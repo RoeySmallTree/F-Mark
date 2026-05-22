@@ -83,8 +83,30 @@ export function RightTodos(): JSX.Element {
           Done {counts.done}
         </span>
       </div>
+      {counts.open + counts.wip + counts.done === 0 ? (
+        <p
+          style={{
+            fontFamily: "var(--serif)",
+            fontStyle: "italic",
+            color: "var(--ink-3)",
+            fontSize: 13,
+            margin: "10px 0",
+          }}
+        >
+          No todos in this session. Use the Todos panel on the left to add
+          one.
+        </p>
+      ) : null}
       {(["open", "wip", "done"] as const).map((status) => {
         const items = buckets[status];
+        // When the bucket is empty and there are no other todos either, the
+        // banner above covers it — skip the per-bucket section so we don't
+        // get a stack of "No open todos."/"Nothing in progress."/"Nothing
+        // done yet." trios. When the bucket is empty but other buckets have
+        // items, keep the per-bucket placeholder for context.
+        if (items.length === 0 && counts.open + counts.wip + counts.done === 0) {
+          return null;
+        }
         return (
           <div key={status}>
             <div
