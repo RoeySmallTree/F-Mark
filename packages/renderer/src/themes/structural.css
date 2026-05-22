@@ -1,0 +1,65 @@
+/* Theme structural overrides — radius, borders, shadows, gradients, scanlines, glows.
+   Ported verbatim from planning/redesign/design.html (lines 112–173). */
+
+/* === THEME structural overrides === */
+body.theme-brutalist *, body.theme-brutalist *::before, body.theme-brutalist *::after { transition:none !important; }
+body.theme-brutalist .card, body.theme-brutalist .prose-card, body.theme-brutalist .embed-card, body.theme-brutalist .choices-card, body.theme-brutalist .todo-card, body.theme-brutalist .file-card{
+  border-width:2px; border-color:var(--line); box-shadow:none; border-radius:0;
+}
+body.theme-brutalist .modal, body.theme-brutalist .popover{ border-width:2px; box-shadow:none; border-radius:0 }
+body.theme-brutalist .turn-pill, body.theme-brutalist .badge, body.theme-brutalist .pop-chip,
+body.theme-brutalist .assign-badge, body.theme-brutalist .kbd-chip, body.theme-brutalist .prose-pin,
+body.theme-brutalist .status-pill, body.theme-brutalist .cmdk-kind{ border-radius:0 !important; border-width:1.5px }
+body.theme-brutalist .avatar{ border-radius:0; border:1.5px solid var(--ink); background:#000; color:#fff }
+body.theme-brutalist .avatar.user, body.theme-brutalist .avatar.agent{ background:#000 }
+body.theme-brutalist .card .stripe{ width:5px; background:var(--ink) }
+body.theme-brutalist .feed-inner h1, body.theme-brutalist .feed-inner h2, body.theme-brutalist .feed-inner h3{ text-transform:uppercase; letter-spacing:.02em }
+body.theme-brutalist .prose-pin{ background:var(--ink); color:var(--canvas); border-color:var(--ink) }
+body.theme-brutalist .prose-pin .dot{ background:var(--canvas) }
+body.theme-brutalist .rail-btn.active::before, body.theme-brutalist .session-item.active::before{ background:var(--ink); width:5px }
+body.theme-brutalist .form-input:focus, body.theme-brutalist .compose-box:focus-within{ box-shadow:0 0 0 2px var(--ink) !important; border-color:var(--ink) !important }
+
+body.theme-terminal{ font-feature-settings: "tnum" }
+body.theme-terminal::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:200;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(58,255,123,.025) 2px, rgba(58,255,123,.025) 3px);
+}
+body.theme-terminal .prose-card, body.theme-terminal .embed-card, body.theme-terminal .choices-card, body.theme-terminal .todo-card, body.theme-terminal .file-card{ box-shadow:0 0 0 1px rgba(58,255,123,.05) }
+body.theme-terminal .prose-head, body.theme-terminal .choices-head, body.theme-terminal .embed-head{ border-style:dashed }
+body.theme-terminal .prose-foot, body.theme-terminal .embed-foot{ border-style:dashed }
+body.theme-terminal .turn-pill .dot{ box-shadow:0 0 8px var(--green) }
+body.theme-terminal .prose-pin{ box-shadow:0 0 8px rgba(78,192,255,.4) }
+body.theme-terminal .prose-title, body.theme-terminal .choices-q, body.theme-terminal .embed-title, body.theme-terminal .modal-title, body.theme-terminal .settings-h{ text-transform:uppercase; letter-spacing:.02em }
+body.theme-terminal .feed-inner h2{ text-transform:uppercase; letter-spacing:.05em; color:var(--ink) }
+body.theme-terminal .feed-inner h2::before{ content:"## "; color:var(--ink-3) }
+
+body.theme-cyber .turn-pill, body.theme-cyber .prose-pin{ box-shadow:0 0 16px rgba(0,229,255,.25) }
+body.theme-cyber .card.user .stripe{ box-shadow:0 0 12px var(--user) }
+body.theme-cyber .card.agent .stripe{ box-shadow:0 0 12px var(--agent) }
+body.theme-cyber .prose-card{ box-shadow:0 0 24px rgba(255,43,214,.06), 0 4px 14px rgba(0,0,0,.4) }
+body.theme-cyber .send-btn{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000; font-weight:600 }
+body.theme-cyber .btn-solid{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000 }
+body.theme-cyber .choice-opt.chosen{ box-shadow:0 0 16px rgba(125,255,90,.2) }
+body.theme-cyber .rail-btn.active::before{ background:linear-gradient(180deg, var(--user), var(--agent)) }
+body.theme-cyber .topbar, body.theme-cyber .left-panel, body.theme-cyber .right-panel{ border-color:var(--line) }
+body.theme-cyber .prose-title{ background:linear-gradient(90deg, var(--ink), var(--user) 80%); -webkit-background-clip:text; background-clip:text; color:transparent }
+
+/* All dark themes — kill the linear gradient on prose-head that uses rgba(0,0,0,.012) */
+body.theme-terminal .prose-head, body.theme-ide .prose-head, body.theme-solarized .prose-head, body.theme-brutalist .prose-head, body.theme-cyber .prose-head,
+body.theme-terminal .prose-foot, body.theme-ide .prose-foot, body.theme-solarized .prose-foot, body.theme-brutalist .prose-foot, body.theme-cyber .prose-foot,
+body.theme-terminal .embed-foot, body.theme-ide .embed-foot, body.theme-solarized .embed-foot, body.theme-brutalist .embed-foot, body.theme-cyber .embed-foot,
+body.theme-terminal .modal-foot, body.theme-ide .modal-foot, body.theme-solarized .modal-foot, body.theme-brutalist .modal-foot, body.theme-cyber .modal-foot,
+body.theme-terminal .pop-foot, body.theme-ide .pop-foot, body.theme-solarized .pop-foot, body.theme-brutalist .pop-foot, body.theme-cyber .pop-foot,
+body.theme-terminal .cmdk-foot, body.theme-ide .cmdk-foot, body.theme-solarized .cmdk-foot, body.theme-brutalist .cmdk-foot, body.theme-cyber .cmdk-foot{
+  background:rgba(255,255,255,.02) !important;
+}
+/* Choice opt hover in dark themes */
+body.theme-terminal .choice-opt:hover, body.theme-ide .choice-opt:hover, body.theme-solarized .choice-opt:hover, body.theme-brutalist .choice-opt:hover, body.theme-cyber .choice-opt:hover{
+  background:rgba(255,255,255,.02);
+}
+/* feed-scroll dim mode in dark themes */
+body.theme-terminal .feed-scroll.dimmed .card:not(.focused),
+body.theme-ide .feed-scroll.dimmed .card:not(.focused),
+body.theme-solarized .feed-scroll.dimmed .card:not(.focused),
+body.theme-brutalist .feed-scroll.dimmed .card:not(.focused),
+body.theme-cyber .feed-scroll.dimmed .card:not(.focused){ opacity:.35 }
