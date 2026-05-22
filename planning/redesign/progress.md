@@ -12,3 +12,5 @@
 | 2026-05-22T21:30Z | P4 | implementer | landed layout shell — topbar, rails, panels, right tabs | tests 41 passing, build clean |
 | 2026-05-22T21:42Z | P5 | implementer | landed event cards | tests 62 passing |
 | 2026-05-22T21:49Z | P6 | implementer | landed compose bar + hotkeys | tests 75 passing |
+| 2026-05-22T22:02Z | P10 | implementer | landed modal framework + new-session modal (slug input, 4 templates with starter prose, agent invite + inline register, open-immediately + clipboard snippet); wired `+ New` in Sessions panel | tests 109 passing (14 new in tests/modals), build clean |
+| 2026-05-22T22:03Z | P12 | implementer | landed reusable Popover framework + LogFilterPopover (Kinds / Participants / Date range / Named-only) + RightLog rewrite (active filter chips, smooth-scroll to feed card on row click); additive store fields `activePopover` + `openPopover` / `closePopover`; ported popover + seg-control CSS to `popovers/popovers.css`; pure `applyFilter` helper | tests 110 passing (12 in popovers, 9 in panels/right-log), build clean |

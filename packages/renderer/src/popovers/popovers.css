@@ -1,0 +1,283 @@
+/* Popovers — ported from planning/redesign/design.html (lines 522-539).
+   Reusable for P8 (Presets), P9 (Skills), P12 (Log filter), and future
+   anchored panels. Every color resolves through CSS variables (tokens.css)
+   so all six themes look right. The pop-toggle selector is intentionally
+   left in modals.css since P10 already lifted it; this file owns the rest. */
+
+/* ============ Popover frame ============ */
+.popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+.popover {
+  position: fixed;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow:
+    0 12px 40px rgba(40, 30, 15, 0.18),
+    0 2px 8px rgba(40, 30, 15, 0.06);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 91;
+}
+.popover.log-filter-popover {
+  min-width: 320px;
+  max-width: 380px;
+  width: 320px;
+}
+.pop-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line-3);
+  font-family: var(--serif);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pop-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-3);
+}
+.pop-section-h {
+  display: flex;
+  align-items: center;
+}
+.pop-section:last-of-type {
+  border-bottom: 0;
+}
+.pop-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 8px;
+}
+.pop-chips {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.pop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.pop-chip.on {
+  background: var(--ink);
+  color: var(--canvas);
+  border-color: var(--ink);
+}
+.pop-chip:not(.on):hover {
+  border-color: var(--ink-4);
+  color: var(--ink-2);
+}
+.pop-chip .x {
+  color: inherit;
+  opacity: 0.6;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+}
+.pop-chip .x:hover {
+  opacity: 1;
+}
+.pop-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-3);
+  background: rgba(0, 0, 0, 0.012);
+}
+
+/* Custom date inputs inside a popover */
+.pop-date-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.pop-date-row input[type="datetime-local"] {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  outline: 0;
+  min-width: 0;
+}
+.pop-date-row input[type="datetime-local"]:focus {
+  border-color: var(--ink-4);
+  box-shadow: 0 0 0 3px rgba(40, 30, 15, 0.04);
+}
+
+/* ============ Segmented control (popover-internal) ============ */
+.seg-control {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 1px;
+  flex-wrap: wrap;
+}
+.seg-control button {
+  padding: 5px 11px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.seg-control button.on {
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.seg-control button:not(.on):hover {
+  color: var(--ink-2);
+}
+
+/* ============ Activity-log table (P12) ============ */
+.log-row {
+  display: grid;
+  grid-template-columns: auto 60px 14px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line-2);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+}
+.log-row:hover {
+  background: var(--panel-2);
+}
+.log-row .ts {
+  color: var(--ink-4);
+}
+.log-row .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  align-self: center;
+}
+.log-row .dot.user {
+  background: var(--user);
+}
+.log-row .dot.agent {
+  background: var(--agent);
+}
+.log-row .kind {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  background: var(--panel);
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  justify-self: start;
+}
+.log-row .summary {
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-row .summary .who {
+  color: var(--ink-4);
+  margin-left: 6px;
+}
+
+.log-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.log-head .scope {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  letter-spacing: 0.04em;
+}
+.log-head .scope b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.log-filter-btn {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+}
+.log-filter-btn:hover {
+  background: var(--canvas);
+  color: var(--ink);
+}
+.log-filter-btn .filter-ct {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  background: var(--ink);
+  color: var(--canvas);
+  padding: 0 5px;
+  min-width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  margin-left: 2px;
+}
+.active-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.active-chips:empty {
+  display: none;
+}

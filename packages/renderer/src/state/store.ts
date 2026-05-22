@@ -11,6 +11,25 @@ export type LeftRailKey =
 export type RightTabKey = "todos" | "comments" | "named" | "log";
 export type ViewMode = "everything" | "document" | "conversation";
 
+export type ModalKey =
+  | null
+  | "new-session"
+  | "settings"
+  | "cmdk"
+  | "presets"
+  | "skills"
+  | "log-filter";
+
+/* Popover state — additive to the modal state above. Popovers anchor to a
+   DOM element (the caller passes the anchor's bounding rect) so they can
+   position themselves relative to it. Only one popover is open at a time. */
+export type PopoverKey = null | "log-filter" | "presets" | "skills";
+
+export interface PopoverState {
+  key: PopoverKey;
+  anchorRect: DOMRect | null;
+}
+
 interface State {
   token: string | null;
   sessions: SessionMeta[];
@@ -23,6 +42,8 @@ interface State {
   leftRail: LeftRailKey;
   rightTab: RightTabKey;
   viewMode: ViewMode;
+  activeModal: ModalKey;
+  activePopover: PopoverState;
   setToken(token: string | null): void;
   setSessions(s: SessionMeta[]): void;
   setCurrentSession(id: string | null): void;
@@ -37,6 +58,10 @@ interface State {
   setLeftRail(v: LeftRailKey): void;
   setRightTab(v: RightTabKey): void;
   setViewMode(v: ViewMode): void;
+  openModal(key: ModalKey): void;
+  closeModal(): void;
+  openPopover(key: PopoverKey, anchorRect: DOMRect | null): void;
+  closePopover(): void;
 }
 
 export const useStore = create<State>((set) => ({
@@ -51,6 +76,8 @@ export const useStore = create<State>((set) => ({
   leftRail: "sessions",
   rightTab: "log",
   viewMode: "everything",
+  activeModal: null,
+  activePopover: { key: null, anchorRect: null },
   setToken: (token) => set({ token }),
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (currentSessionId) =>
@@ -80,4 +107,10 @@ export const useStore = create<State>((set) => ({
   setLeftRail: (leftRail) => set({ leftRail }),
   setRightTab: (rightTab) => set({ rightTab }),
   setViewMode: (viewMode) => set({ viewMode }),
+  openModal: (activeModal) => set({ activeModal }),
+  closeModal: () => set({ activeModal: null }),
+  openPopover: (key, anchorRect) =>
+    set({ activePopover: { key, anchorRect } }),
+  closePopover: () =>
+    set({ activePopover: { key: null, anchorRect: null } }),
 }));

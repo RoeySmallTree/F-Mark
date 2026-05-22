@@ -65,6 +65,7 @@ export function Sessions(): JSX.Element {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const setSessions = useStore((s) => s.setSessions);
+  const openModal = useStore((s) => s.openModal);
   const token = useStore((s) => s.token);
   const [query, setQuery] = useState("");
 
@@ -115,8 +116,8 @@ export function Sessions(): JSX.Element {
         <button
           type="button"
           className="new-btn"
-          title="Coming in P10"
-          disabled
+          onClick={() => openModal("new-session")}
+          aria-label="Start a new session"
         >
           <Plus size={10} style={{ marginRight: 3, verticalAlign: -1 }} />
           NEW

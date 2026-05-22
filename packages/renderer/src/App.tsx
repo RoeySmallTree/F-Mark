@@ -8,6 +8,7 @@ import { LeftPanel } from "./shell/LeftPanel.js";
 import { Feed } from "./shell/Feed.js";
 import { RightPanel } from "./shell/RightPanel.js";
 import { Compose } from "./shell/Compose.js";
+import { ModalRoot } from "./modals/ModalRoot.js";
 
 function readTokenFromQuery(): string | null {
   if (typeof window === "undefined") return null;
@@ -79,6 +80,7 @@ export function App(): JSX.Element {
       <div className="compose">
         <Compose />
       </div>
+      <ModalRoot />
     </div>
   );
 }
