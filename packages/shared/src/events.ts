@@ -85,9 +85,30 @@ export interface TurnEndEventRecord extends EventRecord<TurnEndPayload> {
   kind: "turn-end";
 }
 
+export interface TodoEventRecord extends EventRecord<TodoPayload> {
+  kind: "todo";
+}
+
+export interface FileEventRecord extends EventRecord<FileRefPayload> {
+  kind: "file";
+}
+
+export interface HtmlManifest {
+  id: string;
+  title?: string;
+  dependencies?: string[];
+}
+
+export interface HtmlEventRecord extends EventRecord<HtmlManifest> {
+  kind: "html";
+}
+
 export type AnyEventRecord =
   | ProseEventRecord
   | ChoicesEventRecord
   | ChoiceEventRecord
   | TurnEndEventRecord
+  | TodoEventRecord
+  | FileEventRecord
+  | HtmlEventRecord
   | EventRecord;
