@@ -1,0 +1,16 @@
+{
+  "name": "f-mark-monorepo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "F-Mark — document-based interface for AI agent collaboration",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "build": "pnpm -F @f-mark/shared build && pnpm -F @f-mark/renderer build && pnpm -F f-mark build && pnpm -F f-mark build:bundle",
+    "test": "pnpm -F f-mark test && pnpm -F @f-mark/renderer test",
+    "dev": "pnpm -F f-mark dev"
+  }
+}

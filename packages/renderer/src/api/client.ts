@@ -1,0 +1,140 @@
+import type {
+  AnyEventRecord,
+  EventKind,
+  Participant,
+  RegisteredAgent,
+} from "@f-mark/shared";
+
+export interface ClientConfig {
+  baseUrl: string;
+  token: string | null;
+}
+
+export interface SessionMeta {
+  id: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface EventListParams {
+  since?: string;
+  kinds?: EventKind[];
+  participant?: string;
+}
+
+export interface PostProseBody {
+  participant_id: string;
+  content: string;
+  name?: string;
+  target?: { file: string; lines?: [number, number] };
+  in_reply_to?: string;
+  supersedes?: string;
+}
+
+export interface Client {
+  listSessions(): Promise<SessionMeta[]>;
+  createSession(input: { slug?: string }): Promise<SessionMeta>;
+  listParticipants(): Promise<Record<string, Participant>>;
+  registerAgent(input: {
+    name: string;
+    suggested_id?: string;
+  }): Promise<RegisteredAgent>;
+  listEvents(sessionId: string, params: EventListParams): Promise<AnyEventRecord[]>;
+  postProse(sessionId: string, body: PostProseBody): Promise<{ filename: string }>;
+  postTurnEnd(
+    sessionId: string,
+    participantId: string,
+  ): Promise<{ filename: string }>;
+  postChoice(
+    sessionId: string,
+    body: { participant_id: string; choices_id: string; selected: string[] },
+  ): Promise<{ filename: string }>;
+}
+
+function buildHeaders(token: string | null): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (token !== null) h.Authorization = `Bearer ${token}`;
+  return h;
+}
+
+async function jsonOrThrow(res: Response): Promise<unknown> {
+  if (res.ok) return res.json();
+  let body: unknown = {};
+  try {
+    body = await res.json();
+  } catch {
+    /* ignore */
+  }
+  const msg =
+    typeof body === "object" && body !== null && "error" in body
+      ? String((body as { error: unknown }).error)
+      : `HTTP ${res.status}`;
+  throw new Error(msg);
+}
+
+export function createClient(cfg: ClientConfig): Client {
+  const url = (path: string): string => `${cfg.baseUrl}${path}`;
+
+  async function get(path: string): Promise<unknown> {
+    const res = await fetch(url(path), { headers: buildHeaders(cfg.token) });
+    return jsonOrThrow(res);
+  }
+  async function post(path: string, body: unknown): Promise<unknown> {
+    const res = await fetch(url(path), {
+      method: "POST",
+      headers: buildHeaders(cfg.token),
+      body: JSON.stringify(body),
+    });
+    return jsonOrThrow(res);
+  }
+
+  return {
+    async listSessions() {
+      const body = (await get("/sessions")) as { sessions: SessionMeta[] };
+      return body.sessions;
+    },
+    async createSession(input) {
+      return (await post("/sessions", input)) as SessionMeta;
+    },
+    async listParticipants() {
+      const body = (await get("/participants")) as {
+        participants: Record<string, Participant>;
+      };
+      return body.participants;
+    },
+    async registerAgent(input) {
+      return (await post("/participants/register", {
+        kind: "agent",
+        ...input,
+      })) as RegisteredAgent;
+    },
+    async listEvents(sessionId, params) {
+      const qs = new URLSearchParams();
+      if (params.since !== undefined) qs.set("since", params.since);
+      if (params.kinds !== undefined) qs.set("kinds", params.kinds.join(","));
+      if (params.participant !== undefined)
+        qs.set("participant", params.participant);
+      const suffix = qs.toString();
+      const path = `/sessions/${sessionId}/events${suffix ? `?${suffix}` : ""}`;
+      const body = (await get(path)) as { events: AnyEventRecord[] };
+      return body.events;
+    },
+    async postProse(sessionId, body) {
+      return (await post(
+        `/sessions/${sessionId}/events/prose`,
+        body,
+      )) as { filename: string };
+    },
+    async postTurnEnd(sessionId, participantId) {
+      return (await post(`/sessions/${sessionId}/events/turn-end`, {
+        participant_id: participantId,
+      })) as { filename: string };
+    },
+    async postChoice(sessionId, body) {
+      return (await post(
+        `/sessions/${sessionId}/events/choice`,
+        body,
+      )) as { filename: string };
+    },
+  };
+}

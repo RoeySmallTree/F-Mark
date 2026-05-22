@@ -1,0 +1,93 @@
+export type EventKind =
+  | "prose"
+  | "choices"
+  | "choice"
+  | "turn-end"
+  | "todo"
+  | "html"
+  | "file";
+
+export interface ProseTarget {
+  file: string;
+  lines?: [number, number];
+}
+
+export interface ProseFrontmatter {
+  name?: string;
+  target?: ProseTarget;
+  in_reply_to?: string;
+  supersedes?: string;
+}
+
+export interface ProsePayload extends ProseFrontmatter {
+  content: string;
+}
+
+export interface ChoicesOption {
+  id: string;
+  label: string;
+}
+
+export interface ChoicesPayload {
+  id: string;
+  question: string;
+  options: ChoicesOption[];
+  multi: boolean;
+  supersedes?: string;
+}
+
+export interface ChoicePayload {
+  choices_id: string;
+  selected: string[];
+}
+
+export interface TurnEndPayload {
+  participant_id: string;
+}
+
+export interface TodoPayload {
+  id: string;
+  title: string;
+  body?: string;
+  status: "open" | "done" | "wip";
+  assigned_to?: string;
+  supersedes?: string;
+}
+
+export interface FileRefPayload {
+  id: string;
+  path: string;
+  mime_type: string;
+  description?: string;
+}
+
+export interface EventRecord<T = unknown> {
+  filename: string;
+  timestamp: string;
+  participant_id: string;
+  kind: EventKind;
+  payload: T;
+}
+
+export interface ProseEventRecord extends EventRecord<ProsePayload> {
+  kind: "prose";
+}
+
+export interface ChoicesEventRecord extends EventRecord<ChoicesPayload> {
+  kind: "choices";
+}
+
+export interface ChoiceEventRecord extends EventRecord<ChoicePayload> {
+  kind: "choice";
+}
+
+export interface TurnEndEventRecord extends EventRecord<TurnEndPayload> {
+  kind: "turn-end";
+}
+
+export type AnyEventRecord =
+  | ProseEventRecord
+  | ChoicesEventRecord
+  | ChoiceEventRecord
+  | TurnEndEventRecord
+  | EventRecord;
