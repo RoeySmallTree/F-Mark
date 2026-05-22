@@ -1,27 +1,38 @@
-import { useMemo } from "react";
+import { useMemo, type JSX } from "react";
 import { useStore } from "../state/store.js";
 import { aggregate } from "../state/aggregate.js";
+import { EventCard } from "../cards/EventCard.js";
 
 export function Feed(): JSX.Element {
   const events = useStore((s) => s.events);
+  const participants = useStore((s) => s.participants);
+  const commentTarget = useStore((s) => s.commentTarget);
   const agg = useMemo(() => aggregate(events), [events]);
+
+  // Phase 13 will switch this between feed/document/conversation slices.
+  const slice = agg.feed;
 
   return (
     <section className="feed-col" aria-label="Feed">
-      <div className="feed-scroll">
+      <div
+        className={"feed-scroll" + (commentTarget !== null ? " dimmed" : "")}
+        data-dimmed={commentTarget !== null}
+      >
         <div className="feed-inner">
-          {agg.feed.length === 0 ? (
-            <p className="feed-placeholder">
-              No events yet — start with <code>/guide</code> or a prose.
+          {slice.length === 0 ? (
+            <p className="empty-state">
+              No events yet — start with <code>/guide</code> or paste an invite
+              to an agent.
             </p>
           ) : (
-            agg.feed.map((ev) => (
-              <div
-                key={ev.filename}
-                data-event-filename={ev.filename}
-                className="feed-placeholder"
-              >
-                {ev.kind} · {ev.participant_id}
+            slice.map((event) => (
+              <div key={event.filename} data-event-filename={event.filename}>
+                <EventCard
+                  event={event}
+                  participants={participants}
+                  comments={agg.commentsByTarget.get(event.filename) ?? []}
+                  allEvents={agg.events}
+                />
               </div>
             ))
           )}

@@ -35,6 +35,34 @@ export interface PostProseBody {
 
 export type TodoBuckets = Record<"open" | "wip" | "done", TodoPayload[]>;
 
+export interface PostTodoBody {
+  participant_id: string;
+  id: string;
+  title: string;
+  body?: string;
+  status: "open" | "wip" | "done";
+  assigned_to?: string;
+  supersedes?: string;
+}
+
+export interface PostHtmlBody {
+  participant_id: string;
+  html: string;
+  css?: string;
+  js?: string;
+  title?: string;
+  dependencies?: string[];
+  supersedes?: string;
+}
+
+export interface PostFileBody {
+  participant_id: string;
+  id: string;
+  path: string;
+  mime_type: string;
+  description?: string;
+}
+
 export interface Client {
   listSessions(): Promise<SessionMeta[]>;
   createSession(input: { slug?: string }): Promise<SessionMeta>;
@@ -53,6 +81,9 @@ export interface Client {
     sessionId: string,
     body: { participant_id: string; choices_id: string; selected: string[] },
   ): Promise<{ filename: string }>;
+  postTodo(sessionId: string, body: PostTodoBody): Promise<{ filename: string }>;
+  postHtml(sessionId: string, body: PostHtmlBody): Promise<{ filename: string }>;
+  postFile(sessionId: string, body: PostFileBody): Promise<{ filename: string }>;
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoBuckets>;
   search(query: string, sessionId?: string): Promise<SearchHit[]>;
 }
@@ -139,6 +170,24 @@ export function createClient(cfg: ClientConfig): Client {
     async postChoice(sessionId, body) {
       return (await post(
         `/sessions/${sessionId}/events/choice`,
+        body,
+      )) as { filename: string };
+    },
+    async postTodo(sessionId, body) {
+      return (await post(
+        `/sessions/${sessionId}/events/todo`,
+        body,
+      )) as { filename: string };
+    },
+    async postHtml(sessionId, body) {
+      return (await post(
+        `/sessions/${sessionId}/events/html`,
+        body,
+      )) as { filename: string };
+    },
+    async postFile(sessionId, body) {
+      return (await post(
+        `/sessions/${sessionId}/events/file`,
         body,
       )) as { filename: string };
     },

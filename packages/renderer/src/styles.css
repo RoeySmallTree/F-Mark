@@ -2,6 +2,7 @@
 @import "./themes/structural.css";
 @import "./render/render.css";
 @import "./shell/shell.css";
+@import "./cards/cards.css";
 
 @tailwind base;
 @tailwind components;

@@ -35,7 +35,9 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
     if (typeof sup === "string") superseded.add(sup);
   }
   const visible = sorted.filter((e) => !superseded.has(e.filename));
-  const feed = visible.filter((e) => !proseHasTarget(e));
+  const feed = visible.filter(
+    (e) => !proseHasTarget(e) && e.kind !== "choice",
+  );
   const named = visible.filter(proseHasName);
   const commentsByTarget = new Map<string, AnyEventRecord[]>();
   for (const e of visible) {
