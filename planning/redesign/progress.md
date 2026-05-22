@@ -11,3 +11,4 @@
 | 2026-05-22T21:19Z | P2 | implementer | backend: todos / files / html / raw / presets / skills / search routes + scanner + shared types | kernel tests 28 files / 120 passing, build + bundle clean |
 | 2026-05-22T21:30Z | P4 | implementer | landed layout shell — topbar, rails, panels, right tabs | tests 41 passing, build clean |
 | 2026-05-22T21:42Z | P5 | implementer | landed event cards | tests 62 passing |
+| 2026-05-22T21:49Z | P6 | implementer | landed compose bar + hotkeys | tests 75 passing |
