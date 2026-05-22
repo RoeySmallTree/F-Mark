@@ -2,6 +2,15 @@ import { create } from "zustand";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import type { SessionMeta } from "../api/client.js";
 
+export type LeftRailKey =
+  | "sessions"
+  | "named"
+  | "todos"
+  | "comments"
+  | "search";
+export type RightTabKey = "todos" | "comments" | "named" | "log";
+export type ViewMode = "everything" | "document" | "conversation";
+
 interface State {
   token: string | null;
   sessions: SessionMeta[];
@@ -11,6 +20,9 @@ interface State {
   events: AnyEventRecord[];
   composeMode: "message" | "named" | "comment";
   commentTarget: { file: string; lines?: [number, number] } | null;
+  leftRail: LeftRailKey;
+  rightTab: RightTabKey;
+  viewMode: ViewMode;
   setToken(token: string | null): void;
   setSessions(s: SessionMeta[]): void;
   setCurrentSession(id: string | null): void;
@@ -22,6 +34,9 @@ interface State {
   setCommentTarget(
     target: { file: string; lines?: [number, number] } | null,
   ): void;
+  setLeftRail(v: LeftRailKey): void;
+  setRightTab(v: RightTabKey): void;
+  setViewMode(v: ViewMode): void;
 }
 
 export const useStore = create<State>((set) => ({
@@ -33,6 +48,9 @@ export const useStore = create<State>((set) => ({
   events: [],
   composeMode: "message",
   commentTarget: null,
+  leftRail: "sessions",
+  rightTab: "log",
+  viewMode: "everything",
   setToken: (token) => set({ token }),
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (currentSessionId) =>
@@ -59,4 +77,7 @@ export const useStore = create<State>((set) => ({
       commentTarget,
       composeMode: commentTarget !== null ? "comment" : "message",
     }),
+  setLeftRail: (leftRail) => set({ leftRail }),
+  setRightTab: (rightTab) => set({ rightTab }),
+  setViewMode: (viewMode) => set({ viewMode }),
 }));

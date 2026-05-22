@@ -3,6 +3,8 @@ import type {
   EventKind,
   Participant,
   RegisteredAgent,
+  SearchHit,
+  TodoPayload,
 } from "@f-mark/shared";
 
 export interface ClientConfig {
@@ -31,6 +33,8 @@ export interface PostProseBody {
   supersedes?: string;
 }
 
+export type TodoBuckets = Record<"open" | "wip" | "done", TodoPayload[]>;
+
 export interface Client {
   listSessions(): Promise<SessionMeta[]>;
   createSession(input: { slug?: string }): Promise<SessionMeta>;
@@ -49,6 +53,8 @@ export interface Client {
     sessionId: string,
     body: { participant_id: string; choices_id: string; selected: string[] },
   ): Promise<{ filename: string }>;
+  listTodos(sessionId: string, assignedTo?: string): Promise<TodoBuckets>;
+  search(query: string, sessionId?: string): Promise<SearchHit[]>;
 }
 
 function buildHeaders(token: string | null): Record<string, string> {
@@ -135,6 +141,25 @@ export function createClient(cfg: ClientConfig): Client {
         `/sessions/${sessionId}/events/choice`,
         body,
       )) as { filename: string };
+    },
+    async listTodos(sessionId, assignedTo) {
+      const qs = new URLSearchParams();
+      if (assignedTo !== undefined && assignedTo.length > 0) {
+        qs.set("assigned_to", assignedTo);
+      }
+      const suffix = qs.toString();
+      const path = `/sessions/${sessionId}/todos${suffix ? `?${suffix}` : ""}`;
+      return (await get(path)) as TodoBuckets;
+    },
+    async search(query, sessionId) {
+      const qs = new URLSearchParams({ q: query });
+      if (sessionId !== undefined && sessionId.length > 0) {
+        qs.set("session", sessionId);
+      }
+      const body = (await get(`/search?${qs.toString()}`)) as {
+        hits: SearchHit[];
+      };
+      return body.hits;
     },
   };
 }

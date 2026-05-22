@@ -2,11 +2,12 @@ import { useEffect } from "react";
 import { createClient } from "./api/client.js";
 import { connectWs } from "./api/ws.js";
 import { useStore } from "./state/store.js";
-import { TopBar } from "./components/TopBar.js";
-import { LeftRail } from "./components/LeftRail.js";
-import { RightPanel } from "./components/RightPanel.js";
-import { BottomBar } from "./components/BottomBar.js";
-import { Feed } from "./components/Feed.js";
+import { TopBar } from "./shell/TopBar.js";
+import { LeftRail } from "./shell/LeftRail.js";
+import { LeftPanel } from "./shell/LeftPanel.js";
+import { Feed } from "./shell/Feed.js";
+import { RightPanel } from "./shell/RightPanel.js";
+import { Compose } from "./shell/Compose.js";
 
 function readTokenFromQuery(): string | null {
   if (typeof window === "undefined") return null;
@@ -67,14 +68,17 @@ export function App(): JSX.Element {
   }, [currentSessionId, token, upsertEvent]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="app">
       <TopBar />
-      <div className="flex min-h-0 flex-1">
+      <div className="main">
         <LeftRail />
+        <LeftPanel />
         <Feed />
         <RightPanel />
       </div>
-      <BottomBar />
+      <div className="compose">
+        <Compose />
+      </div>
     </div>
   );
 }
