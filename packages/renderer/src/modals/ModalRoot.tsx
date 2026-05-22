@@ -11,6 +11,7 @@ import { useEffect, type JSX } from "react";
 import { useStore } from "../state/store.js";
 import { NewSessionModal } from "./NewSessionModal.js";
 import { SettingsModal } from "./settings/SettingsModal.js";
+import { CmdKModal } from "./CmdKModal.js";
 
 export function ModalRoot(): JSX.Element | null {
   const activeModal = useStore((s) => s.activeModal);
@@ -35,13 +36,15 @@ export function ModalRoot(): JSX.Element | null {
 
   if (activeModal === null) return null;
 
-  // P10 wires 'new-session', P11 wires 'settings'. Other keys remain
-  // placeholders — P7/P8/P9/P12 will plug into this dispatch.
+  // P10 wires 'new-session', P11 wires 'settings', P7 wires 'cmdk'. Other
+  // keys remain placeholders — P8/P9 will plug into this dispatch later.
   let content: JSX.Element | null = null;
   if (activeModal === "new-session") {
     content = <NewSessionModal />;
   } else if (activeModal === "settings") {
     content = <SettingsModal />;
+  } else if (activeModal === "cmdk") {
+    content = <CmdKModal />;
   }
   if (content === null) return null;
 

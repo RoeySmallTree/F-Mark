@@ -144,8 +144,9 @@ export function TopBar(): JSX.Element {
         <button
           type="button"
           className="icon-btn"
-          title="Search (⌘K) — coming in P7"
-          disabled
+          title="Search (⌘K)"
+          aria-label="Open command palette"
+          onClick={() => openModal("cmdk")}
         >
           <Search size={15} aria-hidden="true" />
           <span className="kbd">⌘K</span>

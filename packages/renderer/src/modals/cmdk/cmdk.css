@@ -1,0 +1,180 @@
+/* Command Palette (⌘K) — ported from planning/redesign/design.html lines
+   577-595. Every color resolves through the theme tokens; only the layout
+   metrics (sizes, padding, gaps) are inline values. The palette uses the
+   shared .modal frame for its border/background/shadow; the .cmdk-* selectors
+   here describe the inner column. */
+
+.cmdk-modal {
+  width: 620px;
+  max-width: calc(100vw - 40px);
+  align-self: flex-start;
+  margin-top: 80px;
+}
+
+.cmdk {
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+  max-height: 88vh;
+}
+
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.cmdk-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+.cmdk-input::placeholder {
+  color: var(--ink-4);
+}
+
+.cmdk-results {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.cmdk-empty {
+  padding: 30px 18px;
+  text-align: center;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-4);
+  font-size: 13.5px;
+}
+
+.cmdk-group {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 10px 18px 4px;
+}
+
+.cmdk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  background: none;
+  width: 100%;
+  text-align: left;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.cmdk-row.sel {
+  background: var(--bg);
+  border-left-color: var(--ink);
+}
+
+.cmdk-row:hover {
+  background: var(--bg);
+}
+
+.cmdk-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  background: var(--panel);
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.cmdk-icon.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.cmdk-label {
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cmdk-sub {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-family: var(--serif);
+  font-style: italic;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.cmdk-kind {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  background: var(--panel);
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cmdk-keys {
+  display: flex;
+  gap: 3px;
+}
+
+.cmdk-foot {
+  display: flex;
+  gap: 14px;
+  padding: 9px 18px;
+  border-top: 1px solid var(--line-2);
+  background: rgba(0, 0, 0, 0.012);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  align-items: center;
+}
+
+.cmdk-foot > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.cmdk-foot kbd {
+  min-width: 18px;
+  height: 18px;
+  font-size: 10.5px;
+  border-bottom-width: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  color: var(--ink);
+}

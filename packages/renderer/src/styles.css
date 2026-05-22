@@ -4,6 +4,7 @@
 @import "./shell/shell.css";
 @import "./cards/cards.css";
 @import "./modals/modals.css";
+@import "./modals/cmdk/cmdk.css";
 @import "./popovers/popovers.css";
 @import "./overlays/overlays.css";
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { createClient } from "./api/client.js";
 import { connectWs } from "./api/ws.js";
 import { useStore } from "./state/store.js";
@@ -9,6 +9,7 @@ import { Feed } from "./shell/Feed.js";
 import { RightPanel } from "./shell/RightPanel.js";
 import { Compose } from "./shell/Compose.js";
 import { ModalRoot } from "./modals/ModalRoot.js";
+import { useHotkeys } from "./hooks/useHotkeys.js";
 
 function readTokenFromQuery(): string | null {
   if (typeof window === "undefined") return null;
@@ -25,6 +26,19 @@ export function App(): JSX.Element {
   const upsertEvent = useStore((s) => s.upsertEvent);
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const openModal = useStore((s) => s.openModal);
+
+  // Global hotkeys registered at the App level. P7 owns ⌘K — other phases
+  // (P8 / P9) will register their chords inside their own modal mounts.
+  const hotkeys = useMemo(
+    () => ({
+      "$mod+k": (): void => {
+        openModal("cmdk");
+      },
+    }),
+    [openModal],
+  );
+  useHotkeys(hotkeys);
 
   useEffect(() => {
     setToken(readTokenFromQuery());
