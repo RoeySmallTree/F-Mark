@@ -49,6 +49,7 @@ export function Compose(): JSX.Element {
   const openPopover = useStore((s) => s.openPopover);
   const closePopover = useStore((s) => s.closePopover);
   const activePopover = useStore((s) => s.activePopover);
+  const openModal = useStore((s) => s.openModal);
 
   const [content, setContent] = useState("");
   const [name, setName] = useState("");
@@ -134,6 +135,9 @@ export function Compose(): JSX.Element {
       "$mod+p": () => {
         openPresets();
       },
+      "$mod+shift+k": () => {
+        openModal("skills");
+      },
       "$mod+enter": () => {
         void submit();
       },
@@ -154,7 +158,15 @@ export function Compose(): JSX.Element {
         return false;
       },
     }),
-    [mode, commentTarget, setMode, setCommentTarget, submit, openPresets],
+    [
+      mode,
+      commentTarget,
+      setMode,
+      setCommentTarget,
+      submit,
+      openPresets,
+      openModal,
+    ],
   );
 
   useHotkeys(hotkeyMap);
@@ -249,9 +261,9 @@ export function Compose(): JSX.Element {
           <button
             type="button"
             className="mode-btn"
-            disabled
-            title="Coming in P9"
-            aria-label="Skills (coming in P9)"
+            onClick={() => openModal("skills")}
+            aria-label="Open skills palette"
+            title="Open skills palette (⌘⇧K)"
           >
             <Sparkles size={11} aria-hidden />
             Skills <span className="kbd">⌘⇧K</span>

@@ -178,3 +178,79 @@
   font-family: var(--mono);
   color: var(--ink);
 }
+
+/* ============ Skills palette (P9) ============
+   Ported from planning/redesign/design.html `.skills-pal .skill-row …`.
+   The palette reuses the cmdk frame; these rules override row padding to
+   give multi-line skill rows breathing space and define the `.skill-text`
+   typography (mono name + serif description). */
+.skills-pal .skill-row {
+  padding: 10px 18px;
+  align-items: flex-start;
+}
+.skill-text {
+  flex: 1;
+  min-width: 0;
+}
+.skill-name {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.skill-args {
+  color: var(--ink-4);
+  font-weight: 400;
+}
+.skill-desc {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-family: var(--serif);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.skill-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: var(--panel);
+  color: var(--ink-3);
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 0;
+}
+.skills-agent-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 7px 3px 9px;
+}
+.skills-agent-label {
+  color: var(--ink-4);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+}
+.skills-agent-select select {
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.skills-agent-select select:focus-visible {
+  outline: 1px solid var(--ink-4);
+  outline-offset: 1px;
+  border-radius: 3px;
+}

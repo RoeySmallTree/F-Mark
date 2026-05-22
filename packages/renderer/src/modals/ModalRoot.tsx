@@ -12,6 +12,7 @@ import { useStore } from "../state/store.js";
 import { NewSessionModal } from "./NewSessionModal.js";
 import { SettingsModal } from "./settings/SettingsModal.js";
 import { CmdKModal } from "./CmdKModal.js";
+import { SkillsPaletteModal } from "./SkillsPaletteModal.js";
 
 export function ModalRoot(): JSX.Element | null {
   const activeModal = useStore((s) => s.activeModal);
@@ -36,8 +37,8 @@ export function ModalRoot(): JSX.Element | null {
 
   if (activeModal === null) return null;
 
-  // P10 wires 'new-session', P11 wires 'settings', P7 wires 'cmdk'. Other
-  // keys remain placeholders — P8/P9 will plug into this dispatch later.
+  // P10 wires 'new-session', P11 wires 'settings', P7 wires 'cmdk',
+  // P9 wires 'skills'. P8 (presets) lives in a popover, not here.
   let content: JSX.Element | null = null;
   if (activeModal === "new-session") {
     content = <NewSessionModal />;
@@ -45,6 +46,8 @@ export function ModalRoot(): JSX.Element | null {
     content = <SettingsModal />;
   } else if (activeModal === "cmdk") {
     content = <CmdKModal />;
+  } else if (activeModal === "skills") {
+    content = <SkillsPaletteModal />;
   }
   if (content === null) return null;
 

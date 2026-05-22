@@ -5,6 +5,7 @@ import type {
   Preset,
   RegisteredAgent,
   SearchHit,
+  SkillRef,
   TodoPayload,
 } from "@f-mark/shared";
 
@@ -110,6 +111,11 @@ export interface Client {
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoBuckets>;
   search(query: string, sessionId?: string): Promise<SearchHit[]>;
   listPresets(sessionId?: string): Promise<{ builtin: Preset[]; project: Preset[] }>;
+  /* Returns the union of skills scanned from `.claude/skills`,
+     `.codex/skills`, `.gemini/skills`, and `.skills/` walking upward from the
+     server's CWD. When `agent` is set, only that agent's directory + the
+     generic `.skills` are scanned. See kernel/skills/scanner.ts. */
+  listSkills(agent?: string): Promise<{ skills: SkillRef[] }>;
 }
 
 function buildHeaders(token: string | null): Record<string, string> {
@@ -259,6 +265,15 @@ export function createClient(cfg: ClientConfig): Client {
       const suffix = qs.toString();
       const path = `/presets${suffix ? `?${suffix}` : ""}`;
       return (await get(path)) as { builtin: Preset[]; project: Preset[] };
+    },
+    async listSkills(agent) {
+      const qs = new URLSearchParams();
+      if (agent !== undefined && agent.length > 0) {
+        qs.set("agent", agent);
+      }
+      const suffix = qs.toString();
+      const path = `/skills${suffix ? `?${suffix}` : ""}`;
+      return (await get(path)) as { skills: SkillRef[] };
     },
   };
 }
