@@ -46,12 +46,13 @@ describe("Shell — TopBar", () => {
   });
 
   test("renders brand glyph, name, and breadcrumb with current session slug", () => {
-    render(<TopBar />);
+    const { container } = render(<TopBar />);
     expect(screen.getByText("F·Mark")).toBeInTheDocument();
-    const breadcrumb = screen.getByRole("button", {
-      name: /project breadcrumb/i,
-    });
-    expect(within(breadcrumb).getByText("launch-planning")).toBeInTheDocument();
+    const breadcrumb = container.querySelector(".breadcrumb");
+    expect(breadcrumb).not.toBeNull();
+    expect(
+      within(breadcrumb as HTMLElement).getByText("launch-planning"),
+    ).toBeInTheDocument();
   });
 
   test("renders a turn-pill (default 'us' turn → 'Your turn' label)", () => {

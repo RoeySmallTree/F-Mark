@@ -86,7 +86,13 @@ export function ProseCard({
         <span className="badge">
           <FileText size={10} aria-hidden /> NAMED
         </span>
-        <button type="button" className="menu" aria-label="More options">
+        <button
+          type="button"
+          className="menu"
+          aria-label="Quick-copy contribution"
+          title="Copy contribution as markdown"
+          onClick={() => void onCopy()}
+        >
           <MoreHorizontal size={14} aria-hidden />
         </button>
       </div>

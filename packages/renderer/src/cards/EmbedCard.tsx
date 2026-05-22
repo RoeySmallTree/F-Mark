@@ -10,6 +10,7 @@ import type {
   Participant,
 } from "@f-mark/shared";
 import { useStore } from "../state/store.js";
+import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
 
 interface Props {
@@ -63,7 +64,21 @@ export function EmbedCard({ event, participants, allEvents }: Props): JSX.Elemen
         <span className="badge">
           <ImageIcon size={10} aria-hidden /> EMBED
         </span>
-        <button type="button" className="menu" aria-label="More options">
+        <button
+          type="button"
+          className="menu"
+          aria-label="Copy embed link"
+          title="Copy embed link"
+          onClick={() => {
+            if (src.length > 0) {
+              const absolute =
+                typeof window !== "undefined"
+                  ? new URL(src, window.location.origin).toString()
+                  : src;
+              void copyToClipboard(absolute);
+            }
+          }}
+        >
           <MoreHorizontal size={14} aria-hidden />
         </button>
       </div>

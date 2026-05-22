@@ -149,7 +149,7 @@ export function Agents(): JSX.Element {
               fontSize: 13,
             }}
           >
-            No agents registered yet.
+            No agents registered yet. Click + Add agent above.
           </div>
         ) : (
           agents.map((a) => (

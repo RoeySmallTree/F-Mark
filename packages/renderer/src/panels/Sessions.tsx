@@ -134,12 +134,17 @@ export function Sessions(): JSX.Element {
       </div>
       <div className="panel-list">
         {sessions.length === 0 ? (
-          <div
-            className="group-label"
-            style={{ textTransform: "none", letterSpacing: 0 }}
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontStyle: "italic",
+              color: "var(--ink-3)",
+              fontSize: 13,
+              margin: "10px 14px",
+            }}
           >
-            No sessions yet.
-          </div>
+            No sessions yet. Press + New.
+          </p>
         ) : (
           GROUP_ORDER.map((key) => {
             const items = groups.get(key) ?? [];

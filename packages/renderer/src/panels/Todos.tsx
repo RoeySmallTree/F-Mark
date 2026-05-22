@@ -6,13 +6,24 @@ import { useStore } from "../state/store.js";
 
 const EMPTY_BUCKETS: TodoBuckets = { open: [], wip: [], done: [] };
 
+/* Generates a short, URL-safe id for new todos (e.g. "td-x9k2"). */
+function generateTodoId(): string {
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `td-${rand}`;
+}
+
 export function Todos(): JSX.Element {
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const token = useStore((s) => s.token);
+  const userId = useStore((s) => s.currentUserId);
   const events = useStore((s) => s.events);
   const [buckets, setBuckets] = useState<TodoBuckets>(EMPTY_BUCKETS);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const slug = useMemo(
     () =>
@@ -47,6 +58,40 @@ export function Todos(): JSX.Element {
     };
   }, [currentSessionId, token, events.length]);
 
+  const totalCount =
+    buckets.open.length + buckets.wip.length + buckets.done.length;
+
+  async function createTodo(): Promise<void> {
+    if (currentSessionId === null || userId === null) {
+      setCreateError("No active session or user.");
+      return;
+    }
+    const title = newTitle.trim();
+    if (title.length === 0) {
+      setCreateError("Title is required.");
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const client = createClient({ baseUrl: "", token });
+      await client.postTodo(currentSessionId, {
+        participant_id: userId,
+        id: generateTodoId(),
+        title,
+        status: "open",
+      });
+      const next = await client.listTodos(currentSessionId);
+      setBuckets(next);
+      setNewTitle("");
+      setShowAdd(false);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <aside
       className="left-panel"
@@ -73,8 +118,10 @@ export function Todos(): JSX.Element {
           <button
             type="button"
             className="new-btn"
-            title="Coming in P10"
-            disabled
+            onClick={() => setShowAdd((v) => !v)}
+            disabled={currentSessionId === null || userId === null}
+            aria-label="Add a new todo"
+            aria-expanded={showAdd}
           >
             <Plus size={10} style={{ marginRight: 3, verticalAlign: -1 }} />
             ADD
@@ -84,35 +131,93 @@ export function Todos(): JSX.Element {
           in <b>{slug}</b>
         </div>
       </div>
+      {showAdd ? (
+        <div
+          style={{
+            padding: "0 14px 8px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <input
+            className="form-input"
+            placeholder="What needs doing?"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createTodo();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setShowAdd(false);
+                setNewTitle("");
+                setCreateError(null);
+              }
+            }}
+            autoFocus
+            aria-label="New todo title"
+          />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              className="btn-solid"
+              disabled={creating || newTitle.trim().length === 0}
+              onClick={() => void createTodo()}
+            >
+              {creating ? "Adding…" : "Add"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                setShowAdd(false);
+                setNewTitle("");
+                setCreateError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {createError !== null ? (
+            <div
+              className="form-error"
+              role="alert"
+              style={{ fontSize: 11.5 }}
+            >
+              {createError}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="panel-list" style={{ padding: "0 14px 12px" }}>
-        {(["open", "wip", "done"] as const).map((status) => {
-          const items = buckets[status];
-          return (
-            <div key={status}>
-              <div
-                className="group-label"
-                style={{ padding: "10px 0 4px" }}
-              >
-                {status.toUpperCase()} ({items.length})
-              </div>
-              {items.length === 0 ? (
-                <p
-                  style={{
-                    fontFamily: "var(--serif)",
-                    fontStyle: "italic",
-                    color: "var(--ink-4)",
-                    fontSize: 12.5,
-                    margin: "2px 0 6px",
-                  }}
+        {totalCount === 0 && !showAdd ? (
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontStyle: "italic",
+              color: "var(--ink-3)",
+              fontSize: 13,
+              margin: "10px 4px",
+            }}
+          >
+            No todos in <b>{slug}</b>. Click + Add.
+          </p>
+        ) : (
+          (["open", "wip", "done"] as const).map((status) => {
+            const items = buckets[status];
+            if (items.length === 0) return null;
+            return (
+              <div key={status}>
+                <div
+                  className="group-label"
+                  style={{ padding: "10px 0 4px" }}
                 >
-                  {status === "open"
-                    ? "No open todos."
-                    : status === "wip"
-                      ? "Nothing in progress."
-                      : "Nothing done yet."}
-                </p>
-              ) : (
-                items.map((t) => (
+                  {status.toUpperCase()} ({items.length})
+                </div>
+                {items.map((t) => (
                   <div
                     key={t.id}
                     className={["session-item"].join(" ").trim()}
@@ -134,11 +239,11 @@ export function Todos(): JSX.Element {
                       </div>
                     ) : null}
                   </div>
-                ))
-              )}
-            </div>
-          );
-        })}
+                ))}
+              </div>
+            );
+          })
+        )}
         {loadError !== null ? (
           <p
             style={{

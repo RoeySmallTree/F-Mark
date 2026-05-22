@@ -64,11 +64,11 @@ export function TopBar(): JSX.Element {
         </pre>
         <span className="name">F·Mark</span>
       </div>
-      <button type="button" className="breadcrumb" aria-label="Project breadcrumb">
+      <div className="breadcrumb" role="presentation">
         <span className="proj">f-mark</span>
         <span className="sep">/</span>
         <span className="sess">{currentSession?.slug ?? "no session"}</span>
-      </button>
+      </div>
 
       <div className="topbar-center">
         <div

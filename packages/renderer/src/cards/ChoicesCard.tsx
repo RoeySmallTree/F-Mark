@@ -12,6 +12,7 @@ import type {
 } from "@f-mark/shared";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
+import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
 
 interface Props {
@@ -72,7 +73,13 @@ export function ChoicesCard({
         <span className="badge">
           <HelpCircle size={10} aria-hidden /> CHOOSE
         </span>
-        <button type="button" className="menu" aria-label="More options">
+        <button
+          type="button"
+          className="menu"
+          aria-label="Copy question"
+          title="Copy question"
+          onClick={() => void copyToClipboard(payload.question)}
+        >
           <MoreHorizontal size={14} aria-hidden />
         </button>
       </div>

@@ -135,6 +135,19 @@ export function Search(): JSX.Element {
             Searching…
           </p>
         ) : null}
+        {!busy && error === null && query.trim().length === 0 ? (
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontStyle: "italic",
+              color: "var(--ink-3)",
+              fontSize: 13,
+              padding: "10px 14px",
+            }}
+          >
+            Type to search across sessions, named contributions, todos.
+          </p>
+        ) : null}
         {!busy && error === null && query.trim().length > 0 && hits.length === 0 ? (
           <p
             style={{

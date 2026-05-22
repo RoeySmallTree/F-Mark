@@ -58,7 +58,23 @@ Point your agent at the local API. The protocol lives at `.f-mark/AGENT.md` once
 
 ## Status
 
-POC release. See `planning/architecture.md` for the full design.
+v0.2.0 — redesigned UI shipped. See `planning/redesign/` for the design source-of-truth and `planning/redesign/progress.md` for the phase log.
+
+## What's in the renderer
+
+- **Command palette** (⌘K) — fuzzy search across sessions, named contributions, todos, and quick actions; opens new-session and settings modals; switches themes.
+- **Presets popover** (⌘P / ⚡ button) — pre-fills compose with built-in or project-local prompt templates.
+- **Skills palette** (⌘⇧K) — surfaces real skills scanned from `.claude/skills/`, `.codex/skills/`, `.gemini/skills/`, and `.skills/`; pick one to insert `/skill-name <args>` into compose.
+- **Settings modal** (gear icon) — Profile, Connected Agents, Appearance (theme + density), Keyboard Shortcuts, About.
+- **Six themes** — Default (light), Terminal, IDE, Solarized, Brutalist, Cyber. Persisted in localStorage; structural overrides per theme.
+- **View toggle** (Everything / Document / Conversation) — re-projects the feed; per-session persistence.
+- **Comment overlay** — pin-click focuses the contribution, dims the rest, opens the thread in the right panel with reply + resolve.
+- **Real backend** — todos (with supersession), files, html bundles, raw asset serving, presets, skills, fuzzy search, participant PATCH.
+- **Markdown + JSON renderers** — multi-mode: rendered / source / accordion for markdown; tree / source / table for JSON, with collapsible nesting.
+
+## Working on the redesign (for agentic workers)
+
+If you're an LLM coding agent picking this work up after a context clear, **read `planning/redesign/INSTRUCTIONS.md` first** — it contains the verbatim original user instruction, the re-orient protocol, and pointers to the master plan and progress log. Do not start coding before reading it.
 
 ## License
 
