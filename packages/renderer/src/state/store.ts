@@ -30,6 +30,44 @@ export interface PopoverState {
   anchorRect: DOMRect | null;
 }
 
+/* Per-session view-mode persistence — when switching sessions, restore the
+   previous view for that session if it was ever set. Backed by localStorage
+   under `fmark.viewModeBySession`. */
+export const VIEW_MODE_STORAGE_KEY = "fmark.viewModeBySession";
+
+const VIEW_MODES: ViewMode[] = ["everything", "document", "conversation"];
+
+function isViewMode(v: unknown): v is ViewMode {
+  return typeof v === "string" && (VIEW_MODES as string[]).includes(v);
+}
+
+export function loadViewModeBySession(): Record<string, ViewMode> {
+  try {
+    const raw = globalThis.localStorage?.getItem(VIEW_MODE_STORAGE_KEY);
+    if (raw === null || raw === undefined) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object") return {};
+    const out: Record<string, ViewMode> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (isViewMode(v)) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveViewModeBySession(map: Record<string, ViewMode>): void {
+  try {
+    globalThis.localStorage?.setItem(
+      VIEW_MODE_STORAGE_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    /* swallow — running in an env without localStorage */
+  }
+}
+
 interface State {
   token: string | null;
   sessions: SessionMeta[];
@@ -46,6 +84,7 @@ interface State {
   leftRail: LeftRailKey;
   rightTab: RightTabKey;
   viewMode: ViewMode;
+  viewModeBySession: Record<string, ViewMode>;
   activeModal: ModalKey;
   activePopover: PopoverState;
   setToken(token: string | null): void;
@@ -69,7 +108,7 @@ interface State {
   closePopover(): void;
 }
 
-export const useStore = create<State>((set) => ({
+export const useStore = create<State>((set, get) => ({
   token: null,
   sessions: [],
   currentSessionId: null,
@@ -82,12 +121,25 @@ export const useStore = create<State>((set) => ({
   leftRail: "sessions",
   rightTab: "log",
   viewMode: "everything",
+  viewModeBySession: loadViewModeBySession(),
   activeModal: null,
   activePopover: { key: null, anchorRect: null },
   setToken: (token) => set({ token }),
   setSessions: (sessions) => set({ sessions }),
-  setCurrentSession: (currentSessionId) =>
-    set({ currentSessionId, events: [] }),
+  setCurrentSession: (currentSessionId) => {
+    /* Preserve P4's behaviour (clear events on session switch) while
+       restoring the per-session view mode if one was previously stored. */
+    const state = get();
+    const nextMode: ViewMode =
+      currentSessionId !== null
+        ? (state.viewModeBySession[currentSessionId] ?? "everything")
+        : "everything";
+    set({
+      currentSessionId,
+      events: [],
+      viewMode: nextMode,
+    });
+  },
   setParticipants: (participants) => {
     const userId = Object.entries(participants).find(
       ([, p]) => p.kind === "user",
@@ -113,7 +165,21 @@ export const useStore = create<State>((set) => ({
   setComposeDraft: (composeDraft) => set({ composeDraft }),
   setLeftRail: (leftRail) => set({ leftRail }),
   setRightTab: (rightTab) => set({ rightTab }),
-  setViewMode: (viewMode) => set({ viewMode }),
+  setViewMode: (viewMode) => {
+    const state = get();
+    /* Mirror the chosen mode into the per-session map (if we have an
+       active session) and persist the map. */
+    if (state.currentSessionId !== null) {
+      const next = {
+        ...state.viewModeBySession,
+        [state.currentSessionId]: viewMode,
+      };
+      saveViewModeBySession(next);
+      set({ viewMode, viewModeBySession: next });
+    } else {
+      set({ viewMode });
+    }
+  },
   openModal: (activeModal) => set({ activeModal }),
   closeModal: () => set({ activeModal: null }),
   openPopover: (key, anchorRect) =>

@@ -4,6 +4,8 @@ export interface Aggregated {
   events: AnyEventRecord[];
   visible: AnyEventRecord[];
   feed: AnyEventRecord[];
+  feedDocument: AnyEventRecord[];
+  feedConversation: AnyEventRecord[];
   named: AnyEventRecord[];
   commentsByTarget: Map<string, AnyEventRecord[]>;
   currentTurnParticipantPrefix: "us" | "ag";
@@ -38,6 +40,24 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
   const feed = visible.filter(
     (e) => !proseHasTarget(e) && e.kind !== "choice",
   );
+  /* Document view: named prose contributions + turn dividers.
+     Comments are dropped here — they appear as pins on the named cards. */
+  const feedDocument = visible.filter(
+    (e) =>
+      (e.kind === "prose" &&
+        proseHasName(e) &&
+        !proseHasTarget(e)) ||
+      e.kind === "turn-end",
+  );
+  /* Conversation view: unnamed messages + choices (+ choice records) + turn
+     dividers. Comments and named contributions are dropped. */
+  const feedConversation = visible.filter(
+    (e) =>
+      (e.kind === "prose" && !proseHasName(e) && !proseHasTarget(e)) ||
+      e.kind === "choices" ||
+      e.kind === "choice" ||
+      e.kind === "turn-end",
+  );
   const named = visible.filter(proseHasName);
   const commentsByTarget = new Map<string, AnyEventRecord[]>();
   for (const e of visible) {
@@ -58,6 +78,8 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
     events: sorted,
     visible,
     feed,
+    feedDocument,
+    feedConversation,
     named,
     commentsByTarget,
     currentTurnParticipantPrefix,
