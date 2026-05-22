@@ -24,6 +24,18 @@ export interface RegisteredAgent {
   color: string;
 }
 
+export interface UpdateParticipantInput {
+  name?: string;
+  color?: string;
+}
+
+export interface UpdatedParticipant {
+  id: string;
+  kind: "user" | "agent";
+  name: string;
+  color: string;
+}
+
 export async function listParticipants(
   p: Paths,
 ): Promise<Record<string, Participant>> {
@@ -72,4 +84,46 @@ export async function registerAgent(
 
 export function isValidParticipantId(id: string): boolean {
   return ID_PATTERN.test(id);
+}
+
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+export function isValidHexColor(value: string): boolean {
+  return HEX_COLOR_PATTERN.test(value);
+}
+
+export async function updateParticipant(
+  p: Paths,
+  id: string,
+  input: UpdateParticipantInput,
+): Promise<UpdatedParticipant> {
+  if (!ID_PATTERN.test(id)) {
+    throw new Error(`invalid participant id format: ${id}`);
+  }
+  const cfg = await readConfig(p);
+  const current = cfg.participants[id];
+  if (current === undefined) {
+    throw new Error(`participant not found: ${id}`);
+  }
+  if (input.name !== undefined) {
+    const trimmed = input.name.trim();
+    if (trimmed.length === 0) {
+      throw new Error("name must be non-empty");
+    }
+    current.name = trimmed;
+  }
+  if (input.color !== undefined) {
+    if (!isValidHexColor(input.color)) {
+      throw new Error(`invalid hex color: ${input.color}`);
+    }
+    current.color = input.color;
+  }
+  cfg.participants[id] = current;
+  await writeConfig(p, cfg);
+  return {
+    id,
+    kind: current.kind,
+    name: current.name,
+    color: current.color,
+  };
 }

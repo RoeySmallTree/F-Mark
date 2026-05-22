@@ -29,6 +29,7 @@ export function TopBar(): JSX.Element {
   const events = useStore((s) => s.events);
   const viewMode = useStore((s) => s.viewMode);
   const setViewMode = useStore((s) => s.setViewMode);
+  const openModal = useStore((s) => s.openModal);
 
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) ?? null,
@@ -152,8 +153,9 @@ export function TopBar(): JSX.Element {
         <button
           type="button"
           className="icon-btn"
-          title="Settings — coming in P11"
-          disabled
+          title="Settings"
+          aria-label="Open settings"
+          onClick={() => openModal("settings")}
         >
           <Settings size={15} aria-hidden="true" />
         </button>

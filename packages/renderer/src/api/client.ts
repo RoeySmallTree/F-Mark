@@ -63,6 +63,23 @@ export interface PostFileBody {
   description?: string;
 }
 
+export interface UpdateParticipantPatch {
+  name?: string;
+  color?: string;
+}
+
+export interface UpdatedParticipant {
+  id: string;
+  kind: "user" | "agent";
+  name: string;
+  color: string;
+}
+
+export interface HealthInfo {
+  status: string;
+  version: string;
+}
+
 export interface Client {
   listSessions(): Promise<SessionMeta[]>;
   createSession(input: { slug?: string }): Promise<SessionMeta>;
@@ -71,6 +88,11 @@ export interface Client {
     name: string;
     suggested_id?: string;
   }): Promise<RegisteredAgent>;
+  updateParticipant(
+    id: string,
+    patch: UpdateParticipantPatch,
+  ): Promise<UpdatedParticipant>;
+  health(): Promise<HealthInfo>;
   listEvents(sessionId: string, params: EventListParams): Promise<AnyEventRecord[]>;
   postProse(sessionId: string, body: PostProseBody): Promise<{ filename: string }>;
   postTurnEnd(
@@ -124,6 +146,14 @@ export function createClient(cfg: ClientConfig): Client {
     });
     return jsonOrThrow(res);
   }
+  async function patch(path: string, body: unknown): Promise<unknown> {
+    const res = await fetch(url(path), {
+      method: "PATCH",
+      headers: buildHeaders(cfg.token),
+      body: JSON.stringify(body),
+    });
+    return jsonOrThrow(res);
+  }
 
   return {
     async listSessions() {
@@ -144,6 +174,15 @@ export function createClient(cfg: ClientConfig): Client {
         kind: "agent",
         ...input,
       })) as RegisteredAgent;
+    },
+    async updateParticipant(id, body) {
+      return (await patch(
+        `/participants/${encodeURIComponent(id)}`,
+        body,
+      )) as UpdatedParticipant;
+    },
+    async health() {
+      return (await get("/health")) as HealthInfo;
     },
     async listEvents(sessionId, params) {
       const qs = new URLSearchParams();
