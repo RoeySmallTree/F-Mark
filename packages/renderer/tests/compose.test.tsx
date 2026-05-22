@@ -34,9 +34,12 @@ function resetStore(overrides: Partial<ReturnType<typeof useStore.getState>> = {
     events: [],
     composeMode: "message",
     commentTarget: null,
+    composeDraft: null,
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",
+    activeModal: null,
+    activePopover: { key: null, anchorRect: null },
     ...overrides,
   });
 }
@@ -353,5 +356,63 @@ describe("useHotkeys — focus suppression", () => {
     expect(document.activeElement).toBe(ta);
     await user.keyboard(`${MOD_OPEN}n${MOD_CLOSE}`);
     expect(useStore.getState().composeMode).toBe("named");
+  });
+});
+
+describe("Compose — Presets (P8)", () => {
+  beforeEach(() => {
+    resetStore();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  test("clicking the ⚡ Presets button opens the presets popover via the store", async () => {
+    const user = userEvent.setup();
+    render(<Compose />);
+    expect(useStore.getState().activePopover.key).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Open presets/i }));
+    expect(useStore.getState().activePopover.key).toBe("presets");
+    expect(useStore.getState().activePopover.anchorRect).not.toBeNull();
+  });
+
+  test("⌘P opens the presets popover", async () => {
+    const user = userEvent.setup();
+    render(<Compose />);
+    expect(useStore.getState().activePopover.key).toBeNull();
+    await user.keyboard(`${MOD_OPEN}p${MOD_CLOSE}`);
+    expect(useStore.getState().activePopover.key).toBe("presets");
+  });
+
+  test("composeDraft populates the textarea when empty (replace)", async () => {
+    render(<Compose />);
+    const ta = screen.getByLabelText(/Compose message/i) as HTMLTextAreaElement;
+    expect(ta.value).toBe("");
+    act(() => {
+      useStore.getState().setComposeDraft("Generate 3 variations of this.");
+    });
+    /* Wait for the useEffect to flush + the queueMicrotask. */
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(ta.value).toBe("Generate 3 variations of this.");
+    /* Draft is cleared so future inserts are detected as new. */
+    expect(useStore.getState().composeDraft).toBeNull();
+  });
+
+  test("composeDraft appends with a blank line when textarea is non-empty", async () => {
+    const user = userEvent.setup();
+    render(<Compose />);
+    const ta = screen.getByLabelText(/Compose message/i) as HTMLTextAreaElement;
+    await user.click(ta);
+    await user.type(ta, "Existing");
+    act(() => {
+      useStore.getState().setComposeDraft("Preset body.");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(ta.value).toBe("Existing\n\nPreset body.");
   });
 });

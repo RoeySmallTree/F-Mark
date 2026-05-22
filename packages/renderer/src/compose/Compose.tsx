@@ -11,6 +11,7 @@
    Hotkeys (via useHotkeys):
      - $mod+/    → toggle comment (only if a target is set; otherwise toggle Message)
      - $mod+n    → toggle named
+     - $mod+p    → open the ⚡ Presets popover anchored at the presets button
      - $mod+enter→ submit the active mode
      - escape    → clear commentTarget if set; else blur textarea
 */
@@ -23,6 +24,7 @@ import { ModeBar } from "./ModeBar.js";
 import { NameInput } from "./NameInput.js";
 import { TargetPill } from "./TargetPill.js";
 import { SendButton } from "./SendButton.js";
+import { PresetsPopover } from "../popovers/PresetsPopover.js";
 import { Zap, Sparkles } from "lucide-react";
 
 function placeholderFor(
@@ -42,12 +44,18 @@ export function Compose(): JSX.Element {
   const setMode = useStore((s) => s.setComposeMode);
   const commentTarget = useStore((s) => s.commentTarget);
   const setCommentTarget = useStore((s) => s.setCommentTarget);
+  const composeDraft = useStore((s) => s.composeDraft);
+  const setComposeDraft = useStore((s) => s.setComposeDraft);
+  const openPopover = useStore((s) => s.openPopover);
+  const closePopover = useStore((s) => s.closePopover);
+  const activePopover = useStore((s) => s.activePopover);
 
   const [content, setContent] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const presetsBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // canSubmit mirrors legacy Composer.
   const canSubmit = useMemo(() => {
@@ -99,6 +107,15 @@ export function Compose(): JSX.Element {
     await client.postTurnEnd(sessionId, userId);
   }, [sessionId, userId, token]);
 
+  /* openPresets — anchor the presets popover under the ⚡ button. Called
+     by the button click handler and by the ⌘P hotkey. Reads the current
+     button's bounding rect at the moment of invocation (the ref may not
+     have settled at memo-construction time). */
+  const openPresets = useCallback((): void => {
+    const rect = presetsBtnRef.current?.getBoundingClientRect() ?? null;
+    openPopover("presets", rect);
+  }, [openPopover]);
+
   // Hotkey map — stable per-render via dependency-aware memo.
   const hotkeyMap = useMemo<HotkeyMap>(
     () => ({
@@ -113,6 +130,9 @@ export function Compose(): JSX.Element {
       },
       "$mod+n": () => {
         setMode(mode === "named" ? "message" : "named");
+      },
+      "$mod+p": () => {
+        openPresets();
       },
       "$mod+enter": () => {
         void submit();
@@ -134,10 +154,39 @@ export function Compose(): JSX.Element {
         return false;
       },
     }),
-    [mode, commentTarget, setMode, setCommentTarget, submit],
+    [mode, commentTarget, setMode, setCommentTarget, submit, openPresets],
   );
 
   useHotkeys(hotkeyMap);
+
+  /* Consume composeDraft — set by external pre-fill paths (P8 presets,
+     P9 skills). If the textarea is empty we replace; otherwise we append
+     after a blank-line separator so we never destroy in-progress typing.
+     Always clears the draft after consuming so a second open of the same
+     preset still inserts again. After insertion, focus the textarea and
+     place the caret at the end. */
+  useEffect(() => {
+    if (composeDraft === null) return;
+    setContent((prev) => {
+      const trimmed = prev.trim();
+      if (trimmed.length === 0) return composeDraft;
+      return `${prev}\n\n${composeDraft}`;
+    });
+    setComposeDraft(null);
+    /* Focus the textarea on the next frame so the value update has flushed
+       and the caret lands at the end. */
+    queueMicrotask(() => {
+      const ta = textareaRef.current;
+      if (ta === null) return;
+      ta.focus();
+      const end = ta.value.length;
+      try {
+        ta.setSelectionRange(end, end);
+      } catch {
+        /* ignore — type=textarea always supports this in real browsers. */
+      }
+    });
+  }, [composeDraft, setComposeDraft]);
 
   // When commentTarget appears, the store also sets mode='comment' (see
   // store.setCommentTarget). When it's cleared by escape we leave mode alone;
@@ -187,11 +236,12 @@ export function Compose(): JSX.Element {
         <div className="compose-actions">
           <ModeBar />
           <button
+            ref={presetsBtnRef}
             type="button"
             className="mode-btn"
-            disabled
-            title="Coming in P8"
-            aria-label="Presets (coming in P8)"
+            onClick={openPresets}
+            aria-label="Open presets"
+            title="Open presets (⌘P)"
           >
             <Zap size={11} aria-hidden />
             Presets <span className="kbd">⌘P</span>
@@ -216,6 +266,12 @@ export function Compose(): JSX.Element {
           />
         </div>
       </div>
+      {activePopover.key === "presets" ? (
+        <PresetsPopover
+          anchorRect={activePopover.anchorRect}
+          onClose={closePopover}
+        />
+      ) : null}
     </div>
   );
 }

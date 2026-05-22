@@ -2,6 +2,7 @@ import type {
   AnyEventRecord,
   EventKind,
   Participant,
+  Preset,
   RegisteredAgent,
   SearchHit,
   TodoPayload,
@@ -108,6 +109,7 @@ export interface Client {
   postFile(sessionId: string, body: PostFileBody): Promise<{ filename: string }>;
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoBuckets>;
   search(query: string, sessionId?: string): Promise<SearchHit[]>;
+  listPresets(sessionId?: string): Promise<{ builtin: Preset[]; project: Preset[] }>;
 }
 
 function buildHeaders(token: string | null): Record<string, string> {
@@ -248,6 +250,15 @@ export function createClient(cfg: ClientConfig): Client {
         hits: SearchHit[];
       };
       return body.hits;
+    },
+    async listPresets(sessionId) {
+      const qs = new URLSearchParams();
+      if (sessionId !== undefined && sessionId.length > 0) {
+        qs.set("session", sessionId);
+      }
+      const suffix = qs.toString();
+      const path = `/presets${suffix ? `?${suffix}` : ""}`;
+      return (await get(path)) as { builtin: Preset[]; project: Preset[] };
     },
   };
 }

@@ -39,6 +39,10 @@ interface State {
   events: AnyEventRecord[];
   composeMode: "message" | "named" | "comment";
   commentTarget: { file: string; lines?: [number, number] } | null;
+  /* composeDraft — text the compose textarea should adopt when next mounted
+     or when this value flips from null to a string. P8 (presets) sets this
+     to the chosen preset body; Compose appends or replaces, then clears. */
+  composeDraft: string | null;
   leftRail: LeftRailKey;
   rightTab: RightTabKey;
   viewMode: ViewMode;
@@ -55,6 +59,7 @@ interface State {
   setCommentTarget(
     target: { file: string; lines?: [number, number] } | null,
   ): void;
+  setComposeDraft(draft: string | null): void;
   setLeftRail(v: LeftRailKey): void;
   setRightTab(v: RightTabKey): void;
   setViewMode(v: ViewMode): void;
@@ -73,6 +78,7 @@ export const useStore = create<State>((set) => ({
   events: [],
   composeMode: "message",
   commentTarget: null,
+  composeDraft: null,
   leftRail: "sessions",
   rightTab: "log",
   viewMode: "everything",
@@ -104,6 +110,7 @@ export const useStore = create<State>((set) => ({
       commentTarget,
       composeMode: commentTarget !== null ? "comment" : "message",
     }),
+  setComposeDraft: (composeDraft) => set({ composeDraft }),
   setLeftRail: (leftRail) => set({ leftRail }),
   setRightTab: (rightTab) => set({ rightTab }),
   setViewMode: (viewMode) => set({ viewMode }),
