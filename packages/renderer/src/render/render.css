@@ -1,0 +1,379 @@
+/* ============================================================================
+   F-Mark renderer styles: Markdown + JSON + ModeToggle
+
+   Every selector here is keyed to the CSS variables defined in
+   `themes/tokens.css`, so all six F-Mark themes get correct treatment.
+   No hard-coded colours.
+   ========================================================================== */
+
+/* -- Markdown rendered prose ----------------------------------------------- */
+.fm-prose {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.fm-prose h1 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 28px 0 10px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.fm-prose h1:first-child { margin-top: 0; }
+.fm-prose h2 {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 24px 0 8px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.fm-prose h2:first-child { margin-top: 0; }
+.fm-prose h3 {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  font-weight: 600;
+  margin: 18px 0 6px;
+  color: var(--ink);
+}
+.fm-prose p { margin: 0 0 12px; }
+.fm-prose ul,
+.fm-prose ol { margin: 0 0 12px; padding-left: 22px; }
+.fm-prose li { margin: 2px 0; }
+.fm-prose code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--panel);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+.fm-prose pre {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  overflow: auto;
+  margin: 0 0 12px;
+}
+.fm-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.fm-prose blockquote {
+  margin: 12px 0;
+  padding: 4px 16px;
+  border-left: 3px solid var(--agent-tint-2);
+  color: var(--ink-2);
+  font-style: italic;
+}
+.fm-prose a {
+  color: var(--user);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fm-prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+/* -- Source view ----------------------------------------------------------- */
+.fm-source {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+.fm-source code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* -- Accordion ------------------------------------------------------------- */
+.fm-accordion {
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fm-accordion-preamble {
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.fm-accordion-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fm-accordion-section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  overflow: hidden;
+}
+.fm-accordion-subsections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line-2);
+}
+.fm-accordion-subsection {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.fm-accordion-h1,
+.fm-accordion-h2 {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 10px 12px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink);
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.fm-accordion-h1:hover,
+.fm-accordion-h2:hover {
+  background: var(--panel-2);
+}
+.fm-accordion-h2 {
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.fm-accordion-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: var(--panel);
+  color: var(--ink-2);
+  padding: 4px 7px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-2);
+  flex-shrink: 0;
+}
+.fm-accordion-chip-sm {
+  font-size: 9px;
+  padding: 3px 6px;
+}
+.fm-accordion-chevron {
+  flex-shrink: 0;
+  color: var(--ink-3);
+  transition: transform 0.15s ease;
+}
+.fm-accordion-chevron-open {
+  transform: rotate(90deg);
+}
+.fm-accordion-title {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.fm-accordion-title-sm {
+  font-size: 13px;
+}
+.fm-accordion-count {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 3px 7px;
+}
+.fm-accordion-body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line-2);
+  background: var(--canvas);
+}
+.fm-accordion-body > .fm-accordion-subsections {
+  margin-top: 12px;
+}
+
+/* -- JSON tree ------------------------------------------------------------- */
+.fm-json-tree {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.fm-json-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.fm-json-toolbar-btn {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fm-json-toolbar-btn:hover {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.fm-json-root {
+  display: flex;
+  flex-direction: column;
+}
+.fm-json-details {
+  display: block;
+}
+.fm-json-summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 2px;
+  user-select: none;
+  outline: none;
+}
+.fm-json-summary::-webkit-details-marker {
+  display: none;
+}
+.fm-json-summary::before {
+  content: "▶";
+  display: inline-block;
+  width: 10px;
+  font-size: 9px;
+  color: var(--ink-3);
+  transition: transform 0.12s ease;
+  transform: rotate(0deg);
+  margin-right: 2px;
+}
+.fm-json-details[open] > .fm-json-summary::before {
+  transform: rotate(90deg);
+}
+.fm-json-children {
+  padding-left: 14px;
+  border-left: 1px dashed var(--line-2);
+  margin-left: 4px;
+}
+.fm-json-leaf {
+  padding: 1px 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.fm-json-key {
+  color: var(--ink-2);
+  font-family: var(--mono);
+}
+.fm-json-index {
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+.fm-json-punct {
+  color: var(--ink-3);
+}
+.fm-json-meta {
+  color: var(--ink-3);
+  font-style: italic;
+}
+.fm-json-string { color: var(--user); }
+.fm-json-number { color: var(--agent); }
+.fm-json-bool   { color: var(--green); }
+.fm-json-null   { color: var(--ink-4); }
+
+/* -- JSON table ------------------------------------------------------------ */
+.fm-json-table {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--canvas);
+  width: 100%;
+}
+.fm-json-table th,
+.fm-json-table td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.fm-json-table th {
+  background: var(--panel);
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fm-json-table tr:nth-child(even) td {
+  background: var(--panel);
+}
+
+/* -- Mode toggle (segmented control) --------------------------------------- */
+.fm-mode-toggle {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 1px;
+}
+.fm-mode-toggle-btn {
+  padding: 5px 11px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fm-mode-toggle-btn:hover {
+  color: var(--ink-2);
+}
+.fm-mode-toggle-btn.on {
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}

@@ -1,5 +1,6 @@
 @import "./themes/tokens.css";
 @import "./themes/structural.css";
+@import "./render/render.css";
 
 @tailwind base;
 @tailwind components;

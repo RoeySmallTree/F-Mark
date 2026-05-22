@@ -7,3 +7,4 @@
 |---|---|---|---|---|
 | _start_ | — | orchestrator | Plan written, agents queued | Phases P1–P15 pending |
 | 2026-05-22T21:07Z | P1 | implementer | landed theme tokens + switcher | tests 12 passing, build clean |
+| 2026-05-22T21:17Z | P3 | implementer | landed markdown + json renderers | tests 35 passing |
