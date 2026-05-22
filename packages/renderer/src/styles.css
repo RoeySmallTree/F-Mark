@@ -5,6 +5,7 @@
 @import "./cards/cards.css";
 @import "./modals/modals.css";
 @import "./popovers/popovers.css";
+@import "./overlays/overlays.css";
 
 @tailwind base;
 @tailwind components;

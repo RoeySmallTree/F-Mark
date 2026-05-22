@@ -1,0 +1,192 @@
+/* Overlays — comment-thread overlay rendered inside the right panel when
+   `store.commentTarget` is non-null. Styles ported verbatim from
+   planning/redesign/design.html (lines 444-467). All colors resolve via
+   CSS variables (tokens.css) so theme swaps just work.
+
+   Note: `.panel-scroll`, `.feed-scroll.dimmed`, and `.prose-card.focused`
+   already live in shell.css and cards.css from earlier phases. */
+
+/* Header line + close button row for the overlay. */
+.overlay-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 14px 6px;
+  border-bottom: 1px solid var(--line-2);
+}
+.overlay-head .comments-on {
+  flex: 1;
+  margin: 0;
+}
+.overlay-close {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-3);
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.overlay-close:hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.comments-on {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+  margin: 0 0 4px;
+}
+.comments-on b {
+  color: var(--ink);
+  text-transform: none;
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.anchor-snippet {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-left: 2px solid var(--user);
+  font-size: 12.5px;
+  font-family: var(--serif);
+  color: var(--ink-2);
+  font-style: italic;
+  border-radius: 0 4px 4px 0;
+  white-space: pre-wrap;
+}
+.anchor-snippet .ln {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-style: normal;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.thread {
+  margin-bottom: 18px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line-2);
+}
+.thread:last-child {
+  border-bottom: 0;
+}
+.thread.resolved {
+  opacity: 0.55;
+}
+
+.thread-msg {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.thread-msg .avatar {
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.thread-msg .body {
+  flex: 1;
+  min-width: 0;
+}
+.thread-msg .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+.thread-msg .head .who {
+  font-weight: 600;
+  color: var(--ink);
+}
+.thread-msg .head .when {
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.thread-msg .txt {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.thread-msg.reply {
+  padding-left: 18px;
+  position: relative;
+}
+.thread-msg.reply::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--line);
+}
+
+.thread-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 0;
+}
+.reply-input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12.5px;
+  color: var(--ink);
+  font-family: var(--sans);
+  cursor: text;
+  outline: 0;
+}
+.reply-input::placeholder {
+  color: var(--ink-3);
+}
+.reply-input:focus {
+  border-color: var(--ink-4);
+}
+
+.resolve-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+}
+.resolve-btn:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--ink);
+}
+.resolve-btn.resolved {
+  background: var(--green-tint);
+  color: var(--green);
+  border-color: var(--green);
+  cursor: default;
+}
+.resolve-btn:disabled {
+  cursor: default;
+}
+
+/* Note on dimming: .feed-scroll.dimmed and .prose-card.focused already
+   live in cards.css (from P5). The overlay relies on those rules. */

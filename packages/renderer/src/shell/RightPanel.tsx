@@ -6,6 +6,7 @@ import { RightTodos } from "../panels/right/RightTodos.js";
 import { RightComments } from "../panels/right/RightComments.js";
 import { RightNamed } from "../panels/right/RightNamed.js";
 import { RightLog } from "../panels/right/RightLog.js";
+import { CommentThreadOverlay } from "../overlays/CommentThreadOverlay.js";
 
 export function RightPanel(): JSX.Element {
   const rightTab = useStore((s) => s.rightTab);
@@ -13,6 +14,7 @@ export function RightPanel(): JSX.Element {
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const events = useStore((s) => s.events);
+  const commentTarget = useStore((s) => s.commentTarget);
 
   const slug = useMemo(
     () =>
@@ -27,6 +29,21 @@ export function RightPanel(): JSX.Element {
     return total;
   }, [agg]);
   const namedCount = agg.named.length;
+
+  // P14: When a pin is focused, replace the tab content with the
+  // comment-thread overlay. The overlay reads from the same
+  // commentsByTarget aggregation so no extra plumbing is needed.
+  if (commentTarget !== null) {
+    const comments = agg.commentsByTarget.get(commentTarget.file) ?? [];
+    return (
+      <aside className="right-panel" aria-label="Comment thread overlay">
+        <CommentThreadOverlay
+          targetFile={commentTarget.file}
+          comments={comments}
+        />
+      </aside>
+    );
+  }
 
   return (
     <aside className="right-panel" aria-label="Right panel">

@@ -38,10 +38,15 @@ export function ProseCard({
   const commentTarget = useStore((s) => s.commentTarget);
   const setCommentTarget = useStore((s) => s.setCommentTarget);
 
+  const isFocused =
+    commentTarget !== null && commentTarget.file === event.filename;
   const classes = [
     "prose-card",
     who.isUser ? "user" : "agent",
-  ].join(" ");
+    isFocused ? "focused" : "",
+  ]
+    .filter((c) => c.length > 0)
+    .join(" ");
 
   function togglePin(file: string, lines?: [number, number]): void {
     const active =
