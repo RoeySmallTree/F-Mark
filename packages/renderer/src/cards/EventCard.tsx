@@ -12,6 +12,7 @@
      file                           → FileCard
      tool-use                       → ToolUseCard
      turn-end                       → TurnEndDivider
+     flow                           → FlowCard
 */
 
 import { type JSX } from "react";
@@ -29,6 +30,7 @@ import { TodoCard } from "./TodoCard.js";
 import { FileCard } from "./FileCard.js";
 import { ToolUseCard } from "./ToolUseCard.js";
 import { TurnEndDivider } from "./TurnEndDivider.js";
+import { FlowCard } from "./FlowCard.js";
 
 interface Props {
   event: AnyEventRecord;
@@ -77,7 +79,13 @@ export function EventCard({
     );
   }
   if (event.kind === "todo") {
-    return <TodoCard event={event} participants={participants} />;
+    return (
+      <TodoCard
+        event={event}
+        participants={participants}
+        allEvents={allEvents}
+      />
+    );
   }
   if (event.kind === "file") {
     return <FileCard event={event} participants={participants} />;
@@ -87,6 +95,9 @@ export function EventCard({
   }
   if (event.kind === "turn-end") {
     return <TurnEndDivider event={event} participants={participants} />;
+  }
+  if (event.kind === "flow") {
+    return <FlowCard event={event} participants={participants} />;
   }
   return null;
 }
