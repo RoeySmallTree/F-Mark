@@ -67,3 +67,19 @@ Never edit a file. To revise a contribution, POST a new prose event with the sam
 - Prefer named prose for durable contributions (plans, code, prose sections). Use unnamed messages for back-and-forth.
 - Use comments (`target`) when commenting on a specific contribution — they render in context.
 - Always end your turn with a `turn-end` event.
+
+## Auto-stream hooks
+
+The kernel exposes a CLI command (`npx -y f-mark hook auto-stream <participant_id>`) that, when wired into your runtime's "turn finished" hook, automatically POSTs:
+- intermediate text blocks as `prose` with `arbitrary: true`
+- tool calls as `tool-use` events
+- the final text block as `prose` with `arbitrary: false`
+- `turn-end` after the concluding prose
+
+Runtime-specific install instructions live in each runtime's skill bundle (Claude Code: `.claude/skills/f-mark/`, Codex: `.codex/skills/f-mark/`, Gemini: `.gemini/skills/f-mark/`).
+
+To stream output from a runtime that lacks lifecycle hooks, post mid-turn narration manually with `arbitrary: true` — the renderer treats both paths identically.
+
+## Active session pointer
+
+`POST /agents/<participant_id>/link` records the active session under `.f-mark/agents/<participant_id>/active-session`. The hook reads this file; without it, the hook exits silently with a stderr warning.
