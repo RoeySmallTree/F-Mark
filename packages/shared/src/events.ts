@@ -6,7 +6,8 @@ export type EventKind =
   | "todo"
   | "html"
   | "file"
-  | "tool-use";
+  | "tool-use"
+  | "flow";
 
 export interface ProseTarget {
   file: string;
@@ -134,6 +135,56 @@ export interface ToolUseEventRecord extends EventRecord<ToolUsePayload> {
   kind: "tool-use";
 }
 
+export type FlowItemType =
+  | "default"
+  | "info"
+  | "success"
+  | "danger"
+  | "disabled";
+
+export type FlowEdgeStyle = "solid" | "dashed" | "dotted" | "flowing";
+export type FlowEdgeType = "default" | "info" | "success" | "danger";
+
+export interface FlowNodePopover {
+  html: string;
+  css?: string;
+  js?: string;
+}
+
+export interface FlowNode {
+  id: string;
+  label: string;
+  title?: string;
+  content?: string;
+  popover?: FlowNodePopover;
+  itemType?: FlowItemType;
+  focused?: boolean;
+  /** Optional explicit position. If omitted on ANY node, the renderer runs dagre. */
+  position?: { x: number; y: number };
+}
+
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  style?: FlowEdgeStyle;
+  type?: FlowEdgeType;
+}
+
+export interface FlowPayload {
+  /** Stable id used by `supersedes` for revisions. */
+  id: string;
+  title?: string;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  supersedes?: string;
+}
+
+export interface FlowEventRecord extends EventRecord<FlowPayload> {
+  kind: "flow";
+}
+
 export type AnyEventRecord =
   | ProseEventRecord
   | ChoicesEventRecord
@@ -143,4 +194,5 @@ export type AnyEventRecord =
   | FileEventRecord
   | HtmlEventRecord
   | ToolUseEventRecord
+  | FlowEventRecord
   | EventRecord;
