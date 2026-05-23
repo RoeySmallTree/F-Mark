@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
+import type { Paths } from "../paths.js";
 import { checkHookInstallStatus, renderInstallInstructions } from "../hooksInstall/index.js";
 
-export function registerHookInstallRoutes(app: FastifyInstance): void {
+export function registerHookInstallRoutes(app: FastifyInstance, paths: Paths): void {
   app.get<{ Querystring: { runtime_id?: string; participant_id?: string; user_participant_id?: string } }>(
     "/managed-agents/hook-install-status",
     async (req, reply) => {
@@ -15,6 +16,7 @@ export function registerHookInstallRoutes(app: FastifyInstance): void {
           runtimeId: runtime_id,
           participantId: participant_id,
           userParticipantId: user_participant_id,
+          projectRoot: paths.root(),
         });
       } catch (e: any) {
         reply.code(400);

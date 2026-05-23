@@ -206,7 +206,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
       projectRoot: deps.paths.root(),
       inputQueue: paneInputQueue,
     });
-    registerHookInstallRoutes(app);
+    registerHookInstallRoutes(app, deps.paths);
 
     // Pane WS subsystem (separate channel router from the global broadcast bus).
     // Hub callbacks need access to the pane pipe functions; we wire them after

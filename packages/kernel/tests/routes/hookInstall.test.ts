@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { registerHookInstallRoutes } from "../../src/routes/hookInstall.js";
+import { paths } from "../../src/paths.js";
+import { withTempProject } from "../helpers/tempdir.js";
 
-async function makeApp() {
+async function makeApp(root?: string) {
   const app = Fastify();
-  registerHookInstallRoutes(app);
+  const p = paths(root ?? "/tmp/fmark-noop");
+  registerHookInstallRoutes(app, p);
   return app;
 }
 
@@ -57,5 +62,42 @@ describe("hook-install routes", () => {
     });
     expect(res.statusCode).toBe(400);
     await app.close();
+  });
+
+  it("GET hook-install-status reads project-local .codex/config.toml when present", async () => {
+    await withTempProject(async (root) => {
+      const agentId = "ag-codex-projectlocal";
+      const userId = "us-projectlocal";
+      const toml = [
+        "[[hooks.Stop]]",
+        `command = ["npx", "-y", "f-mark", "hook", "auto-stream", "${agentId}"]`,
+        "timeout = 30",
+        "",
+        "[[hooks.UserPromptSubmit]]",
+        `command = ["npx", "-y", "f-mark", "hook", "auto-stream", "${userId}", "--kind", "user"]`,
+        "timeout = 10",
+        "",
+      ].join("\n");
+      await mkdir(join(root, ".codex"), { recursive: true });
+      await writeFile(join(root, ".codex", "config.toml"), toml, "utf8");
+
+      const app = await makeApp(root);
+      const res = await app.inject({
+        method: "GET",
+        url: `/managed-agents/hook-install-status?runtime_id=codex&participant_id=${agentId}&user_participant_id=${userId}`,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.installed).toBe(true);
+      expect(
+        body.detectedEntries.some((e: { event: string }) => e.event === "Stop"),
+      ).toBe(true);
+      expect(
+        body.detectedEntries.some(
+          (e: { event: string }) => e.event === "UserPromptSubmit",
+        ),
+      ).toBe(true);
+      await app.close();
+    });
   });
 });

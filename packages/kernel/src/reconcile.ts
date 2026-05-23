@@ -78,6 +78,7 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
             runtimeId,
             participantId: aid,
             userParticipantId,
+            projectRoot: paths.root(),
           });
           if (status.installed) {
             // Hooks are installed but we have no recent ping — surface as
