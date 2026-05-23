@@ -5,7 +5,8 @@ export type EventKind =
   | "turn-end"
   | "todo"
   | "html"
-  | "file";
+  | "file"
+  | "tool-use";
 
 export interface ProseTarget {
   file: string;
@@ -103,6 +104,19 @@ export interface HtmlEventRecord extends EventRecord<HtmlManifest> {
   kind: "html";
 }
 
+export interface ToolUsePayload {
+  tool_name: string;
+  tool_use_id: string;
+  input: unknown;
+  result?: unknown;
+  success: boolean;
+  duration_ms?: number;
+}
+
+export interface ToolUseEventRecord extends EventRecord<ToolUsePayload> {
+  kind: "tool-use";
+}
+
 export type AnyEventRecord =
   | ProseEventRecord
   | ChoicesEventRecord
@@ -111,4 +125,5 @@ export type AnyEventRecord =
   | TodoEventRecord
   | FileEventRecord
   | HtmlEventRecord
+  | ToolUseEventRecord
   | EventRecord;

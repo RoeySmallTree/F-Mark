@@ -20,6 +20,7 @@ import {
   MousePointerClick,
   Paperclip,
   Text,
+  Wrench,
   X,
 } from "lucide-react";
 import type { AnyEventRecord, EventKind, ProsePayload } from "@f-mark/shared";
@@ -43,6 +44,7 @@ const KIND_ICON: Record<EventKind, typeof Text> = {
   todo: CheckSquare,
   html: FileCode2,
   file: Paperclip,
+  "tool-use": Wrench,
 };
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -53,6 +55,7 @@ const KIND_LABEL: Record<EventKind, string> = {
   todo: "todo",
   html: "html",
   file: "file",
+  "tool-use": "tool use",
 };
 
 function formatTs(ts: string): string {
