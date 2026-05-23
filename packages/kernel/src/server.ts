@@ -17,8 +17,11 @@ import { registerSearchRoutes } from "./routes/search.js";
 import { registerGuideRoute } from "./routes/guide.js";
 import { registerStaticRoutes } from "./routes/static.js";
 import { registerPresenceRoutes } from "./routes/presence.js";
+import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
+import { createTmuxManager } from "./tmux/manager.js";
+import { realCommandRunner } from "./tmux/commandRunner.js";
 
 export interface ServerDeps {
   token: string | null;
@@ -123,6 +126,18 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerSearchRoutes(app, deps.paths);
   registerGuideRoute(app, deps.paths);
   registerPresenceRoutes(app, () => tracker);
+
+  const tmux = createTmuxManager({
+    runner: realCommandRunner(),
+    projectRoot: deps.paths.root(),
+  });
+  registerManagedAgentsRoutes(app, {
+    paths: deps.paths,
+    tmux,
+    tracker,
+    projectRoot: deps.paths.root(),
+  });
+
   app.register(async (instance) => {
     await registerStaticRoutes(instance);
     void seqLog("static plugin ready", { module: "server" });
