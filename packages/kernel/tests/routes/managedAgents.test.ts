@@ -11,6 +11,7 @@ import { fakeCommandRunner } from "../../src/tmux/commandRunner.js";
 import { createTmuxManager } from "../../src/tmux/manager.js";
 import { createInputQueue } from "../../src/tmux/inputQueue.js";
 import type { Bus, BusMessage } from "../../src/ws/bus.js";
+import type { DetectResult } from "../../src/hooksInstall/types.js";
 
 function fakeBus(): Bus & { messages: BusMessage[] } {
   const messages: BusMessage[] = [];
@@ -22,7 +23,15 @@ function fakeBus(): Bus & { messages: BusMessage[] } {
   };
 }
 
-async function makeApp(opts?: { bus?: Bus }) {
+async function makeApp(opts?: {
+  bus?: Bus;
+  checkHookInstallStatus?: (o: {
+    runtimeId: string;
+    participantId: string;
+    userParticipantId?: string;
+    projectRoot?: string;
+  }) => Promise<DetectResult>;
+}) {
   const root = await mkdtemp(join(tmpdir(), "fmark-mgd-r-"));
   const p = paths(root);
   await initProject(p);
@@ -41,6 +50,7 @@ async function makeApp(opts?: { bus?: Bus }) {
     projectRoot: root,
     inputQueue: createInputQueue(),
     bus,
+    checkHookInstallStatus: opts?.checkHookInstallStatus,
   });
   return { app, runner, root, p, tracker, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
@@ -553,6 +563,111 @@ describe("Bus publishing (managed-agent WS messages)", () => {
       label: "scratch",
     });
     expect((term as { tmux_session: string }).tmux_session).toMatch(/-term-1$/);
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+});
+
+describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
+  /** Rewrite .f-mark/runtimes.json so the test runtime uses readyDelayMs=0
+      and the kickoff fires inline (no setTimeout). Keeps the test fast and
+      deterministic. */
+  async function setZeroDelayClaude(p: ReturnType<typeof paths>): Promise<void> {
+    const { writeFile } = await import("node:fs/promises");
+    const { join: pjoin } = await import("node:path");
+    const txt = JSON.stringify(
+      {
+        version: "1.0",
+        runtimes: {
+          claude: {
+            displayName: "Claude Code",
+            executable: "claude",
+            args: [],
+            icon: "claude",
+            readyDelayMs: 0,
+          },
+        },
+      },
+      null,
+      2,
+    );
+    await writeFile(pjoin(p.fmarkDir(), "runtimes.json"), txt, "utf8");
+  }
+
+  it("returns hooks_status='installed' and sends kickoff via send-keys when checkHookInstallStatus reports installed", async () => {
+    const fakeCheck = async (): Promise<DetectResult> => ({
+      installed: true,
+      configPath: "~/.claude/settings.json",
+      detectedEntries: [],
+      expectedEntries: [],
+    });
+    const { app, runner, p, tracker, cleanup } = await makeApp({
+      checkHookInstallStatus: fakeCheck,
+    });
+    await setZeroDelayClaude(p);
+    expectSpawnCalls(runner);
+    // Kickoff send-keys: literal text + Enter. With readyDelayMs=0 the route
+    // awaits the kickoff inline before responding, so the runner expectations
+    // are consumed by the time inject() resolves.
+    runner.expect(["tmux", "send-keys", "-t"], {
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "send-keys", "-t"], {
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-hk-ok",
+        session_id: "sess-x",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().hooks_status).toBe("installed");
+    // Tracker should reflect hooks installed.
+    const snap = tracker.snapshot();
+    const entry = snap.get("ag-hk-ok");
+    expect(entry).toBeDefined();
+    // After ping=null + hooksInstalled=true + paneAlive=true,
+    // deriveState() will yield "launching" (no ping yet).
+    expect(entry?.state).toBe("launching");
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("returns hooks_status='missing' and does NOT send kickoff when not installed", async () => {
+    const fakeCheck = async (): Promise<DetectResult> => ({
+      installed: false,
+      configPath: "~/.claude/settings.json",
+      detectedEntries: [],
+      expectedEntries: [],
+    });
+    const { app, runner, p, cleanup } = await makeApp({
+      checkHookInstallStatus: fakeCheck,
+    });
+    await setZeroDelayClaude(p);
+    expectSpawnCalls(runner);
+    // No kickoff send-keys expected.
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-hk-no",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().hooks_status).toBe("missing");
     runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();

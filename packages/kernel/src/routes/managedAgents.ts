@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { Paths } from "../paths.js";
 import type { TmuxManager } from "../tmux/manager.js";
 import type { PresenceTracker } from "../presence/tracker.js";
-import { registerAgent, isValidParticipantId } from "../participants.js";
+import { registerAgent, isValidParticipantId, listParticipants } from "../participants.js";
 import { loadRuntimes } from "../runtimes/registry.js";
 import {
   writeTmuxSession,
@@ -17,6 +17,7 @@ import { writeActiveSession } from "../agents/activeSession.js";
 import { appendAgentLog, readAgentLog } from "../agents/logs.js";
 import type { InputQueue } from "../tmux/inputQueue.js";
 import { validateSlashCommand, validateMessageText } from "../runtimes/validation.js";
+import { checkHookInstallStatus as defaultCheckHookInstallStatus } from "../hooksInstall/index.js";
 import type { Bus } from "../ws/bus.js";
 
 interface SpawnBody {
@@ -50,6 +51,13 @@ export interface ManagedAgentsDeps {
    * so the renderer can update chip state without a manual list refresh.
    */
   bus: Bus;
+  /**
+   * Optional override for the hook-install detection used by the spawn
+   * route. Defaults to the production `checkHookInstallStatus`; tests inject
+   * a fake to drive the kickoff send-keys path without touching real config
+   * files.
+   */
+  checkHookInstallStatus?: typeof defaultCheckHookInstallStatus;
 }
 
 const CONFIRM_TTL_MS = 10_000;
@@ -114,6 +122,7 @@ export function registerManagedAgentsRoutes(
   deps: ManagedAgentsDeps,
 ): void {
   const { paths, tmux, tracker, inputQueue, bus } = deps;
+  const hookStatusCheck = deps.checkHookInstallStatus ?? defaultCheckHookInstallStatus;
 
   // Defence-in-depth: gate cookie-authenticated mutating requests by Origin.
   // Registered before the routes so it runs on every /managed-agents/* call.
@@ -221,6 +230,70 @@ export function registerManagedAgentsRoutes(
       throw err;
     }
 
+    // Hook install detection + presence seeding. Best-effort: if the runtime
+    // is unknown to the detector (or the detector throws on a transient IO
+    // error), fall back to "unknown" rather than failing the whole spawn.
+    let hooksStatus: "installed" | "missing" | "unknown" = "unknown";
+    try {
+      // Find the first registered user participant so the detector matches the
+      // exact `auto-stream <user-id> --kind user` UserPromptSubmit hook the
+      // installer instructions emit. Without this match, real installed hooks
+      // would still be reported "missing".
+      let userParticipantId: string | undefined;
+      try {
+        const parts = await listParticipants(paths);
+        for (const [pid, part] of Object.entries(parts)) {
+          if (part.kind === "user") {
+            userParticipantId = pid;
+            break;
+          }
+        }
+      } catch {
+        // ignore; checkHookInstallStatus has its own default
+      }
+      const detect = await hookStatusCheck({
+        runtimeId: runtime_id,
+        participantId,
+        userParticipantId,
+        projectRoot: paths.root(),
+      });
+      tracker.setManagedHookStatus(participantId, detect.installed);
+      hooksStatus = detect.installed ? "installed" : "missing";
+
+      // When hooks are already installed, deliver a brief kickoff prompt to
+      // the freshly-spawned runtime via send-keys. The spec calls for the full
+      // /guide markdown here, but for v0.4 a concise welcome that includes the
+      // participant id, optional session, and the AGENT.md pointer is enough
+      // to satisfy the "one-click agent spinup" goal. Sent through the shared
+      // input queue so it cannot interleave with overlay-typed input.
+      if (detect.installed) {
+        const sessionHint =
+          body.session_id !== undefined ? `, session ${body.session_id}` : "";
+        const kickoff = `Welcome — you are participant ${participantId}${sessionHint}. Use the F-Mark API as documented in .f-mark/AGENT.md.`;
+        const readyDelayMs = runtime.readyDelayMs ?? 0;
+        const fire = async (): Promise<void> => {
+          await inputQueue.enqueue(sessionName, async () => {
+            await tmux.sendLiteralText(sessionName, kickoff);
+            await tmux.sendKey(sessionName, "C-m");
+          });
+        };
+        if (readyDelayMs > 0) {
+          // Defer the send until the runtime is likely listening on stdin.
+          // The route response returns promptly; the kickoff is queued via the
+          // shared per-pane input queue so it cannot interleave with WS input.
+          setTimeout(() => {
+            void fire().catch(() => {
+              /* best-effort */
+            });
+          }, readyDelayMs).unref?.();
+        } else {
+          await fire();
+        }
+      }
+    } catch {
+      // Detection failed — leave status "unknown" and presence untouched.
+    }
+
     // Publish managed-agent.spawned for the renderer chip strip.
     bus.publish({
       type: "managed-agent.spawned",
@@ -233,7 +306,7 @@ export function registerManagedAgentsRoutes(
       participant_id: participantId,
       tmux_session: sessionName,
       runtime_id,
-      hooks_status: "unknown" as const,
+      hooks_status: hooksStatus,
     };
   });
 
