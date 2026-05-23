@@ -4,18 +4,96 @@ import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 
 interface GuideQuery {
+  session_id?: string;
+  /** Backward-compat alias for `session_id`. */
   sessionId?: string;
+  agent_id?: string;
+  runtime_id?: string;
 }
 
-function buildGuide(
-  baseUrl: string,
-  agentMd: string,
-  sessionId: string | undefined,
+function renderHooksSection(
+  runtimeId: string | undefined,
+  agentId: string | undefined,
 ): string {
+  const userPlaceholder = "us-yourname";
+  const agentPlaceholder = agentId ?? "<your-agent-id>";
+  if (runtimeId === "claude") {
+    return [
+      "### Hooks (Claude Code)",
+      "",
+      "Add the auto-stream hook to `~/.claude/settings.json`:",
+      "",
+      "```json",
+      '"hooks": {',
+      '  "Stop": [{ "hooks": [{ "type": "command", "command": "npx -y f-mark hook auto-stream ' +
+        agentPlaceholder +
+        '" }] }],',
+      '  "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "npx -y f-mark hook auto-stream ' +
+        userPlaceholder +
+        ' --kind user" }] }]',
+      "}",
+      "```",
+    ].join("\n");
+  }
+  if (runtimeId === "codex") {
+    return [
+      "### Hooks (Codex)",
+      "",
+      "Add to `~/.codex/config.toml`:",
+      "",
+      "```toml",
+      "[[hooks.Stop]]",
+      'command = ["npx", "-y", "f-mark", "hook", "auto-stream", "' +
+        agentPlaceholder +
+        '"]',
+      "timeout = 30",
+      "",
+      "[[hooks.UserPromptSubmit]]",
+      'command = ["npx", "-y", "f-mark", "hook", "auto-stream", "' +
+        userPlaceholder +
+        '", "--kind", "user"]',
+      "timeout = 10",
+      "```",
+      "",
+      "On first run, Codex will prompt you to trust the hook command. Approve once.",
+    ].join("\n");
+  }
+  if (runtimeId === "gemini") {
+    return [
+      "### Hooks (Gemini CLI)",
+      "",
+      "Gemini CLI uses **manual-stream mode** in F-Mark v0.4. The model itself POSTs prose, tool-use, and turn-end events — no hooks needed.",
+    ].join("\n");
+  }
+  return [
+    "### Hooks",
+    "",
+    "F-Mark v0.4 supports three runtimes:",
+    "- **Claude Code** — hooks installed in `~/.claude/settings.json`",
+    "- **Codex** — hooks installed in `~/.codex/config.toml`",
+    "- **Gemini CLI** — manual-stream mode (no hooks needed)",
+    "",
+    "Pass `?runtime_id=claude|codex|gemini` to this endpoint for the install snippet.",
+  ].join("\n");
+}
+
+function buildGuide(opts: {
+  baseUrl: string;
+  agentMd: string;
+  sessionId?: string;
+  agentId?: string;
+  runtimeId?: string;
+}): string {
+  const { baseUrl, agentMd, sessionId, agentId, runtimeId } = opts;
+  const agentPlaceholder = agentId ?? "<your-agent-id>";
+  const identityLine =
+    agentId !== undefined
+      ? `\n- **Your participant id:** \`${agentId}\` (already registered — skip the \`POST /participants/register\` step).`
+      : "";
   const sessionSection =
     sessionId === undefined
       ? `\n## No session selected\n\nThe user did not pin a session for you. List existing ones with \`GET ${baseUrl}/sessions\` and ask which to join, or create a new one with \`POST ${baseUrl}/sessions\` (body: \`{"slug":"…"}\`).\n`
-      : `\n## Your session\n\n- **Session id:** \`${sessionId}\`\n- **Read events:** \`GET ${baseUrl}/sessions/${sessionId}/events?since=<last_seen_ts>\`\n\n### First action — say hello\n\nAfter you register as a participant, immediately POST a short prose message so the user sees you are online. Replace \`<your-agent-id>\` with the id returned from \`POST /participants/register\`:\n\n\`\`\`bash\ncurl -X POST '${baseUrl}/sessions/${sessionId}/events/prose' \\\n  -H "Authorization: Bearer $(cat .f-mark/.token)" \\\n  -H 'Content-Type: application/json' \\\n  -d '{"participant_id":"<your-agent-id>","content":"Connected. What would you like to work on?"}'\n\`\`\`\n\nThen wait for the user's next prose, read it via the \`GET /events\` endpoint above, and respond with another prose (or a \`choices\`, \`turn-end\`, etc.). End every turn with \`POST /sessions/${sessionId}/events/turn-end\`.\n`;
+      : `\n## Your session\n\n- **Session id:** \`${sessionId}\`\n- **Read events:** \`GET ${baseUrl}/sessions/${sessionId}/events?since=<last_seen_ts>\`\n\n### First action — say hello\n\nAfter you register as a participant, immediately POST a short prose message so the user sees you are online. Replace \`${agentPlaceholder}\` with the id returned from \`POST /participants/register\`:\n\n\`\`\`bash\ncurl -X POST '${baseUrl}/sessions/${sessionId}/events/prose' \\\n  -H "Authorization: Bearer $(cat .f-mark/.token)" \\\n  -H 'Content-Type: application/json' \\\n  -d '{"participant_id":"${agentPlaceholder}","content":"Connected. What would you like to work on?"}'\n\`\`\`\n\nThen wait for the user's next prose, read it via the \`GET /events\` endpoint above, and respond with another prose (or a \`choices\`, \`turn-end\`, etc.). End every turn with \`POST /sessions/${sessionId}/events/turn-end\`.\n`;
 
   return `# F-Mark agent onboarding
 *Auto-generated by the running kernel at \`${baseUrl}\`. Treat this page as the authoritative live config; \`.f-mark/AGENT.md\` is a static fallback.*
@@ -24,7 +102,7 @@ function buildGuide(
 
 - **Base URL:** \`${baseUrl}\`
 - **Bearer token:** read from \`.f-mark/.token\` in the project root. Send as \`Authorization: Bearer <token>\` on every request (the \`/health\` endpoint is the only exception).
-- **WebSocket (optional):** \`${baseUrl.replace(/^http/, "ws")}/ws\` — broadcasts new event filenames in real-time.
+- **WebSocket (optional):** \`${baseUrl.replace(/^http/, "ws")}/ws\` — broadcasts new event filenames in real-time.${identityLine}
 
 ## Verify your tooling
 
@@ -39,8 +117,7 @@ Before you send anything, check that you have the F-Mark skill installed locally
    \`\`\`
 3. After copying, read \`.claude/skills/f-mark/SKILL.md\` and \`.claude/skills/f-mark/api.md\` for the full reference.
 
-### Hooks (NOT YET SHIPPED)
-The architecture (see \`planning/architecture.md\` §11) reserves a \`.f-mark/hooks/\` directory for scripts triggered on turn-end, comment, etc. **These are not implemented in this version (v0.1.0).** Do not try to install or invoke hooks. Skip this section entirely.
+${renderHooksSection(runtimeId, agentId)}
 ${sessionSection}
 ---
 
@@ -52,7 +129,9 @@ ${agentMd.trimStart()}
 
 export function registerGuideRoute(app: FastifyInstance, p: Paths): void {
   app.get<{ Querystring: GuideQuery }>("/guide", async (req, reply) => {
-    const sessionId = req.query.sessionId;
+    const sessionId = req.query.session_id ?? req.query.sessionId;
+    const agentId = req.query.agent_id;
+    const runtimeId = req.query.runtime_id;
     if (sessionId !== undefined && !(await sessionExists(p, sessionId))) {
       reply.code(404).send({ error: `session not found: ${sessionId}` });
       return;
@@ -64,6 +143,6 @@ export function registerGuideRoute(app: FastifyInstance, p: Paths): void {
     const baseUrl = `${proto}://${host}`;
     const agentMd = await readFile(p.agentMd(), "utf8");
     reply.type("text/markdown; charset=utf-8");
-    return buildGuide(baseUrl, agentMd, sessionId);
+    return buildGuide({ baseUrl, agentMd, sessionId, agentId, runtimeId });
   });
 }
