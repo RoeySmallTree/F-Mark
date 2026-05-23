@@ -19,6 +19,7 @@ import { formatWhen, whoOf } from "./format.js";
 import { LineCommentRail } from "./LineCommentRail.js";
 import { ProseInlineBlock } from "./ProseInlineBlock.js";
 import { ProseEmptyState } from "./ProseEmptyState.js";
+import { BlockAccordion } from "../render/BlockAccordion.js";
 
 interface Props {
   event: AnyEventRecord;
@@ -137,23 +138,39 @@ export function ProseCard({
             ))}
           </div>
         )}
-        {hasLegacyContent && (
-          <ProseInlineBlock
-            event={syntheticLegacyBlock(event, payload)}
+        {mode === "accordion" ? (
+          <BlockAccordion
+            blocks={blocks}
             participants={participants}
-            comments={comments}
-            mode={mode}
+            commentsByFilename={commentsByFilename}
+            legacyBlock={
+              hasLegacyContent
+                ? syntheticLegacyBlock(event, payload)
+                : undefined
+            }
+            legacyComments={comments}
           />
+        ) : (
+          <>
+            {hasLegacyContent && (
+              <ProseInlineBlock
+                event={syntheticLegacyBlock(event, payload)}
+                participants={participants}
+                comments={comments}
+                mode={mode}
+              />
+            )}
+            {blocks.map((b) => (
+              <ProseInlineBlock
+                key={b.filename}
+                event={b}
+                participants={participants}
+                comments={commentsByFilename?.get(b.filename) ?? []}
+                mode={mode}
+              />
+            ))}
+          </>
         )}
-        {blocks.map((b) => (
-          <ProseInlineBlock
-            key={b.filename}
-            event={b}
-            participants={participants}
-            comments={commentsByFilename?.get(b.filename) ?? []}
-            mode={mode}
-          />
-        ))}
         {isTrulyEmpty && <ProseEmptyState />}
         <LineCommentRail
           event={event}
