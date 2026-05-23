@@ -56,9 +56,20 @@ export interface TodoPayload {
   id: string;
   title: string;
   body?: string;
+  status: "open" | "done" | "wip" | "removed";
+  assigned_to?: string;
+  parent_id?: string;
+  supersedes?: string;
+}
+
+export interface TodoTreeNode {
+  id: string;
+  title: string;
+  body?: string;
   status: "open" | "done" | "wip";
   assigned_to?: string;
-  supersedes?: string;
+  parent_id?: string;
+  children: TodoTreeNode[];
 }
 
 export interface FileRefPayload {

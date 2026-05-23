@@ -174,19 +174,18 @@ describe("View toggle — Feed renders the right slice for each mode", () => {
     expect(filenames).not.toContain(COMMENT.filename);
   });
 
-  test("Document: feed shows named prose + turn-end only", () => {
+  test("Document: feed shows named prose only", () => {
     resetStore({ viewMode: "document" });
     const { container } = render(<Feed />);
     const cards = container.querySelectorAll("[data-event-filename]");
     const filenames = Array.from(cards).map((el) =>
       el.getAttribute("data-event-filename"),
     );
-    expect(filenames).toEqual(
-      expect.arrayContaining([NAMED.filename, TURN.filename]),
-    );
+    expect(filenames).toEqual(expect.arrayContaining([NAMED.filename]));
     expect(filenames).not.toContain(UNNAMED.filename);
     expect(filenames).not.toContain(CHOICES.filename);
     expect(filenames).not.toContain(COMMENT.filename);
+    expect(filenames).not.toContain(TURN.filename);
   });
 
   test("Conversation: feed shows unnamed prose + choices + turn-end only", () => {

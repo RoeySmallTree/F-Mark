@@ -1,7 +1,14 @@
 /* Phase 6 — compose bar + global hotkeys. */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, within, cleanup, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  within,
+  cleanup,
+  act,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Participant } from "@f-mark/shared";
 import { Compose } from "../src/compose/Compose.js";
@@ -178,14 +185,42 @@ describe("Compose — hotkeys", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const [url, init] = fetchMock.mock.calls[0]!;
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map(([url]) => String(url));
+      expect(urls.filter((u) => u.endsWith("/events/prose"))).toHaveLength(1);
+      expect(urls.filter((u) => u.endsWith("/events/turn-end"))).toHaveLength(1);
+    });
+    const proseCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/events/prose"),
+    );
+    expect(proseCall).toBeDefined();
+    const [url, init] = proseCall!;
     expect(String(url)).toMatch(/\/events\/prose$/);
     expect((init as RequestInit).method).toBe("POST");
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toEqual({
       participant_id: "us-a7f3",
       content: "Hello world",
+    });
+  });
+
+  test("⌘↵ in empty message mode ends the turn without posting prose", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(jsonResponse({ filename: "turn-end" })),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    resetStore({ composeMode: "message" });
+    render(<Compose />);
+
+    await user.keyboard(`${MOD_OPEN}{Enter}${MOD_CLOSE}`);
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map(([url]) => String(url));
+      expect(urls.filter((u) => u.endsWith("/events/turn-end"))).toHaveLength(1);
+      expect(urls.filter((u) => u.endsWith("/events/prose"))).toHaveLength(0);
     });
   });
 
@@ -264,6 +299,20 @@ describe("Compose — hotkeys", () => {
     await user.keyboard("{Escape}");
     expect(useStore.getState().commentTarget).toBeNull();
   });
+
+  test("Escape clears commentTarget while the compose textarea is focused", async () => {
+    const user = userEvent.setup();
+    resetStore({
+      commentTarget: { file: "x.prose.md", lines: [1, 1] },
+      composeMode: "comment",
+    });
+    render(<Compose />);
+    const ta = screen.getByLabelText(/Compose message/i);
+    await user.click(ta);
+    expect(document.activeElement).toBe(ta);
+    await user.keyboard("{Escape}");
+    expect(useStore.getState().commentTarget).toBeNull();
+  });
 });
 
 describe("Compose — send button label per mode", () => {
@@ -274,22 +323,37 @@ describe("Compose — send button label per mode", () => {
     cleanup();
   });
 
-  test("message mode: empty content → 'End turn' (outline); typed content → 'Send'", async () => {
+  test("message mode: empty content → only End turn; typed content → Send + chain + End turn", async () => {
     const user = userEvent.setup();
     resetStore({ composeMode: "message" });
     const { container } = render(<Compose />);
-    let send = container.querySelector(".send-btn") as HTMLButtonElement;
-    expect(send).toBeTruthy();
-    expect(send).toHaveTextContent(/End turn/i);
-    expect(send.classList.contains("outline")).toBe(true);
+    /* No content → cluster collapses; only End turn is visible. */
+    const cluster = container.querySelector(".send-cluster") as HTMLElement;
+    expect(cluster).toBeTruthy();
+    expect(cluster.classList.contains("empty")).toBe(true);
+    expect(container.querySelector(".send-cluster-send")).toBeNull();
+    expect(container.querySelector(".send-chain")).toBeNull();
+    const endOnly = container.querySelector(".end-turn-btn") as HTMLElement;
+    expect(endOnly).toBeTruthy();
+    expect(endOnly).toHaveTextContent(/End turn/i);
 
     const ta = screen.getByLabelText(/Compose message/i);
     await user.click(ta);
     await user.type(ta, "hi");
 
-    send = container.querySelector(".send-btn") as HTMLButtonElement;
+    /* Content present → Send + chain + End turn all rendered inside the
+       same cluster. */
+    const clusterAfter = container.querySelector(".send-cluster") as HTMLElement;
+    expect(clusterAfter.classList.contains("has-send")).toBe(true);
+    const send = container.querySelector(".send-cluster-send") as HTMLElement;
+    expect(send).toBeTruthy();
     expect(send).toHaveTextContent(/Send/i);
-    expect(send.classList.contains("outline")).toBe(false);
+    const chain = container.querySelector(".send-chain") as HTMLElement;
+    expect(chain).toBeTruthy();
+    /* Default is chained (messageEndsTurn=true). */
+    expect(chain.getAttribute("aria-pressed")).toBe("true");
+    const endTurn = container.querySelector(".end-turn-btn") as HTMLElement;
+    expect(endTurn).toHaveTextContent(/End turn/i);
   });
 
   test("named mode shows 'End turn' as primary action", () => {

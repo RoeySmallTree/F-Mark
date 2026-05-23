@@ -4,6 +4,9 @@ import { aggregate } from "../state/aggregate.js";
 import { EventCard } from "../cards/EventCard.js";
 import { ArbitraryGroupCard } from "../cards/ArbitraryGroupCard.js";
 import { projectFeed } from "../feed/projectFeed.js";
+import { chordToLabel } from "../modals/settings/shortcut-registry.js";
+
+const NAMED_MODE_SHORTCUT = chordToLabel("$mod+N");
 
 export function Feed(): JSX.Element {
   const events = useStore((s) => s.events);
@@ -81,7 +84,8 @@ function EmptyState({
     return (
       <p className="empty-state" data-view="document">
         No named contributions yet. Switch the compose to{" "}
-        <strong>Named</strong> (<code>⌘N</code>) and write your first piece.
+        <strong>Named</strong> (<code>{NAMED_MODE_SHORTCUT}</code>) and write
+        your first piece.
       </p>
     );
   }

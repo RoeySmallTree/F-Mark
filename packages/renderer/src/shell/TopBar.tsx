@@ -8,9 +8,12 @@ import {
 } from "lucide-react";
 import { useStore } from "../state/store.js";
 import { aggregate } from "../state/aggregate.js";
+import { chordToLabel } from "../modals/settings/shortcut-registry.js";
 
 export const FMARK_GLYPH = `▟▙ ╱╲
 ▟▙ ▟▘▘`;
+
+const COMMAND_PALETTE_SHORTCUT = chordToLabel("$mod+K");
 
 function initials(name: string): string {
   const trimmed = name.trim();
@@ -144,12 +147,12 @@ export function TopBar(): JSX.Element {
         <button
           type="button"
           className="icon-btn"
-          title="Search (⌘K)"
+          title={`Search (${COMMAND_PALETTE_SHORTCUT})`}
           aria-label="Open command palette"
           onClick={() => openModal("cmdk")}
         >
           <Search size={15} aria-hidden="true" />
-          <span className="kbd">⌘K</span>
+          <span className="kbd">{COMMAND_PALETTE_SHORTCUT}</span>
         </button>
         <button
           type="button"

@@ -20,6 +20,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "rea
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { useHotkeys, type HotkeyMap } from "../hooks/useHotkeys.js";
+import {
+  readMessageEndsTurn,
+  writeMessageEndsTurn,
+} from "../state/settings.js";
+import { chordToLabel } from "../modals/settings/shortcut-registry.js";
 import { ModeBar } from "./ModeBar.js";
 import { NameInput } from "./NameInput.js";
 import { TargetPill } from "./TargetPill.js";
@@ -27,13 +32,17 @@ import { SendButton } from "./SendButton.js";
 import { PresetsPopover } from "../popovers/PresetsPopover.js";
 import { Zap, Sparkles } from "lucide-react";
 
+const NAMED_SHORTCUT = chordToLabel("$mod+N");
+const PRESETS_SHORTCUT = chordToLabel("$mod+P");
+const SKILLS_SHORTCUT = chordToLabel("$mod+Shift+K");
+
 function placeholderFor(
   mode: "message" | "named" | "comment",
   hasTarget: boolean,
 ): string {
   if (mode === "comment" || hasTarget) return "Write your comment…";
   if (mode === "named") return "Write the contribution content…";
-  return "Write a message or ⌘N to name a contribution…";
+  return `Write a message or ${NAMED_SHORTCUT} to name a contribution…`;
 }
 
 export function Compose(): JSX.Element {
@@ -54,6 +63,14 @@ export function Compose(): JSX.Element {
   const [content, setContent] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [messageEndsTurn, setMessageEndsTurn] = useState<boolean>(() =>
+    readMessageEndsTurn(),
+  );
+
+  const handleMessageEndsTurnChange = useCallback((next: boolean): void => {
+    setMessageEndsTurn(next);
+    writeMessageEndsTurn(next);
+  }, []);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const presetsBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -108,14 +125,48 @@ export function Compose(): JSX.Element {
     await client.postTurnEnd(sessionId, userId);
   }, [sessionId, userId, token]);
 
+  /* The Send action: submit, then (when in message mode with the
+     ends-turn toggle on) end the turn. We chain so the prose event is
+     persisted before the turn-end event — out-of-order would write a
+     turn-end before its contribution. */
+  const submitAndMaybeEndTurn = useCallback(async (): Promise<void> => {
+    await submit();
+    if (mode === "message" && messageEndsTurn) {
+      await endTurn();
+    }
+  }, [submit, endTurn, mode, messageEndsTurn]);
+
+  const sendOrEndTurn = useCallback(async (): Promise<void> => {
+    if (mode === "message" && !canSubmit) {
+      await endTurn();
+      return;
+    }
+    await submitAndMaybeEndTurn();
+  }, [mode, canSubmit, endTurn, submitAndMaybeEndTurn]);
+
   /* openPresets — anchor the presets popover under the ⚡ button. Called
-     by the button click handler and by the ⌘P hotkey. Reads the current
+     by the button click handler and by the $mod+P hotkey. Reads the current
      button's bounding rect at the moment of invocation (the ref may not
      have settled at memo-construction time). */
   const openPresets = useCallback((): void => {
     const rect = presetsBtnRef.current?.getBoundingClientRect() ?? null;
     openPopover("presets", rect);
   }, [openPopover]);
+
+  const handleEscape = useCallback((): boolean => {
+    if (commentTarget !== null) {
+      setCommentTarget(null);
+      return true;
+    }
+    if (
+      textareaRef.current !== null &&
+      document.activeElement === textareaRef.current
+    ) {
+      textareaRef.current.blur();
+      return true;
+    }
+    return false;
+  }, [commentTarget, setCommentTarget]);
 
   // Hotkey map — stable per-render via dependency-aware memo.
   const hotkeyMap = useMemo<HotkeyMap>(
@@ -139,22 +190,10 @@ export function Compose(): JSX.Element {
         openModal("skills");
       },
       "$mod+enter": () => {
-        void submit();
+        void sendOrEndTurn();
       },
-      escape: (e) => {
-        if (commentTarget !== null) {
-          setCommentTarget(null);
-          return;
-        }
-        // Else: blur the textarea if it's focused; otherwise let the event
-        // bubble (return false to opt out of preventDefault).
-        if (
-          textareaRef.current !== null &&
-          document.activeElement === textareaRef.current
-        ) {
-          textareaRef.current.blur();
-          return;
-        }
+      escape: () => {
+        if (handleEscape()) return;
         return false;
       },
     }),
@@ -162,10 +201,10 @@ export function Compose(): JSX.Element {
       mode,
       commentTarget,
       setMode,
-      setCommentTarget,
-      submit,
       openPresets,
       openModal,
+      sendOrEndTurn,
+      handleEscape,
     ],
   );
 
@@ -214,13 +253,8 @@ export function Compose(): JSX.Element {
   }, [content, mode]);
 
   function onTextareaKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
-    // Enter (no shift/meta) → submit in single-line message mode? The
-    // prototype uses ⌘↵ universally and Enter inserts a newline. So we keep
-    // Enter as newline and rely on the global useHotkeys for ⌘↵. We still
-    // stopPropagation on plain Enter so it never escapes to other handlers.
-    if (e.key === "Enter" && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Escape" && handleEscape()) {
       e.preventDefault();
-      void submit();
     }
   }
 
@@ -253,27 +287,29 @@ export function Compose(): JSX.Element {
             className="mode-btn"
             onClick={openPresets}
             aria-label="Open presets"
-            title="Open presets (⌘P)"
+            title={`Open presets (${PRESETS_SHORTCUT})`}
           >
             <Zap size={11} aria-hidden />
-            Presets <span className="kbd">⌘P</span>
+            Presets <span className="kbd">{PRESETS_SHORTCUT}</span>
           </button>
           <button
             type="button"
             className="mode-btn"
             onClick={() => openModal("skills")}
             aria-label="Open skills palette"
-            title="Open skills palette (⌘⇧K)"
+            title={`Open skills palette (${SKILLS_SHORTCUT})`}
           >
             <Sparkles size={11} aria-hidden />
-            Skills <span className="kbd">⌘⇧K</span>
+            Skills <span className="kbd">{SKILLS_SHORTCUT}</span>
           </button>
           <SendButton
             mode={mode}
             canSubmit={canSubmit}
             busy={busy}
             hasContent={content.trim().length > 0}
-            onSubmit={() => void submit()}
+            messageEndsTurn={messageEndsTurn}
+            onMessageEndsTurnChange={handleMessageEndsTurnChange}
+            onSubmit={() => void submitAndMaybeEndTurn()}
             onEndTurn={() => void endTurn()}
           />
         </div>

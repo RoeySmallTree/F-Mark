@@ -1,5 +1,5 @@
 /**
- * Tiny fuzzy matcher used by the Command Palette (⌘K).
+ * Tiny fuzzy matcher used by the Command Palette ($mod+K).
  *
  * Algorithm:
  *   - Lowercase both strings.

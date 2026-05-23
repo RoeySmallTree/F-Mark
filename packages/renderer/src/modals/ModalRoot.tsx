@@ -13,6 +13,7 @@ import { NewSessionModal } from "./NewSessionModal.js";
 import { SettingsModal } from "./settings/SettingsModal.js";
 import { CmdKModal } from "./CmdKModal.js";
 import { SkillsPaletteModal } from "./SkillsPaletteModal.js";
+import { PresetEditorModal } from "./PresetEditorModal.js";
 
 export function ModalRoot(): JSX.Element | null {
   const activeModal = useStore((s) => s.activeModal);
@@ -48,6 +49,8 @@ export function ModalRoot(): JSX.Element | null {
     content = <CmdKModal />;
   } else if (activeModal === "skills") {
     content = <SkillsPaletteModal />;
+  } else if (activeModal === "preset-editor") {
+    content = <PresetEditorModal />;
   }
   if (content === null) return null;
 

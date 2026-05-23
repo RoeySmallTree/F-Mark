@@ -28,8 +28,8 @@ export function App(): JSX.Element {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const openModal = useStore((s) => s.openModal);
 
-  // Global hotkeys registered at the App level. P7 owns ⌘K — other phases
-  // (P8 / P9) will register their chords inside their own modal mounts.
+  // Global hotkeys registered at the App level. Compose owns shortcuts that
+  // need compose state or an anchor element.
   const hotkeys = useMemo(
     () => ({
       "$mod+k": (): void => {

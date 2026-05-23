@@ -5,6 +5,7 @@ import {
   DEFAULT_FILTER,
   type LogFilter,
 } from "../popovers/log-filter-types.js";
+import type { CustomPreset } from "../popovers/customPresets.js";
 
 export type LeftRailKey =
   | "sessions"
@@ -22,7 +23,8 @@ export type ModalKey =
   | "cmdk"
   | "presets"
   | "skills"
-  | "log-filter";
+  | "log-filter"
+  | "preset-editor";
 
 /* Popover state — additive to the modal state above. Popovers anchor to a
    DOM element (the caller passes the anchor's bounding rect) so they can
@@ -90,6 +92,13 @@ interface State {
   viewMode: ViewMode;
   viewModeBySession: Record<string, ViewMode>;
   activeModal: ModalKey;
+  /* When `activeModal === 'preset-editor'`, this holds the preset being
+     edited. `null` means "create new". The popover sets this before
+     opening the editor. */
+  editingPreset: CustomPreset | null;
+  /* Bumped whenever the custom-preset list changes so listeners (the
+     popover) can re-read localStorage and re-render. */
+  customPresetsVersion: number;
   activePopover: PopoverState;
   /* Activity-log filter. Lifted into the store (was previously local to
      RightLog) so applied filters survive a Right-panel tab switch — RightLog
@@ -113,6 +122,8 @@ interface State {
   setViewMode(v: ViewMode): void;
   openModal(key: ModalKey): void;
   closeModal(): void;
+  openPresetEditor(preset: CustomPreset | null): void;
+  bumpCustomPresets(): void;
   openPopover(key: PopoverKey, anchorRect: DOMRect | null): void;
   closePopover(): void;
   setLogFilter(filter: LogFilter): void;
@@ -133,6 +144,8 @@ export const useStore = create<State>((set, get) => ({
   viewMode: "everything",
   viewModeBySession: loadViewModeBySession(),
   activeModal: null,
+  editingPreset: null,
+  customPresetsVersion: 0,
   activePopover: { key: null, anchorRect: null },
   logFilter: DEFAULT_FILTER,
   setToken: (token) => set({ token }),
@@ -192,7 +205,11 @@ export const useStore = create<State>((set, get) => ({
     }
   },
   openModal: (activeModal) => set({ activeModal }),
-  closeModal: () => set({ activeModal: null }),
+  closeModal: () => set({ activeModal: null, editingPreset: null }),
+  openPresetEditor: (editingPreset) =>
+    set({ activeModal: "preset-editor", editingPreset }),
+  bumpCustomPresets: () =>
+    set((s) => ({ customPresetsVersion: s.customPresetsVersion + 1 })),
   openPopover: (key, anchorRect) =>
     set({ activePopover: { key, anchorRect } }),
   closePopover: () =>

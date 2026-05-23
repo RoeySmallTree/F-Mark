@@ -79,6 +79,11 @@ export function chordToKeys(combo: string): string[] {
   return chips;
 }
 
+/** Convert a `$mod+...` pattern to a compact inline label. */
+export function chordToLabel(combo: string): string {
+  return chordToKeys(combo).join("+");
+}
+
 /** Group entries by their section, preserving order. */
 export function shortcutsBySection(): Record<ShortcutSection, ShortcutEntry[]> {
   const grouped: Record<ShortcutSection, ShortcutEntry[]> = {

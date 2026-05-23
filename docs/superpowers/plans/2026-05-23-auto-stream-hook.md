@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **REFACTOR NOTICE (2026-05-23):** Phases 3, 5, 6, 7, 8 of this plan are superseded by `docs/superpowers/specs/2026-05-23-tmux-agent-orchestration-design.md`. The per-Stop-fire transcript parsing collapses into a long-lived supervisor daemon; hooks become trivial `npx f-mark hook ensure-supervisor <agent_id>` one-liners; per-runtime hook installation moves under a kernel-managed Hook Installer flow. Phases 1, 2, and 4 (schema, event routes, renderer cards) stay verbatim. When the implementation plan for the tmux-orchestration spec is written, it will retire or replace the affected phases here. Do NOT execute phases 5+ of this plan as written — execute the orchestration plan instead.
+
 **Goal:** Replace agent-driven prose POSTs with a hook that auto-streams every assistant turn into F-Mark; introduce `tool-use` as a first-class event kind and `arbitrary` as a prose flag; render consecutive mid-turn events as an expandable group that auto-closes when the conclusion arrives. Ship across Claude Code, Codex, and Gemini.
 
 **Architecture:**

@@ -1,0 +1,227 @@
+/* ============ Density tokens ============ */
+/* Defaults = comfortable. Keeps initial paint identical if a body has no
+   density class yet. Compact/spacious override only what they need to. */
+:root {
+  /* Feed (the main scrolling card area) */
+  --feed-pad-y-top: 36px;
+  --feed-pad-y-bot: 80px;
+  --feed-pad-x: 28px;
+  --feed-gap: 18px;
+
+  /* Cards (msg/prose/choices/embed/todo/file) */
+  --card-head-pad-y: 12px;
+  --card-head-pad-x: 16px;
+  --card-body-pad-y: 18px;
+  --card-body-pad-x: 22px;
+  --card-foot-pad-y: 8px;
+  --card-foot-pad-x: 18px;
+  --todo-head-pad-y: 8px;
+  --todo-head-pad-x: 12px;
+
+  /* Choice options (inside .choices-body) */
+  --choice-opt-pad-y: 12px;
+  --choice-opt-pad-x: 14px;
+  --choice-opt-mb: 8px;
+
+  /* Embed card middle (sits between embed-head and embed-foot) */
+  --embed-title-pad-y: 14px;
+  --embed-frame-margin-y-top: 8px;
+  --embed-frame-margin-y-bot: 12px;
+  --variants-pad-y-bot: 12px;
+
+  /* Prose-specific (its body uses asymmetric padding) */
+  --prose-body-pad-y: 22px;
+  --prose-body-pad-r: 64px;
+  --prose-body-pad-l: 30px;
+
+  /* Side panels (left/right) */
+  --panel-head-pad-y: 12px;
+  --panel-head-pad-x: 14px;
+  --panel-scroll-pad-y: 14px;
+  --panel-scroll-pad-x: 14px;
+  --panel-list-pad-y: 4px;
+  --panel-list-pad-x: 8px;
+  --session-item-pad-y: 8px;
+  --session-item-pad-x: 10px;
+  --panel-search-pad-y: 7px;
+  --panel-search-mb: 8px;
+  --right-tabs-pad-y: 8px;
+
+  /* Modals */
+  --modal-head-pad-y: 18px;
+  --modal-head-pad-x: 22px;
+  --modal-body-pad-y: 16px;
+  --modal-body-pad-x: 22px;
+  --modal-foot-pad-y: 12px;
+  --modal-foot-pad-x: 18px;
+  --form-row-mb: 12px;
+
+  /* Settings panel (lives inside .modal but has its own grid layout) */
+  --settings-main-pad-y: 28px;
+  --settings-main-pad-x: 32px;
+  --settings-row-gap: 18px;
+  --settings-row-pad-y: 12px;
+
+  /* Popovers */
+  --pop-head-pad-y: 11px;
+  --pop-head-pad-x: 14px;
+  --pop-section-pad-y: 12px;
+  --pop-section-pad-x: 14px;
+
+  /* Compose bar */
+  --compose-pad-y: 12px;
+  --compose-pad-x: 14px;
+  --compose-inner-gap: 8px;
+  --compose-box-pad-y: 10px;
+  --compose-box-pad-x: 14px;
+
+  /* Command palette (cmdk) */
+  --cmdk-input-pad-y: 14px;
+  --cmdk-row-pad-y: 8px;
+  --cmdk-empty-pad-y: 30px;
+  --cmdk-foot-pad-y: 9px;
+  --cmdk-group-pad-y-top: 10px;
+}
+
+body.density-compact {
+  /* Feed */
+  --feed-pad-y-top: 18px;
+  --feed-pad-y-bot: 60px;
+  --feed-gap: 12px;
+  /* Cards */
+  --card-head-pad-y: 8px;
+  --card-head-pad-x: 14px;
+  --card-body-pad-y: 12px;
+  --card-body-pad-x: 18px;
+  --card-foot-pad-y: 6px;
+  --card-foot-pad-x: 14px;
+  --todo-head-pad-y: 6px;
+  --todo-head-pad-x: 10px;
+  /* Choice options */
+  --choice-opt-pad-y: 8px;
+  --choice-opt-pad-x: 12px;
+  --choice-opt-mb: 5px;
+  /* Embed middle */
+  --embed-title-pad-y: 10px;
+  --embed-frame-margin-y-top: 6px;
+  --embed-frame-margin-y-bot: 8px;
+  --variants-pad-y-bot: 8px;
+  /* Prose */
+  --prose-body-pad-y: 14px;
+  --prose-body-pad-r: 48px;
+  --prose-body-pad-l: 22px;
+  /* Panels */
+  --panel-head-pad-y: 8px;
+  --panel-head-pad-x: 12px;
+  --panel-scroll-pad-y: 8px;
+  --panel-scroll-pad-x: 12px;
+  --panel-list-pad-y: 2px;
+  --panel-list-pad-x: 6px;
+  --session-item-pad-y: 5px;
+  --session-item-pad-x: 8px;
+  --panel-search-pad-y: 5px;
+  --panel-search-mb: 6px;
+  --right-tabs-pad-y: 6px;
+  /* Modals */
+  --modal-head-pad-y: 12px;
+  --modal-head-pad-x: 18px;
+  --modal-body-pad-y: 10px;
+  --modal-body-pad-x: 18px;
+  --modal-foot-pad-y: 8px;
+  --modal-foot-pad-x: 14px;
+  --form-row-mb: 8px;
+  /* Settings */
+  --settings-main-pad-y: 18px;
+  --settings-main-pad-x: 24px;
+  --settings-row-gap: 12px;
+  --settings-row-pad-y: 8px;
+  /* Popovers */
+  --pop-head-pad-y: 8px;
+  --pop-head-pad-x: 12px;
+  --pop-section-pad-y: 8px;
+  --pop-section-pad-x: 12px;
+  /* Compose */
+  --compose-pad-y: 8px;
+  --compose-pad-x: 12px;
+  --compose-inner-gap: 6px;
+  --compose-box-pad-y: 7px;
+  --compose-box-pad-x: 12px;
+  /* cmdk */
+  --cmdk-input-pad-y: 10px;
+  --cmdk-row-pad-y: 6px;
+  --cmdk-empty-pad-y: 22px;
+  --cmdk-foot-pad-y: 7px;
+  --cmdk-group-pad-y-top: 8px;
+}
+
+body.density-spacious {
+  /* Feed */
+  --feed-pad-y-top: 52px;
+  --feed-pad-y-bot: 100px;
+  --feed-pad-x: 32px;
+  --feed-gap: 26px;
+  /* Cards */
+  --card-head-pad-y: 16px;
+  --card-head-pad-x: 18px;
+  --card-body-pad-y: 26px;
+  --card-body-pad-x: 26px;
+  --card-foot-pad-y: 12px;
+  --card-foot-pad-x: 22px;
+  --todo-head-pad-y: 10px;
+  --todo-head-pad-x: 14px;
+  /* Choice options */
+  --choice-opt-pad-y: 16px;
+  --choice-opt-pad-x: 16px;
+  --choice-opt-mb: 12px;
+  /* Embed middle */
+  --embed-title-pad-y: 20px;
+  --embed-frame-margin-y-top: 12px;
+  --embed-frame-margin-y-bot: 18px;
+  --variants-pad-y-bot: 18px;
+  /* Prose */
+  --prose-body-pad-y: 30px;
+  --prose-body-pad-r: 80px;
+  --prose-body-pad-l: 38px;
+  /* Panels */
+  --panel-head-pad-y: 16px;
+  --panel-head-pad-x: 16px;
+  --panel-scroll-pad-y: 20px;
+  --panel-scroll-pad-x: 16px;
+  --panel-list-pad-y: 6px;
+  --panel-list-pad-x: 10px;
+  --session-item-pad-y: 11px;
+  --session-item-pad-x: 12px;
+  --panel-search-pad-y: 10px;
+  --panel-search-mb: 12px;
+  --right-tabs-pad-y: 12px;
+  /* Modals */
+  --modal-head-pad-y: 24px;
+  --modal-head-pad-x: 26px;
+  --modal-body-pad-y: 22px;
+  --modal-body-pad-x: 26px;
+  --modal-foot-pad-y: 16px;
+  --modal-foot-pad-x: 22px;
+  --form-row-mb: 18px;
+  /* Settings */
+  --settings-main-pad-y: 36px;
+  --settings-main-pad-x: 40px;
+  --settings-row-gap: 26px;
+  --settings-row-pad-y: 18px;
+  /* Popovers */
+  --pop-head-pad-y: 14px;
+  --pop-head-pad-x: 16px;
+  --pop-section-pad-y: 16px;
+  --pop-section-pad-x: 16px;
+  /* Compose */
+  --compose-pad-y: 16px;
+  --compose-pad-x: 16px;
+  --compose-inner-gap: 12px;
+  --compose-box-pad-y: 13px;
+  --compose-box-pad-x: 16px;
+  /* cmdk */
+  --cmdk-input-pad-y: 18px;
+  --cmdk-row-pad-y: 12px;
+  --cmdk-empty-pad-y: 40px;
+  --cmdk-foot-pad-y: 12px;
+  --cmdk-group-pad-y-top: 14px;
+}

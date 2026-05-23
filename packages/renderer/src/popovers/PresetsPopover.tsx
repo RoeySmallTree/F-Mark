@@ -12,12 +12,17 @@
    both `name` and `body`. (Inline because P7's fuzzy.ts is not yet shipped.) */
 
 import { useEffect, useMemo, useState, type JSX } from "react";
-import { Search, Zap } from "lucide-react";
+import { Search, Zap, Plus } from "lucide-react";
 import type { Preset, PresetGroup } from "@f-mark/shared";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
+import { chordToLabel } from "../modals/settings/shortcut-registry.js";
 import { Popover } from "./Popover.js";
 import { PresetItem } from "./PresetItem.js";
+import {
+  loadCustomPresets,
+  toPreset,
+} from "./customPresets.js";
 
 interface Props {
   anchorRect: DOMRect | null;
@@ -33,6 +38,8 @@ const GROUP_LABELS: Record<PresetGroup, string> = {
   critique: "Critique",
   format: "Format",
 };
+
+const PRESETS_SHORTCUT = chordToLabel("$mod+P");
 
 function caseInsensitiveSubstring(p: Preset, needle: string): boolean {
   if (needle.length === 0) return true;
@@ -51,10 +58,23 @@ function groupBuiltins(items: Preset[]): Array<[PresetGroup, Preset[]]> {
   return out;
 }
 
+/* Merge a built-in list with custom (renderer-local) presets so the
+   popover shows one Generate/Critique/Format section per category with
+   the user's entries slotted in. Custom presets appear AFTER built-ins
+   within each category so the familiar set stays at the top. */
+function mergeWithCustom(
+  builtin: Preset[],
+  custom: Preset[],
+): Preset[] {
+  return [...builtin, ...custom];
+}
+
 export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
   const token = useStore((s) => s.token);
   const sessionId = useStore((s) => s.currentSessionId);
   const setComposeDraft = useStore((s) => s.setComposeDraft);
+  const openPresetEditor = useStore((s) => s.openPresetEditor);
+  const customPresetsVersion = useStore((s) => s.customPresetsVersion);
 
   const [builtin, setBuiltin] = useState<Preset[]>([]);
   const [project, setProject] = useState<Preset[]>([]);
@@ -85,20 +105,47 @@ export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
     };
   }, [token, sessionId]);
 
+  /* Re-read custom presets whenever the editor bumps the version. */
+  const custom = useMemo(
+    () => loadCustomPresets().map(toPreset),
+    [customPresetsVersion],
+  );
+
   const filteredBuiltin = useMemo(
     () => builtin.filter((p) => caseInsensitiveSubstring(p, query)),
     [builtin, query],
+  );
+  const filteredCustom = useMemo(
+    () => custom.filter((p) => caseInsensitiveSubstring(p, query)),
+    [custom, query],
   );
   const filteredProject = useMemo(
     () => project.filter((p) => caseInsensitiveSubstring(p, query)),
     [project, query],
   );
+  const merged = useMemo(
+    () => mergeWithCustom(filteredBuiltin, filteredCustom),
+    [filteredBuiltin, filteredCustom],
+  );
   const groupedBuiltin = useMemo(
-    () => groupBuiltins(filteredBuiltin),
-    [filteredBuiltin],
+    () => groupBuiltins(merged),
+    [merged],
   );
   const hasResults =
     groupedBuiltin.length > 0 || filteredProject.length > 0;
+
+  function onAddPreset(): void {
+    /* Pass `null` to mean "create new" — the modal allocates the id. */
+    openPresetEditor(null);
+  }
+
+  function onEditPreset(preset: Preset): void {
+    if (preset.source !== "custom") return;
+    const all = loadCustomPresets();
+    const match = all.find((c) => c.id === preset.path);
+    if (match === undefined) return;
+    openPresetEditor(match);
+  }
 
   function onPick(preset: Preset): void {
     setComposeDraft(preset.body);
@@ -120,15 +167,24 @@ export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
       <div className="pop-head">
         <Zap size={14} aria-hidden style={{ color: "var(--ink-2)" }} />
         Presets
+        <button
+          type="button"
+          className="pop-head-add"
+          onClick={onAddPreset}
+          aria-label="Create new preset"
+          title="Create new preset"
+        >
+          <Plus size={13} aria-hidden />
+        </button>
         <span
           style={{
-            marginLeft: "auto",
+            marginLeft: 6,
             fontFamily: "var(--mono)",
             fontSize: 10.5,
             color: "var(--ink-4)",
           }}
         >
-          ⌘P
+          {PRESETS_SHORTCUT}
         </span>
       </div>
 
@@ -167,7 +223,12 @@ export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
               <div key={group} data-testid={`presets-group-${group}`}>
                 <div className="presets-group">{GROUP_LABELS[group]}</div>
                 {items.map((p) => (
-                  <PresetItem key={p.path} preset={p} onPick={onPick} />
+                  <PresetItem
+                    key={p.path}
+                    preset={p}
+                    onPick={onPick}
+                    onEdit={p.source === "custom" ? onEditPreset : undefined}
+                  />
                 ))}
               </div>
             ))}

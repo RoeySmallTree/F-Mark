@@ -9,7 +9,7 @@
    RightLog because it needs the local filter state.
 
    This split lets P8's presets popover live anywhere the user opens it
-   (compose bar, ⌘P hotkey) without forcing the consumer to mount a
+   (compose bar, $mod+P hotkey) without forcing the consumer to mount a
    popover root. */
 
 import type { JSX } from "react";

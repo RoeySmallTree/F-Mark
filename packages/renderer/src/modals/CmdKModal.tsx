@@ -1,5 +1,5 @@
 /* CmdKModal — universal command palette.
-   Triggered by ⌘K (registered globally in App.tsx). Surfaces:
+   Triggered by `$mod+K` (registered globally in App.tsx). Surfaces:
      - Recent sessions (empty query) + first 4 Quick actions.
      - As the user types, filters across sessions, named contributions in the
        current session, backend search hits, and quick actions.

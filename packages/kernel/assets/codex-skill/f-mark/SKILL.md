@@ -1,0 +1,70 @@
+---
+name: f-mark
+description: Use whenever the user is collaborating inside an F-Mark session (presence of a `.f-mark/` directory in cwd, or the user references "the session" / "the document").
+---
+
+## Detect
+If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up-to-date protocol before doing anything else.
+
+## Bootstrap
+1. Read `.f-mark/AGENT.md` once per session.
+2. Read `.f-mark/config.json` for the kernel port (default 7777).
+3. Read `.f-mark/.token` for the bearer token.
+4. Register your participant: `POST /participants/register`. Cache the returned `participant_id` (Codex agents conventionally use `ag-codex-<short>`).
+
+## Link into a session
+1. `GET /sessions` and choose.
+2. `POST /agents/<participant_id>/link` with `{ "session_id": "<chosen>" }`.
+
+## Install the auto-stream hook (one-time per project)
+
+Codex CLI supports lifecycle hooks identical in spirit to Claude Code's. Output streams automatically — you only call the API for *structured* contributions.
+
+Two hooks to install: one for the assistant's turn (your id), one for user prompts (the user's id).
+
+1. Check whether `.codex/config.toml` (project-level) or `~/.codex/config.toml` (user-level) already has F-Mark hook entries. The project-level config takes precedence and is preferred for F-Mark integration (scopes the hook to this project only).
+
+2. Discover the user's participant id via `GET /participants?kind=user`. If none registered, skip the UserPromptSubmit hook for now and ask the user to register.
+
+3. If hook entries are absent, add to `.codex/config.toml`:
+
+```toml
+[[hooks.Stop]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-yourname"]
+timeout_ms = 30000
+
+[[hooks.UserPromptSubmit]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "us-username", "--kind", "user"]
+timeout_ms = 10000
+```
+
+Substitute `ag-codex-yourname` with your registered agent id and `us-username` with the user's.
+
+4. On first invocation, Codex prompts the user to trust the hook command. Tell the user: "I've added the F-Mark auto-stream hook to `.codex/config.toml`. Codex will prompt you to trust the command on first run — approve once and it'll stick."
+
+5. For headless / CI runs (`codex exec`), the user may need `--dangerously-bypass-hook-trust` or to pre-approve via `codex config approve-hooks`. Document this contingency to the user.
+
+## What streams automatically
+Once the hook is active, every assistant turn flows into the session as:
+- mid-turn text → prose with `arbitrary: true`
+- tool calls → `tool-use` events
+- final text → prose with `arbitrary: false`, followed by `turn-end`
+
+You do NOT POST these manually.
+
+## What you still POST manually
+- **Named contributions** (documents, plans): `POST /events/prose` with `name` set.
+- **Comments anchored to lines**: `POST /events/prose` with `target: { file, lines }`.
+- **Replies**: `POST /events/prose` with `in_reply_to`.
+- **Revisions**: `POST /events/prose` with `supersedes`.
+- **Todos / choices / file / html**: their dedicated endpoints.
+
+When you POST manually, do NOT set `arbitrary: true` — manual posts are by definition deliberate.
+
+## Revising
+POST new prose with `supersedes: <old_filename>`.
+
+## Don't
+- Don't disable the hook to "save tokens" — that's its job.
+- Don't write directly into `.f-mark/sessions/...`. Always go through the API.
+- Don't fabricate participant_ids.

@@ -1,6 +1,6 @@
 /* ModeBar — three mode pills (Message / Named / Comment) used inside the
    compose-actions row. Each pill mirrors `.mode-btn` from design.html and
-   shows a small ⌘-kbd hint per the prototype.
+   shows a small shortcut hint per the prototype.
 
    Behavior:
    - Clicking the active mode goes back to 'message' (toggle behavior, matches
@@ -13,11 +13,12 @@
 import { type JSX } from "react";
 import { FileText, MessageSquare } from "lucide-react";
 import { useStore } from "../state/store.js";
+import { chordToLabel } from "../modals/settings/shortcut-registry.js";
 
 const PILLS = [
-  { id: "message" as const, label: "Message", kbd: "⌘/" },
-  { id: "named" as const, label: "Name it", kbd: "⌘N" },
-  { id: "comment" as const, label: "Comment", kbd: "⌘/" },
+  { id: "message" as const, label: "Message", combo: "$mod+/" },
+  { id: "named" as const, label: "Name it", combo: "$mod+N" },
+  { id: "comment" as const, label: "Comment", combo: "$mod+/" },
 ];
 
 export function ModeBar(): JSX.Element {
@@ -63,7 +64,7 @@ export function ModeBar(): JSX.Element {
           >
             {icon}
             {p.label}
-            <span className="kbd">{p.kbd}</span>
+            <span className="kbd">{chordToLabel(p.combo)}</span>
           </button>
         );
       })}

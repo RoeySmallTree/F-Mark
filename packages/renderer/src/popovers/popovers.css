@@ -36,7 +36,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 11px 14px;
+  padding: var(--pop-head-pad-y) var(--pop-head-pad-x);
   border-bottom: 1px solid var(--line-3);
   font-family: var(--serif);
   font-size: 14.5px;
@@ -44,7 +44,7 @@
   color: var(--ink);
 }
 .pop-section {
-  padding: 12px 14px;
+  padding: var(--pop-section-pad-y) var(--pop-section-pad-x);
   border-bottom: 1px solid var(--line-3);
 }
 .pop-section-h {
@@ -176,23 +176,91 @@
   color: var(--ink-4);
   padding: 9px 14px 4px;
 }
+/* Preset row — a click-to-pick body plus an optional pencil affordance
+   on the right for custom (editable) presets. The two split-buttons
+   share a hover state so the row reads as one unit. */
 .preset-item {
+  display: flex;
+  align-items: stretch;
+  border-left: 2px solid transparent;
+  background: none;
+}
+.preset-item:hover,
+.preset-item:focus-within {
+  background: var(--bg);
+  border-left-color: var(--ink);
+}
+.preset-item-pick {
   display: flex;
   gap: 10px;
   padding: 9px 14px;
-  width: 100%;
+  flex: 1;
   text-align: left;
   background: none;
   border: 0;
   cursor: pointer;
   align-items: flex-start;
-  border-left: 2px solid transparent;
+  font: inherit;
+  color: inherit;
+  min-width: 0;
 }
-.preset-item:hover,
-.preset-item:focus-visible {
-  background: var(--bg);
-  border-left-color: var(--ink);
+.preset-item-pick:focus-visible {
   outline: none;
+}
+.preset-item-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  margin: 6px 6px 6px 0;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-4);
+  opacity: 0;
+  transition: opacity 100ms ease;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: center;
+  padding: 5px;
+}
+.preset-item:hover .preset-item-edit,
+.preset-item:focus-within .preset-item-edit {
+  opacity: 1;
+}
+.preset-item-edit:hover {
+  background: var(--canvas);
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+.preset-item-edit:focus-visible {
+  outline: 2px solid var(--ink-4);
+  outline-offset: 1px;
+  opacity: 1;
+}
+/* Add-preset button in the popover header — small, inline. */
+.pop-head-add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 0;
+}
+.pop-head-add:hover {
+  border-color: var(--ink-4);
+  color: var(--ink);
+  background: var(--canvas);
+}
+.pop-head-add:focus-visible {
+  outline: 2px solid var(--ink-4);
+  outline-offset: 1px;
 }
 .preset-icon {
   width: 24px;

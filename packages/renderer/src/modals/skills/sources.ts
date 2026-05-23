@@ -6,7 +6,7 @@
      compose textarea via store.setComposeDraft. */
 
 import type { SkillRef } from "@f-mark/shared";
-import { fuzzyFilter } from "../cmdk/fuzzy.js";
+import { fuzzyScore } from "../cmdk/fuzzy.js";
 
 /* Deterministic agent order — claude first, codex, gemini, generic last.
    Any unrecognized agent key gets sorted between generic and the end,
@@ -68,12 +68,29 @@ export function groupByAgent(skills: SkillRef[]): SkillGroup[] {
   return groups;
 }
 
-/* Apply fuzzy search to a skill list. We score against `name + description`
-   so a user typing "audit" or "design" can find the right skill regardless
-   of whether the word is in the name or the description. */
+/* Filter a skill list by query. We score against the name (fuzzy) and the
+   description (literal substring only). Fuzzy-matching against descriptions
+   is too lenient — a word like "design" can find itself spelled out across
+   scattered characters in any long description, surfacing irrelevant skills.
+   Requiring a literal substring for description matches keeps results
+   intent-aligned while still letting name typos work via fuzzy. */
 export function filterSkills(skills: SkillRef[], query: string): SkillRef[] {
   if (query.length === 0) return skills;
-  return fuzzyFilter(skills, query, (s) => `${s.name} ${s.description}`);
+  const q = query.toLowerCase();
+  const scored: Array<{ skill: SkillRef; score: number; idx: number }> = [];
+  for (let i = 0; i < skills.length; i++) {
+    const s = skills[i]!;
+    const nameScore = fuzzyScore(query, s.name);
+    const descHit = s.description.toLowerCase().includes(q) ? 1 : 0;
+    if (nameScore === 0 && descHit === 0) continue;
+    const score = nameScore * 3 + descHit * 10;
+    scored.push({ skill: s, score, idx: i });
+  }
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.idx - b.idx;
+  });
+  return scored.map((x) => x.skill);
 }
 
 /* Build the compose-bar insertion text for a chosen skill. Mirrors the

@@ -112,7 +112,7 @@ describe("aggregate", () => {
   });
 
   describe("feedDocument", () => {
-    it("includes named prose + turn-end; excludes unnamed prose, comments, choices", () => {
+    it("includes named prose only; excludes unnamed prose, comments, choices, turn-ends", () => {
       const named = prose("20260522T000001Z_us-x.prose.md", {
         content: "plan body",
         name: "Plan",
@@ -144,7 +144,6 @@ describe("aggregate", () => {
       ]);
       expect(agg.feedDocument.map((e) => e.filename)).toEqual([
         named.filename,
-        tend.filename,
       ]);
     });
 
@@ -162,9 +161,10 @@ describe("aggregate", () => {
       expect(agg.feedDocument.map((e) => e.filename)).toEqual([v2.filename]);
     });
 
-    it("returns [] when no named prose / turn-ends exist", () => {
+    it("returns [] when no named prose exists (turn-ends alone are not enough)", () => {
       const unnamed = prose("20260522T000001Z_us-x.prose.md", { content: "hi" });
-      expect(aggregate([unnamed]).feedDocument).toEqual([]);
+      const tend = turnEnd("20260522T000002Z_us-x.turn-end.json");
+      expect(aggregate([unnamed, tend]).feedDocument).toEqual([]);
     });
   });
 

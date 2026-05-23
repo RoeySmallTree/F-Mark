@@ -1,7 +1,8 @@
 /* SkillsPaletteModal — invoke project-scoped commands/skills (P9).
 
    Mounted by ModalRoot when `store.activeModal === 'skills'`. Opens via
-   `$mod+Shift+K` (registered at App level alongside ⌘K). Visually extends
+   `$mod+Shift+K` (registered by Compose while the main layout is mounted).
+   Visually extends
    the cmdk frame (`.cmdk` + `.cmdk-input-row` + `.cmdk-results` +
    `.cmdk-foot`) and adds `.skills-pal` so the design.html
    `.skills-pal .skill-row` overrides apply.
@@ -83,6 +84,9 @@ export function SkillsPaletteModal(): JSX.Element {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  /* True when selectedIdx was last changed by the keyboard (↑/↓). Reset on
+     mouse hover so hovering a row doesn't trigger auto-scroll. */
+  const scrollIntoViewOnNext = useRef(false);
 
   /* Fetch skills whenever activeAgent changes. We pass `undefined` (no
      filter) only when activeAgent itself is null — which currently never
@@ -128,23 +132,31 @@ export function SkillsPaletteModal(): JSX.Element {
     setSelectedIdx(0);
   }, [groups]);
 
-  /* Keep the selected row in view as the user arrows up/down. */
+  /* Keep the selected row in view when the keyboard moves selection. We
+     skip the scroll when the change came from a mouse hover (the row is
+     already under the cursor — scrolling it would chase the pointer). */
   useEffect(() => {
+    if (!scrollIntoViewOnNext.current) return;
+    scrollIntoViewOnNext.current = false;
     const container = resultsRef.current;
     if (container === null) return;
     const el = container.querySelector(
       `[data-skill-idx="${selectedIdx}"]`,
     ) as HTMLElement | null;
-    if (el !== null) {
-      const top = el.offsetTop;
-      const bottom = top + el.offsetHeight;
-      const viewTop = container.scrollTop;
-      const viewBottom = viewTop + container.clientHeight;
-      if (top < viewTop) {
-        container.scrollTop = top - 4;
-      } else if (bottom > viewBottom) {
-        container.scrollTop = bottom - container.clientHeight + 4;
-      }
+    if (el === null) return;
+    /* offsetTop is relative to the offsetParent — which is not necessarily
+       the scroll container. Compute a container-relative offset via the
+       bounding rects, which is what we actually want for scroll math. */
+    const elRect = el.getBoundingClientRect();
+    const ctRect = container.getBoundingClientRect();
+    const top = elRect.top - ctRect.top + container.scrollTop;
+    const bottom = top + el.offsetHeight;
+    const viewTop = container.scrollTop;
+    const viewBottom = viewTop + container.clientHeight;
+    if (top < viewTop) {
+      container.scrollTop = top - 4;
+    } else if (bottom > viewBottom) {
+      container.scrollTop = bottom - container.clientHeight + 4;
     }
   }, [selectedIdx]);
 
@@ -160,12 +172,14 @@ export function SkillsPaletteModal(): JSX.Element {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       if (flatRows.length === 0) return;
+      scrollIntoViewOnNext.current = true;
       setSelectedIdx((i) => (i + 1) % flatRows.length);
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       if (flatRows.length === 0) return;
+      scrollIntoViewOnNext.current = true;
       setSelectedIdx((i) => (i - 1 + flatRows.length) % flatRows.length);
       return;
     }
@@ -285,7 +299,7 @@ export function SkillsPaletteModal(): JSX.Element {
                           <div className="skill-desc">{s.description}</div>
                         ) : null}
                       </div>
-                      <kbd className="skill-badge">{badge}</kbd>
+                      <span className="skill-badge">{badge}</span>
                     </button>
                   );
                 })}

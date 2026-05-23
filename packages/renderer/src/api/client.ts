@@ -7,6 +7,7 @@ import type {
   SearchHit,
   SkillRef,
   TodoPayload,
+  TodoTreeNode,
 } from "@f-mark/shared";
 
 export interface ClientConfig {
@@ -37,13 +38,18 @@ export interface PostProseBody {
 
 export type TodoBuckets = Record<"open" | "wip" | "done", TodoPayload[]>;
 
+export interface TodoListResponse extends TodoBuckets {
+  tree: TodoTreeNode[];
+}
+
 export interface PostTodoBody {
   participant_id: string;
   id: string;
   title: string;
   body?: string;
-  status: "open" | "wip" | "done";
+  status: TodoPayload["status"];
   assigned_to?: string;
+  parent_id?: string;
   supersedes?: string;
 }
 
@@ -108,7 +114,7 @@ export interface Client {
   postTodo(sessionId: string, body: PostTodoBody): Promise<{ filename: string }>;
   postHtml(sessionId: string, body: PostHtmlBody): Promise<{ filename: string }>;
   postFile(sessionId: string, body: PostFileBody): Promise<{ filename: string }>;
-  listTodos(sessionId: string, assignedTo?: string): Promise<TodoBuckets>;
+  listTodos(sessionId: string, assignedTo?: string): Promise<TodoListResponse>;
   search(query: string, sessionId?: string): Promise<SearchHit[]>;
   listPresets(sessionId?: string): Promise<{ builtin: Preset[]; project: Preset[] }>;
   /* Returns the union of skills scanned from `.claude/skills`,
@@ -245,7 +251,7 @@ export function createClient(cfg: ClientConfig): Client {
       }
       const suffix = qs.toString();
       const path = `/sessions/${sessionId}/todos${suffix ? `?${suffix}` : ""}`;
-      return (await get(path)) as TodoBuckets;
+      return (await get(path)) as TodoListResponse;
     },
     async search(query, sessionId) {
       const qs = new URLSearchParams({ q: query });

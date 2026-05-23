@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createServer } from "../../src/server.js";
 import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
@@ -52,6 +54,53 @@ describe("POST /sessions/:id/events/todo", () => {
         },
       });
       expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("accepts parent_id and writes it to the event payload", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "child",
+          title: "Child task",
+          status: "open",
+          parent_id: "parent",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const filename = res.json().filename as string;
+      const onDisk = JSON.parse(
+        await readFile(join(p.sessionDir(sessionId), filename), "utf8"),
+      ) as { parent_id?: string };
+      expect(onDisk.parent_id).toBe("parent");
+      await app.close();
+    });
+  });
+
+  it("accepts removed status", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "td_removed",
+          title: "Removed task",
+          status: "removed",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const filename = res.json().filename as string;
+      const onDisk = JSON.parse(
+        await readFile(join(p.sessionDir(sessionId), filename), "utf8"),
+      ) as { status?: string };
+      expect(onDisk.status).toBe("removed");
       await app.close();
     });
   });
@@ -176,6 +225,232 @@ describe("GET /sessions/:id/todos", () => {
       const body = res.json();
       expect(body.open).toHaveLength(1);
       expect(body.open[0].id).toBe("a");
+      expect(body.tree.map((todo: { id: string }) => todo.id)).toEqual(["a"]);
+      await app.close();
+    });
+  });
+
+  it("cascades removed status to transitive descendants", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const parentRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "parent",
+          title: "Parent",
+          status: "open",
+        },
+      });
+      const parentFilename = parentRes.json().filename as string;
+      const childRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "child",
+          title: "Child",
+          status: "open",
+          parent_id: "parent",
+        },
+      });
+      const childFilename = childRes.json().filename as string;
+      const grandchildRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "grandchild",
+          title: "Grandchild",
+          status: "wip",
+          parent_id: "child",
+        },
+      });
+      const grandchildFilename = grandchildRes.json().filename as string;
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "sibling",
+          title: "Sibling",
+          status: "open",
+        },
+      });
+
+      const removeRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "parent",
+          title: "Parent",
+          status: "removed",
+          supersedes: parentFilename,
+        },
+      });
+      expect(removeRes.statusCode).toBe(200);
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/todos`,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      const visibleIds = [...body.open, ...body.wip, ...body.done].map(
+        (todo: { id: string }) => todo.id,
+      );
+      expect(visibleIds).toEqual(["sibling"]);
+      expect(body.tree.map((todo: { id: string }) => todo.id)).toEqual([
+        "sibling",
+      ]);
+
+      const eventsRes = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/events?kinds=todo`,
+      });
+      const removedEvents = (
+        eventsRes.json().events as {
+          participant_id: string;
+          payload: { id: string; status: string; supersedes?: string };
+        }[]
+      ).filter((event) => event.payload.status === "removed");
+      const removedById = new Map(
+        removedEvents.map((event) => [event.payload.id, event]),
+      );
+      expect(Array.from(removedById.keys()).sort()).toEqual([
+        "child",
+        "grandchild",
+        "parent",
+      ]);
+      expect(removedById.get("child")?.participant_id).toBe(pid);
+      expect(removedById.get("child")?.payload.supersedes).toBe(childFilename);
+      expect(removedById.get("grandchild")?.participant_id).toBe(pid);
+      expect(removedById.get("grandchild")?.payload.supersedes).toBe(
+        grandchildFilename,
+      );
+      await app.close();
+    });
+  });
+
+  it("returns tree nesting in creation order and promotes orphans", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "parent",
+          title: "Parent",
+          body: "Parent body",
+          status: "open",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "child-1",
+          title: "Child 1",
+          body: "Child body",
+          status: "wip",
+          parent_id: "parent",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "grandchild",
+          title: "Grandchild",
+          status: "done",
+          parent_id: "child-1",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "child-2",
+          title: "Child 2",
+          status: "open",
+          parent_id: "parent",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "sibling",
+          title: "Sibling root",
+          status: "open",
+        },
+      });
+      const removedParentRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "removed-parent",
+          title: "Removed parent",
+          status: "open",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "removed-parent",
+          title: "Removed parent",
+          status: "removed",
+          supersedes: removedParentRes.json().filename,
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "orphan-child",
+          title: "Orphan child",
+          status: "open",
+          parent_id: "removed-parent",
+        },
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/todos`,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.tree.map((todo: { id: string }) => todo.id)).toEqual([
+        "parent",
+        "sibling",
+        "orphan-child",
+      ]);
+
+      const parent = body.tree[0];
+      expect(parent.body).toBe("Parent body");
+      expect(parent.children.map((todo: { id: string }) => todo.id)).toEqual([
+        "child-1",
+        "child-2",
+      ]);
+      expect(parent.children[0].body).toBe("Child body");
+      expect(
+        parent.children[0].children.map((todo: { id: string }) => todo.id),
+      ).toEqual(["grandchild"]);
+
+      const orphan = body.tree[2];
+      expect(orphan.parent_id).toBe("removed-parent");
+      expect(JSON.stringify(body.tree)).not.toContain('"status":"removed"');
       await app.close();
     });
   });

@@ -90,16 +90,25 @@ export function Popover({
     setStyle(computePosition(anchorRect, panelRef.current, placement));
   }, [anchorRect, placement]);
 
-  /* Reposition on resize / scroll so it does not detach from the page. */
+  /* Reposition on resize / scroll so it does not detach from the page.
+     Also observe the panel's own size: async content (presets list, skills
+     list, anything fetched after mount) grows the panel after the initial
+     position is computed, so we must recompute to keep it anchored. */
   useEffect(() => {
     function reposition(): void {
       setStyle(computePosition(anchorRect, panelRef.current, placement));
     }
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
+    let observer: ResizeObserver | null = null;
+    if (panelRef.current !== null && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(reposition);
+      observer.observe(panelRef.current);
+    }
     return () => {
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
+      observer?.disconnect();
     };
   }, [anchorRect, placement]);
 

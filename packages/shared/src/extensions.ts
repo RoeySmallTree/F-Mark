@@ -7,7 +7,10 @@ export interface Preset {
   group: PresetGroup;
   icon?: string;
   body: string;
-  source: "builtin" | "project";
+  source: "builtin" | "project" | "custom";
+  /* For builtin/project this is the file path on disk; for `custom`
+     (renderer-local, stored in localStorage) it's a stable client-generated
+     id so the popover and editor can identify a single entry. */
   path: string;
 }
 

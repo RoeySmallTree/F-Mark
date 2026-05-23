@@ -1,6 +1,4 @@
-/* TodoCard — inline todo with a checkbox. Toggling the checkbox writes a
-   new todo event (same id) with the opposite status, supersedes pointing
-   at the current event. */
+/* TodoCard keeps the feed chrome around the shared TodoItem renderer. */
 
 import { type JSX } from "react";
 import type {
@@ -8,9 +6,16 @@ import type {
   Participant,
   TodoPayload,
 } from "@f-mark/shared";
-import { createClient } from "../api/client.js";
+import { createClient, type PostTodoBody } from "../api/client.js";
+import {
+  generateTodoId,
+  getAgentIds,
+  pickRandomAgentId,
+  titleForPost,
+} from "../panels/todoPanelUtils.js";
 import { useStore } from "../state/store.js";
 import { formatWhen, whoOf } from "./format.js";
+import { TodoItem, type TodoItemNode } from "./TodoItem.js";
 
 interface Props {
   event: AnyEventRecord;
@@ -21,45 +26,89 @@ export function TodoCard({ event, participants }: Props): JSX.Element {
   const payload = event.payload as TodoPayload;
   const who = whoOf(event.participant_id, participants);
   const done = payload.status === "done";
+  const removed = payload.status === "removed";
   const sessionId = useStore((s) => s.currentSessionId);
   const userId = useStore((s) => s.currentUserId);
   const token = useStore((s) => s.token);
+  const agentIds = getAgentIds(participants);
 
-  async function onToggle(): Promise<void> {
+  const node: TodoItemNode = {
+    id: payload.id,
+    title: payload.title,
+    body: payload.body,
+    status: payload.status,
+    assigned_to: payload.assigned_to,
+    parent_id: payload.parent_id,
+    children: [],
+  };
+
+  async function postTodo(body: PostTodoBody): Promise<void> {
     if (sessionId === null) return;
-    const actor = userId ?? event.participant_id;
     const client = createClient({ baseUrl: "", token });
-    const nextStatus: "open" | "done" = done ? "open" : "done";
-    const body: {
-      participant_id: string;
-      id: string;
-      title: string;
-      status: "open" | "done" | "wip";
-      supersedes: string;
-      body?: string;
-      assigned_to?: string;
-    } = {
-      participant_id: actor,
-      id: payload.id,
-      title: payload.title,
-      status: nextStatus,
-      supersedes: event.filename,
-    };
-    if (payload.body !== undefined) body.body = payload.body;
-    if (payload.assigned_to !== undefined) {
-      body.assigned_to = payload.assigned_to;
-    }
     await client.postTodo(sessionId, body);
   }
 
-  const assigneeWho =
-    payload.assigned_to !== undefined
-      ? whoOf(payload.assigned_to, participants)
-      : null;
+  function baseBody(
+    patch: Partial<TodoPayload>,
+    assignedTo: string | null | undefined = undefined,
+  ): PostTodoBody | null {
+    const actor = userId ?? event.participant_id;
+    const title = patch.title !== undefined ? patch.title : payload.title;
+    const body: PostTodoBody = {
+      participant_id: actor,
+      id: payload.id,
+      title: titleForPost(title),
+      status: patch.status ?? payload.status,
+      supersedes: event.filename,
+    };
+    if (patch.body !== undefined) {
+      body.body = patch.body;
+    } else if (payload.body !== undefined) {
+      body.body = payload.body;
+    }
+    if (assignedTo === undefined) {
+      if (payload.assigned_to !== undefined) {
+        body.assigned_to = payload.assigned_to;
+      }
+    } else if (assignedTo !== null) {
+      body.assigned_to = assignedTo;
+    }
+    if (payload.parent_id !== undefined) body.parent_id = payload.parent_id;
+    return body;
+  }
+
+  async function updateTodo(
+    patch: Partial<TodoPayload>,
+    assignedTo?: string | null,
+  ): Promise<void> {
+    const body = baseBody(patch, assignedTo);
+    if (body === null) return;
+    await postTodo(body);
+  }
+
+  async function addSubtask(): Promise<void> {
+    const actor = userId ?? event.participant_id;
+    const body: PostTodoBody = {
+      participant_id: actor,
+      id: generateTodoId(),
+      title: " ",
+      status: "open",
+      parent_id: payload.id,
+    };
+    const assignedTo = pickRandomAgentId(agentIds);
+    if (assignedTo !== undefined) body.assigned_to = assignedTo;
+    await postTodo(body);
+  }
 
   return (
     <div
-      className={["todo-card", done ? "done" : ""].join(" ").trim()}
+      className={[
+        "todo-card",
+        done ? "done" : "",
+        removed ? "removed" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-event-kind="todo"
     >
       <div className="todo-head">
@@ -72,57 +121,22 @@ export function TodoCard({ event, participants }: Props): JSX.Element {
         <span className="who">{who.name}</span>
         <span className="when">· {formatWhen(event.timestamp)}</span>
         <span className="status">
-          {done ? "todo completed" : "todo created"}
+          {removed ? "todo removed" : done ? "todo completed" : "todo created"}
         </span>
       </div>
-      <div className="todo-body">
-        <button
-          type="button"
-          className={["todo-check", done ? "done" : ""].join(" ").trim()}
-          aria-pressed={done}
-          aria-label={done ? "Mark as open" : "Mark as done"}
-          onClick={() => void onToggle()}
-        >
-          {done ? (
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3.5"
-              aria-hidden
-            >
-              <path d="m5 13 4 4 10-10" />
-            </svg>
-          ) : null}
-        </button>
-        <div className="todo-info">
-          <div className="todo-title">{payload.title}</div>
-          {payload.body !== undefined && payload.body.length > 0 && (
-            <div className="todo-desc">"{payload.body}"</div>
-          )}
-          <div className="todo-meta">
-            {assigneeWho !== null ? (
-              <span className="assign-badge">
-                <span
-                  className={[
-                    "avatar",
-                    assigneeWho.isUser ? "user" : "agent",
-                    "sm",
-                  ].join(" ")}
-                  aria-hidden
-                >
-                  {assigneeWho.initial}
-                </span>
-                assigned to {assigneeWho.name}
-              </span>
-            ) : (
-              <span className="assign-badge unassigned">unassigned</span>
-            )}
-          </div>
-        </div>
-      </div>
+      <TodoItem
+        node={node}
+        depth={0}
+        participants={participants}
+        agentIds={agentIds}
+        onUpdate={(patch) => updateTodo(patch)}
+        onToggleDone={() =>
+          updateTodo({ status: done ? "open" : "done" })
+        }
+        onRemove={() => updateTodo({ status: "removed" })}
+        onAddSubtask={addSubtask}
+        onReassign={(participantId) => updateTodo({}, participantId)}
+      />
     </div>
   );
 }

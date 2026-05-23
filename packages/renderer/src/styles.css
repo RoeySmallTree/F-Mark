@@ -1,5 +1,6 @@
 @import "./themes/tokens.css";
 @import "./themes/structural.css";
+@import "./themes/density.css";
 @import "./render/render.css";
 @import "./shell/shell.css";
 @import "./cards/cards.css";

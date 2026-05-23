@@ -40,14 +40,12 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
   const feed = visible.filter(
     (e) => !proseHasTarget(e) && e.kind !== "choice",
   );
-  /* Document view: named prose contributions + turn dividers.
-     Comments are dropped here — they appear as pins on the named cards. */
+  /* Document view: named prose contributions only.
+     Comments are dropped here — they appear as pins on the named cards.
+     Turn-end dividers are dropped — they're conversational structure, not
+     document content. */
   const feedDocument = visible.filter(
-    (e) =>
-      (e.kind === "prose" &&
-        proseHasName(e) &&
-        !proseHasTarget(e)) ||
-      e.kind === "turn-end",
+    (e) => e.kind === "prose" && proseHasName(e) && !proseHasTarget(e),
   );
   /* Conversation view: unnamed messages + choices (+ choice records) + turn
      dividers. Comments and named contributions are dropped. */

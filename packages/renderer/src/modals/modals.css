@@ -33,7 +33,8 @@
 }
 
 .modal-head {
-  padding: 18px 22px 12px;
+  padding: var(--modal-head-pad-y) var(--modal-head-pad-x)
+    calc(var(--modal-head-pad-y) - 6px);
   border-bottom: 1px solid var(--line-3);
   position: relative;
 }
@@ -59,14 +60,14 @@
   top: 12px;
 }
 .modal-body {
-  padding: 16px 22px;
+  padding: var(--modal-body-pad-y) var(--modal-body-pad-x);
   overflow: auto;
 }
 .modal-foot {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 18px;
+  padding: var(--modal-foot-pad-y) var(--modal-foot-pad-x);
   border-top: 1px solid var(--line-3);
   background: rgba(0, 0, 0, 0.012);
 }
@@ -84,7 +85,7 @@
 
 /* ============ Form controls ============ */
 .form-row {
-  margin-bottom: 12px;
+  margin-bottom: var(--form-row-mb);
 }
 .form-row-h {
   display: flex;
@@ -461,7 +462,7 @@
   box-shadow: var(--shadow);
 }
 .settings-main {
-  padding: 28px 32px;
+  padding: var(--settings-main-pad-y) var(--settings-main-pad-x);
   overflow: auto;
   position: relative;
 }
@@ -483,8 +484,8 @@
 .settings-row {
   display: grid;
   grid-template-columns: 160px 1fr;
-  gap: 18px;
-  padding: 12px 0;
+  gap: var(--settings-row-gap);
+  padding: var(--settings-row-pad-y) 0;
   border-bottom: 1px solid var(--line-2);
   align-items: center;
 }
@@ -860,16 +861,185 @@ kbd {
   color: var(--ink);
 }
 
-/* ============ Density variants ============ */
-body.density-compact .feed-inner {
-  padding: 18px 28px 60px;
-  gap: 12px;
+/* ============ Preset editor modal ============
+   Editorial flavour: a large round emoji sits to the left of the name
+   like an illuminated initial; the name itself reads as a serif title.
+   Category sits below as a small mono segmented control, then a roomy
+   serif content field. */
+.preset-editor .modal-body {
+  padding: 22px 24px 24px;
 }
-body.density-comfortable .feed-inner {
-  padding: 36px 28px 80px;
-  gap: 18px;
+.preset-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
-body.density-spacious .feed-inner {
-  padding: 52px 32px 100px;
-  gap: 26px;
+.preset-editor-emoji-wrap {
+  position: relative;
+}
+.preset-editor-emoji {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 26px;
+  color: var(--ink);
+  padding: 0;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.preset-editor-emoji:hover,
+.preset-editor-emoji[aria-expanded="true"] {
+  border-color: var(--ink-4);
+  box-shadow: 0 0 0 3px rgba(40, 30, 15, 0.04);
+}
+.preset-editor-emoji-hint {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  background: var(--canvas);
+  border-radius: 999px;
+  padding: 2px;
+  color: var(--ink-4);
+}
+.preset-editor-name {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 1.5px solid var(--line-2);
+  outline: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  padding: 8px 0;
+  transition: border-color 120ms ease;
+}
+.preset-editor-name:focus {
+  border-bottom-color: var(--ink-4);
+}
+.preset-editor-name::placeholder {
+  color: var(--ink-4);
+  font-style: italic;
+  font-weight: 500;
+}
+.preset-editor-body {
+  min-height: 160px;
+}
+.preset-editor-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.preset-editor-delete-btn {
+  color: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.preset-editor-delete-btn:hover {
+  color: var(--rose, #b14)
+}
+.preset-editor-confirm-delete {
+  background: var(--rose, #b14);
+  border-color: var(--rose, #b14);
+  color: var(--canvas);
+}
+.preset-editor-confirm-delete:hover {
+  background: var(--rose, #b14);
+  color: var(--canvas);
+  filter: brightness(0.95);
+}
+
+/* ============ Inline emoji picker ============
+   Pops below the emoji button inside the preset editor. Curated groups,
+   grid of 10 per row. */
+.emoji-picker {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 5;
+  width: 360px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow:
+    0 12px 40px rgba(40, 30, 15, 0.18),
+    0 2px 8px rgba(40, 30, 15, 0.06);
+  padding: 10px 12px 12px;
+  max-height: 340px;
+  overflow: auto;
+}
+.emoji-picker-group {
+  margin-top: 8px;
+}
+.emoji-picker-group:first-child {
+  margin-top: 2px;
+}
+.emoji-picker-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 5px;
+}
+.emoji-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+}
+.emoji-picker-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 80ms ease;
+  padding: 0;
+}
+.emoji-picker-cell:hover {
+  background: var(--bg);
+}
+.emoji-picker-cell.on {
+  background: var(--ink);
+  outline: 1px solid var(--ink-4);
+}
+.emoji-picker-freeform {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-3);
+}
+.emoji-picker-freeform .emoji-picker-label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+.emoji-picker-freeform input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  outline: 0;
+  min-width: 0;
+}
+.emoji-picker-freeform input:focus {
+  border-color: var(--ink-4);
 }
