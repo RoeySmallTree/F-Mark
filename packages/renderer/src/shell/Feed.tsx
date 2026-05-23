@@ -85,6 +85,11 @@ export function Feed(): JSX.Element {
                         ? agg.consumedBlocksByAnchor.get(item.event.filename) ?? []
                         : undefined
                     }
+                    commentsByFilename={
+                      isNamedAnchor(item.event)
+                        ? agg.commentsByTarget
+                        : undefined
+                    }
                   />
                 </div>
               ),

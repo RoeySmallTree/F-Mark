@@ -28,6 +28,9 @@ interface Props {
    *  root-filename slot order in the aggregate. Phase 6+ renders these
    *  inline beneath the anchor head as `ProseInlineBlock` stubs. */
   blocks?: AnyEventRecord[];
+  /** Per-block comment lookup. Phase 7 routes line-comments on individual
+   *  blocks to each block's own LineCommentRail. */
+  commentsByFilename?: Map<string, AnyEventRecord[]>;
 }
 
 export function ProseCard({
@@ -35,6 +38,7 @@ export function ProseCard({
   participants,
   comments,
   blocks = [],
+  commentsByFilename,
 }: Props): JSX.Element {
   const payload = event.payload as ProsePayload;
   const who = whoOf(event.participant_id, participants);
@@ -146,7 +150,7 @@ export function ProseCard({
             key={b.filename}
             event={b}
             participants={participants}
-            comments={[]}
+            comments={commentsByFilename?.get(b.filename) ?? []}
             mode={mode}
           />
         ))}

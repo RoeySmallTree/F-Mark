@@ -14,8 +14,10 @@ import type {
   AnyEventRecord,
   EventKind,
   Participant,
+  ProsePayload,
 } from "@f-mark/shared";
 import { type MarkdownMode } from "../render/MarkdownRenderer.js";
+import { LineCommentRail } from "./LineCommentRail.js";
 
 export interface InlineProps {
   event: AnyEventRecord;
@@ -30,9 +32,35 @@ function StubBlock({ kind }: { kind: string }): JSX.Element {
   );
 }
 
-const InlineProseBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
-);
+/* Real prose-block renderer. Renders the block's markdown content via
+   `LineCommentRail` (which wraps `MarkdownRenderer`) so line-level
+   comments work per-block. If the block has its own `name`, render
+   it as a sub-section header (h3) above the content. */
+const InlineProseBlock: FC<InlineProps> = ({
+  event,
+  participants,
+  comments,
+  mode,
+}) => {
+  const payload = event.payload as ProsePayload;
+  const name = typeof payload.name === "string" ? payload.name.trim() : "";
+  return (
+    <div className="prose-inline-prose">
+      {name.length > 0 && (
+        <h3 className="prose-block-name">{name}</h3>
+      )}
+      <LineCommentRail
+        event={event}
+        content={payload.content}
+        comments={comments}
+        participants={participants}
+        mode={mode}
+        className="prose-block-content"
+        lineHeight={25}
+      />
+    </div>
+  );
+};
 const InlineFlowBlock: FC<InlineProps> = ({ event }) => (
   <StubBlock kind={event.kind} />
 );

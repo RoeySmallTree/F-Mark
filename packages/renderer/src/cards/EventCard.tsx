@@ -47,6 +47,9 @@ interface Props {
   /** Blocks resolved to this anchor's filename — only used when
    *  `event` is a prose anchor and `ProseCard` composes them in. */
   blocks?: AnyEventRecord[];
+  /** Per-block comment lookup — threaded into `ProseCard` so each
+   *  block's LineCommentRail sees its own comment list. */
+  commentsByFilename?: Map<string, AnyEventRecord[]>;
 }
 
 export function EventCard({
@@ -56,6 +59,7 @@ export function EventCard({
   allEvents,
   consumedFilenames,
   blocks,
+  commentsByFilename,
 }: Props): JSX.Element | null {
   /* Consumed-block early-out — runs BEFORE the prose-role dispatch so a
      comment-mode prose that's also been resolved to an anchor still
@@ -85,6 +89,7 @@ export function EventCard({
           participants={participants}
           comments={comments}
           blocks={blocks}
+          commentsByFilename={commentsByFilename}
         />
       );
     }

@@ -9,11 +9,14 @@ describe("ProseInlineBlock registry dispatcher", () => {
     cleanup();
   });
 
-  test("renders a stub for a known kind (prose)", () => {
+  test("renders real markdown for a prose block (no longer a stub)", () => {
+    /* Phase 7 replaced the prose stub with the real markdown renderer.
+       A prose block now shows its actual content via fm-prose, with an
+       optional sub-section header above when `name` is set. */
     const ev = makeProse(
       "20260522T120000Z_ag-c92e.prose.md",
       "ag-c92e",
-      { content: "body", append_to: "anchor.md" },
+      { content: "**hello** body", append_to: "anchor.md" },
     );
     const { container } = render(
       <ProseInlineBlock
@@ -23,10 +26,35 @@ describe("ProseInlineBlock registry dispatcher", () => {
         mode="rendered"
       />,
     );
-    const stub = container.querySelector(".prose-embed-stub");
-    expect(stub).not.toBeNull();
-    expect(stub?.textContent).toContain("prose block");
-    expect(stub?.textContent).toContain("TODO");
+    expect(container.querySelector(".prose-inline-prose")).not.toBeNull();
+    expect(container.querySelector(".fm-prose")).not.toBeNull();
+    expect(container.textContent).toContain("hello");
+    // Phase 7's prose block is NOT a stub anymore.
+    expect(container.querySelector(".prose-embed-stub")).toBeNull();
+  });
+
+  test("named prose block renders its name as an h3 sub-section header", () => {
+    const ev = makeProse(
+      "20260522T120050Z_ag-c92e.prose.md",
+      "ag-c92e",
+      {
+        name: "Data flow",
+        content: "Body content.",
+        append_to: "anchor.md",
+      },
+    );
+    const { container } = render(
+      <ProseInlineBlock
+        event={ev}
+        participants={PARTICIPANTS}
+        comments={[]}
+        mode="rendered"
+      />,
+    );
+    const h3 = container.querySelector(".prose-block-name");
+    expect(h3).not.toBeNull();
+    expect(h3?.tagName).toBe("H3");
+    expect(h3?.textContent).toBe("Data flow");
   });
 
   test("renders a stub for each registered non-prose kind", () => {
