@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { Paths } from "./paths.js";
+import { initRuntimesFile } from "./runtimes/registry.js";
 
 export interface ProjectConfig {
   version: string;
@@ -59,6 +60,7 @@ export async function initProject(p: Paths): Promise<void> {
     const template = await readFile(join(assetsDir(), "AGENT.md"), "utf8");
     await writeFile(p.agentMd(), template);
   }
+  await initRuntimesFile(p.fmarkDir());
 }
 
 export async function readConfig(p: Paths): Promise<ProjectConfig> {

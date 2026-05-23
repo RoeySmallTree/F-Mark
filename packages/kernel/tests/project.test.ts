@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { initProject, readConfig, writeConfig } from "../src/project.js";
 import { paths } from "../src/paths.js";
 import { withTempProject } from "./helpers/tempdir.js";
@@ -17,6 +18,10 @@ describe("project", () => {
       expect(id).toMatch(/^us-[0-9a-f]{4}$/);
       const agent = await readFile(p.agentMd(), "utf8");
       expect(agent.length).toBeGreaterThan(0);
+      const runtimes = JSON.parse(await readFile(join(p.fmarkDir(), "runtimes.json"), "utf8"));
+      expect(runtimes.runtimes.claude).toBeDefined();
+      expect(runtimes.runtimes.codex).toBeDefined();
+      expect(runtimes.runtimes.gemini).toBeDefined();
     });
   });
 
