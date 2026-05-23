@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -60,6 +60,22 @@ describe("runtimes registry", () => {
     await withTmpFmark(async (fmarkDir) => {
       await initRuntimesFile(fmarkDir);
       await expect(upsertRuntime(fmarkDir, "bad", { displayName: "Bad", executable: "bad ; rm -rf", args: [] })).rejects.toThrow();
+    });
+  });
+
+  it("loadRuntimes rejects file without runtimes object", async () => {
+    await withTmpFmark(async (fmarkDir) => {
+      await mkdir(fmarkDir, { recursive: true });
+      await writeFile(join(fmarkDir, "runtimes.json"), JSON.stringify({ version: "1.0" }), "utf8");
+      await expect(loadRuntimes(fmarkDir)).rejects.toThrow(/runtimes/);
+    });
+  });
+
+  it("loadRuntimes wraps JSON.parse errors with filename", async () => {
+    await withTmpFmark(async (fmarkDir) => {
+      await mkdir(fmarkDir, { recursive: true });
+      await writeFile(join(fmarkDir, "runtimes.json"), "{ this is not json", "utf8");
+      await expect(loadRuntimes(fmarkDir)).rejects.toThrow(/runtimes\.json/);
     });
   });
 });

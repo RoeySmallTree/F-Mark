@@ -20,7 +20,7 @@ export function validateSlashCommand(value: string): void {
 export function validateMessageText(text: string): void {
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i);
-    if (c < 0x20 && c !== 0x09) throw new Error(`message contains control char at index ${i}`);
+    if ((c < 0x20 && c !== 0x09) || c === 0x7f) throw new Error(`message contains control char at index ${i}`);
   }
 }
 

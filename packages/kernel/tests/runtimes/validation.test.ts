@@ -40,6 +40,7 @@ describe("validation", () => {
     expect(() => validateMessageText("hello\tworld")).not.toThrow();
     expect(() => validateMessageText("hello\nworld")).toThrow(/control char/);
     expect(() => validateMessageText("\x00")).toThrow();
+    expect(() => validateMessageText("\x7f")).toThrow(/control char/);
   });
 
   it("validateRuntimeEntry catches missing fields", () => {

@@ -17,15 +17,36 @@ async function exists(p: string): Promise<boolean> {
   try { await stat(p); return true; } catch { return false; }
 }
 
+function validateRuntimesFile(parsed: unknown): asserts parsed is RuntimesFile {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("invalid .f-mark/runtimes.json: root must be an object");
+  }
+  const p = parsed as Partial<RuntimesFile>;
+  if (typeof p.version !== "string") {
+    throw new Error("invalid .f-mark/runtimes.json: version must be a string");
+  }
+  if (!p.runtimes || typeof p.runtimes !== "object" || Array.isArray(p.runtimes)) {
+    throw new Error("invalid .f-mark/runtimes.json: runtimes must be an object");
+  }
+}
+
 export async function loadRuntimes(fmarkDir: string): Promise<RuntimesFile> {
   const txt = await readFile(filePath(fmarkDir), "utf8");
-  const parsed = JSON.parse(txt) as RuntimesFile;
-  for (const [, entry] of Object.entries(parsed.runtimes ?? {})) validateRuntimeEntry(entry);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(txt);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid .f-mark/runtimes.json: ${msg}`);
+  }
+  validateRuntimesFile(parsed);
+  for (const [, entry] of Object.entries(parsed.runtimes)) validateRuntimeEntry(entry);
   return parsed;
 }
 
 export async function saveRuntimes(fmarkDir: string, cfg: RuntimesFile): Promise<void> {
   await mkdir(fmarkDir, { recursive: true });
+  validateRuntimesFile(cfg);
   for (const [, entry] of Object.entries(cfg.runtimes)) validateRuntimeEntry(entry);
   await writeFile(filePath(fmarkDir), JSON.stringify(cfg, null, 2), "utf8");
 }
