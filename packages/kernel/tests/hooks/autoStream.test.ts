@@ -45,13 +45,15 @@ describe("runAutoStream(assistant)", () => {
     const exit = await runAutoStream("ag-claude", "assistant", JSON.stringify(stdin));
     expect(exit).toBe(0);
     const f = (globalThis.fetch as any) as ReturnType<typeof vi.fn>;
-    expect(f).toHaveBeenCalledTimes(2);
-    expect(f.mock.calls[0][0]).toContain("/sessions/sess-1/events/prose");
-    expect(JSON.parse(f.mock.calls[0][1].body)).toMatchObject({ arbitrary: false, content: "hello!" });
-    expect(f.mock.calls[1][0]).toContain("/sessions/sess-1/events/turn-end");
+    // ping + prose + turn-end = 3 calls
+    expect(f).toHaveBeenCalledTimes(3);
+    expect(f.mock.calls[0][0]).toContain("/agents/ag-claude/ping");
+    expect(f.mock.calls[1][0]).toContain("/sessions/sess-1/events/prose");
+    expect(JSON.parse(f.mock.calls[1][1].body)).toMatchObject({ arbitrary: false, content: "hello!" });
+    expect(f.mock.calls[2][0]).toContain("/sessions/sess-1/events/turn-end");
   });
 
-  it("short-circuits when stop_hook_active=true", async () => {
+  it("short-circuits after ping when stop_hook_active=true", async () => {
     const { dir, transcript } = await bootstrapProject();
     const stdin = {
       session_id: "claude-1",
@@ -62,7 +64,10 @@ describe("runAutoStream(assistant)", () => {
     };
     const exit = await runAutoStream("ag-claude", "assistant", JSON.stringify(stdin));
     expect(exit).toBe(0);
-    expect((globalThis.fetch as any)).not.toHaveBeenCalled();
+    const f = (globalThis.fetch as any) as ReturnType<typeof vi.fn>;
+    // Presence ping still fires; no event posts.
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(f.mock.calls[0][0]).toContain("/agents/ag-claude/ping");
   });
 
   it("exits 0 with stderr warning when no active-session pointer exists", async () => {
@@ -77,6 +82,7 @@ describe("runAutoStream(assistant)", () => {
     }));
     expect(exit).toBe(0);
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("no active session"));
+    // No active session → no ping (no participant to ping for).
     expect((globalThis.fetch as any)).not.toHaveBeenCalled();
     stderr.mockRestore();
   });
@@ -94,9 +100,11 @@ describe("runAutoStream(user)", () => {
     const exit = await runAutoStream("us-roey", "user", JSON.stringify(stdin));
     expect(exit).toBe(0);
     const f = (globalThis.fetch as any) as ReturnType<typeof vi.fn>;
-    expect(f).toHaveBeenCalledTimes(1);
-    expect(f.mock.calls[0][0]).toContain("/events/prose");
-    expect(JSON.parse(f.mock.calls[0][1].body)).toMatchObject({
+    // ping + prose = 2 calls
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(f.mock.calls[0][0]).toContain("/agents/us-roey/ping");
+    expect(f.mock.calls[1][0]).toContain("/events/prose");
+    expect(JSON.parse(f.mock.calls[1][1].body)).toMatchObject({
       content: "rerun the suite please",
       arbitrary: false,
     });

@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import { readActiveSession } from "../agents/activeSession.js";
 import { loadHookContext } from "./bootstrap.js";
-import { postProjectedEvents } from "./post.js";
+import { postPing, postProjectedEvents } from "./post.js";
 import { projectTurnToEvents } from "./projectTurn.js";
 import { extractLastAssistantTurn } from "./transcript.js";
 
@@ -51,6 +51,8 @@ export async function runAutoStream(
     );
     return 0;
   }
+
+  await postPing(ctx, participantId);
 
   if (kind === "assistant") {
     const a = payload as AssistantStdin;

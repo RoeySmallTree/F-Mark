@@ -50,3 +50,15 @@ export async function postProjectedEvents(
     });
   }
 }
+
+export async function postPing(ctx: HookContext, participantId: string): Promise<void> {
+  try {
+    await fetch(`${ctx.kernelUrl}/agents/${participantId}/ping`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${ctx.token}` },
+      body: "{}",
+    });
+  } catch {
+    // ping is best-effort; never fail the hook for presence
+  }
+}
