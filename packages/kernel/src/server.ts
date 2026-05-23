@@ -15,6 +15,7 @@ import { registerPresetRoutes } from "./routes/presets.js";
 import { registerSkillRoutes } from "./routes/skills.js";
 import { registerSearchRoutes } from "./routes/search.js";
 import { registerGuideRoute } from "./routes/guide.js";
+import { registerEnvProbeRoute, realProbe } from "./routes/envProbe.js";
 import { registerStaticRoutes } from "./routes/static.js";
 import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
@@ -141,6 +142,12 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerSearchRoutes(app, deps.paths);
   registerGuideRoute(app, deps.paths);
   registerPresenceRoutes(app, () => tracker);
+
+  // /env-probe is a read-only PATH-detection endpoint; it lives outside the
+  // process-API gate so the UI can render the install banner even under
+  // --no-auth without --allow-process-api-no-auth.
+  const probeFn = realProbe(["claude", "codex", "gemini"]);
+  registerEnvProbeRoute(app, { probe: probeFn });
 
   // Process-spawning routes are gated. They're always enabled when a token is
   // set (bearer auth protects them), and additionally enabled under --no-auth
