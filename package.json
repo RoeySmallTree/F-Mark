@@ -1,6 +1,6 @@
 {
   "name": "f-mark-monorepo",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "private": true,
   "description": "F-Mark — document-based interface for AI agent collaboration",
   "license": "MIT",
