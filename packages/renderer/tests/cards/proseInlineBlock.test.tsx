@@ -57,17 +57,10 @@ describe("ProseInlineBlock registry dispatcher", () => {
     expect(h3?.textContent).toBe("Data flow");
   });
 
-  test("renders a stub for each registered non-prose kind", () => {
-    /* Walks the registry surface area: one event per supported kind, all
-       composing under the same anchor. */
-    const kinds = [
-      "flow",
-      "file",
-      "html",
-      "choices",
-      "todo",
-      "tool-use",
-    ] as const;
+  test("renders a stub for each registered non-prose kind still on a stub", () => {
+    /* Phases 9+ replace each remaining stub with its real embedded
+       variant. Until then, file/html/choices/todo/tool-use stay on stubs. */
+    const kinds = ["file", "html", "choices", "todo", "tool-use"] as const;
     for (const kind of kinds) {
       const ev: AnyEventRecord = {
         filename: `20260522T120100Z_ag-c92e.${kind}.json`,
@@ -91,6 +84,37 @@ describe("ProseInlineBlock registry dispatcher", () => {
       );
       cleanup();
     }
+  });
+
+  test("flow block renders real embedded FlowCard (no longer a stub)", () => {
+    /* Phase 8 replaced the flow stub with FlowCard variant="embedded".
+       The embedded variant drops the .flow-head chrome but keeps the
+       canvas and (optional) title. */
+    const ev: AnyEventRecord = {
+      filename: "20260522T120150Z_ag-c92e.flow.json",
+      timestamp: "20260522T120150Z",
+      participant_id: "ag-c92e",
+      kind: "flow",
+      payload: {
+        id: "fl_t",
+        title: "Pipeline",
+        nodes: [{ id: "n1", label: "A", position: { x: 0, y: 0 } }],
+        edges: [],
+        append_to: "anchor.md",
+      },
+    };
+    const { container } = render(
+      <ProseInlineBlock
+        event={ev}
+        participants={PARTICIPANTS}
+        comments={[]}
+        mode="rendered"
+      />,
+    );
+    expect(container.querySelector(".flow-card-embedded")).not.toBeNull();
+    expect(container.querySelector(".flow-head")).toBeNull();
+    expect(container.querySelector(".prose-embed-stub")).toBeNull();
+    expect(container.textContent).toContain("Pipeline");
   });
 
   test("unknown kind falls back to UnsupportedBlock", () => {

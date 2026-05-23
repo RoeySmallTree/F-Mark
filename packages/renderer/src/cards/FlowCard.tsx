@@ -23,6 +23,10 @@ import "@xyflow/react/dist/style.css";
 interface Props {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
+  /** "embedded" drops the outer card chrome (head, title row, menu) and
+   *  renders only the flow canvas. Used by ProseInlineBlock to host a
+   *  flow chart inside an anchor prose document. */
+  variant?: "standalone" | "embedded";
 }
 
 const NODE_TYPES = { flow: FlowNode };
@@ -85,13 +89,33 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
   );
 }
 
-export function FlowCard({ event, participants }: Props): JSX.Element {
+export function FlowCard({
+  event,
+  participants,
+  variant = "standalone",
+}: Props): JSX.Element {
   const payload = event.payload as FlowPayload;
   const who = whoOf(event.participant_id, participants);
   const title =
     typeof payload.title === "string" && payload.title.length > 0
       ? payload.title
       : payload.id;
+
+  if (variant === "embedded") {
+    /* Embedded variant: drop the head + menu chrome; the surrounding
+       prose-embed-frame provides separation. Keep the title because
+       a flow chart often *is* its own caption. */
+    return (
+      <div className="flow-card flow-card-embedded" data-event-kind="flow">
+        {title.length > 0 && <div className="flow-title">{title}</div>}
+        <div className="flow-canvas">
+          <ReactFlowProvider>
+            <FlowInner payload={payload} />
+          </ReactFlowProvider>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flow-card" data-event-kind="flow">

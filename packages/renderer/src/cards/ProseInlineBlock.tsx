@@ -18,6 +18,7 @@ import type {
 } from "@f-mark/shared";
 import { type MarkdownMode } from "../render/MarkdownRenderer.js";
 import { LineCommentRail } from "./LineCommentRail.js";
+import { FlowCard } from "./FlowCard.js";
 
 export interface InlineProps {
   event: AnyEventRecord;
@@ -61,8 +62,8 @@ const InlineProseBlock: FC<InlineProps> = ({
     </div>
   );
 };
-const InlineFlowBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
+const InlineFlowBlock: FC<InlineProps> = ({ event, participants }) => (
+  <FlowCard event={event} participants={participants} variant="embedded" />
 );
 const InlineFileBlock: FC<InlineProps> = ({ event }) => (
   <StubBlock kind={event.kind} />

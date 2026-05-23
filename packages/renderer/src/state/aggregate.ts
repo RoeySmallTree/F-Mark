@@ -115,12 +115,16 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
   const supersedorOf = buildSupersedorOf(sorted);
   const superseded = new Set<string>(supersedorOf.keys());
   const visible = sorted.filter((e) => !superseded.has(e.filename));
-  const visibleByFilename = new Set(visible.map((e) => e.filename));
+  const visibleByFilename = new Map<string, AnyEventRecord>();
+  for (const e of visible) visibleByFilename.set(e.filename, e);
 
   /* Block grouping.
      For each visible block (has `append_to`, not a comment), resolve its
-     parent's live filename via the supersedes chain. If the live parent
-     isn't visible, the block is an orphan. */
+     parent's live filename via the supersedes chain. Only NAMED ANCHORS
+     are valid parents — pointing `append_to` at an unnamed message or a
+     standalone non-anchor yields an orphan (review_phase6 finding #1).
+     This prevents top-level non-anchor cards from silently consuming
+     blocks they don't know how to render. */
   const consumedBlocksByAnchor = new Map<string, AnyEventRecord[]>();
   const orphanBlocks = new Set<string>();
   const liveAnchorOf = new Map<string, string | "cycle">();
@@ -136,7 +140,9 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
       live = resolveLiveAnchor(appendTo, supersedorOf);
       liveAnchorOf.set(appendTo, live);
     }
-    if (live === "cycle" || !visibleByFilename.has(live)) {
+    const liveEvent =
+      live === "cycle" ? undefined : visibleByFilename.get(live);
+    if (liveEvent === undefined || !isNamedAnchor(liveEvent)) {
       orphanBlocks.add(e.filename);
       continue;
     }
