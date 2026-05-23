@@ -1,0 +1,148 @@
+# F-Mark HTTP reference
+
+Base URL: `http://localhost:7777` (or whatever port `.f-mark/config.json` reports).
+Auth: `Authorization: Bearer <token>` where token is in `.f-mark/.token`.
+
+## Health
+
+`GET /health` → `{ status, version }`. Auth not required.
+
+## Participants
+
+`GET /participants` → `{ participants: { id: { kind, name, color }, ... } }`.
+
+`POST /participants/register`
+
+```json
+{ "kind": "agent", "name": "Gemini", "suggested_id": "ag-gemini" }
+```
+
+→ `{ id, name, color }`.
+
+## Sessions
+
+`GET /sessions` → `{ sessions: [{ id, slug, created_at }, ...] }`.
+
+`POST /sessions`
+
+```json
+{ "slug": "launch-plan" }
+```
+
+→ `{ id, slug, created_at }`. Omitting `slug` defaults to "untitled".
+
+## Events
+
+All event POSTs return `{ filename, timestamp, kind, participant_id }`.
+
+`POST /sessions/<id>/events/prose`
+
+```json
+{
+  "participant_id": "ag-gemini",
+  "content": "# Launch plan\n\nPhase 1: ...",
+  "name": "Launch Plan v1",
+  "target": { "file": "20260522T143012Z_us-a7f3.prose.md", "lines": [3, 5] },
+  "in_reply_to": "20260522T143012Z_us-a7f3.prose.md",
+  "supersedes": "20260520T100000Z_ag-gemini.prose.md"
+}
+```
+
+All frontmatter fields are optional.
+
+`POST /sessions/<id>/events/choices`
+
+```json
+{
+  "participant_id": "ag-gemini",
+  "id": "ch_approach",
+  "question": "Which direction?",
+  "options": [
+    { "id": "a", "label": "Incremental" },
+    { "id": "b", "label": "Rewrite" }
+  ],
+  "multi": false
+}
+```
+
+`POST /sessions/<id>/events/choice`
+
+```json
+{
+  "participant_id": "us-a7f3",
+  "choices_id": "ch_approach",
+  "selected": ["b"]
+}
+```
+
+`POST /sessions/<id>/events/turn-end`
+
+```json
+{ "participant_id": "ag-gemini" }
+```
+
+## Reading events
+
+`GET /sessions/<id>/events?since=<ts>&kinds=<csv>&participant=<id>`
+
+→ `{ events: [{ filename, timestamp, participant_id, kind, payload }, ...] }`.
+
+`since` is an ISO compact timestamp like `20260522T143012Z`. Strict-newer filter (`>`, not `>=`).
+
+`kinds` is a comma-separated list of `prose, choices, choice, turn-end, todo, html, file`.
+
+## WebSocket
+
+`ws://localhost:7777/ws` (optionally with `?token=<token>`) emits:
+
+```json
+{ "type": "event_added", "session_id": "...", "filename": "...", "kind": "prose", "participant_id": "us-..." }
+{ "type": "event_superseded", "session_id": "...", "filename": "<old>", "supersedes": "<new>" }
+```
+
+## Filenames
+
+Format: `{ISO_TIMESTAMP}_{PARTICIPANT_ID}.{KIND}.{EXT}`
+
+- `20260522T143012Z_us-a7f3.prose.md`
+- `20260522T143245Z_ag-c92e.choices.json`
+- `20260522T143512Z_us-a7f3.turn-end.json`
+
+## POST /agents/:participant_id/link
+
+Sets the active session for a participant. In manual-stream mode this pointer is informational — the model passes the session id explicitly into every POST URL — but linking is still expected, so the renderer and other agents know where the Gemini agent is currently active.
+
+**Request:**
+```json
+{ "session_id": "2026-05-22-launch-plan" }
+```
+
+**Response (200):**
+```json
+{ "participant_id": "ag-gemini", "session_id": "2026-05-22-launch-plan" }
+```
+
+Errors: 400 invalid participant_id, 404 session not found, 401 missing/bad token.
+
+## POST /sessions/:id/events/tool-use
+
+Logs a tool invocation. In Gemini's manual-stream mode, the model POSTs this directly after each tool call returns — see the SKILL.md "Streaming (manual mode)" section.
+
+**Request:**
+```json
+{
+  "participant_id": "ag-gemini",
+  "tool_name": "Bash",
+  "tool_use_id": "tu_01HXYZ",
+  "input": { "command": "ls -la" },
+  "result": "total 0\n",
+  "success": true,
+  "duration_ms": 14
+}
+```
+
+## POST /sessions/:id/events/prose with `arbitrary`
+
+When set to `true`, the renderer groups the message into the collapsible mid-turn box. In Gemini's manual-stream mode, the model sets `arbitrary: true` on every text block *except* the final concluding text of a turn. Final concluding text should omit the field (or set `arbitrary: false`).
+
+For named / targeted / reply / superseding posts, never set `arbitrary: true` — those are deliberate contributions, not mid-turn narration.
