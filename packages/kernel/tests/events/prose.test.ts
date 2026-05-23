@@ -46,3 +46,41 @@ describe("prose serialize/parse", () => {
     expect(parseProse(out).supersedes).toBe("old.prose.md");
   });
 });
+
+describe("prose `arbitrary` flag", () => {
+  it("serialises with arbitrary: true in frontmatter when set", () => {
+    const out = serializeProse({ content: "thinking out loud", arbitrary: true });
+    expect(out.startsWith("---\n")).toBe(true);
+    expect(out).toContain("arbitrary: true");
+    expect(out).toContain("\nthinking out loud");
+  });
+
+  it("omits arbitrary from frontmatter when false (default semantics)", () => {
+    const out = serializeProse({ content: "deliberate", arbitrary: false });
+    expect(out).toBe("deliberate"); // no frontmatter at all
+  });
+
+  it("omits arbitrary from frontmatter when undefined", () => {
+    const out = serializeProse({ content: "deliberate" });
+    expect(out).toBe("deliberate");
+  });
+
+  it("parses arbitrary back as boolean", () => {
+    const md = "---\narbitrary: true\n---\nbody";
+    expect(parseProse(md)).toEqual({ content: "body", arbitrary: true });
+  });
+
+  it("parses missing arbitrary as undefined (not false)", () => {
+    expect(parseProse("plain")).toEqual({ content: "plain" });
+  });
+
+  it("coexists with name and target", () => {
+    const out = serializeProse({
+      content: "midstream comment",
+      name: "Draft",
+      arbitrary: true,
+    });
+    expect(out).toContain("name: Draft");
+    expect(out).toContain("arbitrary: true");
+  });
+});

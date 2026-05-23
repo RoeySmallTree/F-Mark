@@ -7,6 +7,7 @@ function pickFrontmatter(payload: ProsePayload): ProseFrontmatter {
   if (payload.target !== undefined) out.target = payload.target;
   if (payload.in_reply_to !== undefined) out.in_reply_to = payload.in_reply_to;
   if (payload.supersedes !== undefined) out.supersedes = payload.supersedes;
+  if (payload.arbitrary === true) out.arbitrary = true;
   return out;
 }
 
@@ -26,5 +27,6 @@ export function parseProse(raw: string): ProsePayload {
   }
   if (typeof data.in_reply_to === "string") out.in_reply_to = data.in_reply_to;
   if (typeof data.supersedes === "string") out.supersedes = data.supersedes;
+  if (data.arbitrary === true) out.arbitrary = true;
   return out;
 }

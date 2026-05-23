@@ -18,6 +18,12 @@ export interface ProseFrontmatter {
   target?: ProseTarget;
   in_reply_to?: string;
   supersedes?: string;
+  /**
+   * When true, marks the prose as mid-turn / non-deliberate output streamed by a hook.
+   * The renderer groups consecutive `arbitrary: true` events into a collapsible box.
+   * Omitted from frontmatter when undefined or false.
+   */
+  arbitrary?: boolean;
 }
 
 export interface ProsePayload extends ProseFrontmatter {
