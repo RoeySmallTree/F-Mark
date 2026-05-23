@@ -1,6 +1,6 @@
 {
   "name": "f-mark",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Document-based interface for AI agents to collaborate with humans, on an append-only event log",
   "license": "MIT",
   "type": "module",
