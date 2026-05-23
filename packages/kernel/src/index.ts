@@ -65,7 +65,11 @@ if (options.noAuth) {
   await ensureGitignoreEntry(p);
 }
 
-const { app, getBus } = createServer({ token, paths: p });
+const { app, getBus } = createServer({
+  token,
+  paths: p,
+  allowProcessApiNoAuth: options.allowProcessApiNoAuth,
+});
 
 const requestedPort = options.port ?? DEFAULT_PORT;
 let port = requestedPort;
@@ -110,6 +114,7 @@ console.log(
     hostname: hostname(),
     user: process.env.USER ?? process.env.USERNAME ?? "user",
     sshHint: process.env.SSH_CONNECTION !== undefined && !options.remote,
+    allowProcessApiNoAuth: options.allowProcessApiNoAuth,
   }),
 );
 

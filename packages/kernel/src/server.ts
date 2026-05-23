@@ -26,6 +26,16 @@ import { realCommandRunner } from "./tmux/commandRunner.js";
 export interface ServerDeps {
   token: string | null;
   paths: Paths;
+  /**
+   * When true, allow process-spawning routes (managed-agents, pane WS, command
+   * execution) even under `--no-auth`. Default false. Required because, with
+   * auth disabled, *any* network-reachable client could otherwise spawn
+   * arbitrary processes via the kernel.
+   *
+   * Has no effect when `token !== null` — bearer auth already gates those
+   * routes in that mode.
+   */
+  allowProcessApiNoAuth?: boolean;
 }
 
 export interface CreatedServer {
@@ -127,16 +137,36 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerGuideRoute(app, deps.paths);
   registerPresenceRoutes(app, () => tracker);
 
-  const tmux = createTmuxManager({
-    runner: realCommandRunner(),
-    projectRoot: deps.paths.root(),
-  });
-  registerManagedAgentsRoutes(app, {
-    paths: deps.paths,
-    tmux,
-    tracker,
-    projectRoot: deps.paths.root(),
-  });
+  // Process-spawning routes are gated. They're always enabled when a token is
+  // set (bearer auth protects them), and additionally enabled under --no-auth
+  // only when the operator explicitly opts in with --allow-process-api-no-auth.
+  const processApiEnabled =
+    deps.token !== null || deps.allowProcessApiNoAuth === true;
+  if (processApiEnabled) {
+    const tmux = createTmuxManager({
+      runner: realCommandRunner(),
+      projectRoot: deps.paths.root(),
+    });
+    registerManagedAgentsRoutes(app, {
+      paths: deps.paths,
+      tmux,
+      tracker,
+      projectRoot: deps.paths.root(),
+    });
+  } else {
+    // Fallback: respond with a clear 404 explaining why the API is off.
+    const handler = async (
+      _req: import("fastify").FastifyRequest,
+      reply: import("fastify").FastifyReply,
+    ): Promise<void> => {
+      reply.code(404).send({
+        error:
+          "process-spawning API disabled. Pass --allow-process-api-no-auth to enable under --no-auth.",
+      });
+    };
+    app.all("/managed-agents", handler);
+    app.all("/managed-agents/*", handler);
+  }
 
   app.register(async (instance) => {
     await registerStaticRoutes(instance);

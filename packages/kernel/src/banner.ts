@@ -10,6 +10,11 @@ export interface BannerInput {
   hostname: string;
   user: string;
   sshHint: boolean;
+  /**
+   * True when both `--no-auth` and `--allow-process-api-no-auth` are active.
+   * Triggers a loud warning line in the banner.
+   */
+  allowProcessApiNoAuth?: boolean;
 }
 
 const ANSI = {
@@ -123,13 +128,31 @@ function containerBanner(input: BannerInput): string {
   ].join("\n");
 }
 
+function processApiWarning(input: BannerInput): string | null {
+  // Only warn when the dangerous combination is actually active: auth is off
+  // AND the operator explicitly enabled the process-spawning API.
+  if (input.token === null && input.allowProcessApiNoAuth === true) {
+    const line =
+      "WARNING: --no-auth + --allow-process-api-no-auth allows ANY client on this port to spawn processes.";
+    return `  ${yellow(bold(line))}`;
+  }
+  return null;
+}
+
 export function renderBanner(input: BannerInput): string {
+  let body: string;
   switch (input.mode) {
     case "local":
-      return localBanner(input);
+      body = localBanner(input);
+      break;
     case "remote":
-      return remoteBanner(input);
+      body = remoteBanner(input);
+      break;
     case "container":
-      return containerBanner(input);
+      body = containerBanner(input);
+      break;
   }
+  const warning = processApiWarning(input);
+  if (warning === null) return body;
+  return `${body}\n\n${warning}`;
 }

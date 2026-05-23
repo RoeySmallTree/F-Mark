@@ -6,6 +6,7 @@ export interface CliOptions {
   port?: number;
   password?: string;
   noAuth: boolean;
+  allowProcessApiNoAuth: boolean;
   help: boolean;
 }
 
@@ -14,6 +15,7 @@ export function parseArgs(argv: string[]): CliOptions {
     remote: false,
     container: false,
     noAuth: false,
+    allowProcessApiNoAuth: false,
     help: false,
   };
 
@@ -30,6 +32,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break;
       case "--no-auth":
         options.noAuth = true;
+        break;
+      case "--allow-process-api-no-auth":
+        options.allowProcessApiNoAuth = true;
         break;
       case "--help":
       case "-h":
@@ -87,6 +92,10 @@ Options:
   --port <n>          HTTP port (default 7777)
   --password <value>  Use a specific auth token instead of generating one
   --no-auth           Disable auth entirely (prints a warning)
+  --allow-process-api-no-auth
+                      Allow the process-spawning API (managed-agents, pane WS)
+                      under --no-auth. Off by default — without this flag,
+                      --no-auth disables those routes entirely.
   --help, -h          Show this help`);
 }
 

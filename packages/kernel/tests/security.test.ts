@@ -72,4 +72,73 @@ describe("security", () => {
       await app.close();
     });
   });
+
+  it("--no-auth without --allow-process-api-no-auth disables /managed-agents/spawn (404)", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({
+        token: null,
+        paths: p,
+        allowProcessApiNoAuth: false,
+      });
+      const res = await app.inject({
+        method: "POST",
+        url: "/managed-agents/spawn",
+        payload: { runtime_id: "claude" },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error).toMatch(/process-spawning API disabled/);
+      await app.close();
+    });
+  });
+
+  it("--no-auth + --allow-process-api-no-auth enables /managed-agents/* routes", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({
+        token: null,
+        paths: p,
+        allowProcessApiNoAuth: true,
+      });
+      // The route should now exist; we expect a 400 (unknown runtime) rather
+      // than a 404 "disabled" response.
+      const res = await app.inject({
+        method: "POST",
+        url: "/managed-agents/spawn",
+        payload: { runtime_id: "unknown" },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("with token set, --allow-process-api-no-auth is unnecessary and routes work behind bearer", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({
+        token: "secret",
+        paths: p,
+        allowProcessApiNoAuth: false,
+      });
+      // Without bearer → 401
+      const r401 = await app.inject({
+        method: "POST",
+        url: "/managed-agents/spawn",
+        payload: { runtime_id: "unknown" },
+      });
+      expect(r401.statusCode).toBe(401);
+      // With bearer → reaches the route (400 unknown runtime)
+      const r400 = await app.inject({
+        method: "POST",
+        url: "/managed-agents/spawn",
+        headers: { authorization: "Bearer secret" },
+        payload: { runtime_id: "unknown" },
+      });
+      expect(r400.statusCode).toBe(400);
+      await app.close();
+    });
+  });
 });
