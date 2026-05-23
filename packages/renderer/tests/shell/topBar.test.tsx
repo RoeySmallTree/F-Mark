@@ -13,9 +13,10 @@ import {
   vi,
   type MockInstance,
 } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
+  AnyEventRecord,
   EnvProbeResult,
   ManagedAgent,
   ManagedTerminal,
@@ -77,6 +78,8 @@ interface ResetOverrides {
   managedTerminals?: ManagedTerminal[];
   presence?: Record<string, { state: string; last_hook_at: number | null }>;
   envProbe?: EnvProbeResult | null;
+  participants?: Record<string, Participant>;
+  events?: AnyEventRecord[];
 }
 
 function resetStore(overrides: ResetOverrides = {}): void {
@@ -84,9 +87,9 @@ function resetStore(overrides: ResetOverrides = {}): void {
     token: null,
     sessions: [SESSION],
     currentSessionId: SESSION.id,
-    participants: PARTICIPANTS,
+    participants: overrides.participants ?? PARTICIPANTS,
     currentUserId: "us-a7f3",
-    events: [],
+    events: overrides.events ?? [],
     composeMode: "message",
     commentTarget: null,
     composeDraft: null,
@@ -122,8 +125,13 @@ describe("TopBar — chip strip (Phase 12)", () => {
     globalThis.localStorage?.clear();
   });
 
-  test("renders no chips when managedAgents and managedTerminals are empty", () => {
-    resetStore();
+  test("renders no chips when there are no agent participants and no managed terminals", () => {
+    /* Use a user-only participants set so no agent chips render — the new
+       contract is "one chip per agent participant", so participants must
+       be empty of agents (not just managedAgents) for zero chips. */
+    resetStore({
+      participants: { "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" } },
+    });
     const { container } = render(<TopBar />);
     expect(container.querySelectorAll(".agent-chip").length).toBe(0);
     expect(container.querySelectorAll(".terminal-chip").length).toBe(0);
@@ -279,9 +287,20 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
 
   test("clicking + then Claude adds the new AgentChip to local state immediately after the spawn response", async () => {
     const user = userEvent.setup();
+    /* Start with a user-only participants set so we can cleanly assert
+       the new chip appears as the *only* chip after spawn. */
+    resetStore({
+      envProbe: HEALTHY_PROBE,
+      participants: { "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" } },
+    });
     const { container } = render(<TopBar />);
     /* No chips before the spawn click. */
     expect(container.querySelectorAll(".agent-chip").length).toBe(0);
+    /* The spawn handler in TopBar adds the new agent to managedAgents.
+       Since the new contract renders one chip per agent *participant*,
+       we also need the participants slice to reflect the new agent so
+       a chip appears. Simulate the kernel's participants-update by
+       seeding the participant alongside the spawn response below. */
     await user.click(
       screen.getByRole("button", { name: /add agent or terminal/i }),
     );
@@ -293,6 +312,18 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
        no WS round-trip needed. Wait a microtask for the promise chain to
        settle. */
     await new Promise<void>((r) => setTimeout(r, 0));
+    /* Seed the matching participant — the kernel normally delivers this via
+       WS, but the unit test doesn't have that. The TopBar contract is now
+       "render every agent participant"; we verify the chip appears once
+       the participant is known. */
+    act(() => {
+      useStore.setState({
+        participants: {
+          "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+          "ag-new": { kind: "agent", name: "Claude", color: "#b86a1f" },
+        },
+      });
+    });
     const chips = container.querySelectorAll(".agent-chip");
     expect(chips.length).toBe(1);
     expect(chips[0]!.getAttribute("data-participant-id")).toBe("ag-new");
@@ -344,5 +375,195 @@ describe("TopBar — terminal spawn local state (Phase 12)", () => {
     expect(
       terminals.find((t) => t.tmux_session === "fmark-term-new"),
     ).toBeDefined();
+  });
+});
+
+describe("TopBar — turn pill gates on agent presence", () => {
+  beforeEach(() => {
+    globalThis.localStorage?.clear();
+    resetStore();
+  });
+  afterEach(() => {
+    cleanup();
+    globalThis.localStorage?.clear();
+  });
+
+  test("turn pill shows Idle when no agent is online (even if the event log's latest turn-end was from a user — which would otherwise say 'Agent thinking…')", () => {
+    /* Event log contains a user-finished turn — currentTurnParticipantPrefix
+       would resolve to "ag" purely from the log. But no agent presence is
+       online/stale, so the pill must read "Idle". */
+    const userTurnEnd: AnyEventRecord = {
+      filename: "20260523T000001Z_us-a7f3.turn-end.json",
+      timestamp: "20260523T000001Z",
+      participant_id: "us-a7f3",
+      kind: "turn-end",
+      payload: { participant_id: "us-a7f3" },
+    };
+    resetStore({
+      events: [userTurnEnd],
+      /* No managed agents, no presence — agent is offline / not present. */
+    });
+    render(<TopBar />);
+    /* The pill renders with role="status". */
+    const pill = screen.getByRole("status");
+    expect(pill.textContent).toContain("Idle");
+    expect(pill.textContent).not.toContain("Agent thinking");
+  });
+
+  test("turn pill still shows 'Agent thinking…' when an agent has online presence after a user turn-end", () => {
+    const userTurnEnd: AnyEventRecord = {
+      filename: "20260523T000001Z_us-a7f3.turn-end.json",
+      timestamp: "20260523T000001Z",
+      participant_id: "us-a7f3",
+      kind: "turn-end",
+      payload: { participant_id: "us-a7f3" },
+    };
+    resetStore({
+      events: [userTurnEnd],
+      managedAgents: [AGENTS[0]!],
+      presence: { "ag-c92e": { state: "online", last_hook_at: 1 } },
+    });
+    render(<TopBar />);
+    const pill = screen.getByRole("status");
+    expect(pill.textContent).toContain("Agent thinking");
+  });
+
+  test("turn pill still shows 'Agent thinking…' when an agent has stale presence", () => {
+    const userTurnEnd: AnyEventRecord = {
+      filename: "20260523T000001Z_us-a7f3.turn-end.json",
+      timestamp: "20260523T000001Z",
+      participant_id: "us-a7f3",
+      kind: "turn-end",
+      payload: { participant_id: "us-a7f3" },
+    };
+    resetStore({
+      events: [userTurnEnd],
+      managedAgents: [AGENTS[0]!],
+      presence: { "ag-c92e": { state: "stale", last_hook_at: 1 } },
+    });
+    render(<TopBar />);
+    const pill = screen.getByRole("status");
+    expect(pill.textContent).toContain("Agent thinking");
+  });
+});
+
+describe("TopBar — agent participants render as AgentChips, not bare avatars", () => {
+  beforeEach(() => {
+    globalThis.localStorage?.clear();
+    resetStore();
+  });
+  afterEach(() => {
+    cleanup();
+    globalThis.localStorage?.clear();
+  });
+
+  test("agent participant that is NOT in managedAgents still renders as a full AgentChip with name", () => {
+    /* Simulate a pre-existing agent from a prior session that's not currently
+       managed: it appears in participants but not in managedAgents. */
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+    };
+    resetStore({
+      participants,
+      managedAgents: [],
+      /* No presence for ag-old-1 — it should appear as offline. */
+    });
+    const { container } = render(<TopBar />);
+    /* The chip is in the chip strip, not in the avatars stack. */
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-old-1"]',
+    );
+    expect(chip).not.toBeNull();
+    expect(chip!.getAttribute("data-state")).toBe("offline");
+    /* The chip shows the agent's name. */
+    expect(chip!.textContent).toContain("Old Agent");
+  });
+
+  test("agent participant does NOT appear as a bare avatar in the right-side participants stack", () => {
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+    };
+    resetStore({ participants, managedAgents: [] });
+    const { container } = render(<TopBar />);
+    /* Right-side participants stack should only contain user avatars. */
+    const stack = container.querySelector(".participants");
+    expect(stack).not.toBeNull();
+    /* No agent avatars in the stack. */
+    const agentAvatars = stack!.querySelectorAll(".avatar.agent");
+    expect(agentAvatars.length).toBe(0);
+    /* User avatar still present. */
+    const userAvatars = stack!.querySelectorAll(".avatar.user");
+    expect(userAvatars.length).toBe(1);
+  });
+
+  test("clicking an un-managed agent chip opens the AgentActionMenu", async () => {
+    const user = userEvent.setup();
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+    };
+    resetStore({ participants, managedAgents: [] });
+    const { container } = render(<TopBar />);
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-old-1"]',
+    ) as HTMLElement | null;
+    expect(chip).not.toBeNull();
+    await user.click(chip!);
+    /* The menu should now be in the DOM. */
+    const menu = container.querySelector(
+      '.agent-action-menu[data-participant-id="ag-old-1"]',
+    );
+    expect(menu).not.toBeNull();
+  });
+
+  test("un-managed agent chip's action menu disables tmux-only actions (Send /compact + hides Say goodbye)", async () => {
+    const user = userEvent.setup();
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+    };
+    resetStore({
+      participants,
+      managedAgents: [],
+      presence: { "ag-old-1": { state: "online", last_hook_at: 1 } },
+    });
+    const { container } = render(<TopBar />);
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-old-1"]',
+    ) as HTMLElement | null;
+    expect(chip).not.toBeNull();
+    await user.click(chip!);
+    /* Send /compact must be disabled because the agent is not managed. */
+    const compact = screen.getByRole("menuitem", {
+      name: /Send \/compact/i,
+    }) as HTMLButtonElement;
+    expect(compact.disabled).toBe(true);
+    /* Say goodbye must be hidden for un-managed agents. */
+    expect(
+      screen.queryByRole("menuitem", { name: /Say goodbye/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("agent chip strip is sorted by presence state (online first, then offline)", () => {
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-offline": { kind: "agent", name: "AAA Offline", color: "#b86a1f" },
+      "ag-online": { kind: "agent", name: "ZZZ Online", color: "#1f7ab8" },
+    };
+    resetStore({
+      participants,
+      managedAgents: [],
+      presence: { "ag-online": { state: "online", last_hook_at: 1 } },
+    });
+    const { container } = render(<TopBar />);
+    const chips = Array.from(
+      container.querySelectorAll(".agent-chip"),
+    ) as HTMLElement[];
+    const ids = chips.map((c) => c.getAttribute("data-participant-id"));
+    /* Online agent appears before offline agent regardless of name. */
+    expect(ids[0]).toBe("ag-online");
+    expect(ids[1]).toBe("ag-offline");
   });
 });

@@ -171,10 +171,43 @@ describe("AgentActionMenu — disabled states", () => {
     expect(interrupt).toBeDisabled();
   });
 
+  test("Interrupt disabled when not managed", () => {
+    /* Interrupt routes through /managed-agents/.../command which only works
+       for agents the kernel actively manages. An un-managed legacy agent
+       has no tmux session to interrupt. */
+    renderMenu({ state: "online", managed: false });
+    const interrupt = screen.getByRole("menuitem", { name: /Interrupt/i });
+    expect(interrupt).toBeDisabled();
+  });
+
   test("Interrupt enabled when state === 'online'", () => {
     renderMenu({ state: "online" });
     const interrupt = screen.getByRole("menuitem", { name: /Interrupt/i });
     expect(interrupt).not.toBeDisabled();
+  });
+
+  test("Send a message hidden when not managed", () => {
+    /* No tmux session to send a message into. */
+    renderMenu({ managed: false });
+    expect(
+      screen.queryByRole("menuitem", { name: /Send a message/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("Slash commands hidden when not managed", () => {
+    /* Slash routes through /managed-agents/.../command too. */
+    renderMenu({ managed: false });
+    expect(
+      screen.queryByRole("menuitem", { name: /Slash commands/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("Open terminal hidden when not managed", () => {
+    /* No tmux session associated with an un-managed legacy agent. */
+    renderMenu({ managed: false });
+    expect(
+      screen.queryByRole("menuitem", { name: /Open terminal/i }),
+    ).not.toBeInTheDocument();
   });
 });
 

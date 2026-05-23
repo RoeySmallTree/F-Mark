@@ -76,14 +76,33 @@ export function TopBar(): JSX.Element {
 
   const agg = useMemo(() => aggregate(events), [events]);
   const turn = agg.currentTurnParticipantPrefix;
+
+  /* Gate "Agent thinking…" on at least one agent being present (online or
+     stale per the presence map). Without this gate, after an agent
+     disconnects but never emits a closing turn-end, the pill keeps
+     reporting that an agent is mid-turn — which the user sees as a
+     stale "Agent thinking…" with no agent attached. */
+  const anyAgentActive = useMemo(() => {
+    return Object.values(presence).some(
+      (p) => p.state === "online" || p.state === "stale",
+    );
+  }, [presence]);
+
+  const effectiveTurn: "us" | "ag" | "idle" =
+    turn === "ag" && !anyAgentActive ? "idle" : turn;
+
   const turnPillClass =
-    turn === "us"
+    effectiveTurn === "us"
       ? "turn-pill"
-      : turn === "ag"
+      : effectiveTurn === "ag"
         ? "turn-pill thinking"
         : "turn-pill idle";
   const turnLabel =
-    turn === "us" ? "Your turn" : turn === "ag" ? "Agent thinking…" : "Idle";
+    effectiveTurn === "us"
+      ? "Your turn"
+      : effectiveTurn === "ag"
+        ? "Agent thinking…"
+        : "Idle";
 
   const sortedParticipants = useMemo(() => {
     return Object.entries(participants)
@@ -197,15 +216,47 @@ export function TopBar(): JSX.Element {
 
   const tmuxMissing = envProbe !== null && envProbe.tmux === false;
 
-  /* Sort managed agents stably by their participant id so the chip order
-     does not jitter on presence updates. */
-  const sortedAgents = useMemo(
-    () =>
-      [...managedAgents].sort((a, b) =>
-        a.participant_id.localeCompare(b.participant_id),
-      ),
-    [managedAgents],
-  );
+  /* Build a single chip list sourced from participants (every agent who has
+     ever appeared in the session) joined with managedAgents (for tmux info
+     and runtime_id). Un-managed agents — those present in the participants
+     slice but not in managedAgents — still get a full AgentChip with name,
+     presence dot, and click → AgentActionMenu, so a pre-existing agent
+     from a prior session is never an orphaned bare avatar. */
+  const allAgentChips = useMemo(() => {
+    const managedById = new Map<string, (typeof managedAgents)[number]>();
+    for (const a of managedAgents) {
+      managedById.set(a.participant_id, a);
+    }
+    const entries = Object.entries(participants)
+      .filter(([, p]) => p.kind === "agent")
+      .map(([id, p]) => {
+        const managed = managedById.get(id);
+        return {
+          participant_id: id,
+          name: p.name,
+          runtime_id: managed?.runtime_id ?? null,
+          tmux_session: managed?.tmux_session ?? null,
+          isManaged: managed !== undefined,
+        };
+      });
+    /* Sort by presence state — online first, then stale/launching, then
+       hook-not-installed, then pane-dead, then offline/unknown — and
+       alphabetically by name within each bucket. */
+    const order = (id: string): number => {
+      const s = presence[id]?.state;
+      if (s === "online") return 0;
+      if (s === "stale" || s === "launching") return 1;
+      if (s === "hook-not-installed") return 2;
+      if (s === "pane-dead") return 3;
+      return 4;
+    };
+    return entries.sort((a, b) => {
+      const oa = order(a.participant_id);
+      const ob = order(b.participant_id);
+      if (oa !== ob) return oa - ob;
+      return a.name.localeCompare(b.name);
+    });
+  }, [participants, managedAgents, presence]);
 
   const sortedTerminals = useMemo(
     () =>
@@ -316,16 +367,14 @@ export function TopBar(): JSX.Element {
               Wrapped so the action menu can position itself relative to its
               chip via CSS. */}
           <div className="topbar-chips">
-            {sortedAgents.map((agent) => {
-              const participant = participants[agent.participant_id];
-              const name = participant?.name ?? agent.participant_id;
+            {allAgentChips.map((agent) => {
               const state: PresenceState =
                 presence[agent.participant_id]?.state ?? "offline";
               return (
                 <div key={agent.participant_id} className="agent-chip-anchor">
                   <AgentChip
                     participantId={agent.participant_id}
-                    name={name}
+                    name={agent.name}
                     runtimeId={agent.runtime_id}
                     state={state}
                     onClick={() =>
@@ -340,9 +389,9 @@ export function TopBar(): JSX.Element {
                     <div className="agent-action-menu-popover">
                       <AgentActionMenu
                         participantId={agent.participant_id}
-                        name={name}
+                        name={agent.name}
                         state={state}
-                        managed
+                        managed={agent.isManaged}
                         onRename={(newName) => {
                           /* v0.4 stub: update participant name via PATCH;
                              intentionally not wired in this task to keep
@@ -468,22 +517,24 @@ export function TopBar(): JSX.Element {
             title="Participants"
             style={{ marginRight: 6 }}
           >
-            {sortedParticipants.map((p) => (
-              <span
-                key={p.id}
-                className={[
-                  "avatar",
-                  "lg",
-                  p.kind === "user" ? "user" : "agent",
-                ].join(" ")}
-                title={`${p.name} · ${p.id}`}
-                style={
-                  p.color !== undefined ? { background: p.color } : undefined
-                }
-              >
-                {initials(p.name ?? p.id)}
-              </span>
-            ))}
+            {/* Only user avatars render here. Agent participants render as
+                AgentChips in the chip strip above, so rendering them here too
+                would duplicate identity and produce orphan bare avatars for
+                un-managed agents (no name, no click, no presence dot). */}
+            {sortedParticipants
+              .filter((p) => p.kind === "user")
+              .map((p) => (
+                <span
+                  key={p.id}
+                  className="avatar lg user"
+                  title={`${p.name} · ${p.id}`}
+                  style={
+                    p.color !== undefined ? { background: p.color } : undefined
+                  }
+                >
+                  {initials(p.name ?? p.id)}
+                </span>
+              ))}
           </div>
           <button
             type="button"

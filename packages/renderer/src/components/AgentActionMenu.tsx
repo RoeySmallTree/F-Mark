@@ -57,9 +57,11 @@ export function AgentActionMenu({
       ? "Agent is not online"
       : undefined;
 
-  const interruptDisabled = state === "offline" || state === "pane-dead";
-  const interruptReason =
-    state === "offline"
+  const interruptDisabled =
+    !managed || state === "offline" || state === "pane-dead";
+  const interruptReason = !managed
+    ? "Not a managed agent"
+    : state === "offline"
       ? "Agent is offline"
       : state === "pane-dead"
         ? "Pane has exited"
@@ -162,42 +164,46 @@ export function AgentActionMenu({
         Send /compact (best effort)
       </button>
 
-      <button
-        type="button"
-        role="menuitem"
-        className="agent-action-menu-item"
-        aria-expanded={mode === "slash"}
-        onClick={() =>
-          setMode((m) => (m === "slash" ? "none" : "slash"))
-        }
-      >
-        Slash commands…
-      </button>
-      {mode === "slash" ? (
-        <div className="agent-action-menu-sub">
+      {managed ? (
+        <>
           <button
             type="button"
             role="menuitem"
             className="agent-action-menu-item"
-            onClick={() => {
-              onSlash("clear");
-              setMode("none");
-            }}
+            aria-expanded={mode === "slash"}
+            onClick={() =>
+              setMode((m) => (m === "slash" ? "none" : "slash"))
+            }
           >
-            /clear
+            Slash commands…
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="agent-action-menu-item"
-            onClick={() => {
-              onSlash("resume");
-              setMode("none");
-            }}
-          >
-            /resume
-          </button>
-        </div>
+          {mode === "slash" ? (
+            <div className="agent-action-menu-sub">
+              <button
+                type="button"
+                role="menuitem"
+                className="agent-action-menu-item"
+                onClick={() => {
+                  onSlash("clear");
+                  setMode("none");
+                }}
+              >
+                /clear
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="agent-action-menu-item"
+                onClick={() => {
+                  onSlash("resume");
+                  setMode("none");
+                }}
+              >
+                /resume
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       <button
@@ -211,49 +217,53 @@ export function AgentActionMenu({
         Interrupt (Ctrl-C)
       </button>
 
-      {mode === "message" ? (
-        <div className="agent-action-menu-msg">
-          <input
-            type="text"
-            aria-label="Message text"
-            value={messageValue}
-            onChange={(e) => setMessageValue(e.target.value)}
-            onKeyDown={onMessageKey}
-            placeholder="Type a message…"
-            autoFocus
-          />
-          <button type="button" onClick={submitMessage}>
-            Send
-          </button>
+      {managed ? (
+        mode === "message" ? (
+          <div className="agent-action-menu-msg">
+            <input
+              type="text"
+              aria-label="Message text"
+              value={messageValue}
+              onChange={(e) => setMessageValue(e.target.value)}
+              onKeyDown={onMessageKey}
+              placeholder="Type a message…"
+              autoFocus
+            />
+            <button type="button" onClick={submitMessage}>
+              Send
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("none");
+                setMessageValue("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
           <button
             type="button"
-            onClick={() => {
-              setMode("none");
-              setMessageValue("");
-            }}
+            role="menuitem"
+            className="agent-action-menu-item"
+            onClick={() => setMode("message")}
           >
-            Cancel
+            Send a message…
           </button>
-        </div>
-      ) : (
+        )
+      ) : null}
+
+      {managed ? (
         <button
           type="button"
           role="menuitem"
           className="agent-action-menu-item"
-          onClick={() => setMode("message")}
+          onClick={onOpenTerminal}
         >
-          Send a message…
+          Open terminal
         </button>
-      )}
-
-      <button
-        type="button"
-        role="menuitem"
-        className="agent-action-menu-item"
-        onClick={onOpenTerminal}
-      >
-        Open terminal
-      </button>
+      ) : null}
 
       {showReconnect ? (
         <button
