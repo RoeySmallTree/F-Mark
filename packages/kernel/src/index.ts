@@ -7,7 +7,7 @@ import {
   writeTokenFile,
 } from "./auth.js";
 import { renderBanner, type BannerMode } from "./banner.js";
-import { parseArgs, printUsage, type CliOptions } from "./cli.js";
+import { parseArgs, printUsage, runCli, type CliOptions } from "./cli.js";
 import { DEFAULT_PORT, HOST, MAX_PORT_RETRIES } from "./config.js";
 import * as logger from "./logger.js";
 import { paths } from "./paths.js";
@@ -32,6 +32,16 @@ function parseOrExit(): CliOptions {
     printUsage();
     process.exit(1);
   }
+}
+
+const rawArgv = process.argv.slice(2);
+
+// Subcommand dispatch (e.g. `f-mark hook auto-stream <participant>`).
+// Subcommands are short-lived: they run runCli, then exit. They never
+// fall through into the kernel-startup flow below.
+if (rawArgv[0] === "hook") {
+  const code = await runCli(rawArgv);
+  process.exit(code);
 }
 
 const options = parseOrExit();
