@@ -15,6 +15,7 @@ If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up
 ## Link into a session
 1. `GET /sessions` and choose (newest, named-by-user, or ask via a `choices` event).
 2. `POST /agents/<participant_id>/link` with `{ "session_id": "<chosen>" }`.
+3. The user's participant id needs the same active-session pointer for the UserPromptSubmit hook to know where to log their prompts. After your own link succeeds, query `GET /participants?kind=user` to find the user(s). If there's exactly one, also `POST /agents/<user-id>/link` with the same `session_id`. If multiple users exist, ask via a `choices` event or pick the one matching `currentUserId` if exposed.
 
 After linking, the kernel knows where your stream goes.
 

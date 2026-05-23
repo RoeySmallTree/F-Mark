@@ -3,6 +3,8 @@ name: f-mark
 description: Use whenever the user is collaborating inside an F-Mark session (presence of a `.f-mark/` directory in cwd, or the user references "the session" / "the document").
 ---
 
+> **Status: Preview.** The auto-stream hook command parses transcripts using Claude Code's JSONL content-block schema. Codex's transcript uses a different, unstable internal schema, so the Stop-hook path described below may not produce correct events in production. Until a Codex-specific transcript parser ships, prefer the manual-POST flow described in the Gemini skill (`packages/kernel/assets/gemini-skill/f-mark/SKILL.md`) — the model emits prose / tool-use / turn-end events itself. The Claude-Code-style auto-stream WILL work for Codex if its rollout JSONL happens to align block-by-block with Claude Code's, but assume that's not the case.
+
 ## Detect
 If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up-to-date protocol before doing anything else.
 
@@ -15,6 +17,7 @@ If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up
 ## Link into a session
 1. `GET /sessions` and choose.
 2. `POST /agents/<participant_id>/link` with `{ "session_id": "<chosen>" }`.
+3. The user's participant id needs the same active-session pointer for the UserPromptSubmit hook to know where to log their prompts. After your own link succeeds, query `GET /participants?kind=user` to find the user(s). If there's exactly one, also `POST /agents/<user-id>/link` with the same `session_id`. If multiple users exist, ask via a `choices` event or pick the one matching `currentUserId` if exposed.
 
 ## Install the auto-stream hook (one-time per project)
 
@@ -31,11 +34,11 @@ Two hooks to install: one for the assistant's turn (your id), one for user promp
 ```toml
 [[hooks.Stop]]
 command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-yourname"]
-timeout_ms = 30000
+timeout = 30
 
 [[hooks.UserPromptSubmit]]
 command = ["npx", "-y", "f-mark", "hook", "auto-stream", "us-username", "--kind", "user"]
-timeout_ms = 10000
+timeout = 10
 ```
 
 Substitute `ag-codex-yourname` with your registered agent id and `us-username` with the user's.
