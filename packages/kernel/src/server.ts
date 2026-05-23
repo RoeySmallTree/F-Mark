@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import multipart from "@fastify/multipart";
 import websocketPlugin from "@fastify/websocket";
 import { VERSION } from "./config.js";
 import { registerAuthHook } from "./auth.js";
@@ -9,7 +10,7 @@ import { registerAgentsRoutes } from "./routes/agents.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerTodoRoutes } from "./routes/todos.js";
-import { registerFileRoutes } from "./routes/files.js";
+import { MAX_ATTACHMENT_BYTES, registerFileRoutes } from "./routes/files.js";
 import { registerHtmlRoutes } from "./routes/html.js";
 import { registerFlowRoutes } from "./routes/flow.js";
 import { registerRawRoutes } from "./routes/raw.js";
@@ -17,6 +18,7 @@ import { registerPresetRoutes } from "./routes/presets.js";
 import { registerSkillRoutes } from "./routes/skills.js";
 import { registerSearchRoutes } from "./routes/search.js";
 import { registerGuideRoute } from "./routes/guide.js";
+import { registerBestPracticesRoute } from "./routes/bestPractices.js";
 import { registerEnvProbeRoute, realProbe } from "./routes/envProbe.js";
 import { loadRuntimes } from "./runtimes/registry.js";
 import { registerStaticRoutes } from "./routes/static.js";
@@ -119,6 +121,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   });
 
   registerAuthHook(app, deps.token);
+  app.register(multipart, { limits: { fileSize: MAX_ATTACHMENT_BYTES } });
 
   app.get("/health", async () => ({
     status: "ok",
@@ -160,6 +163,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerSkillRoutes(app);
   registerSearchRoutes(app, deps.paths);
   registerGuideRoute(app, deps.paths);
+  registerBestPracticesRoute(app);
   registerPresenceRoutes(app, () => tracker);
 
   // /env-probe is a read-only PATH-detection endpoint; it lives outside the
