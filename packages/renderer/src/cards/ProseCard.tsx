@@ -45,9 +45,19 @@ export function ProseCard({
   const who = whoOf(event.participant_id, participants);
   const [mode, setMode] = useState<MarkdownMode>("rendered");
   const commentTarget = useStore((s) => s.commentTarget);
-  const words = wordCount(payload.content);
   const hasLegacyContent = payload.content.trim().length > 0;
   const isTrulyEmpty = !hasLegacyContent && blocks.length === 0;
+  /* Word count = sum across the anchor's own (legacy) content + every
+     prose block. Non-prose blocks don't contribute. Bug fix (sonnet QA
+     pass 1, BUG-2): anchors are header-only so without this we'd always
+     show "0 words" for composed docs. */
+  const words =
+    wordCount(payload.content) +
+    blocks.reduce((sum, b) => {
+      if (b.kind !== "prose") return sum;
+      const bp = b.payload as ProsePayload;
+      return sum + wordCount(bp.content);
+    }, 0);
 
   const isFocused =
     commentTarget !== null && commentTarget.file === event.filename;

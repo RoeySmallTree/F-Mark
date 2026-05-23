@@ -6,6 +6,12 @@ import { writeEventFile } from "../events/writer.js";
 import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
+/** Upload size cap for the fastify-multipart plugin (consumed by
+ *  server.ts at register time). 64 MiB is a conservative default; the
+ *  user's WIP attachment feature can override per-route. Defined here
+ *  so server.ts's import resolves cleanly. */
+export const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
+
 interface FileBody {
   participant_id: string;
   id: string;
