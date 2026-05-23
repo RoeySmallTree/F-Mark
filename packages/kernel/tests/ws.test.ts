@@ -43,4 +43,39 @@ describe("websocket /ws", () => {
       await app.close();
     });
   });
+
+  it("broadcasts presence message published via the bus", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app, getBus } = createServer({ token: null, paths: p });
+      await app.listen({ port: 0, host: "127.0.0.1" });
+      const address = app.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      const message = new Promise<unknown>((resolve, reject) => {
+        ws.on("message", (data) => resolve(JSON.parse(data.toString())));
+        ws.on("error", reject);
+      });
+      await new Promise<void>((resolve) => ws.once("open", () => resolve()));
+      getBus().publish({
+        type: "presence",
+        participant_id: "ag-claude",
+        state: "online",
+        last_hook_at: 12345,
+      });
+      const event = (await message) as {
+        type: string;
+        participant_id: string;
+        state: string;
+        last_hook_at: number | null;
+      };
+      expect(event.type).toBe("presence");
+      expect(event.participant_id).toBe("ag-claude");
+      expect(event.state).toBe("online");
+      expect(event.last_hook_at).toBe(12345);
+      ws.close();
+      await app.close();
+    });
+  });
 });

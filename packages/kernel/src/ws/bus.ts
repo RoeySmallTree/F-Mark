@@ -17,7 +17,44 @@ export interface EventSupersededMessage {
   supersedes: string;
 }
 
-export type BusMessage = EventAddedMessage | EventSupersededMessage;
+export interface PresenceMessage {
+  type: "presence";
+  participant_id: string;
+  state: string;
+  last_hook_at: number | null;
+}
+
+export interface ManagedAgentSpawnedMessage {
+  type: "managed-agent.spawned";
+  participant_id: string;
+  tmux_session: string;
+  runtime_id: string;
+}
+
+export interface ManagedAgentKilledMessage {
+  type: "managed-agent.killed";
+  participant_id: string;
+}
+
+export interface ManagedAgentTerminalSpawnedMessage {
+  type: "managed-agent.terminal-spawned";
+  tmux_session: string;
+  label: string;
+}
+
+export interface EnvProbeUpdatedMessage {
+  type: "env-probe.updated";
+  result: unknown;
+}
+
+export type BusMessage =
+  | EventAddedMessage
+  | EventSupersededMessage
+  | PresenceMessage
+  | ManagedAgentSpawnedMessage
+  | ManagedAgentKilledMessage
+  | ManagedAgentTerminalSpawnedMessage
+  | EnvProbeUpdatedMessage;
 
 export interface Bus {
   publish(message: BusMessage): void;
