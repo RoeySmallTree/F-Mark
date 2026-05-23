@@ -20,23 +20,13 @@ import { EnvProbeBanner } from "../components/EnvProbeBanner.js";
 import { createManagedAgentsClient } from "../api/managedAgents.js";
 import { copyToClipboard } from "../render/copy.js";
 import { TopBarModalContext } from "../App.js";
+import { KNOWN_RUNTIMES } from "../runtimes.js";
 import type { PresenceState, SpawnResponse } from "@f-mark/shared";
 
 export const FMARK_GLYPH = `▟▙ ╱╲
 ▟▙ ▟▘▘`;
 
 const COMMAND_PALETTE_SHORTCUT = chordToLabel("$mod+K");
-
-/* For v0.4 we use the built-in runtime catalog: kernel ships claude / codex /
-   gemini by default and has no /runtimes endpoint to enumerate user-edited
-   entries. We treat env-probe.runtimes (which the kernel populates by
-   walking the registered runtime list) as the authoritative set of IDs and
-   fall back to this lookup for display names. */
-const KNOWN_RUNTIMES: Record<string, { displayName: string; executable: string }> = {
-  claude: { displayName: "Claude Code", executable: "claude" },
-  codex: { displayName: "Codex", executable: "codex" },
-  gemini: { displayName: "Gemini", executable: "gemini" },
-};
 
 function initials(name: string): string {
   const trimmed = name.trim();
@@ -63,6 +53,8 @@ export function TopBar(): JSX.Element {
   const envProbe = useStore((s) => s.envProbe);
   const addManagedAgent = useStore((s) => s.addManagedAgent);
   const addManagedTerminal = useStore((s) => s.addManagedTerminal);
+  const upsertParticipant = useStore((s) => s.upsertParticipant);
+  const setPresence = useStore((s) => s.setPresence);
   const modalCtx = useContext(TopBarModalContext);
 
   /* Local UI: which AgentChip's action menu is open (anchored to that
@@ -168,11 +160,38 @@ export function TopBar(): JSX.Element {
         tmux_session: resp.tmux_session,
         runtime_id: resp.runtime_id,
       });
+      /* Also reflect the newly-registered participant in the renderer's
+         participants slice. The chip strip iterates `participants` (so
+         pre-existing un-managed agents also appear), so without this
+         the spawned agent has no chip until the next page refresh.
+         displayName fallback comes from KNOWN_RUNTIMES; agent color is
+         server-assigned, so the chip's dot color is fine without one. */
+      const displayName =
+        KNOWN_RUNTIMES[resp.runtime_id]?.displayName ?? resp.runtime_id;
+      upsertParticipant(resp.participant_id, {
+        kind: "agent",
+        name: displayName,
+        color: "#888888",
+      });
+      /* Seed presence locally so the chip dot is correct even before the
+         first WS broadcast lands (the kernel set the same state server-side
+         in tracker.setManagedHookStatus; the WS message will overwrite this
+         consistently shortly after). */
+      const presenceState =
+        resp.hooks_status === "installed"
+          ? "stale"
+          : resp.hooks_status === "missing"
+            ? "hook-not-installed"
+            : "launching";
+      setPresence(resp.participant_id, {
+        state: presenceState,
+        last_hook_at: null,
+      });
       if (resp.hooks_status !== "installed" && modalCtx !== null) {
         modalCtx.openHookInstall(resp.runtime_id, resp.participant_id);
       }
     },
-    [addManagedAgent, modalCtx],
+    [addManagedAgent, upsertParticipant, setPresence, modalCtx],
   );
 
   const onSpawnRuntime = useCallback(

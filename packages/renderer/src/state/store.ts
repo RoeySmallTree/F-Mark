@@ -114,6 +114,7 @@ interface State extends PresenceSlice {
   setSessions(s: SessionMeta[]): void;
   setCurrentSession(id: string | null): void;
   setParticipants(p: Record<string, Participant>): void;
+  upsertParticipant(id: string, p: Participant): void;
   setCurrentUserId(id: string | null): void;
   setEvents(events: AnyEventRecord[]): void;
   upsertEvent(event: AnyEventRecord): void;
@@ -180,6 +181,8 @@ export const useStore = create<State>((set, get) => ({
     )?.[0];
     set({ participants, currentUserId: userId ?? null });
   },
+  upsertParticipant: (id, p) =>
+    set((s) => ({ participants: { ...s.participants, [id]: p } })),
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
   setEvents: (events) => set({ events }),
   upsertEvent: (event) =>
