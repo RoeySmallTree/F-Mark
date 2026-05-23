@@ -6,6 +6,11 @@ import {
   isNamedAnchor,
 } from "@f-mark/shared";
 
+function isProseTombstone(e: AnyEventRecord): boolean {
+  if (e.kind !== "prose") return false;
+  return (e.payload as ProsePayload).removed === true;
+}
+
 export interface Aggregated {
   events: AnyEventRecord[];
   visible: AnyEventRecord[];
@@ -114,7 +119,41 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
   });
   const supersedorOf = buildSupersedorOf(sorted);
   const superseded = new Set<string>(supersedorOf.keys());
-  const visible = sorted.filter((e) => !superseded.has(e.filename));
+
+  /* Tombstone suppression — buddy_final finding "tombstones do not suppress
+     a block chain". A prose event with `removed: true` that supersedes
+     another event marks the WHOLE chain dead: hide the superseded target
+     AND the tombstone itself. Repeat-removals on chains of tombstones are
+     resolved by walking forward. */
+  const tombstoned = new Set<string>();
+  for (const e of sorted) {
+    if (!isProseTombstone(e)) continue;
+    const sup = (e.payload as { supersedes?: string }).supersedes;
+    if (typeof sup === "string" && sup.length > 0) {
+      tombstoned.add(sup);
+    }
+    tombstoned.add(e.filename);
+  }
+
+  /* Fork sibling disposition — buddy_final finding "fork siblings are not
+     surfaced as forks/orphans". When multiple events supersede the same
+     target, `resolveLiveAnchor` picks the lexicographically smallest
+     filename as canonical. The losing siblings (and any blocks downstream
+     of them) become forks — hidden from the feed but recorded so a future
+     UI can surface them. */
+  const forks = new Set<string>();
+  for (const [, sibs] of supersedorOf) {
+    if (sibs.length <= 1) continue;
+    // The first (after sort) is canonical; the rest are forks.
+    for (let i = 1; i < sibs.length; i++) forks.add(sibs[i]!);
+  }
+
+  const visible = sorted.filter(
+    (e) =>
+      !superseded.has(e.filename) &&
+      !tombstoned.has(e.filename) &&
+      !forks.has(e.filename),
+  );
   const visibleByFilename = new Map<string, AnyEventRecord>();
   for (const e of visible) visibleByFilename.set(e.filename, e);
 

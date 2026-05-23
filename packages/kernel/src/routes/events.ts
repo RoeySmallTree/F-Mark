@@ -6,7 +6,10 @@ import { writeEventFile } from "../events/writer.js";
 import { serializeProse } from "../events/prose.js";
 import { serializeToolUse } from "../events/toolUse.js";
 import { readEvents } from "../events/reader.js";
-import { validateProseFrontmatter } from "../events/proseValidate.js";
+import {
+  validateProseFrontmatter,
+  validateNonProseAppendTo,
+} from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
 interface ProseBody extends Omit<ProsePayload, "content"> {
@@ -238,6 +241,11 @@ export function registerEventRoutes(
     async (req, reply) => {
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
+        const apCheck = validateNonProseAppendTo(req.body.append_to);
+        if (!apCheck.ok) {
+          reply.code(400);
+          return { error: apCheck.error };
+        }
         const filename = await writeEventFile(p, req.params.id, {
           participant_id: req.body.participant_id,
           kind: "tool-use",
@@ -311,6 +319,11 @@ export function registerEventRoutes(
     async (req, reply) => {
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
+        const apCheck = validateNonProseAppendTo(req.body.append_to);
+        if (!apCheck.ok) {
+          reply.code(400);
+          return { error: apCheck.error };
+        }
         const { participant_id, supersedes, ...rest } = req.body;
         const filename = await writeEventFile(p, req.params.id, {
           participant_id,

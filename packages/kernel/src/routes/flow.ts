@@ -8,6 +8,7 @@ import type {
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
+import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
 interface FlowBody extends FlowPayload {
@@ -163,6 +164,11 @@ export function registerFlowRoutes(
         const { participant_id, supersedes, ...rest } = req.body;
         const payload: FlowPayload =
           supersedes !== undefined ? { ...rest, supersedes } : rest;
+        const apCheck = validateNonProseAppendTo(payload.append_to);
+        if (!apCheck.ok) {
+          reply.code(400);
+          return { error: apCheck.error };
+        }
         validateGraph(payload.nodes, payload.edges);
         const filename = await writeEventFile(p, req.params.id, {
           participant_id,

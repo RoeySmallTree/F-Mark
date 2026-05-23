@@ -9,6 +9,7 @@ import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
 import { readEvents } from "../events/reader.js";
+import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
 interface TodoBody {
@@ -406,6 +407,11 @@ export function registerTodoRoutes(
     async (req, reply) => {
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
+        const apCheck = validateNonProseAppendTo(req.body.append_to);
+        if (!apCheck.ok) {
+          reply.code(400);
+          return { error: apCheck.error };
+        }
         const { participant_id, ...rest } = req.body;
         const payload = buildTodoPayload(rest);
         let cascadedRemovals: TodoSnapshotEntry[] = [];

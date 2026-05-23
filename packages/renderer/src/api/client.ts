@@ -61,6 +61,8 @@ export interface PostTodoBody {
   assigned_to?: string;
   parent_id?: string;
   supersedes?: string;
+  /** Embed this todo inside a named-anchor prose document. */
+  append_to?: string;
 }
 
 export interface PostHtmlBody {
@@ -71,6 +73,8 @@ export interface PostHtmlBody {
   title?: string;
   dependencies?: string[];
   supersedes?: string;
+  /** Embed this html widget inside a named-anchor prose document. */
+  append_to?: string;
 }
 
 export interface PostFlowBody {
@@ -80,6 +84,8 @@ export interface PostFlowBody {
   nodes: import("@f-mark/shared").FlowNode[];
   edges: import("@f-mark/shared").FlowEdge[];
   supersedes?: string;
+  /** Embed this flow chart inside a named-anchor prose document. */
+  append_to?: string;
 }
 
 export interface PostFileBody {
@@ -88,6 +94,8 @@ export interface PostFileBody {
   path: string;
   mime_type: string;
   description?: string;
+  /** Embed this file inside a named-anchor prose document. */
+  append_to?: string;
 }
 
 export interface UpdateParticipantPatch {

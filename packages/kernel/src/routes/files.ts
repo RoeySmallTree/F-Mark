@@ -3,6 +3,7 @@ import type { EventKind, FileRefPayload } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
+import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
 interface FileBody {
@@ -75,6 +76,11 @@ export function registerFileRoutes(
     async (req, reply) => {
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
+        const apCheck = validateNonProseAppendTo(req.body.append_to);
+        if (!apCheck.ok) {
+          reply.code(400);
+          return { error: apCheck.error };
+        }
         const { participant_id, ...rest } = req.body;
         const payload: FileRefPayload = {
           id: rest.id,
