@@ -110,11 +110,19 @@ export function Compose(): JSX.Element {
         participant_id: string;
         content: string;
         name?: string;
-        target?: { file: string; lines?: [number, number] };
+        append_to?: string;
+        mode?: "content" | "comment";
+        lines?: [number, number];
       } = { participant_id: userId, content };
       if (mode === "named") body.name = name.trim();
       if (mode === "comment" && commentTarget !== null) {
-        body.target = commentTarget;
+        /* Composable-prose Phase 2: POST comments in the new shape
+           (append_to + mode: "comment" + lines?) instead of legacy
+           `target`. The kernel still accepts legacy `target` and
+           normalises it on the way in. */
+        body.append_to = commentTarget.file;
+        body.mode = "comment";
+        if (commentTarget.lines !== undefined) body.lines = commentTarget.lines;
       }
       await client.postProse(sessionId, body);
       setContent("");

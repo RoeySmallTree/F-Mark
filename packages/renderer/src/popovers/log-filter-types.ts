@@ -5,7 +5,8 @@
    (singular) — not multi-participant, not date ranges, not named-only.
    So we fetch the whole list and filter locally. Cheap for POC sessions. */
 
-import type { AnyEventRecord, EventKind, ProsePayload } from "@f-mark/shared";
+import type { AnyEventRecord, EventKind } from "@f-mark/shared";
+import { isNamedAnchor } from "@f-mark/shared";
 
 export type LogFilterRange = "all" | "today" | "7d" | "30d" | "custom";
 
@@ -139,11 +140,10 @@ export function applyFilter(
       if (bounds.end !== null && d > bounds.end) return false;
     }
     if (filter.namedOnly) {
-      if (ev.kind !== "prose") return false;
-      const payload = ev.payload as ProsePayload;
-      if (payload.name === undefined || payload.name.length === 0) {
-        return false;
-      }
+      /* Only top-level named anchors qualify — named SUB-blocks are
+         consumed inside their parent doc and never standalone, so they
+         shouldn't show in the "named only" filter. */
+      if (!isNamedAnchor(ev)) return false;
     }
     return true;
   });

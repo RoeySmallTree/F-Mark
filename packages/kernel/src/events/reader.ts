@@ -66,6 +66,9 @@ export async function readEvents(
       payload,
     });
   }
-  records.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  records.sort((a, b) => {
+    const t = a.timestamp.localeCompare(b.timestamp);
+    return t !== 0 ? t : a.filename.localeCompare(b.filename);
+  });
   return records;
 }

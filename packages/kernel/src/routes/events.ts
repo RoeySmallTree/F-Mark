@@ -1,16 +1,49 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { EventKind, ProsePayload } from "@f-mark/shared";
+import type { EventKind, ProsePayload, ProseTarget } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
 import { serializeProse } from "../events/prose.js";
 import { serializeToolUse } from "../events/toolUse.js";
 import { readEvents } from "../events/reader.js";
+import { validateProseFrontmatter } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
 interface ProseBody extends Omit<ProsePayload, "content"> {
   participant_id: string;
   content: string;
+  /** Legacy field accepted for back-compat. Normalised to `append_to` +
+   *  `mode: "comment"` + `lines` before validation / serialization. */
+  target?: ProseTarget;
+}
+
+/**
+ * Translate a legacy `{ target: { file, lines? } }` request body to the
+ * new `append_to + mode: "comment" + lines` shape. Returns either the
+ * normalised body or a 400 reason if the body mixes legacy + new fields.
+ */
+function normaliseProseBody(
+  body: ProseBody,
+): { ok: true; body: ProseBody } | { ok: false; error: string } {
+  const hasLegacy = body.target !== undefined && body.target !== null;
+  const hasNew =
+    body.append_to !== undefined ||
+    body.mode !== undefined ||
+    body.lines !== undefined;
+  if (hasLegacy && hasNew) {
+    return {
+      ok: false,
+      error: "request body must not contain both legacy `target` and new `append_to`/`mode`/`lines`",
+    };
+  }
+  if (!hasLegacy) return { ok: true, body };
+  const t = body.target!;
+  const out: ProseBody = { ...body };
+  delete out.target;
+  out.append_to = t.file;
+  out.mode = "comment";
+  if (t.lines !== undefined) out.lines = t.lines;
+  return { ok: true, body: out };
 }
 
 async function ensureSession(
@@ -68,10 +101,23 @@ export function registerEventRoutes(
         body: {
           type: "object",
           required: ["participant_id", "content"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string" },
             content: { type: "string" },
             name: { type: "string" },
+            /* New composable-prose fields. */
+            append_to: { type: "string" },
+            mode: { enum: ["content", "comment"] },
+            lines: {
+              type: "array",
+              items: { type: "integer", minimum: 1 },
+              minItems: 2,
+              maxItems: 2,
+            },
+            // Strict boolean enum — see arbitrary note below.
+            removed: { enum: [true, false] },
+            /* Legacy field — still accepted, normalised on the server. */
             target: {
               type: "object",
               required: ["file"],
@@ -99,24 +145,43 @@ export function registerEventRoutes(
     },
     async (req, reply) => {
       if (!(await ensureSession(p, req.params.id, reply))) return;
+      const normalised = normaliseProseBody(req.body);
+      if (!normalised.ok) {
+        reply.code(400);
+        return { error: normalised.error };
+      }
+      const body = normalised.body;
+      const validation = validateProseFrontmatter({
+        content: body.content,
+        name: body.name,
+        append_to: body.append_to,
+        mode: body.mode,
+        lines: body.lines,
+        removed: body.removed,
+        /* legacy `target` is already normalised away above */
+      });
+      if (!validation.ok) {
+        reply.code(400);
+        return { error: validation.error };
+      }
       try {
         const filename = await writeEventFile(p, req.params.id, {
-          participant_id: req.body.participant_id,
+          participant_id: body.participant_id,
           kind: "prose",
           ext: "md",
-          contents: serializeProse(req.body),
+          contents: serializeProse(body),
         });
         publish(
           req.params.id,
           filename,
           "prose",
-          req.body.participant_id,
-          req.body.supersedes,
+          body.participant_id,
+          body.supersedes,
         );
         return {
           filename,
           timestamp: filename.split("_")[0]!,
-          participant_id: req.body.participant_id,
+          participant_id: body.participant_id,
           kind: "prose" as const,
         };
       } catch (err) {

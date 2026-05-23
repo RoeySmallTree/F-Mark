@@ -317,7 +317,7 @@ describe("Compose — hotkeys", () => {
     expect(body.content).toBe("named body");
   });
 
-  test("⌘↵ in comment mode posts target and clears commentTarget", async () => {
+  test("⌘↵ in comment mode posts new-shape comment and clears commentTarget", async () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(() =>
@@ -345,7 +345,11 @@ describe("Compose — hotkeys", () => {
     const body = JSON.parse(
       (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
     );
-    expect(body.target).toEqual(target);
+    /* Composable-prose Phase 2: comments POST the new shape. */
+    expect(body.target).toBeUndefined();
+    expect(body.append_to).toBe("evt.prose.md");
+    expect(body.mode).toBe("comment");
+    expect(body.lines).toEqual([3, 3]);
     expect(useStore.getState().commentTarget).toBeNull();
   });
 

@@ -1,4 +1,5 @@
 import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
+import { getProseRole, getCommentTarget, isNamedAnchor } from "@f-mark/shared";
 
 export interface Aggregated {
   events: AnyEventRecord[];
@@ -11,16 +12,9 @@ export interface Aggregated {
   currentTurnParticipantPrefix: "us" | "ag";
 }
 
-function isProse(e: AnyEventRecord): boolean {
-  return e.kind === "prose";
-}
-
-function proseHasTarget(e: AnyEventRecord): boolean {
-  return isProse(e) && (e.payload as ProsePayload).target !== undefined;
-}
-
-function proseHasName(e: AnyEventRecord): boolean {
-  return isProse(e) && (e.payload as ProsePayload).name !== undefined;
+function isProseComment(e: AnyEventRecord): boolean {
+  if (e.kind !== "prose") return false;
+  return getProseRole(e.payload as ProsePayload).kind === "comment";
 }
 
 function nextTurnPrefix(participantId: string): "us" | "ag" {
@@ -28,9 +22,10 @@ function nextTurnPrefix(participantId: string): "us" | "ag" {
 }
 
 export function aggregate(events: AnyEventRecord[]): Aggregated {
-  const sorted = [...events].sort((a, b) =>
-    a.timestamp.localeCompare(b.timestamp),
-  );
+  const sorted = [...events].sort((a, b) => {
+    const t = a.timestamp.localeCompare(b.timestamp);
+    return t !== 0 ? t : a.filename.localeCompare(b.filename);
+  });
   const superseded = new Set<string>();
   for (const e of sorted) {
     const sup = (e.payload as { supersedes?: string }).supersedes;
@@ -38,34 +33,37 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
   }
   const visible = sorted.filter((e) => !superseded.has(e.filename));
   const feed = visible.filter(
-    (e) => !proseHasTarget(e) && e.kind !== "choice",
+    (e) => !isProseComment(e) && e.kind !== "choice",
   );
-  /* Document view: named prose + flow charts (durable deliberate contributions).
+  /* Document view: anchor prose + flow charts (durable deliberate contributions).
      Comments are dropped here — they appear as pins on the named cards.
      Turn-end dividers are dropped — they're conversational structure, not
-     document content. */
+     document content. Anchor prose = named prose without an `append_to`. */
   const feedDocument = visible.filter(
-    (e) =>
-      (e.kind === "prose" && proseHasName(e) && !proseHasTarget(e)) ||
-      e.kind === "flow",
+    (e) => isNamedAnchor(e) || e.kind === "flow",
   );
   /* Conversation view: unnamed messages + choices (+ choice records) + turn
-     dividers. Comments and named contributions are dropped. */
-  const feedConversation = visible.filter(
-    (e) =>
-      (e.kind === "prose" && !proseHasName(e) && !proseHasTarget(e)) ||
+     dividers. Comments and anchor/named contributions are dropped. */
+  const feedConversation = visible.filter((e) => {
+    if (e.kind === "prose") {
+      return getProseRole(e.payload as ProsePayload).kind === "message";
+    }
+    return (
+      e.kind === "file" ||
       e.kind === "choices" ||
       e.kind === "choice" ||
-      e.kind === "turn-end",
-  );
-  const named = visible.filter(proseHasName);
+      e.kind === "turn-end"
+    );
+  });
+  const named = visible.filter(isNamedAnchor);
   const commentsByTarget = new Map<string, AnyEventRecord[]>();
   for (const e of visible) {
-    if (!proseHasTarget(e)) continue;
-    const target = (e.payload as ProsePayload).target!.file;
-    const arr = commentsByTarget.get(target) ?? [];
+    if (e.kind !== "prose") continue;
+    const ct = getCommentTarget(e.payload as ProsePayload);
+    if (ct === undefined) continue;
+    const arr = commentsByTarget.get(ct.anchor) ?? [];
     arr.push(e);
-    commentsByTarget.set(target, arr);
+    commentsByTarget.set(ct.anchor, arr);
   }
   let currentTurnParticipantPrefix: "us" | "ag" = "us";
   for (let i = sorted.length - 1; i >= 0; i--) {

@@ -22,6 +22,7 @@ import type {
   ProsePayload,
   ToolUseEventRecord,
 } from "@f-mark/shared";
+import { getProseRole } from "@f-mark/shared";
 import { MessageCard } from "./MessageCard.js";
 import { ProseCard } from "./ProseCard.js";
 import { ChoicesCard } from "./ChoicesCard.js";
@@ -46,9 +47,11 @@ export function EventCard({
   allEvents,
 }: Props): JSX.Element | null {
   if (event.kind === "prose") {
-    const payload = event.payload as ProsePayload;
-    if (payload.target !== undefined) return null;
-    if (payload.name !== undefined && payload.name.length > 0) {
+    const role = getProseRole(event.payload as ProsePayload);
+    /* Comments are rendered inside the target card / right panel, not as
+       top-level cards. */
+    if (role.kind === "comment") return null;
+    if (role.kind === "anchor") {
       return (
         <ProseCard
           event={event}

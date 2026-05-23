@@ -28,6 +28,7 @@ import type {
   Participant,
   ProsePayload,
 } from "@f-mark/shared";
+import { getCommentTarget } from "@f-mark/shared";
 import { useStore } from "../state/store.js";
 import { createClient } from "../api/client.js";
 import { formatWhen, whoOf } from "../cards/format.js";
@@ -242,8 +243,8 @@ export function CommentThreadOverlay({
   // All comments that target this file (raw, including resolved/superseded).
   const allTargetComments = events.filter((e) => {
     if (e.kind !== "prose") return false;
-    const t = (e.payload as ProsePayload).target;
-    return t !== undefined && t.file === targetFile;
+    const ct = getCommentTarget(e.payload as ProsePayload);
+    return ct !== undefined && ct.anchor === targetFile;
   });
 
   // Also fold in any visible-root comments whose supersession is itself in
@@ -276,11 +277,15 @@ export function CommentThreadOverlay({
   ): Promise<void> {
     if (currentSessionId === null || currentUserId === null) return;
     const client = createClient({ baseUrl: "", token });
+    /* Composable-prose Phase 2: POST in the new shape (append_to + mode
+       + lines?) instead of the legacy `target` wrapper. */
     await client.postProse(currentSessionId, {
       participant_id: currentUserId,
       content,
       in_reply_to: root.filename,
-      target: { file: targetFile, lines },
+      append_to: targetFile,
+      mode: "comment",
+      ...(lines === undefined ? {} : { lines }),
     });
     // Refresh events so the reply appears immediately.
     const fresh = await client.listEvents(currentSessionId, {});
@@ -294,7 +299,9 @@ export function CommentThreadOverlay({
       participant_id: currentUserId,
       content: "_resolved_",
       supersedes: root.filename,
-      target: { file: targetFile, lines },
+      append_to: targetFile,
+      mode: "comment",
+      ...(lines === undefined ? {} : { lines }),
     });
     const fresh = await client.listEvents(currentSessionId, {});
     for (const e of fresh) upsertEvent(e);

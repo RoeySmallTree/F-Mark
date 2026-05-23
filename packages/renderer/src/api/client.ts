@@ -31,7 +31,17 @@ export interface PostProseBody {
   participant_id: string;
   content: string;
   name?: string;
-  target?: { file: string; lines?: [number, number] };
+  /** Composable-prose Phase 2: parent event filename. The legacy `target`
+   *  shape is no longer accepted by the client type — the kernel still
+   *  reads it for back-compat, but new writes use these fields. */
+  append_to?: string;
+  /** When `append_to` is set, "content" (default) makes this a block of
+   *  the parent doc; "comment" makes it a line/card-targeted annotation. */
+  mode?: "content" | "comment";
+  /** Inclusive 1-based line range; valid only when `mode === "comment"`. */
+  lines?: [number, number];
+  /** Logical tombstone for a block chain (prose-only). */
+  removed?: boolean;
   in_reply_to?: string;
   supersedes?: string;
 }

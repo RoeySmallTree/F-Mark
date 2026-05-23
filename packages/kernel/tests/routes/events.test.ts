@@ -74,6 +74,208 @@ describe("POST /sessions/:id/events/prose", () => {
   });
 });
 
+describe("POST /sessions/:id/events/prose — composable-prose write-body normaliser", () => {
+  it("translates legacy `target` body into new-shape file (append_to + mode + lines)", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+
+      /* First post a prose anchor so we have a real filename to target. */
+      const anchorRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "body", name: "Doc" },
+      });
+      expect(anchorRes.statusCode).toBe(200);
+      const anchorFilename = anchorRes.json().filename;
+
+      /* Now post a comment using the LEGACY shape. The server should
+         normalise it and write the new-shape frontmatter to disk. */
+      const commentRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "a comment",
+          target: { file: anchorFilename, lines: [2, 4] },
+        },
+      });
+      expect(commentRes.statusCode).toBe(200);
+      const commentFilename = commentRes.json().filename;
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), commentFilename),
+        "utf8",
+      );
+      expect(onDisk).toContain(`append_to: ${anchorFilename}`);
+      expect(onDisk).toContain("mode: comment");
+      expect(onDisk).toContain("lines:");
+      expect(onDisk).not.toMatch(/^target:/m);
+      await app.close();
+    });
+  });
+
+  it("translates legacy `target` body without `lines` into card-level comment", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const anchorRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "body", name: "Doc" },
+      });
+      const anchorFilename = anchorRes.json().filename;
+
+      const commentRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "card-level",
+          target: { file: anchorFilename },
+        },
+      });
+      expect(commentRes.statusCode).toBe(200);
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), commentRes.json().filename),
+        "utf8",
+      );
+      expect(onDisk).toContain(`append_to: ${anchorFilename}`);
+      expect(onDisk).toContain("mode: comment");
+      expect(onDisk).not.toMatch(/^lines:/m);
+      await app.close();
+    });
+  });
+
+  it("400s when body has BOTH legacy `target` and new `append_to`", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const anchorRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "body", name: "Doc" },
+      });
+      const anchorFilename = anchorRes.json().filename;
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "x",
+          target: { file: anchorFilename },
+          append_to: anchorFilename,
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("accepts new-shape body directly and writes new-shape file", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const anchorRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "body", name: "Doc" },
+      });
+      const anchorFilename = anchorRes.json().filename;
+
+      const commentRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "block body",
+          append_to: anchorFilename,
+        },
+      });
+      expect(commentRes.statusCode).toBe(200);
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), commentRes.json().filename),
+        "utf8",
+      );
+      expect(onDisk).toContain(`append_to: ${anchorFilename}`);
+      expect(onDisk).not.toMatch(/^target:/m);
+      await app.close();
+    });
+  });
+
+  it("400s when `lines` is set without `mode: comment`", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const anchorRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "body", name: "Doc" },
+      });
+      const anchorFilename = anchorRes.json().filename;
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "x",
+          append_to: anchorFilename,
+          lines: [1, 2],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("400s when comment carries `name`", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const anchorRes = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "body", name: "Doc" },
+      });
+      const anchorFilename = anchorRes.json().filename;
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "x",
+          append_to: anchorFilename,
+          mode: "comment",
+          name: "Should not be here",
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("strips unknown properties (additionalProperties: false + Fastify default removeAdditional)", async () => {
+    /* Fastify's default Ajv config has `removeAdditional: true`. Combined
+       with `additionalProperties: false` on the schema, unknown keys are
+       silently dropped before they reach the handler — so they never
+       make it onto disk. Phase 3 will tighten this to a hard 400 across
+       every route once we reconfigure Ajv; for Phase 2 we just verify
+       the stray didn't persist. */
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "hi",
+          mood: "happy",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), res.json().filename),
+        "utf8",
+      );
+      expect(onDisk).not.toContain("mood");
+      await app.close();
+    });
+  });
+});
+
 describe("POST /sessions/:id/events/prose with arbitrary", () => {
   it("stores arbitrary: true in frontmatter when sent", async () => {
     await withTempProject(async (root) => {

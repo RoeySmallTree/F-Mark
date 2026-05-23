@@ -334,10 +334,11 @@ describe("CommentThreadOverlay — reply behavior", () => {
     expect(body.participant_id).toBe("us-a7f3");
     expect(body.content).toBe("Sounds good");
     expect(body.in_reply_to).toBe(root.filename);
-    expect(body.target).toEqual({
-      file: target.filename,
-      lines: [1, 1],
-    });
+    /* Composable-prose Phase 2: replies POST the new shape. */
+    expect(body.target).toBeUndefined();
+    expect(body.append_to).toBe(target.filename);
+    expect(body.mode).toBe("comment");
+    expect(body.lines).toEqual([1, 1]);
   });
 
   test("empty reply does NOT post on Enter", async () => {
@@ -454,10 +455,11 @@ describe("CommentThreadOverlay — resolve behavior", () => {
     expect(body.participant_id).toBe("us-a7f3");
     expect(body.supersedes).toBe(root.filename);
     expect(body.content).toBe("_resolved_");
-    expect(body.target).toEqual({
-      file: target.filename,
-      lines: [2, 3],
-    });
+    /* Composable-prose Phase 2: resolves POST the new shape. */
+    expect(body.target).toBeUndefined();
+    expect(body.append_to).toBe(target.filename);
+    expect(body.mode).toBe("comment");
+    expect(body.lines).toEqual([2, 3]);
   });
 
   test("resolved threads render with .thread.resolved class and 'Resolved' label", () => {
