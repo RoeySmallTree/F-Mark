@@ -170,11 +170,16 @@ export function Compose(): JSX.Element {
     openPopover("presets", rect);
   }, [openPopover]);
 
-  const openSettings = useCallback((): void => {
+  const openSettings = useCallback((e: React.MouseEvent): void => {
+    e.stopPropagation();
+    if (activePopover.key === "compose-settings") {
+      closePopover();
+      return;
+    }
     const rect = settingsBtnRef.current?.getBoundingClientRect() ?? null;
     setCreateTodoAnchorRect(null);
     openPopover("compose-settings", rect);
-  }, [openPopover]);
+  }, [activePopover.key, closePopover, openPopover]);
 
   const openCreateTodo = useCallback((): void => {
     const rect = createTodoBtnRef.current?.getBoundingClientRect() ?? null;
@@ -286,6 +291,15 @@ export function Compose(): JSX.Element {
 
   // Auto-grow the textarea up to its max-height (140px from CSS).
 
+  // Auto-grow the textarea up to its max-height (140px from CSS).
+  useLayoutEffect(() => {
+    const ta = textareaRef.current;
+    if (ta === null) return;
+    ta.style.height = "24px";
+    const next = Math.min(ta.scrollHeight, 140);
+    ta.style.height = `${next}px`;
+  }, [content, mode]);
+
   function onTextareaKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === "Escape" && handleEscape()) {
       e.preventDefault();
@@ -312,17 +326,15 @@ export function Compose(): JSX.Element {
         <NameInput value={name} onChange={setName} />
       )}
       <div className="compose-box">
-        <div className="textarea-wrapper" data-replicated-value={content}>
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={onTextareaKey}
-            placeholder={placeholderFor(mode, commentTarget !== null)}
-            rows={mode === "named" ? 4 : 1}
-            aria-label="Compose message"
-          />
-        </div>
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onKeyDown={onTextareaKey}
+          placeholder={placeholderFor(mode, commentTarget !== null)}
+          rows={mode === "named" ? 4 : 1}
+          aria-label="Compose message"
+        />
         <div className="compose-actions">
           {/* Zone 1 — mode setters (Name it · Comment). */}
           <div className="compose-zone compose-zone-modes">

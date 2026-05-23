@@ -705,40 +705,20 @@
     0 0 0 3px rgba(40, 30, 15, 0.04),
     var(--shadow);
 }
-.textarea-wrapper {
-  display: grid;
-}
-
-.textarea-wrapper::after,
-.textarea-wrapper textarea {
-  grid-area: 1 / 1 / 2 / 2;
+.compose-box textarea {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  resize: none;
   font: inherit;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 14px;
   color: var(--ink);
-  padding: 0;
-  margin: 0;
   min-height: 24px;
   max-height: 140px;
-  border: none;
-  background: transparent;
-  resize: none;
-  outline: none;
-  word-break: break-word;
-  white-space: pre-wrap;
+  line-height: 1.55;
 }
-
-.textarea-wrapper::after {
-  content: attr(data-replicated-value) " ";
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.textarea-wrapper textarea {
-  overflow-y: auto;
-}
-
-.textarea-wrapper textarea::placeholder {
+.compose-box textarea::placeholder {
   color: var(--ink-4);
 }
 /* ============ Compose Actions Dock ============
