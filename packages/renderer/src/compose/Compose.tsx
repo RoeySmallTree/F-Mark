@@ -257,7 +257,7 @@ export function Compose(): JSX.Element {
      Always clears the draft after consuming so a second open of the same
      preset still inserts again. After insertion, focus the textarea and
      place the caret at the end. */
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (composeDraft === null) return;
     setContent((prev) => {
       const trimmed = prev.trim();
@@ -285,13 +285,6 @@ export function Compose(): JSX.Element {
   // it will return to 'message' on next composeMode update by ModeBar.
 
   // Auto-grow the textarea up to its max-height (140px from CSS).
-  useLayoutEffect(() => {
-    const ta = textareaRef.current;
-    if (ta === null) return;
-    ta.style.height = "auto";
-    const next = Math.min(ta.scrollHeight, 140);
-    ta.style.height = `${next}px`;
-  }, [content, mode]);
 
   function onTextareaKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === "Escape" && handleEscape()) {
@@ -319,15 +312,17 @@ export function Compose(): JSX.Element {
         <NameInput value={name} onChange={setName} />
       )}
       <div className="compose-box">
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onKeyDown={onTextareaKey}
-          placeholder={placeholderFor(mode, commentTarget !== null)}
-          rows={mode === "named" ? 4 : 2}
-          aria-label="Compose message"
-        />
+        <div className="textarea-wrapper" data-replicated-value={content}>
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onTextareaKey}
+            placeholder={placeholderFor(mode, commentTarget !== null)}
+            rows={mode === "named" ? 4 : 1}
+            aria-label="Compose message"
+          />
+        </div>
         <div className="compose-actions">
           {/* Zone 1 — mode setters (Name it · Comment). */}
           <div className="compose-zone compose-zone-modes">
@@ -404,6 +399,16 @@ export function Compose(): JSX.Element {
         <PresetsPopover
           anchorRect={activePopover.anchorRect}
           onClose={closePopover}
+        />
+      ) : null}
+      {activePopover.key === "compose-settings" ? (
+        <ComposeSettingsPopover
+          anchorRect={activePopover.anchorRect}
+          onClose={closePopover}
+          messageEndsTurn={messageEndsTurn}
+          onMessageEndsTurnChange={handleMessageEndsTurnChange}
+          enterToSend={enterToSend}
+          onEnterToSendChange={handleEnterToSendChange}
         />
       ) : null}
       {createTodoAnchorRect !== null ? (

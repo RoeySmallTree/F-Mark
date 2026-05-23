@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TodoCard } from "../../src/cards/TodoCard.js";
 import {
@@ -179,9 +185,78 @@ describe("TodoCard", () => {
     });
     expect(posted[1]).toMatchObject({
       id: "t1",
-      title: "Old title",
+      title: "New title",
       body: "New body",
       supersedes: ev.filename,
     });
+  });
+
+  test("keyboard bindings local to one inline todo still work", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({ filename: "20260522T110600Z_us-a7f3.todo.json" }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const ev = makeTodo(
+      "20260522T110000Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "t1", title: "Key task", body: "note", status: "open" },
+    );
+    render(<TodoCard event={ev} participants={PARTICIPANTS} />);
+    const title = screen.getByLabelText("Task title");
+
+    expect(
+      fireEvent.keyDown(title, { key: "Enter", code: "Enter" }),
+    ).toBe(false);
+    expect(screen.getByLabelText("Task description")).toHaveFocus();
+
+    expect(
+      fireEvent.keyDown(title, {
+        key: "Enter",
+        code: "Enter",
+        metaKey: true,
+      }),
+    ).toBe(false);
+    expect(
+      fireEvent.keyDown(title, {
+        key: "Backspace",
+        code: "Backspace",
+        metaKey: true,
+      }),
+    ).toBe(false);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject(
+      { id: "t1", status: "done" },
+    );
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject(
+      { id: "t1", status: "removed" },
+    );
+  });
+
+  test("inline TodoCard ignores tree-only keyboard chords", () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ filename: "20260522T110700Z_us-a7f3.todo.json" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const ev = makeTodo(
+      "20260522T110000Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "t1", title: "Inline task", status: "open" },
+    );
+    render(<TodoCard event={ev} participants={PARTICIPANTS} />);
+    const title = screen.getByLabelText("Task title");
+
+    expect(fireEvent.keyDown(title, { key: "Tab", code: "Tab" })).toBe(true);
+    expect(
+      fireEvent.keyDown(title, { key: "ArrowDown", code: "ArrowDown" }),
+    ).toBe(true);
+    expect(
+      fireEvent.keyDown(title, { key: "ArrowUp", code: "ArrowUp" }),
+    ).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

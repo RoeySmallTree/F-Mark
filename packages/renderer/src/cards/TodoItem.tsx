@@ -22,6 +22,13 @@ export interface TodoItemNode {
   children: TodoTreeNode[];
 }
 
+export type TodoInputField = "title" | "body";
+
+export interface TodoInputRefs {
+  title: HTMLInputElement;
+  body: HTMLTextAreaElement;
+}
+
 interface TodoItemProps {
   node: TodoItemNode;
   depth: number;
@@ -29,9 +36,23 @@ interface TodoItemProps {
   agentIds: string[];
   onUpdate: (patch: Partial<TodoPayload>) => Promise<void>;
   onToggleDone: () => Promise<void>;
-  onRemove: () => Promise<void>;
+  onRemove: (field?: TodoInputField) => Promise<void>;
   onAddSubtask: () => Promise<void> | void;
   onReassign: (participantId: string | null) => Promise<void>;
+  registerInputs?: (id: string, inputs: TodoInputRefs | null) => void;
+  onIndent?: (
+    field: TodoInputField,
+    patch: { title: string; body: string },
+  ) => Promise<void> | void;
+  onOutdent?: (
+    field: TodoInputField,
+    patch: { title: string; body: string },
+  ) => Promise<void> | void;
+  onFocusPrev?: () => void;
+  onFocusNext?: () => void;
+  onCommitAndCreateBelow?: (
+    patch: { title: string; body: string },
+  ) => Promise<void> | void;
   titlePlaceholder?: string;
   autoFocusTitle?: boolean;
   compact?: boolean;
@@ -63,6 +84,12 @@ export function TodoItem({
   onRemove,
   onAddSubtask,
   onReassign,
+  registerInputs,
+  onIndent,
+  onOutdent,
+  onFocusPrev,
+  onFocusNext,
+  onCommitAndCreateBelow,
   titlePlaceholder = "Task title",
   autoFocusTitle = false,
   compact = false,
@@ -76,7 +103,9 @@ export function TodoItem({
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const assigneeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const skipBlurCommitRef = useRef<TodoInputField | null>(null);
   const descendants = countDescendants(node);
 
   useEffect(() => {
@@ -94,6 +123,17 @@ export function TodoItem({
     input.focus();
     input.select();
   }, [autoFocusTitle, node.id]);
+
+  useEffect(() => {
+    if (registerInputs === undefined) return;
+    const titleInput = titleRef.current;
+    const bodyInput = bodyRef.current;
+    if (titleInput === null || bodyInput === null) return;
+    registerInputs(node.id, { title: titleInput, body: bodyInput });
+    return () => {
+      registerInputs(node.id, null);
+    };
+  }, [node.id, registerInputs]);
 
   useEffect(() => {
     if (!assigneeOpen) return;
@@ -119,16 +159,24 @@ export function TodoItem({
   );
 
   async function commitTitle(): Promise<void> {
+    if (skipBlurCommitRef.current === "title") {
+      skipBlurCommitRef.current = null;
+      return;
+    }
     const previous = fieldValue(node.title);
     if (title === previous) return;
     if (draft && title.trim().length === 0) return;
-    await onUpdate({ title });
+    await onUpdate({ title, body });
   }
 
   async function commitBody(): Promise<void> {
+    if (skipBlurCommitRef.current === "body") {
+      skipBlurCommitRef.current = null;
+      return;
+    }
     const previous = fieldValue(node.body);
     if (body === previous) return;
-    await onUpdate({ body });
+    await onUpdate({ title, body });
   }
 
   async function remove(): Promise<void> {
@@ -151,6 +199,61 @@ export function TodoItem({
     event.stopPropagation();
     setAssigneeOpen(false);
     assigneeButtonRef.current?.focus();
+  }
+
+  function onInputKeyDown(
+    event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    field: TodoInputField,
+  ): void {
+    const isMod = event.metaKey || event.ctrlKey;
+
+    if (event.key === "Tab") {
+      const handler = event.shiftKey ? onOutdent : onIndent;
+      if (handler === undefined) return;
+      event.preventDefault();
+      void handler(field, { title, body });
+      return;
+    }
+
+    if (event.key === "Enter" && isMod) {
+      event.preventDefault();
+      void onToggleDone();
+      return;
+    }
+
+    if (event.key === "Backspace" && isMod) {
+      event.preventDefault();
+      skipBlurCommitRef.current = field;
+      void onRemove(field);
+      return;
+    }
+
+    if (event.key === "Enter" && field === "title") {
+      event.preventDefault();
+      bodyRef.current?.focus();
+      return;
+    }
+
+    if (event.key === "Enter" && field === "body") {
+      if (onCommitAndCreateBelow === undefined) return;
+      event.preventDefault();
+      skipBlurCommitRef.current = "body";
+      void onCommitAndCreateBelow({ title, body });
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (onFocusPrev === undefined) return;
+      event.preventDefault();
+      onFocusPrev();
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      if (onFocusNext === undefined) return;
+      event.preventDefault();
+      onFocusNext();
+    }
   }
 
   const style = {
@@ -195,15 +298,18 @@ export function TodoItem({
             placeholder={titlePlaceholder}
             aria-label="Task title"
             onChange={(event) => setTitle(event.target.value)}
+            onKeyDown={(event) => onInputKeyDown(event, "title")}
             onBlur={() => void commitTitle()}
           />
           <textarea
+            ref={bodyRef}
             className="todo-desc"
             value={body}
             placeholder="Task description (optional)"
             aria-label="Task description"
             rows={1}
             onChange={(event) => setBody(event.target.value)}
+            onKeyDown={(event) => onInputKeyDown(event, "body")}
             onBlur={() => void commitBody()}
           />
           <div className="todo-meta">
