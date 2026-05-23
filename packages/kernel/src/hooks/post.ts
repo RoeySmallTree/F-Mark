@@ -57,8 +57,9 @@ export async function postPing(ctx: HookContext, participantId: string): Promise
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${ctx.token}` },
       body: "{}",
+      signal: AbortSignal.timeout(2000),
     });
   } catch {
-    // ping is best-effort; never fail the hook for presence
+    // best-effort: network errors, non-2xx, and timeouts are all swallowed
   }
 }
