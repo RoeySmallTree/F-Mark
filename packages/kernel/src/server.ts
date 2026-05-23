@@ -16,6 +16,8 @@ import { registerSkillRoutes } from "./routes/skills.js";
 import { registerSearchRoutes } from "./routes/search.js";
 import { registerGuideRoute } from "./routes/guide.js";
 import { registerStaticRoutes } from "./routes/static.js";
+import { registerPresenceRoutes } from "./routes/presence.js";
+import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
 
 export interface ServerDeps {
@@ -26,6 +28,7 @@ export interface ServerDeps {
 export interface CreatedServer {
   app: FastifyInstance;
   getBus(): Bus;
+  getTracker(): PresenceTracker;
 }
 
 export function createServer(deps: ServerDeps): CreatedServer {
@@ -101,6 +104,12 @@ export function createServer(deps: ServerDeps): CreatedServer {
     void seqLog("websocket plugin ready", { module: "server" });
   });
 
+  const tracker = createPresenceTracker({
+    broadcast: (m) => busRef.publish(m),
+  });
+  const presenceTicker = setInterval(() => tracker.tick(), 5_000);
+  presenceTicker.unref();
+
   registerParticipantRoutes(app, deps.paths);
   registerAgentsRoutes(app, deps.paths);
   registerSessionRoutes(app, deps.paths);
@@ -113,6 +122,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerSkillRoutes(app);
   registerSearchRoutes(app, deps.paths);
   registerGuideRoute(app, deps.paths);
+  registerPresenceRoutes(app, () => tracker);
   app.register(async (instance) => {
     await registerStaticRoutes(instance);
     void seqLog("static plugin ready", { module: "server" });
@@ -133,5 +143,6 @@ export function createServer(deps: ServerDeps): CreatedServer {
   return {
     app,
     getBus: () => busRef,
+    getTracker: () => tracker,
   };
 }
