@@ -20,6 +20,7 @@ import {
   MousePointerClick,
   Paperclip,
   Text,
+  Workflow,
   Wrench,
   X,
 } from "lucide-react";
@@ -45,6 +46,7 @@ const KIND_ICON: Record<EventKind, typeof Text> = {
   html: FileCode2,
   file: Paperclip,
   "tool-use": Wrench,
+  flow: Workflow,
 };
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -56,6 +58,7 @@ const KIND_LABEL: Record<EventKind, string> = {
   html: "html",
   file: "file",
   "tool-use": "tool use",
+  flow: "flow",
 };
 
 function formatTs(ts: string): string {

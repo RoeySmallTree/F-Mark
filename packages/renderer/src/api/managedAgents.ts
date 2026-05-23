@@ -49,27 +49,38 @@ export function createManagedAgentsClient(
   deps: ManagedAgentsClientConfig,
 ): ManagedAgentsClient {
   const { baseUrl, token } = deps;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (token !== null) headers.Authorization = `Bearer ${token}`;
+  // Only set Content-Type when there IS a body — Fastify rejects a POST that
+  // declares `application/json` but ships an empty body with
+  // FST_ERR_CTP_EMPTY_JSON_BODY. Authorization stays regardless.
+  const authHeader: Record<string, string> =
+    token !== null ? { Authorization: `Bearer ${token}` } : {};
 
   async function req<T>(
     method: string,
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const res = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    const init: RequestInit = { method, headers: { ...authHeader } };
+    if (body !== undefined) {
+      (init.headers as Record<string, string>)["Content-Type"] =
+        "application/json";
+      init.body = JSON.stringify(body);
+    }
+    const res = await fetch(`${baseUrl}${path}`, init);
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`${method} ${path} → ${res.status}: ${text}`);
     }
     if (res.status === 204) return undefined as unknown as T;
-    return (await res.json()) as T;
+    const responseText = await res.text();
+    if (responseText.length === 0) return undefined as unknown as T;
+    try {
+      return JSON.parse(responseText) as T;
+    } catch (err) {
+      throw new Error(
+        `${method} ${path} → ${res.status} returned non-JSON: ${responseText.slice(0, 200)}`,
+      );
+    }
   }
 
   return {
