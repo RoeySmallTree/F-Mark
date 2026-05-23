@@ -79,7 +79,14 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
             participantId: aid,
             userParticipantId,
           });
-          tracker.setManagedHookStatus(aid, status.installed);
+          if (status.installed) {
+            // Hooks are installed but we have no recent ping — surface as
+            // "stale" until the next ping flips state back to "online".
+            // Note: this also (re)sets paneAlive, which is fine.
+            tracker.markReconciledStale(aid, { paneAlive: () => true });
+          } else {
+            tracker.setManagedHookStatus(aid, false);
+          }
         } catch {
           // unknown runtime — leave hook status unset
         }
@@ -87,7 +94,10 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
     } else {
       // CASE B: agent dir exists but no live tmux session.
       await clearManagedSiblings(paths.fmarkDir(), aid);
-      tracker.clearManagedPane(aid);
+      // Surface the dead pane to the tracker so the dashboard shows it as
+      // "pane-dead" (not "launching" or absent). markPaneDead also creates
+      // the entry on cold startup when none existed before.
+      tracker.markPaneDead(aid);
       try {
         await appendAgentLog(paths.fmarkDir(), aid, { event: "pane-died" });
       } catch {

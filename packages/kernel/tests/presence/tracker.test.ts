@@ -130,6 +130,51 @@ describe("PresenceTracker", () => {
     });
   });
 
+  it("markReconciledStale sets state to stale with managed pane", () => {
+    const t = createPresenceTracker({ broadcast: () => {} });
+    t.markReconciledStale("ag-x", { paneAlive: () => true });
+    expect(t.snapshot().get("ag-x")?.state).toBe("stale");
+  });
+
+  it("markReconciledStale broadcasts the stale state and a subsequent ping flips to online", () => {
+    const broadcasts: any[] = [];
+    const t = createPresenceTracker({ broadcast: (m) => broadcasts.push(m) });
+    t.markReconciledStale("ag-x", { paneAlive: () => true });
+    expect(broadcasts.at(-1)).toMatchObject({
+      type: "presence",
+      participant_id: "ag-x",
+      state: "stale",
+    });
+    t.ping("ag-x");
+    expect(t.snapshot().get("ag-x")?.state).toBe("online");
+    expect(broadcasts.at(-1)).toMatchObject({
+      type: "presence",
+      participant_id: "ag-x",
+      state: "online",
+    });
+  });
+
+  it("markPaneDead sets state to pane-dead", () => {
+    const t = createPresenceTracker({ broadcast: () => {} });
+    t.setManagedPane("ag-x", { paneAlive: () => true });
+    t.ping("ag-x");
+    expect(t.snapshot().get("ag-x")?.state).toBe("online");
+    t.markPaneDead("ag-x");
+    expect(t.snapshot().get("ag-x")?.state).toBe("pane-dead");
+  });
+
+  it("markPaneDead creates a pane-dead entry even when no prior entry exists", () => {
+    const broadcasts: any[] = [];
+    const t = createPresenceTracker({ broadcast: (m) => broadcasts.push(m) });
+    t.markPaneDead("ag-x");
+    expect(t.snapshot().get("ag-x")?.state).toBe("pane-dead");
+    expect(broadcasts.at(-1)).toMatchObject({
+      type: "presence",
+      participant_id: "ag-x",
+      state: "pane-dead",
+    });
+  });
+
   it("stale -> offline two-step transition: ticks through both states and broadcasts each", () => {
     const broadcasts: any[] = [];
     const t = createPresenceTracker({ broadcast: (m) => broadcasts.push(m) });

@@ -18,6 +18,17 @@ export interface PresenceTracker {
   setManagedPane(participantId: string, opts: { paneAlive: () => boolean }): void;
   clearManagedPane(participantId: string): void;
   setManagedHookStatus(participantId: string, installed: boolean): void;
+  // Reconcile-only seeders. `markReconciledStale` is for a surviving managed
+  // agent (paneAlive=true, hooks already installed) where we have no recent
+  // ping — the dashboard should see "stale" until the next ping flips it back
+  // to "online". `markPaneDead` is for a managed agent whose tmux session is
+  // gone — `paneAlive` is forced to return false so `deriveState` yields
+  // `pane-dead`.
+  markReconciledStale(
+    participantId: string,
+    opts: { paneAlive: () => boolean },
+  ): void;
+  markPaneDead(participantId: string): void;
   tick(): void;
   snapshot(): Map<string, { state: PresenceState; lastHookAt: number | null }>;
   remove(participantId: string): void;
@@ -95,6 +106,32 @@ export function createPresenceTracker(deps: CreateTrackerDeps): PresenceTracker 
       const cur = map.get(id) ?? { state: "launching", lastHookAt: null };
       const prev = cur.state;
       cur.hooksInstalled = installed;
+      cur.state = deriveState(cur, t);
+      map.set(id, cur);
+      emit(id, cur, prev);
+    },
+    markReconciledStale(id, { paneAlive }) {
+      const t = now();
+      const cur = map.get(id) ?? { state: "launching", lastHookAt: null };
+      const prev = cur.state;
+      cur.paneAlive = paneAlive;
+      cur.hooksInstalled = true;
+      // Synthesize a lastHookAt just past the managed online cap so deriveState
+      // yields "stale" (still well within OFFLINE_TTL_MS). The next real ping
+      // overwrites lastHookAt with `now()` and flips state back to "online".
+      cur.lastHookAt = t - ONLINE_MANAGED_TTL_MS - 1;
+      cur.state = deriveState(cur, t);
+      map.set(id, cur);
+      emit(id, cur, prev);
+    },
+    markPaneDead(id) {
+      const t = now();
+      const cur = map.get(id) ?? { state: "launching", lastHookAt: null };
+      const prev = cur.state;
+      // Force the deriveState invariant by replacing the paneAlive closure
+      // with one that returns false — `deriveState` then returns "pane-dead"
+      // without bypassing the single-source-of-state model.
+      cur.paneAlive = () => false;
       cur.state = deriveState(cur, t);
       map.set(id, cur);
       emit(id, cur, prev);

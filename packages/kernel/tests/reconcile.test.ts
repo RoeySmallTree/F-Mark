@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reconcile } from "../src/reconcile.js";
-import { initProject } from "../src/project.js";
+import { initProject, readConfig, writeConfig } from "../src/project.js";
 import { paths } from "../src/paths.js";
 import {
   writeTmuxSession,
@@ -57,6 +57,17 @@ async function makeFixture() {
 }
 
 describe("reconcile", () => {
+  // HOME override so claude hookInstall lookups read a controlled settings.json
+  // for the "hooks installed" survivor test. Restored after each test.
+  let savedHome: string | undefined;
+  beforeEach(() => {
+    savedHome = process.env.HOME;
+  });
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+  });
+
   it("returns early when tmux is unavailable", async () => {
     const { paths: p } = await makeFixture();
     const tmux = fakeTmux({ sessions: [], version: null });
@@ -96,6 +107,79 @@ describe("reconcile", () => {
     expect(s?.state).toBe("hook-not-installed");
   });
 
+  it("CASE A (hooks installed): surviving managed agent with installed hooks → tracker state 'stale'", async () => {
+    const { paths: p } = await makeFixture();
+
+    // Pin the user participant id so we can write a matching claude
+    // settings.json snippet below. initProject seeds a random us-XXXX user;
+    // overwrite that with a fixed id.
+    const cfg = await readConfig(p);
+    cfg.participants = {
+      "us-test": { kind: "user", name: "You", color: "#0EA5E9" },
+    };
+    await writeConfig(p, cfg);
+
+    await writeTmuxSession(
+      p.fmarkDir(),
+      "ag-claude",
+      "fmark-x-12345678-ag-ag-claude",
+    );
+    await writeRuntime(p.fmarkDir(), "ag-claude", "claude");
+
+    // Stand up a fake HOME with a ~/.claude/settings.json that records the
+    // f-mark Stop + UserPromptSubmit hooks for ag-claude / us-test so
+    // detectClaudeHooks reports installed=true.
+    const fakeHome = await mkdtemp(join(tmpdir(), "fmark-home-"));
+    await mkdir(join(fakeHome, ".claude"), { recursive: true });
+    await writeFile(
+      join(fakeHome, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: "npx -y f-mark hook auto-stream ag-claude",
+                },
+              ],
+            },
+          ],
+          UserPromptSubmit: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command:
+                    "npx -y f-mark hook auto-stream us-test --kind user",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      "utf8",
+    );
+    process.env.HOME = fakeHome;
+
+    const tmux = fakeTmux({
+      sessions: [
+        {
+          sessionName: "fmark-x-12345678-ag-ag-claude",
+          kind: "agent",
+          participantId: "ag-claude",
+        },
+      ],
+    });
+    const tracker = createPresenceTracker({ broadcast: () => {} });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await reconcile({ paths: p, tmux: tmux as any, tracker });
+
+    const s = tracker.snapshot().get("ag-claude");
+    expect(s).toBeDefined();
+    expect(s?.state).toBe("stale");
+  });
+
   it("CASE B: agent dir without live tmux session → clear siblings + pane-died log + tracker pane cleared", async () => {
     const { paths: p } = await makeFixture();
     await writeTmuxSession(
@@ -125,6 +209,11 @@ describe("reconcile", () => {
     );
     expect(logTxt).toContain("spawn");
     expect(logTxt).toContain("pane-died");
+    // Tracker should surface the dead-pane agent so the dashboard can show
+    // it as "pane-dead" (not "launching" or absent).
+    const s = tracker.snapshot().get("ag-claude");
+    expect(s).toBeDefined();
+    expect(s?.state).toBe("pane-dead");
   });
 
   it("CASE C: orphan agent session (tmux exists but no agent dir) → kill session", async () => {
