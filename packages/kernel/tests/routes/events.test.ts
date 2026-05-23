@@ -209,6 +209,39 @@ describe("POST /sessions/:id/events/tool-use", () => {
       await app.close();
     });
   });
+
+  it("preserves success: false and structured (non-string) result on disk", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/tool-use`,
+        payload: {
+          participant_id: pid,
+          tool_name: "Read",
+          tool_use_id: "tu_err",
+          input: { file_path: "/missing.txt" },
+          result: { error: "ENOENT", path: "/missing.txt" },
+          success: false,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const filename = res.json().filename;
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), filename),
+        "utf8",
+      );
+      const parsed = JSON.parse(onDisk);
+      expect(parsed).toEqual({
+        tool_name: "Read",
+        tool_use_id: "tu_err",
+        input: { file_path: "/missing.txt" },
+        result: { error: "ENOENT", path: "/missing.txt" },
+        success: false,
+      });
+      await app.close();
+    });
+  });
 });
 
 describe("GET /sessions/:id/events", () => {

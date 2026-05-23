@@ -146,6 +146,7 @@ export function registerEventRoutes(
             "participant_id",
             "tool_name",
             "tool_use_id",
+            "input",
             "success",
           ],
           properties: {
@@ -170,7 +171,7 @@ export function registerEventRoutes(
           contents: serializeToolUse({
             tool_name: req.body.tool_name,
             tool_use_id: req.body.tool_use_id,
-            input: req.body.input ?? {},
+            input: req.body.input,
             result: req.body.result,
             success: req.body.success,
             duration_ms: req.body.duration_ms,
