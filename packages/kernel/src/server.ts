@@ -4,6 +4,7 @@ import { registerAuthHook } from "./auth.js";
 import { seqLog, LogLevel } from "./lib/seq-log.js";
 import type { Paths } from "./paths.js";
 import { registerParticipantRoutes } from "./routes/participants.js";
+import { registerAgentsRoutes } from "./routes/agents.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerTodoRoutes } from "./routes/todos.js";
@@ -101,6 +102,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   });
 
   registerParticipantRoutes(app, deps.paths);
+  registerAgentsRoutes(app, deps.paths);
   registerSessionRoutes(app, deps.paths);
   registerEventRoutes(app, deps.paths, () => busRef);
   registerTodoRoutes(app, deps.paths, () => busRef);
