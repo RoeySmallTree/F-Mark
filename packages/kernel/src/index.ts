@@ -12,7 +12,10 @@ import { DEFAULT_PORT, HOST, MAX_PORT_RETRIES } from "./config.js";
 import * as logger from "./logger.js";
 import { paths } from "./paths.js";
 import { initProject } from "./project.js";
+import { reconcile } from "./reconcile.js";
 import { createServer } from "./server.js";
+import { realCommandRunner } from "./tmux/commandRunner.js";
+import { createTmuxManager } from "./tmux/manager.js";
 import { startWatcher } from "./watcher.js";
 
 function hasErrnoCode(err: unknown, code: string): boolean {
@@ -65,7 +68,7 @@ if (options.noAuth) {
   await ensureGitignoreEntry(p);
 }
 
-const { app, getBus } = createServer({
+const { app, getBus, getTracker } = createServer({
   token,
   paths: p,
   allowProcessApiNoAuth: options.allowProcessApiNoAuth,
@@ -99,6 +102,21 @@ if (!bound) {
 const stopWatcher = await startWatcher(p, {
   publish: (m) => getBus().publish(m),
 });
+
+// Reconcile surviving tmux sessions against .f-mark/agents/*. Best-effort: a
+// reconcile failure must not crash startup. We construct a dedicated tmux
+// manager here since `createServer` doesn't expose its own — tmux is stateless
+// server-side, so a duplicate handle is fine.
+try {
+  const reconcileTmux = createTmuxManager({
+    runner: realCommandRunner(),
+    projectRoot: p.root(),
+  });
+  await reconcile({ paths: p, tmux: reconcileTmux, tracker: getTracker() });
+} catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`reconcile failed: ${msg}\n`);
+}
 
 const mode: BannerMode = options.remote
   ? "remote"
