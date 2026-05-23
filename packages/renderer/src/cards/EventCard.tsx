@@ -15,7 +15,12 @@
 */
 
 import { type JSX } from "react";
-import type { AnyEventRecord, Participant, ProsePayload } from "@f-mark/shared";
+import type {
+  AnyEventRecord,
+  Participant,
+  ProsePayload,
+  ToolUseEventRecord,
+} from "@f-mark/shared";
 import { MessageCard } from "./MessageCard.js";
 import { ProseCard } from "./ProseCard.js";
 import { ChoicesCard } from "./ChoicesCard.js";
@@ -78,7 +83,7 @@ export function EventCard({
     return <FileCard event={event} participants={participants} />;
   }
   if (event.kind === "tool-use") {
-    return <ToolUseCard event={event} />;
+    return <ToolUseCard event={event as ToolUseEventRecord} />;
   }
   if (event.kind === "turn-end") {
     return <TurnEndDivider event={event} participants={participants} />;
