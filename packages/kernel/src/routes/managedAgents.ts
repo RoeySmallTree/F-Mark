@@ -43,11 +43,65 @@ interface ConfirmEntry {
   exp: number;
 }
 
+/**
+ * Cookie-auth Origin/Host gate for mutating /managed-agents/* routes.
+ *
+ * Defence-in-depth per the v0.4 Security spec: any cookie-authenticated
+ * mutating request must carry an `Origin` header whose host resolves to
+ * `localhost`, `127.0.0.1`, or matches the request's own `Host` header.
+ *
+ * Bearer-authenticated requests (`Authorization: Bearer …`) bypass the check,
+ * because the bearer token is not silently sent by browsers across origins.
+ * GETs are unaffected.
+ */
+function makeManagedAgentsOriginHook(): (
+  req: import("fastify").FastifyRequest,
+  reply: import("fastify").FastifyReply,
+) => Promise<void> {
+  return async (req, reply) => {
+    // Only scope this hook to /managed-agents/* URLs. We register globally
+    // (Fastify hooks bubble), so we have to gate by prefix ourselves.
+    if (!req.url.startsWith("/managed-agents")) return;
+    if (req.method === "GET") return; // read-only routes never gated
+    const hasHeader = req.headers.authorization !== undefined;
+    if (hasHeader) return; // bearer auth — skip
+    const cookieHeader = req.headers.cookie ?? "";
+    const hasCookie = cookieHeader.includes("fmark_token=");
+    if (!hasCookie) return; // no auth at all → upstream auth gate will 401
+    const origin = req.headers.origin;
+    if (typeof origin !== "string" || origin.length === 0) {
+      reply
+        .code(403)
+        .send({ error: "cookie-authenticated request missing Origin header" });
+      return;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      reply.code(403).send({ error: `invalid Origin header: ${origin}` });
+      return;
+    }
+    const host = parsed.hostname;
+    const rawHost = (req.headers.host ?? "").toString();
+    // host header is "name[:port]" — strip port for comparison.
+    const reqHost = rawHost.split(":")[0] ?? "";
+    if (host !== "localhost" && host !== "127.0.0.1" && host !== reqHost) {
+      reply.code(403).send({ error: `Origin ${origin} not allowed` });
+      return;
+    }
+  };
+}
+
 export function registerManagedAgentsRoutes(
   app: FastifyInstance,
   deps: ManagedAgentsDeps,
 ): void {
   const { paths, tmux, tracker } = deps;
+
+  // Defence-in-depth: gate cookie-authenticated mutating requests by Origin.
+  // Registered before the routes so it runs on every /managed-agents/* call.
+  app.addHook("preHandler", makeManagedAgentsOriginHook());
 
   // Per-registration confirm-token map so multiple Fastify instances in the
   // same process (e.g. parallel test apps) cannot share or stomp on each
@@ -122,21 +176,34 @@ export function registerManagedAgentsRoutes(
       args: runtime.args,
       env: runtime.env,
     });
-    await writeTmuxSession(paths.fmarkDir(), participantId, sessionName);
-    await writeRuntime(paths.fmarkDir(), participantId, runtime_id);
-    if (body.session_id !== undefined) {
-      await writeActiveSession(paths.fmarkDir(), participantId, body.session_id);
+    // After a successful tmux spawn we have external state (the tmux session).
+    // If any subsequent write fails the route would otherwise return 500 and
+    // leave an orphan tmux session behind. Roll back by killing the session
+    // before re-raising.
+    try {
+      await writeTmuxSession(paths.fmarkDir(), participantId, sessionName);
+      await writeRuntime(paths.fmarkDir(), participantId, runtime_id);
+      if (body.session_id !== undefined) {
+        await writeActiveSession(paths.fmarkDir(), participantId, body.session_id);
+      }
+      // v0.4: optimistic paneAlive — the presence ticker / pane-died detection
+      // happens elsewhere. We pass a closure that returns true so the tracker
+      // bucket exists; downstream code can replace this when it has authoritative
+      // pane state.
+      tracker.setManagedPane(participantId, { paneAlive: () => true });
+      await appendAgentLog(paths.fmarkDir(), participantId, {
+        event: "spawn",
+        runtime: runtime_id,
+        tmux_session: sessionName,
+      });
+    } catch (err) {
+      try {
+        await tmux.killSession(sessionName);
+      } catch {
+        // best-effort cleanup; surface the original write failure
+      }
+      throw err;
     }
-    // v0.4: optimistic paneAlive — the presence ticker / pane-died detection
-    // happens elsewhere. We pass a closure that returns true so the tracker
-    // bucket exists; downstream code can replace this when it has authoritative
-    // pane state.
-    tracker.setManagedPane(participantId, { paneAlive: () => true });
-    await appendAgentLog(paths.fmarkDir(), participantId, {
-      event: "spawn",
-      runtime: runtime_id,
-      tmux_session: sessionName,
-    });
     return {
       participant_id: participantId,
       tmux_session: sessionName,
@@ -198,19 +265,26 @@ export function registerManagedAgentsRoutes(
 
   app.get("/managed-agents", async () => {
     const sessions = await tmux.listFmarkSessions();
+    const liveSessionNames = new Set(sessions.map((s) => s.sessionName));
     const agentIds = await listManagedAgentIds(paths.fmarkDir());
     const agents: Array<{
       participant_id: string;
       tmux_session: string | null;
       runtime_id: string | null;
+      alive: boolean;
     }> = [];
     for (const aid of agentIds) {
       const tmuxSession = await readTmuxSession(paths.fmarkDir(), aid);
       const runtimeId = await readRuntime(paths.fmarkDir(), aid);
+      // alive iff the recorded tmux session is in the live-sessions set.
+      // Stale agent directories (session died, files left behind) are still
+      // surfaced — the UI can use alive=false to offer "Reconnect" or cleanup.
+      const alive = tmuxSession !== null && liveSessionNames.has(tmuxSession);
       agents.push({
         participant_id: aid,
         tmux_session: tmuxSession,
         runtime_id: runtimeId,
+        alive,
       });
     }
     const terminals = sessions

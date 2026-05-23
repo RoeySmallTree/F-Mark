@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerManagedAgentsRoutes } from "../../src/routes/managedAgents.js";
@@ -138,6 +138,41 @@ describe("POST /managed-agents/spawn", () => {
     expect(r2.statusCode).toBe(200);
     const cfg = await readConfig(p);
     expect(cfg.participants["ag-claude-rb"]).toBeDefined();
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("rolls back tmux session when a post-spawn write fails", async () => {
+    const { app, runner, p, cleanup } = await makeApp();
+    // Sabotage the writeRuntime() target: pre-create
+    // .f-mark/agents/<id>/runtime as a directory so writeFile throws EISDIR.
+    const sabotagedId = "ag-rb-fail";
+    await mkdir(join(p.fmarkDir(), "agents", sabotagedId, "runtime"), {
+      recursive: true,
+    });
+
+    expectSpawnCalls(runner);
+    // After the write fails, we expect a kill-session attempt to roll back.
+    runner.expect(["tmux", "kill-session"], {
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: sabotagedId,
+      },
+    });
+    // Surfaces as a 5xx because the write actually failed; the contract is
+    // that tmux state was cleaned up before the error propagates.
+    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    // Verify all expected tmux calls (spawn + kill) were consumed —
+    // the kill-session expectation proves the route rolled back.
     runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();
@@ -333,8 +368,45 @@ describe("GET /managed-agents", () => {
     expect(body.agents[0].participant_id).toBe("ag-claude-list");
     expect(body.agents[0].tmux_session).toBe(agentSession);
     expect(body.agents[0].runtime_id).toBe("claude");
+    expect(body.agents[0].alive).toBe(true);
     expect(body.terminals).toHaveLength(1);
     expect(body.terminals[0].tmux_session).toBe(termSession);
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("marks an agent dir whose tmux session is gone as alive: false", async () => {
+    const { app, runner, p, cleanup } = await makeApp();
+    // Manually set up an agent directory: write tmux-session + runtime.
+    // No corresponding tmux session exists in the runner — listFmarkSessions()
+    // will return empty.
+    const { writeTmuxSession, writeRuntime } = await import(
+      "../../src/agents/managed.js"
+    );
+    await writeTmuxSession(
+      p.fmarkDir(),
+      "ag-claude-stale",
+      "fmark-test-12345678-ag-ag-claude-stale",
+    );
+    await writeRuntime(p.fmarkDir(), "ag-claude-stale", "claude");
+
+    // ls returns nothing — sessions list is empty.
+    runner.expect(["tmux", "ls"], {
+      stdout: "",
+      stderr: "no sessions",
+      exitCode: 1,
+    });
+    const list = await app.inject({ method: "GET", url: "/managed-agents" });
+    expect(list.statusCode).toBe(200);
+    const body = list.json();
+    expect(body.agents).toHaveLength(1);
+    expect(body.agents[0].participant_id).toBe("ag-claude-stale");
+    expect(body.agents[0].tmux_session).toBe(
+      "fmark-test-12345678-ag-ag-claude-stale",
+    );
+    expect(body.agents[0].runtime_id).toBe("claude");
+    expect(body.agents[0].alive).toBe(false);
     runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();

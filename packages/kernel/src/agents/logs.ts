@@ -37,11 +37,14 @@ export async function appendAgentLog(
   assertValid(id);
   const p = logPath(fmarkDir, id);
   await mkdir(join(fmarkDir, "agents", id), { recursive: true });
+  const line = JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n";
+  const lineBytes = Buffer.byteLength(line, "utf8");
   const size = await fileSize(p);
-  if (size > MAX_LOG_BYTES) {
+  // Rotate when this append would cross the MAX_LOG_BYTES bound, so the
+  // active file size always stays <= MAX_LOG_BYTES + smallest-pending-line.
+  if (size + lineBytes > MAX_LOG_BYTES) {
     await rename(p, `${p}.1`);
   }
-  const line = JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n";
   await appendFile(p, line, "utf8");
 }
 
