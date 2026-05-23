@@ -15,6 +15,8 @@ import {
 } from "../agents/managed.js";
 import { writeActiveSession } from "../agents/activeSession.js";
 import { appendAgentLog, readAgentLog } from "../agents/logs.js";
+import { createInputQueue } from "../tmux/inputQueue.js";
+import { validateSlashCommand, validateMessageText } from "../runtimes/validation.js";
 
 interface SpawnBody {
   runtime_id?: string;
@@ -51,6 +53,11 @@ export function registerManagedAgentsRoutes(
   // same process (e.g. parallel test apps) cannot share or stomp on each
   // other's tokens.
   const confirmTokens = new Map<string, ConfirmEntry>();
+
+  // Per-registration input queue so user-typed and kernel-injected keystrokes
+  // serialize per pane. Each route handler enqueues its tmux sends against
+  // the agent's tmux-session as the pane key.
+  const inputQueue = createInputQueue();
 
   function mintConfirm(id: string): string {
     const token = randomBytes(8).toString("hex");
@@ -230,4 +237,64 @@ export function registerManagedAgentsRoutes(
       return { entries };
     },
   );
+
+  app.post<{
+    Params: { id: string };
+    Body: { type?: string; command?: string; text?: string };
+  }>("/managed-agents/:id/command", async (req, reply) => {
+    const id = decodeURIComponent(req.params.id);
+    if (!isValidParticipantId(id)) {
+      reply.code(400);
+      return { error: "invalid id" };
+    }
+    const session = await readTmuxSession(paths.fmarkDir(), id);
+    if (!session) {
+      reply.code(409);
+      return { reason: "unmanaged_pane", offer: "open_overlay" };
+    }
+    const body = (req.body ?? {}) as {
+      type?: string;
+      command?: string;
+      text?: string;
+    };
+    try {
+      if (body.type === "interrupt") {
+        await inputQueue.enqueue(session, () => tmux.sendKey(session, "C-c"));
+      } else if (body.type === "slash") {
+        if (typeof body.command !== "string") {
+          reply.code(400);
+          return { error: "missing command" };
+        }
+        validateSlashCommand(body.command);
+        const cmd = body.command;
+        await inputQueue.enqueue(session, async () => {
+          await tmux.sendLiteralText(session, "/" + cmd);
+          await tmux.sendKey(session, "C-m");
+        });
+      } else if (body.type === "message") {
+        if (typeof body.text !== "string") {
+          reply.code(400);
+          return { error: "missing text" };
+        }
+        validateMessageText(body.text);
+        const text = body.text;
+        await inputQueue.enqueue(session, async () => {
+          await tmux.sendLiteralText(session, text);
+          await tmux.sendKey(session, "C-m");
+        });
+      } else {
+        reply.code(400);
+        return { error: "unknown command type" };
+      }
+      await appendAgentLog(paths.fmarkDir(), id, {
+        event: "command",
+        type: body.type,
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      reply.code(400);
+      return { error: msg };
+    }
+  });
 }
