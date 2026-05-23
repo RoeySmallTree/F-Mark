@@ -4,6 +4,7 @@ import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
 import { serializeProse } from "../events/prose.js";
+import { serializeToolUse } from "../events/toolUse.js";
 import { readEvents } from "../events/reader.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 
@@ -111,6 +112,76 @@ export function registerEventRoutes(
           timestamp: filename.split("_")[0]!,
           participant_id: req.body.participant_id,
           kind: "prose" as const,
+        };
+      } catch (err) {
+        reply.code(400);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body: {
+      participant_id: string;
+      tool_name: string;
+      tool_use_id: string;
+      input: unknown;
+      result?: unknown;
+      success: boolean;
+      duration_ms?: number;
+    };
+  }>(
+    "/sessions/:id/events/tool-use",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" } },
+        },
+        body: {
+          type: "object",
+          required: [
+            "participant_id",
+            "tool_name",
+            "tool_use_id",
+            "success",
+          ],
+          properties: {
+            participant_id: { type: "string", minLength: 1 },
+            tool_name: { type: "string", minLength: 1 },
+            tool_use_id: { type: "string", minLength: 1 },
+            input: {},
+            result: {},
+            success: { type: "boolean" },
+            duration_ms: { type: "number" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      if (!(await ensureSession(p, req.params.id, reply))) return;
+      try {
+        const filename = await writeEventFile(p, req.params.id, {
+          participant_id: req.body.participant_id,
+          kind: "tool-use",
+          ext: "json",
+          contents: serializeToolUse({
+            tool_name: req.body.tool_name,
+            tool_use_id: req.body.tool_use_id,
+            input: req.body.input ?? {},
+            result: req.body.result,
+            success: req.body.success,
+            duration_ms: req.body.duration_ms,
+          }),
+        });
+        publish(req.params.id, filename, "tool-use", req.body.participant_id);
+        return {
+          filename,
+          timestamp: filename.split("_")[0]!,
+          participant_id: req.body.participant_id,
+          kind: "tool-use" as const,
         };
       } catch (err) {
         reply.code(400);

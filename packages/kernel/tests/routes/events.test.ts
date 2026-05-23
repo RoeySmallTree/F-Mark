@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createServer } from "../../src/server.js";
 import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
@@ -126,6 +128,84 @@ describe("POST /sessions/:id/events/turn-end", () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().filename).toMatch(/\.turn-end\.json$/);
+      await app.close();
+    });
+  });
+});
+
+describe("POST /sessions/:id/events/tool-use", () => {
+  it("writes a tool-use event file and broadcasts", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/tool-use`,
+        payload: {
+          participant_id: pid,
+          tool_name: "Bash",
+          tool_use_id: "tu_01",
+          input: { command: "ls" },
+          result: "a\nb\n",
+          success: true,
+          duration_ms: 12,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.filename).toMatch(
+        new RegExp(`\\d{8}T\\d{6}Z_${pid}\\.tool-use\\.json$`),
+      );
+      expect(body.kind).toBe("tool-use");
+
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), body.filename),
+        "utf8",
+      );
+      expect(JSON.parse(onDisk)).toMatchObject({
+        tool_name: "Bash",
+        success: true,
+      });
+      await app.close();
+    });
+  });
+
+  it("400s on missing tool_name", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/tool-use`,
+        payload: {
+          participant_id: pid,
+          tool_use_id: "tu_01",
+          input: {},
+          success: true,
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("401s without bearer when token is configured", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const session = await createSession(p, { slug: "x" });
+      const [pid] = Object.keys(await listParticipants(p));
+      const { app } = createServer({ token: "secret", paths: p });
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${session.id}/events/tool-use`,
+        payload: {
+          participant_id: pid!,
+          tool_name: "x",
+          tool_use_id: "y",
+          input: {},
+          success: true,
+        },
+      });
+      expect(res.statusCode).toBe(401);
       await app.close();
     });
   });
