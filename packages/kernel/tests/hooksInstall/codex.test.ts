@@ -37,4 +37,77 @@ command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-1"]`;
     expect(r.installed).toBe(false);
     expect(r.detectedEntries).toEqual([]);
   });
+
+  it("detects hooks declared with a multiline command array", () => {
+    const toml = `
+[[hooks.Stop]]
+command = [
+  "npx",
+  "-y",
+  "f-mark",
+  "hook",
+  "auto-stream",
+  "ag-codex-1"
+]
+timeout = 30
+
+[[hooks.UserPromptSubmit]]
+command = [
+  "npx", "-y", "f-mark", "hook", "auto-stream",
+  "us-1", "--kind", "user"
+]
+`;
+    const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
+    expect(r.installed).toBe(true);
+    expect(r.detectedEntries.length).toBe(2);
+  });
+
+  it("does not detect commented-out command lines as installed", () => {
+    const toml = `
+[[hooks.Stop]]
+# command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-1"]
+
+[[hooks.UserPromptSubmit]]
+# command = ["npx", "-y", "f-mark", "hook", "auto-stream", "us-1", "--kind", "user"]
+`;
+    const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
+    expect(r.installed).toBe(false);
+    expect(r.detectedEntries).toEqual([]);
+  });
+
+  it("detects when one event uses single-line and the other uses multiline arrays", () => {
+    const toml = `
+[[hooks.Stop]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-1"]
+timeout = 30
+
+[[hooks.UserPromptSubmit]]
+command = [
+  "npx", "-y", "f-mark", "hook", "auto-stream",
+  "us-1", "--kind", "user"
+]
+`;
+    const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
+    expect(r.installed).toBe(true);
+    expect(r.detectedEntries.length).toBe(2);
+  });
+
+  it("detects when hooks live across both user-level and project-local TOML", () => {
+    // Simulates the dispatcher concatenating ~/.codex/config.toml and
+    // <projectRoot>/.codex/config.toml. detectCodexHooks should treat the
+    // combined content as a single TOML stream so installed status reflects
+    // the union of both files.
+    const userToml = `
+[[hooks.Stop]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-1"]
+`;
+    const projectToml = `
+[[hooks.UserPromptSubmit]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "us-1", "--kind", "user"]
+`;
+    const combined = userToml + "\n" + projectToml;
+    const r = detectCodexHooks(combined, "ag-codex-1", "us-1");
+    expect(r.installed).toBe(true);
+    expect(r.detectedEntries.length).toBe(2);
+  });
 });

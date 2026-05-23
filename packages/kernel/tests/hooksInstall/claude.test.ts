@@ -39,4 +39,21 @@ describe("Claude hooks adapter", () => {
     const r = detectClaudeHooks(null as any, "ag-claude", "us-1");
     expect(r.installed).toBe(false);
   });
+
+  it("renders parseable JSON in the snippet", () => {
+    const s = renderClaudeInstallSnippet("ag-claude", "us-1");
+    const match = /```json\n([\s\S]+?)\n```/.exec(s);
+    expect(match).not.toBeNull();
+    const json = match![1]!;
+    expect(() => JSON.parse(json)).not.toThrow();
+    const parsed = JSON.parse(json) as {
+      hooks: {
+        Stop: Array<{ hooks: Array<{ type: string; command: string }> }>;
+        UserPromptSubmit: Array<{ hooks: Array<{ type: string; command: string }> }>;
+      };
+    };
+    expect(parsed.hooks.Stop[0]!.hooks[0]!.command).toContain("ag-claude");
+    expect(parsed.hooks.UserPromptSubmit[0]!.hooks[0]!.command).toContain("us-1");
+    expect(parsed.hooks.UserPromptSubmit[0]!.hooks[0]!.command).toContain("--kind user");
+  });
 });

@@ -55,26 +55,29 @@ export async function loadClaudeSettings(): Promise<unknown | null> {
 }
 
 export function renderClaudeInstallSnippet(agentId: string, userId: string): string {
+  const snippet = {
+    hooks: {
+      Stop: [
+        {
+          hooks: [
+            { type: "command", command: `npx -y f-mark hook auto-stream ${agentId}` },
+          ],
+        },
+      ],
+      UserPromptSubmit: [
+        {
+          hooks: [
+            { type: "command", command: `npx -y f-mark hook auto-stream ${userId} --kind user` },
+          ],
+        },
+      ],
+    },
+  };
   return [
-    "Add these two entries to `~/.claude/settings.json` under `hooks`:",
+    "Add this to `~/.claude/settings.json` (merge with any existing `hooks` block):",
     "",
     "```json",
-    '"hooks": {',
-    '  "Stop": [',
-    "    {",
-    '      "hooks": [',
-    `        { "type": "command", "command": "npx -y f-mark hook auto-stream ${agentId}" }`,
-    "      ]",
-    "    }",
-    "  ],",
-    '  "UserPromptSubmit": [',
-    "    {",
-    '      "hooks": [',
-    `        { "type": "command", "command": "npx -y f-mark hook auto-stream ${userId} --kind user" }`,
-    "      ]",
-    "    }",
-    "  ]",
-    "}",
+    JSON.stringify(snippet, null, 2),
     "```",
   ].join("\n");
 }

@@ -7,6 +7,7 @@ export async function checkHookInstallStatus(opts: {
   runtimeId: string;
   participantId: string;
   userParticipantId?: string;
+  projectRoot?: string;
 }): Promise<DetectResult> {
   const userId = opts.userParticipantId ?? "us-unknown";
   if (opts.runtimeId === "claude") {
@@ -14,7 +15,7 @@ export async function checkHookInstallStatus(opts: {
     return detectClaudeHooks(settings ?? {}, opts.participantId, userId);
   }
   if (opts.runtimeId === "codex") {
-    const toml = await loadCodexConfig();
+    const toml = await loadCodexConfig(opts.projectRoot);
     return detectCodexHooks(toml, opts.participantId, userId);
   }
   if (opts.runtimeId === "gemini") return detectGeminiHooks();
