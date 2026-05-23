@@ -63,6 +63,15 @@ export interface PostHtmlBody {
   supersedes?: string;
 }
 
+export interface PostFlowBody {
+  participant_id: string;
+  id: string;
+  title?: string;
+  nodes: import("@f-mark/shared").FlowNode[];
+  edges: import("@f-mark/shared").FlowEdge[];
+  supersedes?: string;
+}
+
 export interface PostFileBody {
   participant_id: string;
   id: string;
@@ -113,6 +122,7 @@ export interface Client {
   ): Promise<{ filename: string }>;
   postTodo(sessionId: string, body: PostTodoBody): Promise<{ filename: string }>;
   postHtml(sessionId: string, body: PostHtmlBody): Promise<{ filename: string }>;
+  postFlow(sessionId: string, body: PostFlowBody): Promise<{ filename: string }>;
   postFile(sessionId: string, body: PostFileBody): Promise<{ filename: string }>;
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoListResponse>;
   search(query: string, sessionId?: string): Promise<SearchHit[]>;
@@ -235,6 +245,12 @@ export function createClient(cfg: ClientConfig): Client {
     async postHtml(sessionId, body) {
       return (await post(
         `/sessions/${sessionId}/events/html`,
+        body,
+      )) as { filename: string };
+    },
+    async postFlow(sessionId, body) {
+      return (await post(
+        `/sessions/${sessionId}/events/flow`,
         body,
       )) as { filename: string };
     },
