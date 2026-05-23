@@ -957,6 +957,96 @@ kbd {
   filter: brightness(0.95);
 }
 
+/* ============ Terminal overlay (Phase 12) ============
+   Modal that hosts xterm.js attached to /ws/pane for a tmux session.
+   Sized large (wider than the standard modal) since terminals need room. */
+.modal.terminal-overlay {
+  width: min(960px, 92vw);
+}
+.terminal-overlay-head {
+  position: relative;
+}
+.terminal-overlay-body {
+  background: #1a1714;
+  padding: 12px;
+  min-height: 480px;
+  height: 60vh;
+  width: 100%;
+  overflow: hidden;
+}
+.terminal-overlay-body .xterm {
+  height: 100%;
+  width: 100%;
+}
+
+/* ============ Hook install + Reconnect modals (Phase 12) ============
+   Both surfaces render markdown instructions + a copy-snippet block.
+   They share the broader .modal frame; these rules tighten the prose
+   width and stack copy buttons next to each snippet. */
+.modal.hook-install-modal,
+.modal.reconnect-modal {
+  width: min(720px, 92vw);
+}
+.modal.hook-install-modal .modal-body,
+.modal.reconnect-modal .modal-body {
+  padding: 18px 22px;
+}
+.install-instructions {
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.install-instructions pre {
+  background: #1a1714;
+  color: #e6dec9;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 12px 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+.install-instructions code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line-2);
+}
+.install-instructions h1,
+.install-instructions h2,
+.install-instructions h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: var(--ink);
+}
+.install-instructions h1 {
+  font-size: 18px;
+}
+.install-instructions h2 {
+  font-size: 15px;
+}
+.install-instructions h3 {
+  font-size: 13.5px;
+}
+.install-step-snippet {
+  position: relative;
+}
+.install-step-snippet .copy-btn {
+  top: 8px;
+  right: 8px;
+}
+.install-step-config-path {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-4);
+  margin-bottom: 6px;
+}
+
 /* ============ Inline emoji picker ============
    Pops below the emoji button inside the preset editor. Curated groups,
    grid of 10 per row. */
