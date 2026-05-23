@@ -48,4 +48,30 @@ describe("filename", () => {
     });
     expect(name).toBe("20260522T143012Z_ag-c92e.html");
   });
+
+  it("composeFilename produces a tool-use filename", () => {
+    const name = composeFilename({
+      timestamp: "20260523T100000Z",
+      participant_id: "ag-claude",
+      kind: "tool-use",
+      ext: "json",
+    });
+    expect(name).toBe("20260523T100000Z_ag-claude.tool-use.json");
+  });
+
+  it("composeFilename + parseFilename round trip for tool-use", () => {
+    const name = composeFilename({
+      timestamp: "20260523T100000Z",
+      participant_id: "ag-claude",
+      kind: "tool-use",
+      ext: "json",
+    });
+    const parsed = parseFilename(name);
+    expect(parsed).toEqual({
+      timestamp: "20260523T100000Z",
+      participant_id: "ag-claude",
+      kind: "tool-use",
+      ext: "json",
+    });
+  });
 });
