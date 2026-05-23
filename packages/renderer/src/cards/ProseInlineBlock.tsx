@@ -15,10 +15,16 @@ import type {
   EventKind,
   Participant,
   ProsePayload,
+  ToolUseEventRecord,
 } from "@f-mark/shared";
 import { type MarkdownMode } from "../render/MarkdownRenderer.js";
 import { LineCommentRail } from "./LineCommentRail.js";
 import { FlowCard } from "./FlowCard.js";
+import { EmbedCard } from "./EmbedCard.js";
+import { FileCard } from "./FileCard.js";
+import { ChoicesCard } from "./ChoicesCard.js";
+import { TodoCard } from "./TodoCard.js";
+import { ToolUseCard } from "./ToolUseCard.js";
 
 export interface InlineProps {
   event: AnyEventRecord;
@@ -65,20 +71,30 @@ const InlineProseBlock: FC<InlineProps> = ({
 const InlineFlowBlock: FC<InlineProps> = ({ event, participants }) => (
   <FlowCard event={event} participants={participants} variant="embedded" />
 );
-const InlineFileBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
+const InlineFileBlock: FC<InlineProps> = ({ event, participants, comments }) => (
+  <FileCard event={event} participants={participants} comments={comments} />
 );
-const InlineHtmlBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
+const InlineHtmlBlock: FC<InlineProps> = ({ event, participants }) => (
+  <EmbedCard
+    event={event}
+    participants={participants}
+    allEvents={[event]}
+    variant="embedded"
+  />
 );
-const InlineChoicesBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
+const InlineChoicesBlock: FC<InlineProps> = ({ event, participants }) => (
+  <ChoicesCard
+    event={event}
+    participants={participants}
+    allEvents={[event]}
+    variant="embedded"
+  />
 );
-const InlineTodoBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
+const InlineTodoBlock: FC<InlineProps> = ({ event, participants }) => (
+  <TodoCard event={event} participants={participants} variant="embedded" />
 );
 const InlineToolUseBlock: FC<InlineProps> = ({ event }) => (
-  <StubBlock kind={event.kind} />
+  <ToolUseCard event={event as ToolUseEventRecord} />
 );
 
 const INLINE_RENDERERS: Partial<Record<EventKind, FC<InlineProps>>> = {

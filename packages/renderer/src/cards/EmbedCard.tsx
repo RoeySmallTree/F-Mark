@@ -17,9 +17,17 @@ interface Props {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
   allEvents: AnyEventRecord[];
+  /** "embedded" drops the head + menu chrome so the html embed slots
+   *  inside an anchor ProseCard via ProseInlineBlock. */
+  variant?: "standalone" | "embedded";
 }
 
-export function EmbedCard({ event, participants, allEvents }: Props): JSX.Element {
+export function EmbedCard({
+  event,
+  participants,
+  allEvents,
+  variant = "standalone",
+}: Props): JSX.Element {
   const payload = event.payload as HtmlManifest;
   const who = whoOf(event.participant_id, participants);
   const sessionId = useStore((s) => s.currentSessionId);
@@ -50,38 +58,44 @@ export function EmbedCard({ event, participants, allEvents }: Props): JSX.Elemen
         }`
       : "";
 
+  const isEmbedded = variant === "embedded";
   return (
-    <div className="embed-card" data-event-kind="html">
-      <div className="embed-head">
-        <span
-          className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
-          aria-hidden
-        >
-          {who.initial}
-        </span>
-        <span className="who">{who.name}</span>
-        <span className="when">{formatWhen(event.timestamp)}</span>
-        <span className="badge">
-          <ImageIcon size={10} aria-hidden /> EMBED
-        </span>
-        <button
-          type="button"
-          className="menu"
-          aria-label="Copy embed link"
-          title="Copy embed link"
-          onClick={() => {
-            if (src.length > 0) {
-              const absolute =
-                typeof window !== "undefined"
-                  ? new URL(src, window.location.origin).toString()
-                  : src;
-              void copyToClipboard(absolute);
-            }
-          }}
-        >
-          <MoreHorizontal size={14} aria-hidden />
-        </button>
-      </div>
+    <div
+      className={isEmbedded ? "embed-card embed-card-embedded" : "embed-card"}
+      data-event-kind="html"
+    >
+      {!isEmbedded && (
+        <div className="embed-head">
+          <span
+            className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
+            aria-hidden
+          >
+            {who.initial}
+          </span>
+          <span className="who">{who.name}</span>
+          <span className="when">{formatWhen(event.timestamp)}</span>
+          <span className="badge">
+            <ImageIcon size={10} aria-hidden /> EMBED
+          </span>
+          <button
+            type="button"
+            className="menu"
+            aria-label="Copy embed link"
+            title="Copy embed link"
+            onClick={() => {
+              if (src.length > 0) {
+                const absolute =
+                  typeof window !== "undefined"
+                    ? new URL(src, window.location.origin).toString()
+                    : src;
+                void copyToClipboard(absolute);
+              }
+            }}
+          >
+            <MoreHorizontal size={14} aria-hidden />
+          </button>
+        </div>
+      )}
       <div className="embed-title">
         {typeof payload.title === "string" && payload.title.length > 0
           ? payload.title

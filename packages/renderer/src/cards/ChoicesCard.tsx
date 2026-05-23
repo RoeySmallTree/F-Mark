@@ -19,12 +19,15 @@ interface Props {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
   allEvents: AnyEventRecord[];
+  /** "embedded" drops the head + menu chrome. */
+  variant?: "standalone" | "embedded";
 }
 
 export function ChoicesCard({
   event,
   participants,
   allEvents,
+  variant = "standalone",
 }: Props): JSX.Element {
   const payload = event.payload as ChoicesPayload;
   const who = whoOf(event.participant_id, participants);
@@ -59,30 +62,38 @@ export function ChoicesCard({
     });
   }
 
+  const isEmbedded = variant === "embedded";
   return (
-    <div className="choices-card" data-event-kind="choices">
-      <div className="choices-head">
-        <span
-          className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
-          aria-hidden
-        >
-          {who.initial}
-        </span>
-        <span className="who">{who.name}</span>
-        <span className="when">{formatWhen(event.timestamp)}</span>
-        <span className="badge">
-          <HelpCircle size={10} aria-hidden /> CHOOSE
-        </span>
-        <button
-          type="button"
-          className="menu"
-          aria-label="Copy question"
-          title="Copy question"
-          onClick={() => void copyToClipboard(payload.question)}
-        >
-          <MoreHorizontal size={14} aria-hidden />
-        </button>
-      </div>
+    <div
+      className={
+        isEmbedded ? "choices-card choices-card-embedded" : "choices-card"
+      }
+      data-event-kind="choices"
+    >
+      {!isEmbedded && (
+        <div className="choices-head">
+          <span
+            className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
+            aria-hidden
+          >
+            {who.initial}
+          </span>
+          <span className="who">{who.name}</span>
+          <span className="when">{formatWhen(event.timestamp)}</span>
+          <span className="badge">
+            <HelpCircle size={10} aria-hidden /> CHOOSE
+          </span>
+          <button
+            type="button"
+            className="menu"
+            aria-label="Copy question"
+            title="Copy question"
+            onClick={() => void copyToClipboard(payload.question)}
+          >
+            <MoreHorizontal size={14} aria-hidden />
+          </button>
+        </div>
+      )}
       <div className="choices-body">
         <h3 className="choices-q">{payload.question}</h3>
         {payload.options.map((opt) => {

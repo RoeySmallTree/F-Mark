@@ -57,17 +57,65 @@ describe("ProseInlineBlock registry dispatcher", () => {
     expect(h3?.textContent).toBe("Data flow");
   });
 
-  test("renders a stub for each registered non-prose kind still on a stub", () => {
-    /* Phases 9+ replace each remaining stub with its real embedded
-       variant. Until then, file/html/choices/todo/tool-use stay on stubs. */
-    const kinds = ["file", "html", "choices", "todo", "tool-use"] as const;
-    for (const kind of kinds) {
+  test("registered non-prose kinds render their real embedded card (not stubs)", () => {
+    /* Phases 9+10 replaced the remaining stubs with the real cards.
+       Each kind renders its corresponding card class — no `.prose-embed-stub`. */
+    const cases: { kind: AnyEventRecord["kind"]; cardClass: string; payload: object }[] = [
+      {
+        kind: "html",
+        cardClass: ".embed-card-embedded",
+        payload: { id: "h1", title: "demo", append_to: "anchor.md" },
+      },
+      {
+        kind: "choices",
+        cardClass: ".choices-card-embedded",
+        payload: {
+          id: "c1",
+          question: "Pick?",
+          multi: false,
+          options: [{ id: "a", label: "A" }],
+          append_to: "anchor.md",
+        },
+      },
+      {
+        kind: "todo",
+        cardClass: ".todo-card",
+        payload: {
+          id: "t1",
+          title: "do",
+          status: "open",
+          append_to: "anchor.md",
+        },
+      },
+      {
+        kind: "file",
+        cardClass: ".file-card",
+        payload: {
+          id: "f1",
+          path: "note.txt",
+          mime_type: "text/plain",
+          append_to: "anchor.md",
+        },
+      },
+      {
+        kind: "tool-use",
+        cardClass: ".tool-use-card",
+        payload: {
+          tool_name: "Bash",
+          tool_use_id: "tu1",
+          input: {},
+          success: true,
+          append_to: "anchor.md",
+        },
+      },
+    ];
+    for (const { kind, cardClass, payload } of cases) {
       const ev: AnyEventRecord = {
         filename: `20260522T120100Z_ag-c92e.${kind}.json`,
         timestamp: "20260522T120100Z",
         participant_id: "ag-c92e",
         kind,
-        payload: { append_to: "anchor.md" },
+        payload: payload as never,
       };
       const { container } = render(
         <ProseInlineBlock
@@ -77,11 +125,11 @@ describe("ProseInlineBlock registry dispatcher", () => {
           mode="rendered"
         />,
       );
-      const stub = container.querySelector(".prose-embed-stub");
-      expect(stub, `stub for ${kind}`).not.toBeNull();
-      expect(stub?.textContent, `stub label for ${kind}`).toContain(
-        `${kind} block`,
-      );
+      expect(container.querySelector(cardClass), `${kind} card`).not.toBeNull();
+      expect(
+        container.querySelector(".prose-embed-stub"),
+        `${kind} not a stub`,
+      ).toBeNull();
       cleanup();
     }
   });
