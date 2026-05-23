@@ -1058,3 +1058,65 @@
   max-height: 240px;
   overflow: auto;
 }
+
+/* === Arbitrary-group card ===
+   Bundles a contiguous mid-turn run of prose + tool-use events from a
+   single participant. Open by default while the turn is still streaming;
+   collapsed once the kernel emits a concluding prose or turn-end. */
+.arbitrary-group {
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--canvas);
+  overflow: hidden;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+.arbitrary-group--streaming {
+  border-color: color-mix(in oklch, var(--line-2) 60%, var(--agent) 40%);
+}
+.arbitrary-group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink);
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.arbitrary-group-head:hover {
+  background: var(--panel);
+}
+.arbitrary-group-head:focus-visible {
+  outline: 2px solid var(--user);
+  outline-offset: -2px;
+}
+.arbitrary-group-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+.arbitrary-group-title {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.arbitrary-group-live {
+  color: var(--agent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10.5px;
+}
+.arbitrary-group-body {
+  border-top: 1px dashed var(--line-3);
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: color-mix(in oklch, var(--canvas) 92%, var(--panel) 8%);
+}
