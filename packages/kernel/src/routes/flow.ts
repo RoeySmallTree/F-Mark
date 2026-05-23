@@ -87,11 +87,13 @@ export function registerFlowRoutes(
         body: {
           type: "object",
           required: ["participant_id", "id", "nodes", "edges"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string", minLength: 1 },
             id: { type: "string", minLength: 1 },
             title: { type: "string" },
             supersedes: { type: "string" },
+            append_to: { type: "string", minLength: 1 },
             nodes: {
               type: "array",
               items: {

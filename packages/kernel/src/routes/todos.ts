@@ -20,10 +20,29 @@ interface TodoBody {
   assigned_to?: string;
   parent_id?: string;
   supersedes?: string;
+  append_to?: string;
 }
 
 type VisibleTodoStatus = TodoTreeNode["status"];
-type TodoBuckets = Record<VisibleTodoStatus, TodoPayload[]>;
+type TodoOwnership = "owned" | "NOT owned";
+
+interface TodoOwnershipAnnotation {
+  owned_by_viewer?: boolean;
+  ownership?: TodoOwnership;
+}
+
+type AnnotatedTodoPayload = TodoPayload & TodoOwnershipAnnotation;
+type AnnotatedTodoTreeNode = Omit<TodoTreeNode, "children"> &
+  TodoOwnershipAnnotation & {
+    children: AnnotatedTodoTreeNode[];
+  };
+type TodoBuckets = Record<VisibleTodoStatus, AnnotatedTodoPayload[]>;
+
+const TODO_STATUS_RANK: Record<VisibleTodoStatus, number> = {
+  wip: 0,
+  open: 1,
+  done: 2,
+};
 
 interface TodoSnapshotEntry {
   event: TodoEventRecord;
@@ -32,7 +51,8 @@ interface TodoSnapshotEntry {
 }
 
 interface TodoListResponse extends TodoBuckets {
-  tree: TodoTreeNode[];
+  tree: AnnotatedTodoTreeNode[];
+  viewer?: string;
 }
 
 function isVisibleTodoStatus(
@@ -94,8 +114,24 @@ function buildTodoSnapshot(todoEvents: TodoEventRecord[]): TodoSnapshotEntry[] {
   return entries;
 }
 
-function makeTreeNode(payload: TodoPayload): TodoTreeNode {
-  const node: TodoTreeNode = {
+function annotateOwnership<T extends TodoPayload | TodoTreeNode>(
+  todo: T,
+  viewer?: string,
+): T & TodoOwnershipAnnotation {
+  if (viewer === undefined || viewer.length === 0) return todo;
+  const owned = todo.assigned_to === viewer;
+  return {
+    ...todo,
+    owned_by_viewer: owned,
+    ownership: owned ? "owned" : "NOT owned",
+  };
+}
+
+function makeTreeNode(
+  payload: TodoPayload,
+  viewer?: string,
+): AnnotatedTodoTreeNode {
+  const node: AnnotatedTodoTreeNode = {
     id: payload.id,
     title: payload.title,
     status: payload.status as VisibleTodoStatus,
@@ -104,7 +140,7 @@ function makeTreeNode(payload: TodoPayload): TodoTreeNode {
   if (payload.body !== undefined) node.body = payload.body;
   if (payload.assigned_to !== undefined) node.assigned_to = payload.assigned_to;
   if (payload.parent_id !== undefined) node.parent_id = payload.parent_id;
-  return node;
+  return annotateOwnership(node, viewer);
 }
 
 function wouldCreateCycle(
@@ -126,23 +162,24 @@ function wouldCreateCycle(
 function buildTodoTree(
   entries: TodoSnapshotEntry[],
   assignedTo?: string,
-): TodoTreeNode[] {
+  viewer?: string,
+): AnnotatedTodoTreeNode[] {
   const visibleEntries = entries.filter(
     (entry) =>
       isVisibleTodoStatus(entry.payload.status) &&
       matchesAssignedTo(entry.payload, assignedTo),
   );
-  const nodeById = new Map<string, TodoTreeNode>();
+  const nodeById = new Map<string, AnnotatedTodoTreeNode>();
   const payloadById = new Map<string, TodoPayload>();
   const createdAtById = new Map<string, string>();
 
   for (const entry of visibleEntries) {
-    nodeById.set(entry.payload.id, makeTreeNode(entry.payload));
+    nodeById.set(entry.payload.id, makeTreeNode(entry.payload, viewer));
     payloadById.set(entry.payload.id, entry.payload);
     createdAtById.set(entry.payload.id, entry.createdAt);
   }
 
-  const roots: TodoTreeNode[] = [];
+  const roots: AnnotatedTodoTreeNode[] = [];
   for (const entry of visibleEntries) {
     const node = nodeById.get(entry.payload.id);
     if (node === undefined) continue;
@@ -161,13 +198,22 @@ function buildTodoTree(
     }
   }
 
-  const compareByCreation = (a: TodoTreeNode, b: TodoTreeNode): number => {
+  const compareByGroup = (
+    a: AnnotatedTodoTreeNode,
+    b: AnnotatedTodoTreeNode,
+  ): number => {
+    const status = TODO_STATUS_RANK[a.status] - TODO_STATUS_RANK[b.status];
+    if (status !== 0) return status;
+    const assignee = (a.assigned_to ?? "\uffff").localeCompare(
+      b.assigned_to ?? "\uffff",
+    );
+    if (assignee !== 0) return assignee;
     const aCreatedAt = createdAtById.get(a.id) ?? "";
     const bCreatedAt = createdAtById.get(b.id) ?? "";
     return aCreatedAt.localeCompare(bCreatedAt) || a.id.localeCompare(b.id);
   };
-  const sortNodes = (nodes: TodoTreeNode[]): void => {
-    nodes.sort(compareByCreation);
+  const sortNodes = (nodes: AnnotatedTodoTreeNode[]): void => {
+    nodes.sort(compareByGroup);
     for (const node of nodes) sortNodes(node.children);
   };
   sortNodes(roots);
@@ -177,6 +223,7 @@ function buildTodoTree(
 function buildTodoListResponse(
   entries: TodoSnapshotEntry[],
   assignedTo?: string,
+  viewer?: string,
 ): TodoListResponse {
   const buckets = createTodoBuckets();
 
@@ -189,13 +236,15 @@ function buildTodoListResponse(
     const payload = entry.payload;
     if (!isVisibleTodoStatus(payload.status)) continue;
     if (!matchesAssignedTo(payload, assignedTo)) continue;
-    buckets[payload.status].push(payload);
+    buckets[payload.status].push(annotateOwnership(payload, viewer));
   }
 
-  return {
+  const response: TodoListResponse = {
     ...buckets,
-    tree: buildTodoTree(entries, assignedTo),
+    tree: buildTodoTree(entries, assignedTo, viewer),
   };
+  if (viewer !== undefined && viewer.length > 0) response.viewer = viewer;
+  return response;
 }
 
 function findDescendants(
@@ -246,6 +295,7 @@ function buildTodoPayload(body: Omit<TodoBody, "participant_id">): TodoPayload {
   if (body.assigned_to !== undefined) payload.assigned_to = body.assigned_to;
   if (body.parent_id !== undefined) payload.parent_id = body.parent_id;
   if (body.supersedes !== undefined) payload.supersedes = body.supersedes;
+  if (body.append_to !== undefined) payload.append_to = body.append_to;
   return payload;
 }
 
@@ -335,6 +385,7 @@ export function registerTodoRoutes(
         body: {
           type: "object",
           required: ["participant_id", "id", "title", "status"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string", minLength: 1 },
             id: { type: "string", minLength: 1 },
@@ -347,6 +398,7 @@ export function registerTodoRoutes(
             assigned_to: { type: "string" },
             parent_id: { type: "string" },
             supersedes: { type: "string" },
+            append_to: { type: "string", minLength: 1 },
           },
         },
       },
@@ -408,7 +460,7 @@ export function registerTodoRoutes(
 
   app.get<{
     Params: { id: string };
-    Querystring: { assigned_to?: string };
+    Querystring: { assigned_to?: string; viewer?: string };
   }>(
     "/sessions/:id/todos",
     async (req, reply) => {
@@ -419,7 +471,12 @@ export function registerTodoRoutes(
       );
 
       const assignedTo = req.query.assigned_to;
-      return buildTodoListResponse(buildTodoSnapshot(todoEvents), assignedTo);
+      const viewer = req.query.viewer;
+      return buildTodoListResponse(
+        buildTodoSnapshot(todoEvents),
+        assignedTo,
+        viewer,
+      );
     },
   );
 }

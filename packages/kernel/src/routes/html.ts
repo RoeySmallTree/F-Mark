@@ -20,6 +20,7 @@ interface HtmlBody {
   title?: string;
   dependencies?: string[];
   supersedes?: string;
+  append_to?: string;
 }
 
 async function ensureSession(
@@ -114,6 +115,7 @@ export function registerHtmlRoutes(
         body: {
           type: "object",
           required: ["participant_id", "html"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string", minLength: 1 },
             html: { type: "string" },
@@ -125,6 +127,7 @@ export function registerHtmlRoutes(
               items: { type: "string" },
             },
             supersedes: { type: "string" },
+            append_to: { type: "string", minLength: 1 },
           },
         },
       },
@@ -140,6 +143,7 @@ export function registerHtmlRoutes(
           title,
           dependencies,
           supersedes,
+          append_to,
         } = req.body;
 
         const participants = await listParticipants(p);
@@ -178,6 +182,9 @@ export function registerHtmlRoutes(
         }
         if (Array.isArray(dependencies)) {
           manifest.dependencies = dependencies;
+        }
+        if (typeof append_to === "string" && append_to.length > 0) {
+          manifest.append_to = append_to;
         }
 
         const manifestPath = join(folderPath, "manifest.json");

@@ -15,7 +15,7 @@ export function parseToolUse(raw: string): ToolUsePayload {
   if (typeof data.success !== "boolean") {
     throw new Error("tool-use payload missing success");
   }
-  return {
+  const out: ToolUsePayload = {
     tool_name: data.tool_name,
     tool_use_id: data.tool_use_id,
     input: data.input ?? {},
@@ -23,4 +23,8 @@ export function parseToolUse(raw: string): ToolUsePayload {
     success: data.success,
     duration_ms: typeof data.duration_ms === "number" ? data.duration_ms : undefined,
   };
+  if (typeof data.append_to === "string" && data.append_to.length > 0) {
+    out.append_to = data.append_to;
+  }
+  return out;
 }

@@ -201,6 +201,7 @@ export function registerEventRoutes(
       result?: unknown;
       success: boolean;
       duration_ms?: number;
+      append_to?: string;
     };
   }>(
     "/sessions/:id/events/tool-use",
@@ -220,6 +221,7 @@ export function registerEventRoutes(
             "input",
             "success",
           ],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string", minLength: 1 },
             tool_name: { type: "string", minLength: 1 },
@@ -228,6 +230,7 @@ export function registerEventRoutes(
             result: {},
             success: { type: "boolean" },
             duration_ms: { type: "number" },
+            append_to: { type: "string", minLength: 1 },
           },
         },
       },
@@ -246,6 +249,7 @@ export function registerEventRoutes(
             result: req.body.result,
             success: req.body.success,
             duration_ms: req.body.duration_ms,
+            append_to: req.body.append_to,
           }),
         });
         publish(req.params.id, filename, "tool-use", req.body.participant_id);
@@ -271,6 +275,7 @@ export function registerEventRoutes(
       options: { id: string; label: string }[];
       multi: boolean;
       supersedes?: string;
+      append_to?: string;
     };
   }>(
     "/sessions/:id/events/choices",
@@ -279,6 +284,7 @@ export function registerEventRoutes(
         body: {
           type: "object",
           required: ["participant_id", "id", "question", "options", "multi"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string" },
             id: { type: "string" },
@@ -288,6 +294,7 @@ export function registerEventRoutes(
               items: {
                 type: "object",
                 required: ["id", "label"],
+                additionalProperties: false,
                 properties: {
                   id: { type: "string" },
                   label: { type: "string" },
@@ -296,6 +303,7 @@ export function registerEventRoutes(
             },
             multi: { type: "boolean" },
             supersedes: { type: "string" },
+            append_to: { type: "string", minLength: 1 },
           },
         },
       },
@@ -338,6 +346,7 @@ export function registerEventRoutes(
         body: {
           type: "object",
           required: ["participant_id", "choices_id", "selected"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string" },
             choices_id: { type: "string" },
@@ -383,6 +392,7 @@ export function registerEventRoutes(
         body: {
           type: "object",
           required: ["participant_id"],
+          additionalProperties: false,
           properties: { participant_id: { type: "string" } },
         },
       },

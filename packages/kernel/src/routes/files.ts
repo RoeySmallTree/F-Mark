@@ -11,6 +11,7 @@ interface FileBody {
   path: string;
   mime_type: string;
   description?: string;
+  append_to?: string;
 }
 
 async function ensureSession(
@@ -59,12 +60,14 @@ export function registerFileRoutes(
         body: {
           type: "object",
           required: ["participant_id", "id", "path", "mime_type"],
+          additionalProperties: false,
           properties: {
             participant_id: { type: "string", minLength: 1 },
             id: { type: "string", minLength: 1 },
             path: { type: "string", minLength: 1 },
             mime_type: { type: "string", minLength: 1 },
             description: { type: "string" },
+            append_to: { type: "string", minLength: 1 },
           },
         },
       },
@@ -79,6 +82,7 @@ export function registerFileRoutes(
           mime_type: rest.mime_type,
         };
         if (rest.description !== undefined) payload.description = rest.description;
+        if (rest.append_to !== undefined) payload.append_to = rest.append_to;
         const filename = await writeEventFile(p, req.params.id, {
           participant_id,
           kind: "file",
