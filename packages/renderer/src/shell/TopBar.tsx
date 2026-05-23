@@ -147,8 +147,8 @@ export function TopBar(): JSX.Element {
   );
 
   /* After a successful spawn we may need to open the hook-install modal.
-     The check is hooks_status !== "installed" per the contract: kernel
-     marks the agent as having installed hooks when it sees them. */
+     `not_required` is used by Gemini's manual-stream mode: the modal is
+     informational, but the chip should not look broken. */
   const onSpawnComplete = useCallback(
     (resp: SpawnResponse) => {
       /* Add the spawned agent to local chip state immediately so the user
@@ -180,14 +180,20 @@ export function TopBar(): JSX.Element {
       const presenceState =
         resp.hooks_status === "installed"
           ? "stale"
-          : resp.hooks_status === "missing"
-            ? "hook-not-installed"
-            : "launching";
+          : resp.hooks_status === "not_required"
+            ? "stale"
+            : resp.hooks_status === "missing"
+              ? "hook-not-installed"
+              : "launching";
       setPresence(resp.participant_id, {
         state: presenceState,
         last_hook_at: null,
       });
-      if (resp.hooks_status !== "installed" && modalCtx !== null) {
+      if (
+        (resp.hooks_status === "missing" ||
+          resp.hooks_status === "not_required") &&
+        modalCtx !== null
+      ) {
         modalCtx.openHookInstall(resp.runtime_id, resp.participant_id);
       }
     },

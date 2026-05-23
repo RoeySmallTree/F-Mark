@@ -15,6 +15,7 @@ export interface Participant {
   kind: "user" | "agent";
   name: string;
   color: string;
+  runtime_id?: string;
 }
 
 const DEFAULT_VERSION = "0.1.0";

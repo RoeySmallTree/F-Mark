@@ -16,6 +16,7 @@ const ID_PATTERN = /^(us|ag|sys|grp)-[a-z0-9-]{2,12}$/;
 export interface RegisterAgentInput {
   name: string;
   suggested_id?: string;
+  runtime_id?: string;
 }
 
 export interface RegisteredAgent {
@@ -77,9 +78,35 @@ export async function registerAgent(
     id = freshAgentId(cfg.participants);
   }
   const color = nextColor(cfg.participants);
-  cfg.participants[id] = { kind: "agent", name: input.name, color };
+  const participant: Participant = {
+    kind: "agent",
+    name: input.name,
+    color,
+  };
+  if (input.runtime_id !== undefined) {
+    participant.runtime_id = input.runtime_id;
+  }
+  cfg.participants[id] = participant;
   await writeConfig(p, cfg);
   return { id, name: input.name, color };
+}
+
+/* Idempotent: backfills runtime_id on an existing participant. Used by the
+   spawn flow so re-spawning under an existing participant still records the
+   runtime, and so legacy participants registered before runtime_id existed
+   pick it up the next time they spawn. */
+export async function setParticipantRuntime(
+  p: Paths,
+  id: string,
+  runtimeId: string,
+): Promise<void> {
+  const cfg = await readConfig(p);
+  const current = cfg.participants[id];
+  if (current === undefined) return;
+  if (current.runtime_id === runtimeId) return;
+  current.runtime_id = runtimeId;
+  cfg.participants[id] = current;
+  await writeConfig(p, cfg);
 }
 
 export function isValidParticipantId(id: string): boolean {

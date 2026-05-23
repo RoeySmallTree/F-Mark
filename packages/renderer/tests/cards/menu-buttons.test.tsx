@@ -34,7 +34,7 @@ describe("Card .menu buttons are wired (Phase 15)", () => {
     cleanup();
   });
 
-  test("ProseCard .menu copies the prose content to clipboard", async () => {
+  test("ProseCard copy button copies the prose content to clipboard", async () => {
     const user = userEvent.setup();
     const writeText = getClipboardSpy();
     const ev = makeProse("20260522T120000Z_us-a7f3.prose.md", "us-a7f3", {
@@ -44,10 +44,10 @@ describe("Card .menu buttons are wired (Phase 15)", () => {
     render(
       <ProseCard event={ev} participants={PARTICIPANTS} comments={[]} />,
     );
-    const menuBtn = screen.getByRole("button", {
-      name: /quick-copy contribution/i,
+    const copyBtn = screen.getByRole("button", {
+      name: /copy as markdown/i,
     });
-    await user.click(menuBtn);
+    await user.click(copyBtn);
     expect(writeText).toHaveBeenCalledWith("# Hello world");
   });
 

@@ -39,7 +39,7 @@ describe("EventCard dispatcher", () => {
     expect(container.querySelector(".prose-card")).toBeNull();
   });
 
-  test("prose with name → ProseCard (.prose-card with .prose-title)", () => {
+  test("prose with name → ProseCard (.prose-card with .prose-title-name)", () => {
     const ev = makeProse(
       "20260522T100100Z_us-a7f3.prose.md",
       "us-a7f3",
@@ -54,7 +54,9 @@ describe("EventCard dispatcher", () => {
       />,
     );
     expect(container.querySelector(".prose-card")).not.toBeNull();
-    expect(container.querySelector(".prose-title")?.textContent).toBe("Spec");
+    expect(container.querySelector(".prose-title-name")?.textContent).toBe(
+      "Spec",
+    );
   });
 
   test("prose with target → null (consumed as pin on the ProseCard)", () => {

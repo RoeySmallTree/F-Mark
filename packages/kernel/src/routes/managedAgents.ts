@@ -3,7 +3,12 @@ import type { FastifyInstance } from "fastify";
 import type { Paths } from "../paths.js";
 import type { TmuxManager } from "../tmux/manager.js";
 import type { PresenceTracker } from "../presence/tracker.js";
-import { registerAgent, isValidParticipantId, listParticipants } from "../participants.js";
+import {
+  registerAgent,
+  isValidParticipantId,
+  listParticipants,
+  setParticipantRuntime,
+} from "../participants.js";
 import { loadRuntimes } from "../runtimes/registry.js";
 import {
   writeTmuxSession,
@@ -186,6 +191,7 @@ export function registerManagedAgentsRoutes(
       await registerAgent(paths, {
         name: body.name ?? runtime.displayName,
         suggested_id: participantId,
+        runtime_id,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -193,7 +199,9 @@ export function registerManagedAgentsRoutes(
         reply.code(400);
         return { error: msg };
       }
-      // Reuse existing participant
+      // Reuse existing participant — backfill runtime_id in case it was
+      // registered before the field existed or under a different runtime.
+      await setParticipantRuntime(paths, participantId, runtime_id);
     }
     const { sessionName } = await tmux.spawnAgent({
       participantId,
@@ -233,7 +241,8 @@ export function registerManagedAgentsRoutes(
     // Hook install detection + presence seeding. Best-effort: if the runtime
     // is unknown to the detector (or the detector throws on a transient IO
     // error), fall back to "unknown" rather than failing the whole spawn.
-    let hooksStatus: "installed" | "missing" | "unknown" = "unknown";
+    let hooksStatus: "installed" | "missing" | "not_required" | "unknown" =
+      "unknown";
     try {
       // Find the first registered user participant so the detector matches the
       // exact `auto-stream <user-id> --kind user` UserPromptSubmit hook the
@@ -257,8 +266,17 @@ export function registerManagedAgentsRoutes(
         userParticipantId,
         projectRoot: paths.root(),
       });
-      tracker.setManagedHookStatus(participantId, detect.installed);
-      hooksStatus = detect.installed ? "installed" : "missing";
+      const hooksRequired = detect.expectedEntries.length > 0;
+      if (detect.installed) {
+        tracker.setManagedHookStatus(participantId, true);
+        hooksStatus = "installed";
+      } else if (hooksRequired) {
+        tracker.setManagedHookStatus(participantId, false);
+        hooksStatus = "missing";
+      } else {
+        tracker.markReconciledStale(participantId, { paneAlive: () => true });
+        hooksStatus = "not_required";
+      }
 
       // When hooks are already installed, deliver a brief kickoff prompt to
       // the freshly-spawned runtime via send-keys. The spec calls for the full

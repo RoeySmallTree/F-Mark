@@ -6,81 +6,274 @@
    No hard-coded colours.
    ========================================================================== */
 
-/* -- Markdown rendered prose ----------------------------------------------- */
+/* -- Markdown rendered prose -----------------------------------------------
+   Every selector is keyed to theme tokens. When .fm-prose sits inside a
+   .prose-card, the card sets --prose-accent (--user or --agent) so the
+   accent picks up the speaker's color. Elsewhere it falls back to --user
+   (the universal "link" color in this app).
+   ------------------------------------------------------------------------- */
 .fm-prose {
   font-family: var(--serif);
   font-size: 15.5px;
   line-height: 1.6;
   color: var(--ink);
 }
-.fm-prose h1 {
+
+/* Headings — serif, decreasing scale, accent underline on h1 to anchor
+   the section without competing with the prose name in the card head. */
+.fm-prose h1,
+.fm-prose h2,
+.fm-prose h3,
+.fm-prose h4,
+.fm-prose h5,
+.fm-prose h6 {
   font-family: var(--serif);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.fm-prose h1 {
   font-size: 22px;
   font-weight: 700;
   margin: 28px 0 10px;
-  color: var(--ink);
-  letter-spacing: -0.01em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--prose-accent-tint-2, var(--user-tint-2));
 }
 .fm-prose h1:first-child { margin-top: 0; }
 .fm-prose h2 {
-  font-family: var(--serif);
   font-size: 18px;
-  font-weight: 600;
   margin: 24px 0 8px;
-  color: var(--ink);
-  letter-spacing: -0.01em;
 }
 .fm-prose h2:first-child { margin-top: 0; }
 .fm-prose h3 {
-  font-family: var(--serif);
   font-size: 15.5px;
-  font-weight: 600;
   margin: 18px 0 6px;
-  color: var(--ink);
 }
+.fm-prose h4 {
+  font-size: 14px;
+  margin: 16px 0 4px;
+  color: var(--ink-2);
+}
+.fm-prose h5,
+.fm-prose h6 {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin: 14px 0 4px;
+}
+
+/* Paragraphs + inline emphasis */
 .fm-prose p { margin: 0 0 12px; }
+.fm-prose strong { font-weight: 700; color: var(--ink); }
+.fm-prose em { font-style: italic; color: var(--ink-2); }
+.fm-prose del,
+.fm-prose s {
+  color: var(--ink-4);
+  text-decoration: line-through;
+}
+.fm-prose mark {
+  background: var(--prose-accent-tint, var(--user-tint));
+  color: var(--ink);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+/* Lists — accent-tinted markers tie the body to the card's identity. */
 .fm-prose ul,
-.fm-prose ol { margin: 0 0 12px; padding-left: 22px; }
+.fm-prose ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
 .fm-prose li { margin: 2px 0; }
+.fm-prose li::marker {
+  color: var(--prose-accent, var(--user));
+}
+.fm-prose ul ul,
+.fm-prose ol ol,
+.fm-prose ul ol,
+.fm-prose ol ul {
+  margin: 4px 0 4px;
+}
+/* GFM task lists — drop the disc, style the checkbox in accent. */
+.fm-prose li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -22px;
+  padding-left: 0;
+}
+.fm-prose li > input[type="checkbox"] {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin: 0 8px 0 0;
+  vertical-align: -2px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--canvas);
+  cursor: default;
+  position: relative;
+}
+.fm-prose li > input[type="checkbox"]:checked {
+  background: var(--prose-accent, var(--user));
+  border-color: var(--prose-accent, var(--user));
+}
+.fm-prose li > input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border-right: 1.5px solid var(--canvas);
+  border-bottom: 1.5px solid var(--canvas);
+  transform: rotate(45deg);
+}
+
+/* Inline code — panel chip with a thin line, accent-shifted text so it
+   reads as syntax, not plain text. */
 .fm-prose code {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 0.87em;
   background: var(--panel);
+  border: 1px solid var(--line-2);
   padding: 1px 5px;
   border-radius: 3px;
-  color: var(--ink);
+  color: var(--prose-accent, var(--user));
 }
+
+/* Code block — slightly stronger panel with a 2px accent rail on the
+   left edge to signal "code region". */
 .fm-prose pre {
   font-family: var(--mono);
   font-size: 12.5px;
+  line-height: 1.55;
   background: var(--panel);
   border: 1px solid var(--line);
+  border-left: 2px solid var(--prose-accent, var(--user));
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 12px 14px;
   overflow: auto;
-  margin: 0 0 12px;
+  margin: 0 0 14px;
+  color: var(--ink);
 }
 .fm-prose pre code {
   background: none;
+  border: 0;
   padding: 0;
   font-size: inherit;
+  color: inherit;
 }
+
+/* Blockquote — accent tint background + accent border-left. Reads as
+   "lifted aside" while still sitting on the card's color identity. */
 .fm-prose blockquote {
-  margin: 12px 0;
-  padding: 4px 16px;
-  border-left: 3px solid var(--agent-tint-2);
+  margin: 14px 0;
+  padding: 8px 14px;
+  background: var(--prose-accent-tint, var(--user-tint));
+  border-left: 3px solid var(--prose-accent, var(--user));
+  border-radius: 0 var(--radius) var(--radius) 0;
   color: var(--ink-2);
   font-style: italic;
 }
-.fm-prose a {
-  color: var(--user);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+.fm-prose blockquote p:last-child { margin-bottom: 0; }
+.fm-prose blockquote > blockquote {
+  background: transparent;
+  border-left-color: var(--prose-accent-tint-2, var(--user-tint-2));
+  margin: 6px 0;
 }
+
+/* Links — accent color, soft underline that lifts on hover. */
+.fm-prose a {
+  color: var(--prose-accent, var(--user));
+  text-decoration: underline;
+  text-decoration-color: var(--prose-accent-tint-2, var(--user-tint-2));
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.12s;
+}
+.fm-prose a:hover {
+  text-decoration-color: var(--prose-accent, var(--user));
+}
+
+/* Horizontal rule — thin line with a center accent dot. */
 .fm-prose hr {
   border: 0;
-  border-top: 1px solid var(--line);
-  margin: 18px 0;
+  height: 1px;
+  background: var(--line);
+  margin: 22px 0;
+  position: relative;
+}
+.fm-prose hr::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 5px;
+  height: 5px;
+  background: var(--prose-accent, var(--user));
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+/* Tables — panel header, zebra rows, theme-keyed borders. */
+.fm-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  font-family: var(--sans);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.fm-prose thead {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.fm-prose th,
+.fm-prose td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: top;
+}
+.fm-prose th {
+  font-weight: 600;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fm-prose tbody tr:nth-child(even) td {
+  background: var(--panel);
+}
+.fm-prose tbody tr:last-child td { border-bottom: 0; }
+
+/* Keyboard / abbreviation */
+.fm-prose kbd {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 1px 6px;
+  color: var(--ink-2);
+}
+.fm-prose abbr[title] {
+  text-decoration: underline dotted var(--ink-3);
+  cursor: help;
+}
+
+/* Images stay inside the column. */
+.fm-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  display: block;
+  margin: 12px 0;
 }
 
 /* -- Source view ----------------------------------------------------------- */

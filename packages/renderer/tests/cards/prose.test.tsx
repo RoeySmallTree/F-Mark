@@ -29,7 +29,10 @@ describe("ProseCard", () => {
     const { container } = render(
       <ProseCard event={ev} participants={PARTICIPANTS} comments={[]} />,
     );
-    expect(screen.getByRole("heading", { level: 1, name: "Launch Plan" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Launch Plan" }),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".prose-title-name")).not.toBeNull();
     // The markdown content should be rendered (not the source view).
     expect(container.querySelector("pre.fm-source")).toBeNull();
     expect(container.querySelector(".fm-prose")).not.toBeNull();
@@ -37,7 +40,7 @@ describe("ProseCard", () => {
     expect(container.querySelector(".prose-card.agent")).not.toBeNull();
   });
 
-  test("clicking View source switches to source mode and toggles back", async () => {
+  test("clicking the accordion toggle switches between rendered and accordion modes", async () => {
     const user = userEvent.setup();
     const ev = makeProse(
       "20260522T120100Z_ag-c92e.prose.md",
@@ -47,23 +50,25 @@ describe("ProseCard", () => {
     const { container } = render(
       <ProseCard event={ev} participants={PARTICIPANTS} comments={[]} />,
     );
-    expect(container.querySelector("pre.fm-source")).toBeNull();
-    const btn = screen.getByRole("button", { name: /view source/i });
-    await user.click(btn);
-    const pre = container.querySelector("pre.fm-source");
-    expect(pre).not.toBeNull();
-    expect(pre!.textContent).toContain("# Heading");
-    // Click again → back to rendered.
-    await user.click(btn);
-    expect(container.querySelector("pre.fm-source")).toBeNull();
+    // Default = rendered mode.
+    expect(container.querySelector(".fm-prose")).not.toBeNull();
+    expect(container.querySelector(".fm-accordion")).toBeNull();
+    const accordionBtn = screen.getByRole("button", { name: /accordion view/i });
+    await user.click(accordionBtn);
+    expect(container.querySelector(".fm-accordion")).not.toBeNull();
+    // Switch back via the rendered toggle.
+    const renderedBtn = screen.getByRole("button", { name: /rendered view/i });
+    await user.click(renderedBtn);
+    expect(container.querySelector(".fm-accordion")).toBeNull();
+    expect(container.querySelector(".fm-prose")).not.toBeNull();
   });
 
-  test("comment with target on this event renders a pin and click dispatches commentTarget", async () => {
+  test("comment with target on this event renders a line marker and click dispatches commentTarget", async () => {
     const user = userEvent.setup();
     const ev = makeProse(
       "20260522T120200Z_ag-c92e.prose.md",
       "ag-c92e",
-      { name: "Plan", content: "Body here" },
+      { name: "Plan", content: "Line one\nLine two\nLine three" },
     );
     const comment = makeProse(
       "20260522T120300Z_us-a7f3.prose.md",
@@ -80,7 +85,7 @@ describe("ProseCard", () => {
         comments={[comment]}
       />,
     );
-    const pin = container.querySelector(".prose-pin");
+    const pin = container.querySelector(".line-comment-marker.existing");
     expect(pin).not.toBeNull();
     expect(useStore.getState().commentTarget).toBeNull();
     await user.click(pin as Element);

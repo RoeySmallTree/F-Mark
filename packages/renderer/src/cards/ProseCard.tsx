@@ -1,31 +1,28 @@
-/* ProseCard — substantial named-prose card with title, frontmatter pointers,
-   rendered markdown body, comment pins in the right gutter, and a foot
-   toolbar that toggles rendered / source / accordion modes.
-
-   The pin position math is approximate: we multiply the comment's target
-   line number by the prose-content line-height (~25px). Phase 14 will
-   replace this with line-precision DOM measurement.
+/* ProseCard — named-prose card. The head holds the prose name (accent-coloured
+   left) and a meta cluster (word count • view toggle • copy) on the right,
+   with a small caption row underneath for participant + timestamp.
+   The body renders frontmatter pointers, markdown content (rendered or
+   accordion mode), and a right-side line comment rail.
 */
 
 import { useState, type JSX } from "react";
-import { FileText, MoreHorizontal } from "lucide-react";
+import { AlignLeft, Copy, Rows3 } from "lucide-react";
 import type {
   AnyEventRecord,
   Participant,
   ProsePayload,
 } from "@f-mark/shared";
-import { MarkdownRenderer, type MarkdownMode } from "../render/MarkdownRenderer.js";
+import { type MarkdownMode } from "../render/MarkdownRenderer.js";
 import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
+import { LineCommentRail } from "./LineCommentRail.js";
 
 interface Props {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
   comments: AnyEventRecord[];
 }
-
-const LINE_PX = 25; // matches prose-content font-size:15.5px * line-height:1.6.
 
 export function ProseCard({
   event,
@@ -36,7 +33,7 @@ export function ProseCard({
   const who = whoOf(event.participant_id, participants);
   const [mode, setMode] = useState<MarkdownMode>("rendered");
   const commentTarget = useStore((s) => s.commentTarget);
-  const setCommentTarget = useStore((s) => s.setCommentTarget);
+  const words = wordCount(payload.content);
 
   const isFocused =
     commentTarget !== null && commentTarget.file === event.filename;
@@ -47,23 +44,6 @@ export function ProseCard({
   ]
     .filter((c) => c.length > 0)
     .join(" ");
-
-  function togglePin(file: string, lines?: [number, number]): void {
-    const active =
-      commentTarget !== null &&
-      commentTarget.file === file &&
-      (commentTarget.lines?.[0] ?? null) === (lines?.[0] ?? null);
-    if (active) {
-      setCommentTarget(null);
-    } else {
-      setCommentTarget({ file, lines });
-    }
-  }
-
-  function pinTop(lines: [number, number] | undefined): number {
-    const line = lines?.[0] ?? 1;
-    return LINE_PX * line - 4;
-  }
 
   const frontmatterEntries: [string, string][] = [];
   if (typeof payload.in_reply_to === "string" && payload.in_reply_to.length > 0) {
@@ -77,27 +57,64 @@ export function ProseCard({
     await copyToClipboard(payload.content);
   }
 
+  const proseName = payload.name ?? "Untitled";
+
   return (
     <article className={classes} data-event-kind="prose-named">
-      <div className="prose-head">
-        <span className="stripe-dot" aria-hidden />
-        <span className="who">{who.name}</span>
-        <span className="when">{formatWhen(event.timestamp)}</span>
-        <span className="badge">
-          <FileText size={10} aria-hidden /> NAMED
-        </span>
-        <button
-          type="button"
-          className="menu"
-          aria-label="Quick-copy contribution"
-          title="Copy contribution as markdown"
-          onClick={() => void onCopy()}
-        >
-          <MoreHorizontal size={14} aria-hidden />
-        </button>
-      </div>
+      <header className="prose-head">
+        <div className="prose-title-row">
+          <h2 className="prose-title-name" title={proseName}>
+            {proseName}
+          </h2>
+          <div className="prose-meta">
+            <span className="prose-meta-item prose-meta-words">
+              {words} {words === 1 ? "word" : "words"}
+            </span>
+            <div
+              className="prose-toggle"
+              role="group"
+              aria-label="Markdown view mode"
+            >
+              <button
+                type="button"
+                className={mode === "rendered" ? "on" : ""}
+                onClick={() => setMode("rendered")}
+                aria-label="Rendered view"
+                aria-pressed={mode === "rendered"}
+                title="Rendered"
+              >
+                <AlignLeft size={13} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={mode === "accordion" ? "on" : ""}
+                onClick={() => setMode("accordion")}
+                aria-label="Accordion view"
+                aria-pressed={mode === "accordion"}
+                title="Accordion"
+              >
+                <Rows3 size={13} aria-hidden />
+              </button>
+            </div>
+            <button
+              type="button"
+              className="prose-copy-btn"
+              onClick={() => void onCopy()}
+              aria-label="Copy as markdown"
+              title="Copy as markdown"
+            >
+              <Copy size={13} aria-hidden />
+            </button>
+          </div>
+        </div>
+        <div className="prose-caption">
+          <span className="prose-caption-who">{who.name}</span>
+          <span className="prose-caption-when">
+            {formatWhen(event.timestamp)}
+          </span>
+        </div>
+      </header>
       <div className={`prose-body${who.isUser ? " user" : ""}`}>
-        <h1 className="prose-title">{payload.name ?? "Untitled"}</h1>
         {frontmatterEntries.length > 0 && (
           <div className="prose-frontmatter">
             {frontmatterEntries.map(([k, v]) => (
@@ -107,56 +124,15 @@ export function ProseCard({
             ))}
           </div>
         )}
-        <div className="prose-content">
-          <MarkdownRenderer content={payload.content} mode={mode} />
-        </div>
-        {comments.map((c) => {
-          const lines = (c.payload as ProsePayload).target?.lines;
-          const active =
-            commentTarget !== null &&
-            commentTarget.file === event.filename &&
-            (commentTarget.lines?.[0] ?? null) === (lines?.[0] ?? null);
-          return (
-            <button
-              key={c.filename}
-              type="button"
-              className={["prose-pin", active ? "active" : ""].join(" ").trim()}
-              style={{ top: `${pinTop(lines)}px` }}
-              onClick={() => togglePin(event.filename, lines)}
-              aria-label={`Comment by ${c.participant_id}`}
-              data-target-line={lines?.[0] ?? 1}
-            >
-              <span className="dot" aria-hidden />1
-            </button>
-          );
-        })}
-      </div>
-      <div className="prose-foot">
-        <button type="button" onClick={() => void onCopy()}>
-          Copy as markdown
-        </button>
-        <button
-          type="button"
-          className={mode === "source" ? "active" : ""}
-          onClick={() =>
-            setMode((m) => (m === "source" ? "rendered" : "source"))
-          }
-        >
-          View source
-        </button>
-        <button
-          type="button"
-          className={mode === "accordion" ? "active" : ""}
-          onClick={() =>
-            setMode((m) => (m === "accordion" ? "rendered" : "accordion"))
-          }
-        >
-          View accordion
-        </button>
-        <span className="spacer" />
-        <span className="ver">
-          {wordCount(payload.content)} words
-        </span>
+        <LineCommentRail
+          event={event}
+          content={payload.content}
+          comments={comments}
+          participants={participants}
+          mode={mode}
+          className="prose-content"
+          lineHeight={25}
+        />
       </div>
     </article>
   );
