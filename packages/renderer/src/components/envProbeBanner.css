@@ -1,0 +1,44 @@
+/* EnvProbeBanner — warning strip styling. Uses the existing agent-tint
+   amber palette from tokens.css so the banner blends with the rest of the
+   chrome but still reads as "needs attention". */
+
+.env-probe-banner {
+  background: var(--agent-tint);
+  border: 1px solid var(--agent-tint-2);
+  border-radius: var(--radius);
+  color: var(--ink);
+  padding: 8px 12px;
+  font: 13px/1.45 var(--sans);
+  margin: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.env-probe-banner code {
+  font-family: var(--mono);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.env-probe-banner a {
+  color: var(--user);
+  text-decoration: underline;
+}
+
+.env-probe-copy {
+  margin-left: 6px;
+  font: inherit;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.env-probe-copy:hover {
+  background: var(--panel-2);
+}
