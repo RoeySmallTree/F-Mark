@@ -19,6 +19,7 @@ import { registerEnvProbeRoute, realProbe } from "./routes/envProbe.js";
 import { registerStaticRoutes } from "./routes/static.js";
 import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
+import { registerHookInstallRoutes } from "./routes/hookInstall.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
 import { createPaneHub } from "./ws/paneHub.js";
@@ -165,6 +166,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
       tracker,
       projectRoot: deps.paths.root(),
     });
+    registerHookInstallRoutes(app);
 
     // Pane WS subsystem (separate channel router from the global broadcast bus).
     // Hub callbacks need access to the pane pipe functions; we wire them after
