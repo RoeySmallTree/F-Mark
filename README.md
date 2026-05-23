@@ -31,6 +31,7 @@ This starts the kernel on port 7777, generates a token, writes it to `.f-mark/.t
 - `--port <n>` — HTTP port (default 7777). Increments on conflict.
 - `--password <value>` — Use a specific token instead of generating one.
 - `--no-auth` — Disable auth entirely (local development only).
+- `--allow-process-api-no-auth` — Enable process-spawning routes under `--no-auth`. **Use with caution** — anyone reachable on the port can spawn processes.
 - `--remote` — Print SSH port-forwarding instructions.
 - `--container` — Print docker port-mapping instructions.
 
@@ -63,6 +64,18 @@ For Gemini (which doesn't yet have a transcript JSONL parser in F-Mark), the ski
 ## Status
 
 v0.2.0 — redesigned UI shipped. See `planning/redesign/` for the design source-of-truth and `planning/redesign/progress.md` for the phase log.
+
+## What's new in v0.4
+
+- **Managed agents** — Click `+` in the top bar to spawn Claude Code, Codex, or Gemini directly into a tmux session F-Mark supervises.
+- **Terminal panes** — `+ → Terminal` opens a free-form shell pane in the project root.
+- **Per-pane terminal overlay** — Click any agent or terminal chip → "Open terminal" to attach an in-browser xterm.js session to the tmux pane.
+- **Presence** — Top-bar chips show `online | stale | offline | hook-not-installed | pane-dead` state, derived from the auto-stream hook firing.
+- **Remote control** — Agent chip menus offer best-effort `/compact`, `interrupt`, and "Send a message" via tmux `send-keys`.
+- **Hook install detection** — F-Mark detects whether the auto-stream hook is installed in your `~/.claude/settings.json` / `~/.codex/config.toml` and shows manual install instructions per runtime.
+- **Tmux orchestration** — Sessions survive kernel restarts. On reconnect, the kernel reconciles surviving tmux sessions with `.f-mark/agents/*/` pointers.
+
+v0.4 is **additive** on v0.3.0's auto-stream backbone — existing hook installs keep working without changes.
 
 ## What's in the renderer
 

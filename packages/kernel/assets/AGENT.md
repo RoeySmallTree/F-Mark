@@ -83,3 +83,9 @@ To stream output from a runtime that lacks lifecycle hooks, post mid-turn narrat
 ## Active session pointer
 
 `POST /agents/<participant_id>/link` records the active session under `.f-mark/agents/<participant_id>/active-session`. The hook reads this file; without it, the hook exits silently with a stderr warning.
+
+## Presence (v0.4+)
+
+The kernel tracks per-participant presence via a `lastHookAt` timestamp. The shipped `f-mark hook auto-stream` command POSTs `POST /agents/<participant_id>/ping` automatically at the start of every fire. If you're implementing a custom integration that doesn't use the auto-stream hook, send this ping periodically (or at least at the start of every event POST) so your presence flips to `online` in the UI.
+
+States: `launching`, `online`, `stale`, `offline`, `pane-dead`, `hook-not-installed`. The kernel broadcasts state changes over the WebSocket bus as `{ type: "presence", participant_id, state, last_hook_at }`.

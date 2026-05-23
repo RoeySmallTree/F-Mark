@@ -12,6 +12,18 @@ If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up
 3. Read `.f-mark/.token` for the bearer token.
 4. Register your participant: `POST /participants/register`. Cache the returned `participant_id` (Gemini agents conventionally use `ag-gemini-<short>`).
 
+## Managed spawn (v0.4+)
+
+F-Mark v0.4 added the ability for the kernel to launch this agent for the user via a `+` button in the UI. When that happens:
+- The kernel creates a detached tmux session running this agent CLI.
+- It writes `.f-mark/agents/<your-id>/tmux-session` and `runtime` pointers automatically.
+- The user pastes the auto-stream hook snippet for this agent's id into their runtime config (the kernel renders the snippet via `GET /managed-agents/hook-install-instructions`).
+- Once hooks fire, presence flips online and your contributions stream automatically.
+
+You don't need to handle the managed-vs-manual distinction in your code — both paths converge on the same auto-stream hook. The only side-effect for you: if you see `.f-mark/agents/<your-id>/tmux-session`, your process is being supervised by the kernel.
+
+> **v0.4 note:** Gemini still uses manual-stream mode — no hooks are installed for Gemini in v0.4. Managed spawn still works (the kernel launches the Gemini CLI in a tmux session), but contributions must be POSTed manually as described in the **Streaming (manual mode)** section below.
+
 ## Link into a session
 1. `GET /sessions` and choose (newest, named-by-user, or ask via a `choices` event).
 2. `POST /agents/<participant_id>/link` with `{ "session_id": "<chosen>" }`.
