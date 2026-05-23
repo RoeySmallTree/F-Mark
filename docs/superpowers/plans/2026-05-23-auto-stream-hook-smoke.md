@@ -143,3 +143,23 @@ The two new tests live under
 `packages/kernel/tests/integration/auto-stream-e2e.test.ts`. They take
 roughly 250ms together, are pure node fs + a bound localhost socket,
 and require no external services.
+
+## Codex coverage (Task 26)
+
+The auto-stream pipeline is runtime-agnostic at the CLI seam (`f-mark hook auto-stream <id>`). What's verified automatically:
+- Codex-shaped stdin payload (with `turn_id`, `last_assistant_message`, `model`, `permission_mode` fields the CLI doesn't read) is accepted — the extra fields are JSON.parsed and ignored.
+- Same transcript JSONL format yields the same event projection (text → prose, tool_use → tool-use, etc.).
+- See: `tests/integration/auto-stream-e2e.test.ts` — the "works with Codex-shaped stdin payload" case.
+
+What still needs manual Codex verification before shipping:
+- Real `~/.codex/config.toml` or `.codex/config.toml` TOML registration of `[[hooks.Stop]]` and `[[hooks.UserPromptSubmit]]` and confirmation that Codex actually invokes the command with the documented payload.
+- Trust-prompt UX on first invocation (Codex requires user trust for hook commands).
+- `--dangerously-bypass-hook-trust` flow for headless / `codex exec` runs.
+- Verification that Codex's transcript JSONL exposes `text` and `tool_use` blocks in the same shape as Claude Code (likely yes per OpenAI's hook docs, but only a live smoke confirms).
+
+To run a real smoke:
+1. Install Codex CLI: `npm i -g @openai/codex` (or whatever current install command is)
+2. Set up an F-Mark project, register an `ag-codex-*` agent, link a session.
+3. Add the TOML hook block from `packages/kernel/assets/codex-skill/f-mark/SKILL.md`.
+4. Start Codex against the project. Ask it to use a tool. Approve the trust prompt.
+5. Watch the F-Mark renderer for the grouped events.

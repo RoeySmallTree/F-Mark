@@ -243,4 +243,67 @@ describe("auto-stream end-to-end", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("works with Codex-shaped stdin payload (with extra fields)", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const root = await mkdtemp(join(tmpdir(), "fmark-int-"));
+    let app: FastifyInstance | undefined;
+    try {
+      const h = await setup(root);
+      app = h.app;
+      const { p, sessionId, pid } = h;
+
+      // Link agent → session directly via the active-session pointer (the HTTP
+      // path is already exercised by the Multi-block test).
+      await writeActiveSession(p.fmarkDir(), pid, sessionId);
+
+      const transcript = join(root, "transcript-codex.jsonl");
+      const lines = [
+        JSON.stringify({
+          role: "user",
+          content: [{ type: "text", text: "ping" }],
+        }),
+        JSON.stringify({
+          role: "assistant",
+          content: [{ type: "text", text: "pong" }],
+        }),
+      ];
+      await writeFile(transcript, lines.join("\n"), "utf8");
+
+      // Codex Stop payload shape — has extra fields the CLI should ignore.
+      const stdin = {
+        session_id: "codex-session-1",
+        turn_id: "turn_42",
+        transcript_path: transcript,
+        last_assistant_message: "pong", // Codex-specific; our CLI ignores this
+        cwd: root,
+        model: "gpt-5-codex",
+        permission_mode: "ask",
+        hook_event_name: "Stop",
+        stop_hook_active: false,
+      };
+
+      const exit = await runAutoStream(pid, "assistant", JSON.stringify(stdin));
+      expect(exit).toBe(0);
+
+      const sessionDir = p.sessionDir(sessionId);
+      const files = await readdir(sessionDir);
+      const proseFiles = files.filter((f) => f.endsWith(".prose.md"));
+      const turnEndFiles = files.filter((f) => f.endsWith(".turn-end.json"));
+      expect(proseFiles).toHaveLength(1);
+      expect(turnEndFiles).toHaveLength(1);
+
+      const content = await readFile(
+        join(sessionDir, proseFiles[0]!),
+        "utf8",
+      );
+      expect(content).toContain("pong");
+      // Single concluding text → no arbitrary flag.
+      expect(content).not.toContain("arbitrary");
+    } finally {
+      if (app) await app.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
