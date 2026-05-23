@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import type { SessionMeta } from "../api/client.js";
+import {
+  DEFAULT_FILTER,
+  type LogFilter,
+} from "../popovers/log-filter-types.js";
 
 export type LeftRailKey =
   | "sessions"
@@ -87,6 +91,11 @@ interface State {
   viewModeBySession: Record<string, ViewMode>;
   activeModal: ModalKey;
   activePopover: PopoverState;
+  /* Activity-log filter. Lifted into the store (was previously local to
+     RightLog) so applied filters survive a Right-panel tab switch — RightLog
+     unmounts when the user switches to Todos/Comments/Named, and local state
+     would otherwise reset to DEFAULT_FILTER on remount. */
+  logFilter: LogFilter;
   setToken(token: string | null): void;
   setSessions(s: SessionMeta[]): void;
   setCurrentSession(id: string | null): void;
@@ -106,6 +115,7 @@ interface State {
   closeModal(): void;
   openPopover(key: PopoverKey, anchorRect: DOMRect | null): void;
   closePopover(): void;
+  setLogFilter(filter: LogFilter): void;
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -124,6 +134,7 @@ export const useStore = create<State>((set, get) => ({
   viewModeBySession: loadViewModeBySession(),
   activeModal: null,
   activePopover: { key: null, anchorRect: null },
+  logFilter: DEFAULT_FILTER,
   setToken: (token) => set({ token }),
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (currentSessionId) => {
@@ -186,4 +197,5 @@ export const useStore = create<State>((set, get) => ({
     set({ activePopover: { key, anchorRect } }),
   closePopover: () =>
     set({ activePopover: { key: null, anchorRect: null } }),
+  setLogFilter: (logFilter) => set({ logFilter }),
 }));

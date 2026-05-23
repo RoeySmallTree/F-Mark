@@ -11,6 +11,7 @@
   "scripts": {
     "build": "pnpm -F @f-mark/shared build && pnpm -F @f-mark/renderer build && pnpm -F f-mark build && pnpm -F f-mark build:bundle",
     "test": "pnpm -F f-mark test && pnpm -F @f-mark/renderer test",
-    "dev": "pnpm -F f-mark dev"
+    "dev": "pnpm -F @f-mark/renderer build && pnpm dev:concurrent",
+    "dev:concurrent": "trap 'kill 0' EXIT INT TERM; pnpm -F @f-mark/renderer dev:bundled & pnpm -F f-mark dev"
   }
 }

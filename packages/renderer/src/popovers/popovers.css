@@ -263,13 +263,22 @@
   color: var(--ink-2);
 }
 
-/* ============ Activity-log table (P12) ============ */
+/* ============ Activity-log table (P12) ============
+   Five-column fixed-width grid: identity (dot + initial) · time · kind tag
+   with icon · summary (flex) · hover-only jump chevron. Mono throughout so
+   columns stay aligned even with single-glyph cells. Rows sit on a hairline
+   dashed grid; the kind tag carries the subtle per-kind tint that gives the
+   log its scannable color palette without hijacking attention. */
+.log-list {
+  display: flex;
+  flex-direction: column;
+}
 .log-row {
   display: grid;
-  grid-template-columns: auto 60px 14px 1fr;
-  gap: 8px;
-  align-items: baseline;
-  padding: 6px 0;
+  grid-template-columns: 30px 64px 104px 1fr 12px;
+  column-gap: 10px;
+  align-items: center;
+  padding: 5px 4px;
   border-bottom: 1px dashed var(--line-2);
   font-family: var(--mono);
   font-size: 11.5px;
@@ -285,42 +294,136 @@
 .log-row:hover {
   background: var(--panel-2);
 }
-.log-row .ts {
-  color: var(--ink-4);
-}
-.log-row .dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
+.log-row:focus-visible {
+  outline: 2px solid var(--ink-4);
+  outline-offset: -2px;
   border-radius: 4px;
-  align-self: center;
 }
-.log-row .dot.user {
-  background: var(--user);
-}
-.log-row .dot.agent {
-  background: var(--agent);
-}
-.log-row .kind {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-4);
-  background: var(--panel);
-  padding: 2px 7px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+
+/* Column 1 — identity. Dot + initial sit together so a single visual cell
+   identifies the author across every row. */
+.log-row .log-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   justify-self: start;
 }
+.log-row .log-who .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.log-row .log-who.user .dot {
+  background: var(--user);
+}
+.log-row .log-who.agent .dot {
+  background: var(--agent);
+}
+.log-row .log-who .initial {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  line-height: 1;
+}
+
+/* Column 2 — time. Tabular figures keep digits in lockstep across rows. */
+.log-row .ts {
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* Column 3 — kind tag with lucide icon + label. Subtle per-kind tint
+   carried via [data-kind="..."] so all six themes stay coherent (tints
+   resolve through CSS vars with safe fallbacks). */
+.log-row .kind-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px 2px 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  background: var(--panel-2);
+  border: 1px solid var(--line-3);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  justify-self: start;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+}
+.log-row .kind-tag svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.log-row .kind-tag .kind-tag-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Per-kind tints. Each pairs a low-chroma background with an ink color
+   inherited from the theme. The tints are intentionally faint — the icon
+   carries most of the semantic signal. */
+.log-row .kind-tag[data-kind="prose"] {
+  background: color-mix(in oklch, var(--panel) 70%, var(--ink) 4%);
+  color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="choices"] {
+  background: color-mix(in oklch, var(--panel) 70%, var(--user) 14%);
+  color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="choice"] {
+  background: color-mix(in oklch, var(--panel) 70%, var(--user) 18%);
+  color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="turn-end"] {
+  background: color-mix(in oklch, var(--panel) 80%, var(--ink) 8%);
+  color: var(--ink-3);
+}
+.log-row .kind-tag[data-kind="todo"] {
+  background: color-mix(in oklch, var(--panel) 70%, var(--agent) 14%);
+  color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="html"] {
+  background: color-mix(in oklch, var(--panel) 70%, var(--agent) 18%);
+  color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="file"] {
+  background: color-mix(in oklch, var(--panel) 70%, var(--ink) 10%);
+  color: var(--ink-2);
+}
+
+/* Column 4 — summary. Single line, truncate. */
 .log-row .summary {
   color: var(--ink-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
-.log-row .summary .who {
+
+/* Column 5 — hover-only jump chevron. Sits at the right edge as an
+   affordance for "click to jump to this card". */
+.log-row .row-jump {
   color: var(--ink-4);
-  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  justify-self: end;
+}
+.log-row:hover .row-jump,
+.log-row:focus-visible .row-jump {
+  opacity: 1;
+}
+
+.log-empty {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-3);
+  font-size: 13px;
+  margin: 4px 0 0;
 }
 
 .log-head {
@@ -336,10 +439,6 @@
   color: var(--ink-4);
   letter-spacing: 0.04em;
 }
-.log-head .scope b {
-  color: var(--ink-2);
-  font-weight: 500;
-}
 .log-filter-btn {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -354,9 +453,11 @@
   cursor: pointer;
   position: relative;
 }
-.log-filter-btn:hover {
+.log-filter-btn:hover,
+.log-filter-btn[aria-expanded="true"] {
   background: var(--canvas);
   color: var(--ink);
+  border-color: var(--ink-4);
 }
 .log-filter-btn .filter-ct {
   font-family: var(--mono);
@@ -377,7 +478,25 @@
   flex-wrap: wrap;
   gap: 5px;
   margin-bottom: 8px;
+  align-items: center;
 }
 .active-chips:empty {
   display: none;
+}
+.active-chips-clear {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--line);
+  letter-spacing: 0.04em;
+}
+.active-chips-clear:hover {
+  color: var(--ink-2);
+  text-decoration-color: var(--ink-4);
 }

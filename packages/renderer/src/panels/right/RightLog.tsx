@@ -1,15 +1,28 @@
-/* RightLog — the Activity-log tab. Lists every event in the current
-   session (newest first), with a Filter button that opens
-   <LogFilterPopover>. Clicking a row smooth-scrolls the feed to the
-   matching card via the [data-event-filename] attribute the Feed
-   already emits.
+/* RightLog — the Activity-log tab. Lists every event in the current session
+   in chronological order (oldest first / newest last), one row per event,
+   aligned in fixed columns: identity (dot + initial) · time · kind tag with
+   icon · summary. Clicking a row smooth-scrolls the feed to the matching
+   card via the [data-event-filename] attribute the Feed already emits.
 
-   The applied filter lives in component state so it survives tab
-   switches but not a reload. */
+   The applied filter lives in the global store (state/store.ts) so it
+   survives a Right-panel tab switch — RightLog unmounts when the user
+   moves to Todos/Comments/Named, and local React state would otherwise
+   reset to DEFAULT_FILTER on remount. */
 
-import { useMemo, useRef, useState, type JSX } from "react";
-import { ChevronDown, X } from "lucide-react";
-import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
+import { useMemo, useRef, type JSX } from "react";
+import {
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  FileCode2,
+  Flag,
+  ListChecks,
+  MousePointerClick,
+  Paperclip,
+  Text,
+  X,
+} from "lucide-react";
+import type { AnyEventRecord, EventKind, ProsePayload } from "@f-mark/shared";
 import { useStore } from "../../state/store.js";
 import { LogFilterPopover } from "../../popovers/LogFilterPopover.js";
 import {
@@ -20,8 +33,30 @@ import {
   type LogFilter,
 } from "../../popovers/log-filter-types.js";
 
+/* Lucide icon per event kind. Picks something semantically grounded — no
+   abstract glyphs that the reader would have to decode. */
+const KIND_ICON: Record<EventKind, typeof Text> = {
+  prose: Text,
+  choices: ListChecks,
+  choice: MousePointerClick,
+  "turn-end": Flag,
+  todo: CheckSquare,
+  html: FileCode2,
+  file: Paperclip,
+};
+
+const KIND_LABEL: Record<EventKind, string> = {
+  prose: "prose",
+  choices: "choices",
+  choice: "choice",
+  "turn-end": "turn end",
+  todo: "todo",
+  html: "html",
+  file: "file",
+};
+
 function formatTs(ts: string): string {
-  // Compact ISO ("20260522T101530Z") and standard ISO both supported.
+  /* Compact ISO ("20260522T101530Z") and standard ISO both supported. */
   let iso = ts;
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(ts);
   if (m !== null) {
@@ -94,23 +129,19 @@ function chipLabelForRange(filter: LogFilter): string {
 export function RightLog(): JSX.Element {
   const events = useStore((s) => s.events);
   const participants = useStore((s) => s.participants);
-  const sessions = useStore((s) => s.sessions);
-  const currentSessionId = useStore((s) => s.currentSessionId);
   const activePopover = useStore((s) => s.activePopover);
   const openPopover = useStore((s) => s.openPopover);
   const closePopover = useStore((s) => s.closePopover);
+  const filter = useStore((s) => s.logFilter);
+  const setFilter = useStore((s) => s.setLogFilter);
 
-  const [filter, setFilter] = useState<LogFilter>(DEFAULT_FILTER);
   const buttonRef = useRef<HTMLButtonElement>(null);
-
-  const slug = useMemo(
-    () => sessions.find((s) => s.id === currentSessionId)?.slug ?? "session",
-    [sessions, currentSessionId],
-  );
 
   const filtered = useMemo(() => {
     const result = applyFilter(events, filter);
-    return [...result].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    /* Oldest first, newest last — chronological top-to-bottom matches how
+       people read a transcript / changelog. */
+    return [...result].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   }, [events, filter]);
 
   const popoverOpen =
@@ -118,9 +149,17 @@ export function RightLog(): JSX.Element {
   const filterCount = activeFilterCount(filter);
   const anyFilter = hasActiveFilter(filter);
 
-  function openFilter(): void {
+  function toggleFilter(): void {
+    if (popoverOpen) {
+      closePopover();
+      return;
+    }
     if (buttonRef.current === null) return;
     openPopover("log-filter", buttonRef.current.getBoundingClientRect());
+  }
+
+  function clearAll(): void {
+    setFilter(DEFAULT_FILTER);
   }
 
   function jumpTo(filename: string): void {
@@ -134,14 +173,12 @@ export function RightLog(): JSX.Element {
   return (
     <div data-testid="right-log">
       <div className="log-head">
-        <span className="scope">
-          in <b>{slug}</b> · newest first
-        </span>
+        <span className="scope">oldest first · {filtered.length} events</span>
         <button
           ref={buttonRef}
           type="button"
           className="log-filter-btn"
-          onClick={openFilter}
+          onClick={toggleFilter}
           aria-haspopup="dialog"
           aria-expanded={popoverOpen}
         >
@@ -167,10 +204,10 @@ export function RightLog(): JSX.Element {
               key={`k-${k}`}
               className="pop-chip on"
               onClick={() =>
-                setFilter((f) => ({
-                  ...f,
-                  kinds: f.kinds.filter((x) => x !== k),
-                }))
+                setFilter({
+                  ...filter,
+                  kinds: filter.kinds.filter((x) => x !== k),
+                })
               }
             >
               {k}
@@ -185,10 +222,10 @@ export function RightLog(): JSX.Element {
                 key={`p-${id}`}
                 className="pop-chip on"
                 onClick={() =>
-                  setFilter((f) => ({
-                    ...f,
-                    participants: f.participants.filter((x) => x !== id),
-                  }))
+                  setFilter({
+                    ...filter,
+                    participants: filter.participants.filter((x) => x !== id),
+                  })
                 }
               >
                 {p?.name ?? id}
@@ -201,12 +238,12 @@ export function RightLog(): JSX.Element {
               type="button"
               className="pop-chip on"
               onClick={() =>
-                setFilter((f) => ({
-                  ...f,
+                setFilter({
+                  ...filter,
                   range: "all",
                   customStart: undefined,
                   customEnd: undefined,
-                }))
+                })
               }
             >
               {chipLabelForRange(filter)}
@@ -217,34 +254,36 @@ export function RightLog(): JSX.Element {
             <button
               type="button"
               className="pop-chip on"
-              onClick={() => setFilter((f) => ({ ...f, namedOnly: false }))}
+              onClick={() => setFilter({ ...filter, namedOnly: false })}
             >
               named only
               <X size={9} aria-hidden="true" />
             </button>
           ) : null}
+          <button
+            type="button"
+            className="active-chips-clear"
+            onClick={clearAll}
+            aria-label="Clear all filters"
+          >
+            clear all
+          </button>
         </div>
       ) : null}
 
       {filtered.length === 0 ? (
-        <p
-          style={{
-            fontFamily: "var(--serif)",
-            fontStyle: "italic",
-            color: "var(--ink-3)",
-            fontSize: 13,
-          }}
-        >
+        <p className="log-empty">
           {events.length === 0
             ? "No events in this session."
             : "No events match the current filter."}
         </p>
       ) : (
-        <div role="list">
+        <div role="list" className="log-list">
           {filtered.map((ev) => {
             const p = participants[ev.participant_id];
             const kind = p?.kind === "user" ? "user" : "agent";
             const initial = (p?.name[0] ?? "?").toUpperCase();
+            const KindIcon = KIND_ICON[ev.kind] ?? Text;
             return (
               <button
                 type="button"
@@ -254,20 +293,34 @@ export function RightLog(): JSX.Element {
                 data-event-filename={ev.filename}
                 data-event-kind={ev.kind}
                 onClick={() => jumpTo(ev.filename)}
+                title={`${p?.name ?? ev.participant_id} · ${ev.kind} · ${formatTs(ev.timestamp)}`}
               >
-                <span className="kind">{ev.kind}</span>
+                <span
+                  className={["log-who", kind].join(" ")}
+                  aria-label={p?.name ?? ev.participant_id}
+                >
+                  <span className="dot" aria-hidden="true" />
+                  <span className="initial" aria-hidden="true">
+                    {initial}
+                  </span>
+                </span>
                 <span className="ts">{formatTs(ev.timestamp)}</span>
                 <span
-                  className={["dot", kind].join(" ")}
-                  aria-hidden="true"
-                  title={p?.name ?? ev.participant_id}
+                  className="kind-tag"
+                  data-kind={ev.kind}
+                  aria-label={`Kind: ${KIND_LABEL[ev.kind] ?? ev.kind}`}
                 >
-                  {""}
+                  <KindIcon size={11} aria-hidden="true" />
+                  <span className="kind-tag-label">
+                    {KIND_LABEL[ev.kind] ?? ev.kind}
+                  </span>
                 </span>
-                <span className="summary">
-                  {shortSummary(ev)}
-                  <span className="who">{initial}</span>
-                </span>
+                <span className="summary">{shortSummary(ev)}</span>
+                <ChevronRight
+                  size={11}
+                  className="row-jump"
+                  aria-hidden="true"
+                />
               </button>
             );
           })}

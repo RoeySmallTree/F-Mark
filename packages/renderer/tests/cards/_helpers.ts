@@ -9,6 +9,7 @@ import type {
 } from "@f-mark/shared";
 import { useStore } from "../../src/state/store.js";
 import type { SessionMeta } from "../../src/api/client.js";
+import { DEFAULT_FILTER } from "../../src/popovers/log-filter-types.js";
 
 export const PARTICIPANTS: Record<string, Participant> = {
   "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
@@ -34,6 +35,9 @@ export function resetStore(overrides: Partial<ReturnType<typeof useStore.getStat
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",
+    logFilter: DEFAULT_FILTER,
+    activeModal: null,
+    activePopover: { key: null, anchorRect: null },
     ...overrides,
   });
 }
