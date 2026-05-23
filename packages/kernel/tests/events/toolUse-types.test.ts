@@ -33,12 +33,14 @@ describe("tool-use event types", () => {
         success: true,
       },
     } satisfies ToolUseEventRecord;
-    // Direct union membership check — fails if ToolUseEventRecord is removed
-    // from AnyEventRecord. The previous form `rec: AnyEventRecord` then
-    // asserting `typeof rec extends AnyEventRecord` was circular and would
-    // silently fall through to the `EventRecord` catch-all branch.
-    expectTypeOf<ToolUseEventRecord>().toMatchTypeOf<AnyEventRecord>();
-    // Also keep an assignability check on the value.
+    // Discriminant-based union membership check. Resolves to `never` if
+    // `ToolUseEventRecord` is removed from `AnyEventRecord`, because the
+    // catch-all `EventRecord` branch has `kind: EventKind` (broader than
+    // `"tool-use"`) and so does not survive `Extract`. The previous form
+    // `expectTypeOf<ToolUseEventRecord>().toMatchTypeOf<AnyEventRecord>()`
+    // was circular against the catch-all branch and gave false confidence.
+    expectTypeOf<Extract<AnyEventRecord, { kind: "tool-use" }>>().toEqualTypeOf<ToolUseEventRecord>();
+    // Value-side assignability sanity check.
     expectTypeOf(rec).toMatchTypeOf<AnyEventRecord>();
   });
 
