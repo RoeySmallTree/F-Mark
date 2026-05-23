@@ -124,6 +124,38 @@ ${renderHooksSection(runtimeId, agentId, userParticipantId)}
 ${sessionSection}
 ---
 
+## Composing long documents
+
+For documents that mix prose, flow charts, and other embeds, **use
+\`append_to\`** to build a single composable doc out of multiple events:
+
+1. POST a named prose (the **anchor**). Keep new anchors **header-only**
+   — leave \`content\` empty. The anchor's \`name\` is the document title.
+2. Append every part with \`append_to: <anchor filename>\` on each
+   subsequent POST. Pick the part's kind to match its role: prose for
+   sections, flow for diagrams, file for images, html for widgets,
+   choices/todo/tool-use for interactive panels.
+3. The renderer collapses the anchor + all blocks into a single visible
+   document, in event-arrival order.
+
+### Common pitfalls
+
+- Anchors are header-only. New anchors with markdown content still render
+  (legacy fallback), but new authoring should keep content empty.
+- Use prose \`mode: "comment"\` for comments; **never** put \`name\` on a
+  comment.
+- \`lines\` is comment-only and only applies to prose-text targets.
+- When superseding a block, **preserve its \`append_to\`** so the slot is
+  kept; otherwise the supersedor renders as a new top-level event.
+- Mark removed blocks with prose \`removed: true\` (and \`supersedes:\`
+  the block's filename), not empty content. A prose tombstone may
+  supersede any block kind.
+
+See \`${baseUrl}/best-practices\` for a worked four-event canonical
+example, full JSON payloads, and the complete error-rule table.
+
+---
+
 ## Full protocol (from \`.f-mark/AGENT.md\`)
 
 ${agentMd.trimStart()}
