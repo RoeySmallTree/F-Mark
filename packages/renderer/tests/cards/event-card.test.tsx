@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
+import type { ToolUseEventRecord } from "@f-mark/shared";
 import { EventCard } from "../../src/cards/EventCard.js";
 import {
   PARTICIPANTS,
@@ -179,5 +180,24 @@ describe("EventCard dispatcher", () => {
       />,
     );
     expect(container.querySelector(".turn-end")).not.toBeNull();
+  });
+
+  test("tool-use → ToolUseCard", () => {
+    const ev: ToolUseEventRecord = {
+      filename: "20260523T100000Z_ag-claude.tool-use.json",
+      timestamp: "20260523T100000Z",
+      participant_id: "ag-claude",
+      kind: "tool-use",
+      payload: { tool_name: "Bash", tool_use_id: "tu_1", input: {}, success: true },
+    };
+    render(
+      <EventCard
+        event={ev}
+        participants={PARTICIPANTS}
+        comments={[]}
+        allEvents={[ev]}
+      />,
+    );
+    expect(screen.getByText("Bash")).toBeInTheDocument();
   });
 });

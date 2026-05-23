@@ -10,6 +10,7 @@
      html                           → EmbedCard
      todo                           → TodoCard
      file                           → FileCard
+     tool-use                       → ToolUseCard
      turn-end                       → TurnEndDivider
 */
 
@@ -21,6 +22,7 @@ import { ChoicesCard } from "./ChoicesCard.js";
 import { EmbedCard } from "./EmbedCard.js";
 import { TodoCard } from "./TodoCard.js";
 import { FileCard } from "./FileCard.js";
+import { ToolUseCard } from "./ToolUseCard.js";
 import { TurnEndDivider } from "./TurnEndDivider.js";
 
 interface Props {
@@ -74,6 +76,9 @@ export function EventCard({
   }
   if (event.kind === "file") {
     return <FileCard event={event} participants={participants} />;
+  }
+  if (event.kind === "tool-use") {
+    return <ToolUseCard event={event} />;
   }
   if (event.kind === "turn-end") {
     return <TurnEndDivider event={event} participants={participants} />;
