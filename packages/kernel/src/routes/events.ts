@@ -87,6 +87,12 @@ export function registerEventRoutes(
             },
             in_reply_to: { type: "string" },
             supersedes: { type: "string" },
+            // `enum` form (not `type: "boolean"`) intentional: Fastify's default
+            // AJV coerces `1`/`"true"`/`null` to booleans, defeating the strict
+            // `=== true` semantics in serializeProse. `enum: [true, false]` is
+            // checked after coercion would have applied and rejects non-booleans
+            // with 400. See Task 6 / Task 2 reviewer's strict-boolean note.
+            arbitrary: { enum: [true, false] },
           },
         },
       },

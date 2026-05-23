@@ -74,6 +74,81 @@ describe("POST /sessions/:id/events/prose", () => {
   });
 });
 
+describe("POST /sessions/:id/events/prose with arbitrary", () => {
+  it("stores arbitrary: true in frontmatter when sent", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "mid-turn output",
+          arbitrary: true,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const filename = res.json().filename;
+      const onDisk = await readFile(
+        join(p.sessionDir(sessionId), filename),
+        "utf8",
+      );
+      expect(onDisk).toMatch(/arbitrary: true/);
+      expect(onDisk).toContain("mid-turn output");
+      await app.close();
+    });
+  });
+
+  it("does not write arbitrary key when false/omitted", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+
+      const resFalse = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: {
+          participant_id: pid,
+          content: "explicit false",
+          arbitrary: false,
+        },
+      });
+      expect(resFalse.statusCode).toBe(200);
+      const onDiskFalse = await readFile(
+        join(p.sessionDir(sessionId), resFalse.json().filename),
+        "utf8",
+      );
+      expect(onDiskFalse).not.toMatch(/arbitrary/);
+
+      const resOmitted = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "omitted" },
+      });
+      expect(resOmitted.statusCode).toBe(200);
+      const onDiskOmitted = await readFile(
+        join(p.sessionDir(sessionId), resOmitted.json().filename),
+        "utf8",
+      );
+      expect(onDiskOmitted).not.toMatch(/arbitrary/);
+
+      await app.close();
+    });
+  });
+
+  it("400s on non-boolean arbitrary value", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/prose`,
+        payload: { participant_id: pid, content: "hi", arbitrary: 1 },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+});
+
 describe("POST /sessions/:id/events/choices", () => {
   it("writes a choices event", async () => {
     await withTempProject(async (root) => {
