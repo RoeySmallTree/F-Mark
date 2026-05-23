@@ -68,7 +68,7 @@ describe("LogFilterPopover — rendering", () => {
       />,
     );
     const kindsGroup = screen.getByRole("group", { name: "Filter by kind" });
-    // 7 filterable kinds
+    // 8 filterable kinds
     expect(within(kindsGroup).getByRole("checkbox", { name: "prose" })).toBeInTheDocument();
     expect(within(kindsGroup).getByRole("checkbox", { name: "choices" })).toBeInTheDocument();
     expect(within(kindsGroup).getByRole("checkbox", { name: "choice" })).toBeInTheDocument();
@@ -76,6 +76,7 @@ describe("LogFilterPopover — rendering", () => {
     expect(within(kindsGroup).getByRole("checkbox", { name: "todo" })).toBeInTheDocument();
     expect(within(kindsGroup).getByRole("checkbox", { name: "html" })).toBeInTheDocument();
     expect(within(kindsGroup).getByRole("checkbox", { name: "file" })).toBeInTheDocument();
+    expect(within(kindsGroup).getByRole("checkbox", { name: "tool-use" })).toBeInTheDocument();
 
     const partGroup = screen.getByRole("group", {
       name: "Filter by participant",

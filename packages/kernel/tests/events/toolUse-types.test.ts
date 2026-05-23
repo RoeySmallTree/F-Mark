@@ -21,11 +21,11 @@ describe("tool-use event types", () => {
   });
 
   it("AnyEventRecord includes ToolUseEventRecord", () => {
-    const rec: AnyEventRecord = {
+    const rec = {
       filename: "20260523T100000Z_ag-claude.tool-use.json",
       timestamp: "20260523T100000Z",
       participant_id: "ag-claude",
-      kind: "tool-use",
+      kind: "tool-use" as const,
       payload: {
         tool_name: "Bash",
         tool_use_id: "tu_abc",
@@ -33,7 +33,13 @@ describe("tool-use event types", () => {
         success: true,
       },
     } satisfies ToolUseEventRecord;
-    expectTypeOf<typeof rec>().toMatchTypeOf<AnyEventRecord>();
+    // Direct union membership check — fails if ToolUseEventRecord is removed
+    // from AnyEventRecord. The previous form `rec: AnyEventRecord` then
+    // asserting `typeof rec extends AnyEventRecord` was circular and would
+    // silently fall through to the `EventRecord` catch-all branch.
+    expectTypeOf<ToolUseEventRecord>().toMatchTypeOf<AnyEventRecord>();
+    // Also keep an assignability check on the value.
+    expectTypeOf(rec).toMatchTypeOf<AnyEventRecord>();
   });
 
   it('"tool-use" is a member of EventKind', () => {

@@ -5,7 +5,7 @@
    (singular) — not multi-participant, not date ranges, not named-only.
    So we fetch the whole list and filter locally. Cheap for POC sessions. */
 
-import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
+import type { AnyEventRecord, EventKind, ProsePayload } from "@f-mark/shared";
 
 export type LogFilterRange = "all" | "today" | "7d" | "30d" | "custom";
 
@@ -27,8 +27,11 @@ export const DEFAULT_FILTER: LogFilter = {
 
 /* Available kinds, in the order they should appear in the popover. The
    `choice` kind exists in the log but is consumed inside ChoicesCard;
-   it's useful to surface in the filter for transparency. */
-export const FILTERABLE_KINDS: readonly string[] = [
+   it's useful to surface in the filter for transparency. Typed as
+   `readonly EventKind[]` so future additions to `EventKind` in @f-mark/shared
+   surface as a compile-time hint here (rather than silently dropping the
+   new kind from the filter UI). */
+export const FILTERABLE_KINDS: readonly EventKind[] = [
   "prose",
   "choices",
   "choice",
@@ -36,6 +39,7 @@ export const FILTERABLE_KINDS: readonly string[] = [
   "todo",
   "html",
   "file",
+  "tool-use",
 ];
 
 export function hasActiveFilter(filter: LogFilter): boolean {
