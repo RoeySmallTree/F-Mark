@@ -163,3 +163,142 @@ To run a real smoke:
 3. Add the TOML hook block from `packages/kernel/assets/codex-skill/f-mark/SKILL.md`.
 4. Start Codex against the project. Ask it to use a tool. Approve the trust prompt.
 5. Watch the F-Mark renderer for the grouped events.
+
+## Gemini coverage (Task 29)
+
+Gemini CLI supports lifecycle hooks (`AfterAgent`, `BeforeAgent`,
+`AfterTool`, `BeforeTool`) but its `transcript_path` JSONL uses a
+Gemini-specific schema (`type: "user" | "gemini"`, sibling
+`toolCalls: ToolCallRecord[]` arrays, `PartListUnion` content from
+`@google/genai`) that F-Mark's existing transcript parser (designed
+around Claude Code's `{ role, content: [{ type, text/tool_use/... }] }`
+shape) cannot consume. The `AfterAgent` payload alone supplies only a
+flat `prompt_response: string` — no mid-turn narration, no tool calls,
+no tool results — which would collapse every tool-using turn to a single
+concluding-prose card in the F-Mark feed.
+
+Task 27 (research) concluded that the right Phase-8 choice is the
+plan's **manual-POST fallback**: the Gemini skill instructs the model
+to POST `arbitrary: true` narration, `tool-use` events, a concluding
+`arbitrary: false` prose, and a `turn-end` — producing a renderer feed
+identical to the hook-driven runtimes. See:
+`docs/superpowers/plans/2026-05-23-gemini-hooks-research.md`.
+
+### What's auto-verified
+
+Nothing new in the integration test, by design. The auto-stream
+pipeline (`packages/kernel/src/hooks/autoStream.ts` and friends) is not
+exercised by Gemini — the model writes directly to the existing prose /
+tool-use / turn-end endpoints, which are already covered by the kernel
+route tests (`tests/events.test.ts`, `tests/routes/toolUse.test.ts`,
+etc.). No `f-mark hook auto-stream` invocation occurs in the Gemini
+flow, so no Gemini-shaped stdin test case is appropriate or
+informative.
+
+### What still needs manual verification before shipping
+
+Because the producer is the model itself (not the hook system), the
+manual smoke is the *only* verification that matters for Gemini:
+
+1. **Skill discovery.** Confirm Gemini auto-loads the skill from the
+   installed location, and the model reads `SKILL.md` + `api.md` when
+   the session triggers F-Mark detection.
+2. **Bootstrap + link.** Model successfully registers a participant
+   (`ag-gemini-*` namespace), links to a session via
+   `POST /agents/<id>/link`.
+3. **Manual stream — tool-using turn.** Model emits the documented
+   sequence (`arbitrary: true` prose → `tool-use` → optional more of
+   each → final `arbitrary: false` prose → `turn-end`) for a turn that
+   includes ≥1 tool call.
+4. **Manual stream — tool-free turn.** Model emits exactly one
+   `arbitrary: false` prose + one `turn-end` and nothing else for a
+   turn with no tool calls.
+5. **Renderer projection.** F-Mark renderer groups the Gemini turn into
+   the same mid-turn-box-then-concluding-card shape as the Claude /
+   Codex auto-streamed turns — no visual distinction from the
+   hook-driven runtimes.
+6. **Multiple agents.** A session with both a Claude-Code-driven
+   (auto-stream) agent and a Gemini-driven (manual-stream) agent shows
+   coherent, distinct streams — no cross-contamination of
+   `participant_id`s.
+
+### Step-by-step manual smoke procedure
+
+Prereqs: Gemini CLI installed (`npm i -g @google/gemini-cli`), F-Mark
+built (`pnpm -r build`).
+
+1. **Bootstrap a scratch project.**
+   ```bash
+   mkdir /tmp/fmark-gemini-smoke && cd /tmp/fmark-gemini-smoke
+   node /home/roey/workspace/F-Mark/packages/kernel/dist/cli.js --no-auth --port 7790 &
+   ```
+2. **Install the Gemini skill.** Copy the bundled skill into Gemini's
+   skill discovery location. Confirm the exact path on your Gemini
+   version — the canonical layout is
+   `~/.gemini/extensions/f-mark/skills/f-mark/{SKILL.md,api.md}` with a
+   minimal `gemini-extension.json` manifest at the extension root.
+   ```bash
+   mkdir -p ~/.gemini/extensions/f-mark/skills/f-mark
+   cp /home/roey/workspace/F-Mark/packages/kernel/assets/gemini-skill/f-mark/* \
+      ~/.gemini/extensions/f-mark/skills/f-mark/
+   cat > ~/.gemini/extensions/f-mark/gemini-extension.json <<'JSON'
+   { "name": "f-mark", "version": "0.1.0" }
+   JSON
+   ```
+3. **Register a participant + create a session** (manually, via curl,
+   since Gemini hasn't connected yet):
+   ```bash
+   curl -X POST http://localhost:7790/participants/register \
+     -H 'Content-Type: application/json' \
+     -d '{"kind":"agent","name":"Gemini","suggested_id":"ag-gemini"}'
+   curl -X POST http://localhost:7790/sessions \
+     -H 'Content-Type: application/json' -d '{"slug":"gemini-smoke"}'
+   ```
+   Note the returned session id (e.g., `2026-05-23-gemini-smoke`).
+4. **Open the F-Mark renderer** at `http://localhost:7790/` and pin the
+   smoke session.
+5. **Start Gemini in the project directory.** Ask it something that
+   triggers ≥1 tool call. Example:
+   > "Read the package.json in this directory, list the dependencies,
+   > then write a short summary."
+6. **Expected behavior.** Gemini reads `SKILL.md`, registers (or reuses)
+   `ag-gemini-*`, links the session, then emits:
+   - one `arbitrary: true` prose ("I'll read the package.json…")
+   - one `tool-use` event (Read with input/result)
+   - one `arbitrary: false` prose (the summary)
+   - one `turn-end`
+7. **Verify the renderer.** The grouped mid-turn box shows the
+   arbitrary prose + tool-use; the concluding card shows the summary;
+   the turn closes cleanly.
+8. **Tool-free turn check.** Follow up with a tool-free question
+   ("What's the most interesting dep?"). Expect exactly one
+   `arbitrary: false` prose + one `turn-end`. No mid-turn box.
+9. **Cross-agent check (optional).** From a separate Claude Code
+   session in the same project (with the auto-stream hook installed,
+   per the original smoke), interact with the same session. Both
+   participants' streams should appear correctly, no
+   participant-id confusion.
+10. **Tear down.** `kill %1` to stop the kernel; `rm -rf
+    /tmp/fmark-gemini-smoke`.
+
+If steps 5–8 produce the documented feed without intervention, the
+Gemini integration is shipping-ready as-is. If the model misorders
+events, fails to set `arbitrary: true` on mid-turn prose, or skips the
+`turn-end`, the gap is in the SKILL.md prose itself (not in F-Mark) and
+should be tightened there. The integration test suite (kernel 188,
+renderer 279) is unchanged for Task 29.
+
+### Future: hook-driven Gemini mode
+
+The Phase-8 manual-POST mode is intentionally future-compatible with a
+later hook-driven mode. Adding it requires:
+1. A Gemini-flavored transcript parser
+   (`packages/kernel/src/hooks/geminiTranscript.ts`) that consumes the
+   `MessageRecord` / `ToolCallRecord` shape from
+   `@google/gemini-cli/core/src/services/chatRecordingTypes.ts`.
+2. A switch in `runAutoStream` (or a sibling entry point) that selects
+   the parser by stdin payload shape.
+3. An updated SKILL.md "Streaming (hook mode)" section paralleling the
+   Codex skill, gated on a settings toggle.
+
+None of this is in scope for Tasks 27–29.
