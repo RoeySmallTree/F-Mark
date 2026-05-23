@@ -79,7 +79,7 @@ On session creation, the Tmux Manager also stores two tmux user options for redu
 - `@fmark-project` — absolute project root.
 - `@fmark-participant` — the participant id (agent sessions only).
 
-These are set via `tmux set-option -t <session> -w @fmark-project <path>` and read on reconcile. They are immune to `cd` inside the pane.
+These are set via `tmux set-option -t <session> @fmark-project <path>` (session-scoped user options; no `-g` / `-w` / `-p` flag) and read on reconcile via `tmux show-options -t <session> -v @fmark-project`. They are immune to `cd` inside the pane.
 
 **Minimum supported tmux version: 3.0.** Earlier versions lack reliable `display-message -p` format support for the user options we rely on. Probed at startup; surfaced via the env banner if missing.
 
@@ -94,7 +94,7 @@ Computed continuously in-memory. State machine:
 | `stale` | Last hook ping 60s–10m ago. Managed agent with no ping for >120s but pane still alive falls here. | Amber dot |
 | `offline` | No ping >10m and (unmanaged OR managed pane is dead). | Gray dot |
 | `pane-dead` | Managed agent: tmux pane no longer exists (process exited). | Gray dot + "exited" badge + "Restart" action |
-| `hook-not-installed` | Managed spawn completed but no hook ping has ever arrived. (Differs from `launching` by elapsed time > 60s.) | Gray dot + "Install hooks" affordance |
+| `hook-not-installed` | Managed agent whose runtime had `hook-install-status: false` at spawn time (or at reconcile time). State is decided up-front from the install-status check, not by timing. Transitions to `online` immediately on first ping (proves the user pasted the snippet). | Gray dot + "Install hooks" affordance |
 
 State transitions broadcast as WS messages: `{ type: "presence", participant_id, state, last_hook_at }`.
 
@@ -197,7 +197,7 @@ All under standard `Bearer <token>` auth (existing `registerAuthHook`). Mutating
   - `{ type: "pane.key", key: "Enter" | "C-c" | "C-d" | "Up" | ... }` — named key.
   - `{ type: "pane.resize", cols: <n>, rows: <n> }` — `tmux resize-window`.
 
-  **One** `tmux pipe-pane` per pane in the kernel process; in-memory fan-out to all subscribers. Pipe starts when subscriber count goes from 0→1; stops when 1→0. Initial snapshot: `tmux capture-pane -t <session> -p -e -J -S -2000`. Tested with an injectable command runner.
+  **One** `tmux pipe-pane` per pane in the kernel process; in-memory fan-out to all subscribers. Pipe starts when subscriber count goes from 0→1; stops when 1→0. When stopped, output produced while no subscribers are attached is **not buffered** by the kernel — the next subscriber re-snapshots via `capture-pane` and proceeds from there. Initial snapshot: `tmux capture-pane -t <session> -p -e -J -S -2000`. Tested with an injectable command runner.
 
 - **`POST /managed-agents/:participant_id/command`** — body one of:
   - `{ type: "slash", command: "compact" | "clear" | "resume" | <free> }`
@@ -274,7 +274,7 @@ When the kernel starts:
 2. `tmux ls -F '#{session_name} #{?#{==:#{session_attached},0},detached,attached}'`, filter by prefix `fmark-<basename>-<hash8>-`.
 3. For each survivor: read user option `@fmark-project` via `tmux show-options -t <s> -w -v @fmark-project`; drop sessions whose value doesn't match the kernel's project root.
 4. Cross-reference with `.f-mark/agents/*/`:
-   - Agent dir + tmux session exists → "managed agent, presence state = `stale` initially (no recent hook). Will flip to `online` when next hook ping arrives within TTL window."
+   - Agent dir + tmux session exists → managed agent, run `hook-install-status` for its runtime + participant_id. If hooks present → state = `stale` (next ping flips to `online`). If hooks absent → state = `hook-not-installed`.
    - Agent dir + tmux session gone → managed agent died during kernel downtime. Clear `tmux-session` + `runtime` files (keep `active-session` + `log.jsonl`). Append a `pane-died` log entry. State = `pane-dead`.
    - Tmux session + no agent dir → either a terminal session or an orphan. Terminals: keep as terminal; orphan agent sessions get killed (we wrote `@fmark-participant` but no agent dir means inconsistent state).
 5. Non-blocking; reconcile completes under 200ms for reasonable session counts.
@@ -356,7 +356,7 @@ The threat model expands meaningfully: v0.4 introduces routes that spawn process
 
 1. **Bearer-token gate.** All new routes go through the existing `registerAuthHook`. Same as today.
 
-2. **Origin/Host validation for mutating routes when auth came via cookie.** The shipped `auth.ts` accepts the bearer token either as `Authorization` header, query param (which then sets an HttpOnly + SameSite=Strict cookie), or the cookie itself. SameSite=Strict gives strong CSRF protection in modern browsers, but for defense in depth, all new POST/DELETE routes that authenticate via cookie also validate `Origin` (must be a `localhost` / `127.0.0.1` / configured-host scheme) and `Host` headers. Mismatch → 403.
+2. **Origin/Host validation for mutating routes when auth came via cookie.** The shipped `auth.ts` accepts the bearer token either as `Authorization` header, query param (which then sets an HttpOnly + SameSite=Strict cookie), or the cookie itself. SameSite=Strict gives strong CSRF protection in modern browsers, but for defense in depth, all new POST/DELETE routes that authenticate via cookie also validate `Origin` (must be a `localhost` / `127.0.0.1` / configured-host scheme) and `Host` headers. Mismatch → 403. Cookie-authenticated requests without an `Origin` header are also rejected (browsers always send it; absence indicates a non-browser caller that should have used the bearer header).
 
 3. **`--no-auth` disables process-spawning routes by default.** Today `--no-auth` disables the bearer gate entirely. In v0.4, the spawn / kill / command / pane-input routes refuse to register if `--no-auth` is set, **unless** the user also passes a new flag `--allow-process-api-no-auth`. The startup banner shows a loud warning when both are set. (We keep `--no-auth` working for read-only API exploration; it just doesn't let an unauthenticated peer execute commands.)
 
