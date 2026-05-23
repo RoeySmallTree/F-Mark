@@ -20,6 +20,8 @@ import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
+import { createPaneHub } from "./ws/paneHub.js";
+import { registerPaneWebSocket } from "./ws/pane.js";
 import { createTmuxManager } from "./tmux/manager.js";
 import { realCommandRunner } from "./tmux/commandRunner.js";
 
@@ -156,6 +158,20 @@ export function createServer(deps: ServerDeps): CreatedServer {
       tracker,
       projectRoot: deps.paths.root(),
     });
+
+    // Pane WS subsystem (separate channel router from the global broadcast bus).
+    // Hub callbacks need access to the pane pipe functions; we wire them after
+    // both objects exist via mutation, since the registration returns the pipe
+    // controls and the hub deps need those controls.
+    let pipeControls: { startPipe(id: string): Promise<void>; stopPipe(id: string): Promise<void> } = {
+      startPipe: async () => {},
+      stopPipe: async () => {},
+    };
+    const paneHub = createPaneHub({
+      onStart: (id) => { void pipeControls.startPipe(id); },
+      onStop: (id) => { void pipeControls.stopPipe(id); },
+    });
+    pipeControls = registerPaneWebSocket(app, { tmux, hub: paneHub });
   } else {
     // Fallback: respond with a clear 404 explaining why the API is off.
     const handler = async (
