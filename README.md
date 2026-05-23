@@ -56,6 +56,10 @@ Each event is a timestamped file. There is no database. The folder is the entire
 
 Point your agent at the local API. The protocol lives at `.f-mark/AGENT.md` once the kernel runs. For Claude Code, the kernel ships a skill bundle in `node_modules/f-mark/assets/claude-skill/f-mark/` that you can install into your `.claude/skills/` directory.
 
+Agents stream output automatically once the auto-stream hook is installed. The skill bundle at `assets/<runtime>-skill/f-mark/SKILL.md` walks each runtime (Claude Code, Codex, Gemini) through registering, linking to a session via `POST /agents/:id/link`, and adding the hook entry. After install, the agent only calls the HTTP API for *structured* contributions (named documents, replies, comments, todos, choices).
+
+For Gemini (which doesn't yet have a transcript JSONL parser in F-Mark), the skill instructs the model to POST mid-turn events manually with `arbitrary: true` — the renderer renders the same grouped feed regardless.
+
 ## Status
 
 v0.2.0 — redesigned UI shipped. See `planning/redesign/` for the design source-of-truth and `planning/redesign/progress.md` for the phase log.
@@ -71,6 +75,8 @@ v0.2.0 — redesigned UI shipped. See `planning/redesign/` for the design source
 - **Comment overlay** — pin-click focuses the contribution, dims the rest, opens the thread in the right panel with reply + resolve.
 - **Real backend** — todos (with supersession), files, html bundles, raw asset serving, presets, skills, fuzzy search, participant PATCH.
 - **Markdown + JSON renderers** — multi-mode: rendered / source / accordion for markdown; tree / source / table for JSON, with collapsible nesting.
+- **Mid-turn group** — consecutive arbitrary prose + tool-use events from the same agent collapse into a single expandable card; auto-collapsed once the agent's concluding message arrives.
+- **Tool-use cards** — tool invocations render with a per-tool icon and expandable input/output.
 
 ## Working on the redesign (for agentic workers)
 
