@@ -114,4 +114,22 @@ describe("projectFeed", () => {
       expect.objectContaining({ type: "group", status: "streaming", toolCount: 0, items: ev }),
     ]);
   });
+
+  it("flow events surface as standalone feed items (not absorbed into arbitrary groups)", () => {
+    const events: AnyEventRecord[] = [
+      tool("ag-claude", "Bash", "20260523T100000Z"),
+      {
+        filename: "20260523T100001Z_ag-claude.flow.json",
+        timestamp: "20260523T100001Z",
+        participant_id: "ag-claude",
+        kind: "flow",
+        payload: { id: "fl1", nodes: [], edges: [] },
+      },
+    ];
+    const items = projectFeed(events);
+    const flowItem = items.find(
+      (i) => i.type === "event" && i.event.kind === "flow",
+    );
+    expect(flowItem).toBeDefined();
+  });
 });
