@@ -1,160 +1,115 @@
-# Tmux-Orchestrated Agent Sessions — Design Spec
+# Tmux-Orchestrated Agent Sessions — Design Spec (v0.4 target)
 
-> **For agentic workers:** This is the design source-of-truth for the agent-orchestration feature. The implementation plan derived from this spec lives in `docs/superpowers/plans/` (created by `writing-plans` after spec approval). This document captures decisions and architecture, not per-task implementation steps.
+> **For agentic workers:** This spec targets F-Mark **v0.4**. It evolves the **already-shipped v0.3.0 auto-stream hook** rather than replacing it. The implementation plan derived from this spec lives in `docs/superpowers/plans/` (created by `writing-plans` after spec approval). Captured-but-deferred work for v0.5 (hook installer + presence refinements + Codex structured events) and v0.6 (telemetry / context accounting) appears under "Future Work."
 
 ## Summary
 
-Add a process-orchestration layer to the F-Mark kernel so the user can spawn, supervise, surface, **and remote-control** agent CLIs (Claude Code, Codex, Gemini, or any custom runtime) directly from the F-Mark UI. The kernel owns detached tmux sessions for managed agents and plain terminal panes; in-browser xterm.js overlays give the user manual control of any pane. Presence (online/offline) is driven by a daemon supervisor spawned by the agent's auto-stream hook — independent of model activity, decoupled from tmux ownership — so the same presence machinery works for both F-Mark-managed and user-launched agents.
+Add a process-orchestration layer to the F-Mark kernel so the user can spawn, supervise, and surface agent CLIs (Claude Code, Codex, Gemini, or any custom runtime) directly from the F-Mark UI. The kernel owns detached tmux sessions for managed agents and plain terminal panes; an in-browser xterm.js overlay attaches to any pane.
 
-A bidirectional **control plane** sits over the orchestration layer: outbound (agent → kernel) uses HTTP from hook events plus transcript parsing in the daemon to surface live telemetry (context-window utilization, current tool, awaiting-approval state, idle/active); inbound (kernel → agent) uses `tmux send-keys` for managed panes to inject slash-commands, interrupt the agent, or send free-text messages. Un-managed agents (launched by the user in their own terminal) get the outbound half only.
+The shipped v0.3.0 auto-stream hook path (Stop / UserPromptSubmit → `f-mark hook auto-stream <participant_id>`) is the **backbone** of how agents reach the kernel. This feature wraps tmux orchestration around that backbone — it does not replace it.
 
-This spec also absorbs and supersedes the in-flight `2026-05-23-auto-stream-hook.md` plan; that plan's per-Stop transcript parsing collapses into the supervisor daemon.
+For v0.4: **presence = TTL + tmux liveness** (no long-lived supervisor daemon). For v0.4: **no telemetry derivation** beyond presence states — `context_pct`, `last_tool`, `awaiting_approval` and similar are deferred to v0.6 once per-runtime transcript fixtures and real test coverage exist. For v0.4: **hook installation = read-only detection + copyable manual instructions** (no automated rewrites of `~/.claude/settings.json` / `~/.codex/config.toml` / `~/.gemini/settings.json`).
 
-## Goals
+Inbound control (kernel → agent) uses `tmux send-keys`, framed honestly as best-effort pane input — reliable for `interrupt` (Ctrl-C), idle-gated for slash commands and free text.
 
-1. **One-click agent spinup.** A `+` button in the top bar offers Claude / Codex / Gemini / Terminal. Clicking any of the first three spawns a managed tmux session with the runtime pre-loaded, the active-session pointer pre-wired, the auto-stream hook installed, and the initial onboarding prompt sent to the REPL via `tmux send-keys`. Zero terminal context-switching for the user.
+## Goals (v0.4)
+
+1. **One-click agent spinup.** A `+` button in the top bar offers Claude / Codex / Gemini / Terminal. Clicking any of the first three spawns a managed tmux session pre-loaded with the runtime, in the project's working directory. The pane onboards the agent by either (a) showing the user copyable manual hook-install instructions tied to the spawned agent's participant id, or (b) — if hooks are already detected as installed — sending the kickoff prompt via `tmux send-keys`. Either way the user never leaves F-Mark.
 2. **Kernel-managed agent lifecycle.** The kernel knows about every managed agent — list, kill (the "say goodbye" action), rename, open-terminal-overlay. Tmux sessions survive kernel restarts (detached); on next kernel start the kernel reconciles surviving sessions and presence resumes naturally.
-3. **Multi-agent orchestration.** Multiple managed agents can run concurrently against the same F-Mark session (the event log is already append-only and participant-aware). Terminal panes are first-class peers, listed alongside agents in the top bar; if a user types `claude` inside a terminal pane and the auto-stream hook fires, the participant appears in the agents list automatically — same tmux session, now with agent metadata.
-4. **Bidirectional control plane.** From the UI, the user can see live agent telemetry (context-window %, awaiting-approval state, current tool, idle/active) and send control actions (compact / interrupt / free-text message) into managed agents. Same wire protocol across all three runtimes; per-runtime capability differences (e.g., Codex has no native idle-detection hook) are surfaced honestly in the UI rather than papered over.
+3. **Multi-agent orchestration.** Multiple managed agents can run concurrently against the same F-Mark session (the event log is already append-only and participant-aware). Terminal panes are first-class peers, listed alongside agents in the top bar.
 
-## Non-Goals
+## Non-Goals (v0.4)
 
-- **Multi-machine orchestration.** Spawn always targets the kernel's host machine. `--remote` mode targets the SSH'd-into box; `--container` targets the container; cross-machine fleet management is out of scope.
-- **Coordinating turn-taking between concurrent agents.** The event log is append-only and tolerates concurrent writers; we do not add scheduling, locking, or fairness primitives. Two agents posting at once will interleave by timestamp.
-- **Windows without WSL.** Tmux is the chosen transport. Windows users go through WSL (which the environment probe will detect).
-- **Replacing the existing AGENT.md / SKILL.md docs.** Those still drive the agent-side protocol. This spec only adds the orchestration layer above them.
+- **Supervisor daemon.** No long-lived hook-spawned daemon. Presence is derived from hook-fire TTL + tmux liveness. (Re-evaluate in v0.6 only if a concrete user-visible bug demands it — e.g., "manual agent should show online during a 45-minute silent planning turn.")
+- **Token-derived telemetry** (`context_pct`, `tokens_used`, etc.) — defer to v0.6 with per-runtime transcript fixtures + smoke coverage as prerequisites.
+- **Automatic hook installation.** v0.4 only *detects* whether hooks are present and renders manual install instructions tailored to the runtime + the spawned participant id.
+- **Package-manager / OS-level installation flows.** v0.4 probes for `tmux` and the three runtimes; if missing, shows the install command for the user's package manager (apt/brew/etc.) as copyable text. No `POST /env/install` route in v0.4.
+- **External slash-command RPC.** None of the three runtimes expose this. v0.4 uses send-keys with explicit best-effort framing.
+- **Multi-machine fleet orchestration.** Spawn always targets the kernel's host machine.
+- **Coordinating turn-taking between concurrent agents.** The event log is append-only and tolerates concurrent writers; we do not add scheduling, locking, or fairness primitives.
+- **Windows without WSL.** Tmux is the chosen transport. Windows users go through WSL.
+
+## Migration from v0.3.0
+
+This is **purely additive** — no v0.3.0 functionality is removed or changed.
+
+- `f-mark hook auto-stream <participant_id> [--kind assistant|user]` keeps working exactly as it does today. Existing users with hooks in `~/.claude/settings.json` notice nothing.
+- The active-session pointer at `.f-mark/agents/<id>/active-session` keeps its current contract. We add **sibling files**, never modify the pointer's format.
+- The Claude-shaped transcript parser in `packages/kernel/src/hooks/transcript.ts` is unchanged. Codex stays in "preview" mode for transcript projection (its current state). Gemini stays in manual-stream mode (its current state).
+- Hook config files (`~/.claude/settings.json`, `~/.codex/config.toml`, `~/.gemini/settings.json`) are **not modified by v0.4**. The renderer surfaces copyable text the user pastes themselves.
+- The kernel adds a new "managed-agent" concept layered on top of the existing participant model. A managed agent is *also* a regular participant — with a `tmux-session` sibling file pointing to its F-Mark-owned tmux session.
+
+The one v0.3.0 piece that does change: `GET /guide` is extended (see §"Guide Endpoint Update" below). The shipped route accepts `sessionId` (camelCase) only and explicitly says "Hooks (NOT YET SHIPPED)." Both are corrected — `sessionId` stays as a backward-compatible alias, the hooks text is rewritten to point at the runtime-specific manual install instructions.
 
 ## Architecture Overview
 
-Six new logical pieces, all additive — no existing event-log or participant semantics change.
+Five new logical pieces; all additive.
 
-1. **Tmux Manager** (kernel module, `packages/kernel/src/tmux/`).
-   Owns tmux session creation, naming, listing, killing, and reconciliation. Knows the F-Mark naming convention. Spawns the runtime CLI inside the new session and uses `tmux send-keys` to deliver the kickoff prompt after a runtime-specific ready delay. Identity-agnostic: works for agent sessions and bare terminal sessions identically. **Also the transport for the inbound half of the control plane** (kernel → agent commands).
+1. **Tmux Manager** (`packages/kernel/src/tmux/`).
+   Creates / lists / kills / attaches / verifies-ownership-of tmux sessions. Knows the F-Mark naming convention (see §"Tmux Session Naming"). Spawns the runtime CLI inside a fresh session and runs `tmux send-keys` for the per-pane input queue. Tested via an injectable command runner so no actual tmux is required for unit tests.
 
-2. **Runtime Registry** (kernel module + per-project config file, `.f-mark/runtimes.json`).
-   Data-driven catalog mapping `runtime_id → { displayName, command, icon, readyDelayMs, env?, args?, hookConfig }`. Ships with `claude`, `codex`, `gemini` defaults. Users add custom runtimes via Settings → Connected Agents → Manage Runtimes. Custom runtimes render with a generic bot icon if no built-in icon matches. The `hookConfig` block per runtime declares where and how F-Mark installs its hooks (see "Hook Installation" below).
+2. **Runtime Registry** (`packages/kernel/src/runtimes/`, per-project file `.f-mark/runtimes.json`).
+   Data-driven catalog: `runtime_id → { displayName, executable, args, env?, icon, readyDelayMs }`. Ships defaults for `claude` / `codex` / `gemini` (written on `initProject()`). User additions appear via Settings → Connected Agents → Manage Runtimes; custom runtimes fall back to a generic bot icon. `executable` + `args[]` are separate fields (no whitespace-splitting of a `command` string).
 
-3. **Supervisor Daemon** (kernel CLI subcommand, `f-mark hook supervisor`).
-   Detached Node process spawned by the agent's auto-stream hook on first fire. Single instance per `agent_id` (flock'd at `.f-mark/agents/<id>/.supervisor.lock`). Owns four responsibilities for the agent's lifetime:
-   - **Heartbeat:** POST `/agents/:id/heartbeat` every ~15s.
-   - **Transcript streaming:** watch the runtime's JSONL transcript via `fs.watch` and POST new turns as `tool-use` / `prose` (arbitrary + concluding) events in order.
-   - **Telemetry derivation:** on transcript change, recompute `context_pct` (tokens used / context-window size for the runtime's model), `last_tool` (most recent `tool_use` without a paired `tool_result`), `idle_state` (derived from time-since-last-event + last hook event kind). Post via `POST /agents/:id/telemetry`. Stateful changes broadcast over WS.
-   - **Death detection:** poll `kill -0 <agent_pid>` between heartbeats; on failure, POST `/agents/:id/unlink` and exit.
+3. **Presence Tracker** (`packages/kernel/src/presence/`).
+   In-memory map of `participant_id → { lastHookAt, tmuxSession?, state }` updated by:
+   - A new tiny endpoint that hook fires ping (`POST /agents/:id/ping`), augmenting v0.3.0's existing auto-stream POSTs with a single presence signal call.
+   - The Tmux Manager's pane-liveness checks (`tmux ls | grep ...` + `display-message -p "#{pane_dead}"`) for managed agents.
 
-   **This component subsumes the work the in-flight `2026-05-23-auto-stream-hook.md` plan distributes across each Stop hook fire.** That plan is refactored (see "Auto-Stream-Hook Plan Refactor" below).
+   States: `online | stale | offline | launching | pane-dead`. (See §"Presence States" for the transition table.)
 
-4. **Presence + Control API** (kernel HTTP routes + WS channels, `packages/kernel/src/routes/managed-agents.ts`, `packages/kernel/src/ws/pane.ts`).
-   HTTP endpoints for spawn / kill / list-managed / link / unlink / heartbeat / **telemetry / command**. WebSocket channels: `pane.<tmux_session_id>` (terminal piping), presence events on the existing bus, **and `telemetry.<participant_id>` broadcasts**.
+   Broadcasts state changes on the WS bus. No daemon. No flock files. No `kill -0`.
 
-5. **Guide Endpoint Extension** (`GET /guide?agent_id=<id>&session_id=<id>`).
-   Existing `/guide` route extended to accept query params and substitute them into a tailored onboarding markdown. Used by:
-   - The renderer's "Reconnect" modal (shown for offline agents) — user copies the rendered command and pastes into wherever they're launching from.
-   - The kernel's own auto-launch flow — same renderer builds the `tmux send-keys` payload pushed into a freshly-spawned managed pane. Single source of truth for "how an agent joins F-Mark."
+4. **Pane WS Subsystem** (`packages/kernel/src/ws/pane.ts`).
+   New WS sub-channel router (the existing `ws/bus.ts` is a global broadcast and stays so for event-log notifications). Per-pane: **one** `tmux pipe-pane` to a single in-process buffer; all subscribed WS clients receive that stream. Pipe starts on first subscriber, stops after last unsubscribes. Input is via `tmux send-keys` through the per-pane input queue.
 
-6. **Hook Installer** (kernel module + first-run UI flow).
-   On first spawn of a runtime, the kernel checks whether F-Mark's hooks are present in that runtime's config file (path declared in the runtime's `hookConfig`). If absent, the renderer prompts: "Install F-Mark hooks for Claude Code? (modifies ~/.claude/settings.json)" — explicit consent, one-time per runtime per machine. Hooks installed: the runtime's equivalents of `Stop`, `UserPromptSubmit`, `PostToolUse`, `PreToolUse`, `Notification`/`PermissionRequest`, `PreCompact`/`PreCompress` — all bound to the single one-liner `npx f-mark hook ensure-supervisor <agent_id>`. The installer is idempotent and never removes hooks the user added themselves; it merges into the runtime's expected hook config format.
+5. **Managed-Agent + Terminal API** (`packages/kernel/src/routes/managed-agents.ts`).
+   HTTP endpoints for spawn / kill / list-managed / terminal-spawn / hook-install-status / per-pane input + command / per-agent logs / probe. (Detailed in §"Kernel HTTP Routes" below.) Plus `GET /guide` extension.
 
-### Presence Data Flow
+## Tmux Session Naming
 
-```
-[managed-agent spawn path]
-  Renderer POST /managed-agents/spawn
-    → Tmux Manager creates session "fmark-<proj>-ag-<id>"
-    → spawns runtime CLI with auto-stream hook config
-    → after readyDelayMs, send-keys the rendered guide markdown
-  Runtime CLI starts → first hook fires
-    → hook runs `f-mark hook ensure-supervisor <agent_id>`
-    → flock'd: supervisor spawns detached, hook exits
-  Supervisor loop (every 15s):
-    POST /agents/:id/heartbeat
-    kill -0 <agent_pid>
-  Kernel receives heartbeat → updates in-memory presence map
-    → broadcasts on WS bus → renderer flips dot green
+All F-Mark-owned tmux sessions use a recognizable prefix and **include a stable hash of the absolute project root** so two projects with the same basename don't collide in the global tmux namespace.
 
-[death path]
-  Agent CLI exits (user types /exit, Ctrl+D, crash)
-    → next supervisor poll: kill -0 fails
-    → POST /agents/:id/unlink → supervisor exits
-  Kernel clears presence + broadcasts → renderer flips dot gray + shows "Reconnect"
-  Tmux session may still exist (if no `tmux kill-session`) — Tmux Manager reconciles on next list
-```
+- Agent sessions: `fmark-<basename>-<hash8>-ag-<participantId>`
+- Terminal sessions: `fmark-<basename>-<hash8>-term-<index>`
 
-### Manual / Reconnect Path
+`basename` is the project root's final path segment, lowercased + slugged (reusing `normalizeSlug` from `packages/kernel/src/sessions.ts`). `hash8` is the first 8 hex chars of `sha256(abs(projectRoot))`. Maximum session name length: 90 chars; participant ids are truncated to 32 chars if longer (regex already enforces ≤64; we cap at 32 for naming only).
 
-```
-[user clicks "Reconnect" on offline agent]
-  Renderer fetches GET /guide?agent_id=ag-claude&session_id=2026-05-23-foo
-  Modal shows rendered markdown with launch command pre-substituted:
-    claude
-    (then paste this as your first message:)
-    > You are participant ag-claude in F-Mark session 2026-05-23-foo. ...
-  User runs in their own terminal (or in a new terminal pane via the Terminal entry)
-  Runtime starts → hook fires → ensure-supervisor → presence flips green
-```
+On session creation, the Tmux Manager also stores two tmux user options for redundant reconcile verification:
+- `@fmark-project` — absolute project root.
+- `@fmark-participant` — the participant id (agent sessions only).
 
-## Control Plane
+These are set via `tmux set-option -t <session> -w @fmark-project <path>` and read on reconcile. They are immune to `cd` inside the pane.
 
-A bidirectional channel between the kernel and managed agents, using two distinct transports because none of Claude / Codex / Gemini expose external-action triggers in their hook output schemas.
+**Minimum supported tmux version: 3.0.** Earlier versions lack reliable `display-message -p` format support for the user options we rely on. Probed at startup; surfaced via the env banner if missing.
 
-### Outbound — agent → kernel (telemetry + events)
+## Presence States
 
-Two layered mechanisms collaborating inside the Supervisor Daemon:
+Computed continuously in-memory. State machine:
 
-- **Hook events as edge-triggers.** Every fire of the runtime's hooks (Stop, UserPromptSubmit, PreToolUse, PostToolUse, Notification/PermissionRequest, PreCompact/PreCompress, SessionStart) calls `npx f-mark hook ensure-supervisor <agent_id>`. The supervisor receives the stdin JSON via a per-hook event queue file (`.f-mark/agents/<id>/.events/<ts>.json`) that the hook drops before exiting. The supervisor's event-queue watcher consumes each file, translates it to the kernel's event model, and POSTs.
+| State | Definition | UI |
+|---|---|---|
+| `launching` | Spawn POST in flight; tmux session created but no hook ping yet. | Spinning indicator |
+| `online` | Last hook ping ≤60s ago, OR (managed agent AND tmux pane alive AND last ping ≤120s ago). | Green dot |
+| `stale` | Last hook ping 60s–10m ago. Managed agent with no ping for >120s but pane still alive falls here. | Amber dot |
+| `offline` | No ping >10m and (unmanaged OR managed pane is dead). | Gray dot |
+| `pane-dead` | Managed agent: tmux pane no longer exists (process exited). | Gray dot + "exited" badge + "Restart" action |
+| `hook-not-installed` | Managed spawn completed but no hook ping has ever arrived. (Differs from `launching` by elapsed time > 60s.) | Gray dot + "Install hooks" affordance |
 
-- **Transcript polling as level-triggered.** The supervisor's `fs.watch` on the runtime's JSONL transcript catches every model turn including state hooks miss (e.g., token usage). The daemon recomputes derived telemetry on every transcript change.
+State transitions broadcast as WS messages: `{ type: "presence", participant_id, state, last_hook_at }`.
 
-**Derived telemetry shipped to the kernel:**
+The TTL values are tuned for v0.4 acceptance:
+- 60s online threshold: long enough for a hook fire on each Stop / PreToolUse / PostToolUse to keep `online` glued during a turn; short enough that a crashed agent fades quickly.
+- 120s stretched threshold for managed-with-pane-alive: covers an agent thinking 90s without firing any hook.
+- 10m offline threshold: matches typical idle-after-prompt time.
 
-- `context_pct` — tokens used / context-window cap for the runtime's currently-active model. Computed by walking the transcript JSONL and summing input/output token counts (each runtime exposes these in transcript entries; differences in field names are handled by runtime-specific transcript parsers in the daemon). The context-window cap is looked up from a per-model table maintained in the daemon (e.g., `claude-sonnet-4-6`: 200k, `claude-opus-4-7[1m]`: 1M, `gpt-5.5`: 256k, `gemini-2.5-pro`: 1M). Updates whenever transcript grows.
-- `last_tool` — the most recent `tool_use` entry without a paired `tool_result`. Carries `{tool_name, tool_input, started_at}`. Cleared when the `tool_result` lands.
-- `awaiting_approval` — flipped true on `Notification` (Claude/Gemini, when `event_kind: permission_prompt`) or `PermissionRequest` (Codex). Cleared on the next `PostToolUse` or `Stop`.
-- `idle_state` — derived from `now - last_hook_event_ts` exceeding a runtime-specific threshold (Claude/Gemini have native idle hooks we use directly; for Codex we use the heuristic). One of `active | thinking | idle | awaiting_approval | dead`.
-
-**Per-runtime hook-event mapping** (declared in `runtimes.json` `hookConfig.events`):
-
-| Logical event | Claude Code | Codex | Gemini CLI |
-|---|---|---|---|
-| TurnStart | `UserPromptSubmit` | `UserPromptSubmit` | `BeforeAgent` |
-| TurnEnd | `Stop` | `Stop` | `AfterAgent` |
-| ToolBefore | `PreToolUse` | `PreToolUse` | `BeforeTool` |
-| ToolAfter | `PostToolUse` | `PostToolUse` | `AfterTool` |
-| ApprovalNeeded | `Notification` (filter: `permission_prompt`) | `PermissionRequest` | `Notification` (filter: `permission_prompt`) |
-| Idle | `Notification` (filter: `idle_prompt`) | *(derived)* | `Notification` (filter: `idle_prompt`) |
-| Compacting | `PreCompact` | `PreCompact` | `PreCompress` |
-| SessionStart | `SessionStart` | `SessionStart` | `SessionStart` |
-
-### Inbound — kernel → agent (commands)
-
-`tmux send-keys` is the only universal transport for action injection. The agent treats the keystrokes as if the user typed them in its TUI. F-Mark exposes three command types via `POST /managed-agents/:id/command`:
-
-- `{ type: "slash", command: "compact" | "clear" | "resume" | <free> }` — sends `/<command>` followed by Enter. Used by the UI's "Compact now" action and any future slash-driven flows.
-- `{ type: "interrupt" }` — sends Ctrl-C (`tmux send-keys C-c`). Stops the current model turn.
-- `{ type: "message", text: <string> }` — sends the text followed by Enter. Used by the "Send a message" inline input on the agent chip; lets the user nudge an agent without leaving F-Mark.
-
-For un-managed agents (no F-Mark-owned tmux session), the command endpoint returns `409 Conflict` with `{ reason: "unmanaged_pane", offer: "open_overlay" }`. The renderer surfaces this as "Open the terminal overlay first" — the user attaches via F-Mark, and from that point the kernel owns send-keys access.
-
-### Capability matrix — what each runtime supports
-
-Surfaced honestly in the UI (capabilities a runtime lacks render as disabled menu items with explanation tooltips).
-
-| Capability | Claude Code | Codex | Gemini CLI |
-|---|---|---|---|
-| Live lifecycle stream | ✓ | ✓ | ✓ |
-| Token-derived `context_pct` | ✓ | ✓ | ✓ |
-| `awaiting_approval` state | ✓ (Notification) | ✓ (PermissionRequest hook) | ✓ (Notification) |
-| `idle_state` from native hook | ✓ | ✗ (derived only) | ✓ |
-| `PreCompact` observability | ✓ | ✓ | ✓ (PreCompress) |
-| Tool-use block / mutate | ✓ | ✓ | ✓ |
-| Slash-command injection via send-keys | ✓ (managed) | ✓ (managed) | ✓ (managed) |
-| Slash-command injection in un-managed panes | ✗ | ✗ | ✗ |
-| Hook config location | `~/.claude/settings.json` | `~/.codex/config.toml` | `~/.gemini/settings.json` |
+Future v0.5+ can tighten / loosen via runtime config; v0.4 ships with these constants.
 
 ## Data Model
 
-### `.f-mark/runtimes.json` (new)
+### `.f-mark/runtimes.json` (new, per-project)
 
-Per-project, with the kernel writing defaults on `initProject()` if absent.
+Written on `initProject()` with built-in defaults. Editable via Settings → Connected Agents → Manage Runtimes.
 
 ```json
 {
@@ -162,374 +117,349 @@ Per-project, with the kernel writing defaults on `initProject()` if absent.
   "runtimes": {
     "claude": {
       "displayName": "Claude Code",
-      "command": "claude",
+      "executable": "claude",
+      "args": [],
       "icon": "claude",
-      "readyDelayMs": 2000,
-      "hookConfig": {
-        "path": "~/.claude/settings.json",
-        "format": "claude-settings",
-        "events": {
-          "TurnStart": "UserPromptSubmit",
-          "TurnEnd": "Stop",
-          "ToolBefore": "PreToolUse",
-          "ToolAfter": "PostToolUse",
-          "ApprovalNeeded": "Notification",
-          "Idle": "Notification",
-          "Compacting": "PreCompact",
-          "SessionStart": "SessionStart"
-        },
-        "notificationFilter": { "ApprovalNeeded": "permission_prompt", "Idle": "idle_prompt" }
-      },
-      "transcriptFormat": "claude-jsonl"
+      "readyDelayMs": 2000
     },
     "codex": {
       "displayName": "Codex",
-      "command": "codex",
+      "executable": "codex",
+      "args": [],
       "icon": "codex",
-      "readyDelayMs": 1500,
-      "hookConfig": {
-        "path": "~/.codex/config.toml",
-        "format": "codex-toml",
-        "events": {
-          "TurnStart": "UserPromptSubmit",
-          "TurnEnd": "Stop",
-          "ToolBefore": "PreToolUse",
-          "ToolAfter": "PostToolUse",
-          "ApprovalNeeded": "PermissionRequest",
-          "Compacting": "PreCompact",
-          "SessionStart": "SessionStart"
-        }
-      },
-      "transcriptFormat": "codex-jsonl"
+      "readyDelayMs": 1500
     },
     "gemini": {
       "displayName": "Gemini",
-      "command": "gemini",
+      "executable": "gemini",
+      "args": [],
       "icon": "gemini",
-      "readyDelayMs": 1500,
-      "hookConfig": {
-        "path": "~/.gemini/settings.json",
-        "format": "gemini-settings",
-        "events": {
-          "TurnStart": "BeforeAgent",
-          "TurnEnd": "AfterAgent",
-          "ToolBefore": "BeforeTool",
-          "ToolAfter": "AfterTool",
-          "ApprovalNeeded": "Notification",
-          "Idle": "Notification",
-          "Compacting": "PreCompress",
-          "SessionStart": "SessionStart"
-        },
-        "notificationFilter": { "ApprovalNeeded": "permission_prompt", "Idle": "idle_prompt" }
-      },
-      "transcriptFormat": "gemini-jsonl"
+      "readyDelayMs": 1500
     }
   }
 }
 ```
 
-User additions look the same with arbitrary `id`, `icon: "bot"` (or any icon name not in the built-in set falls back to the bot icon), and a `hookConfig` they can fill in or leave null. If `hookConfig` is null, the runtime is launchable but operates in **outbound-disabled mode** — presence won't come online, telemetry won't populate, and control commands work only via direct send-keys (no slash-via-hook fallback). The UI shows a "hooks not configured" hint with a link to docs.
+User additions: arbitrary `id`, `executable` (single PATH lookup name or absolute path, not a shell fragment), `args[]` (array of strings, never split), optional `env: Record<string, string>`, optional `icon` (built-in icon name or fallback to "bot"). No `command` field — that mistake from earlier drafts is closed.
 
-Optional fields: `env: Record<string, string>` (set in the runtime's shell), `args: string[]` (extra CLI args before `send-keys` kicks in), `contextWindow: { default: number, perModel?: Record<string, number> }` (token caps for `context_pct` derivation; falls back to a kernel-shipped table when absent).
+Validation: `executable` must match `^[a-zA-Z0-9_./-]+$`; no spaces, no shell metacharacters. The renderer's "edit runtime" form keeps `executable` and `args[]` separate and only renders a shell-style display string for humans.
 
-### `.f-mark/agents/<participant_id>/` (extends auto-stream-hook plan)
-
-Per-agent directory created on first managed spawn or first `link` POST.
+### `.f-mark/agents/<participant_id>/` (extends v0.3.0)
 
 ```
 .f-mark/agents/ag-claude/
-├── active-session         # plaintext: session id (already in auto-stream plan)
-├── .supervisor.lock       # flock'd by supervisor daemon
-├── supervisor.pid         # supervisor's own pid (for ops/debug)
-├── tmux-session           # plaintext: F-Mark tmux session name (only if managed)
-├── runtime                # plaintext: runtime_id (only if managed; sourced from RuntimeRegistry)
-├── telemetry.json         # latest telemetry snapshot (context_pct, last_tool, ...)
-└── .events/               # incoming hook event JSON drops, consumed by supervisor
-    └── 20260523T143012Z_pretooluse_abc123.json
+├── active-session         # v0.3.0 — unchanged
+├── tmux-session           # NEW — F-Mark tmux session name (managed only)
+├── runtime                # NEW — runtime_id (managed only)
+└── log.jsonl              # NEW — per-agent lifecycle log (managed only)
 ```
 
-The `tmux-session` and `runtime` files are how the kernel re-identifies managed agents during reconcile-on-startup.
+`log.jsonl` records lifecycle events (spawn / kill / hook-detected / pane-died / send-keys / restart / state-change) as one JSON object per line. Bounded at 1MB with rotation to `log.jsonl.1` (single backup, not full multi-file rotation). Used by `GET /managed-agents/:id/logs` to fuel the chip's "show last failure" affordance.
 
-### Tmux Session Naming Convention
+### Participant model — unchanged
 
-All F-Mark-owned sessions are prefixed `fmark-`. The full pattern:
-
-- Agent sessions: `fmark-<projectSlug>-ag-<participantId>`
-  Example: `fmark-acme-billing-ag-claude-1a2b`
-- Terminal sessions: `fmark-<projectSlug>-term-<index>`
-  Example: `fmark-acme-billing-term-2`
-
-`projectSlug` is derived from the absolute project root path via the same `normalizeSlug` already in `packages/kernel/src/sessions.ts`, applied to the final path segment. Collisions across projects are deliberately possible — they're harmless because the kernel only ever reconciles sessions whose pane CWD matches its own project root (checked via `tmux display-message -t <session> -p "#{pane_current_path}"`).
-
-### Participant Model — No Schema Change
-
-We deliberately do **not** add presence to `config.json`. Presence is in-memory in the kernel, broadcast over WS, and rebuilt from heartbeats on kernel restart. This keeps the participant record stable across crashes (a participant is never "lost," only its current online state).
+No schema additions to `config.json`. Managed-vs-unmanaged is purely a function of "does `.f-mark/agents/<id>/tmux-session` exist."
 
 ## Kernel HTTP Routes
 
-All under standard `Bearer <token>` auth. New routes:
+All under standard `Bearer <token>` auth (existing `registerAuthHook`). Mutating routes (anything that spawns, kills, or sends keystrokes) additionally validate `Origin` / `Host` headers when the request authenticates via cookie (see §"Security").
 
 ### Managed Agents
 
-- **`POST /managed-agents/spawn`**
-  Body: `{ runtime_id, session_id, name?, suggested_participant_id? }`
-  Behavior: register participant if `suggested_id` doesn't exist (reusing existing `participants.ts`), create tmux session, spawn runtime with hook config injected into the runtime's settings file (Claude `settings.json`, Codex `config.toml`, Gemini equivalent — these are no-ops on subsequent spawns if already present), wait `readyDelayMs`, render guide markdown via `GET /guide?agent_id=...&session_id=...` (internal call), `tmux send-keys` it. Returns `{ participant_id, tmux_session, runtime_id }`.
+- **`POST /managed-agents/spawn`** — body `{ runtime_id, session_id, name?, suggested_participant_id? }`.
+  Creates participant (if `suggested_id` doesn't exist), writes `active-session` and `tmux-session` pointers, runs `tmux new-session -d -s <name> <executable> <args...>`, sets `@fmark-project` and `@fmark-participant` user options, appends to `log.jsonl`. **Does not** install hooks. **Does not** auto-`send-keys` a kickoff prompt unless `hook-install-status` reports the runtime's hooks already present — in that case it sends the rendered guide markdown (see §"Inbound Pane Input"). Otherwise leaves the pane at the runtime's startup screen and tells the UI to surface the manual hook-install instructions. Returns `{ participant_id, tmux_session, runtime_id, hooks_status }`.
 
-- **`DELETE /managed-agents/:participant_id`**
-  The "say goodbye" action. Kills the tmux session (`tmux kill-session -t ...`), removes `.f-mark/agents/<id>/`, broadcasts a presence-offline event. **Does not** delete the participant record itself — only the managed lifecycle. (Participant rename / removal stays in the existing `/participants/:id` PATCH.)
+- **`DELETE /managed-agents/:participant_id`** — the "say goodbye" action.
+  Requires `confirm` query token (see §"Security"). Kills the tmux session (`tmux kill-session -t <name>`), removes `tmux-session` / `runtime` / `log.jsonl` files but **keeps `active-session`** so the participant can be relaunched later as an unmanaged agent.
 
-- **`POST /managed-agents/terminal`**
-  Body: `{ name? }`
-  Creates a `fmark-<proj>-term-<n>` tmux session running just `$SHELL` in the project CWD. Returns `{ tmux_session, label }`.
+- **`POST /managed-agents/terminal`** — body `{ name? }`.
+  Creates `fmark-<basename>-<hash8>-term-<n>` tmux session running `$SHELL` in the project root. Returns `{ tmux_session, label }`.
 
-- **`GET /managed-agents`**
-  Returns `{ agents: [...], terminals: [...] }`. Each item: `{ tmux_session, participant_id?, runtime_id?, label, created_at }`. Agent items have participant_id + runtime_id; terminal items have just label. Computed live from `tmux ls` + `.f-mark/agents/*/` directory scan.
+- **`GET /managed-agents`** — returns `{ agents: [...], terminals: [...] }` computed live from `tmux ls -F` filtered by F-Mark prefix + `@fmark-project` verification, joined with `.f-mark/agents/*/` directory scan.
+
+- **`GET /managed-agents/:participant_id/logs?since=<n>`** — returns the per-agent log (last `since` entries; default 50).
 
 ### Presence
 
-- **`POST /agents/:participant_id/link`**
-  (Already in auto-stream-hook plan.) Writes `.f-mark/agents/<id>/active-session` to the kernel's currently-pointed session. Idempotent.
+- **`POST /agents/:participant_id/ping`** — body optional (empty `{}` accepted).
+  Called by hooks alongside their existing event POSTs. Bumps the in-memory `lastHookAt`. Returns 204. **This is the only new endpoint v0.3.0 hooks need to start calling.** The auto-stream code already POSTs events; this is one more two-line call inserted ahead of those.
 
-- **`POST /agents/:participant_id/unlink`**
-  Clears `active-session`. Flips presence offline. Supervisor POSTs this on death.
+### Pane I/O
 
-- **`POST /agents/:participant_id/heartbeat`**
-  Updates the in-memory `lastSeen` map. If absent (kernel just started), implicit `link` happens. Broadcasts an online event if state changed.
+- **WebSocket `/ws/pane?session=<tmux_session>`** — subscribes to a tmux pane.
+  Server messages:
+  - `{ type: "pane.snapshot", data: <ansi-string> }` — initial render (capture-pane).
+  - `{ type: "pane.data", data: <chunk> }` — incremental stream chunks.
+  - `{ type: "pane.exit" }` — pane no longer exists.
 
-### Control & Telemetry
+  Client messages:
+  - `{ type: "pane.input", data: <string> }` — literal text via `tmux send-keys -l -- <text>`.
+  - `{ type: "pane.key", key: "Enter" | "C-c" | "C-d" | "Up" | ... }` — named key.
+  - `{ type: "pane.resize", cols: <n>, rows: <n> }` — `tmux resize-window`.
 
-- **`POST /agents/:participant_id/telemetry`**
-  Body: `{ context_pct?, last_tool?, awaiting_approval?, idle_state?, model?, tokens_used?, tokens_total? }`. Partial updates accepted; kernel merges into `.f-mark/agents/<id>/telemetry.json` and broadcasts `{ type: "telemetry", participant_id, ...patch }` over WS. Supervisor calls this on every transcript change and on `ApprovalNeeded` / `Idle` hook events.
+  **One** `tmux pipe-pane` per pane in the kernel process; in-memory fan-out to all subscribers. Pipe starts when subscriber count goes from 0→1; stops when 1→0. Initial snapshot: `tmux capture-pane -t <session> -p -e -J -S -2000`. Tested with an injectable command runner.
 
-- **`GET /agents/:participant_id/telemetry`**
-  Returns the latest telemetry snapshot. Used on UI startup to seed before WS events arrive.
+- **`POST /managed-agents/:participant_id/command`** — body one of:
+  - `{ type: "slash", command: "compact" | "clear" | "resume" | <free> }`
+  - `{ type: "interrupt" }`
+  - `{ type: "message", text: <string> }`
 
-- **`POST /managed-agents/:participant_id/command`**
-  Body: one of
-  - `{ type: "slash", command: "compact" }` — sends `/compact` Enter
-  - `{ type: "slash", command: <any> }` — generic slash-command injection
-  - `{ type: "interrupt" }` — sends Ctrl-C
-  - `{ type: "message", text: <string> }` — sends free text + Enter
+  Routes through the per-pane input queue (see §"Inbound Pane Input"). Returns `200` on enqueue, `409 { reason: "unmanaged_pane", offer: "open_overlay" }` for un-managed agents.
 
-  Resolves the agent's tmux session via `.f-mark/agents/<id>/tmux-session` and invokes `tmux send-keys -t <session> -- <payload>`. Returns `200` on success, `409 { reason: "unmanaged_pane", offer: "open_overlay" }` if the agent has no F-Mark-owned pane, `404` if participant doesn't exist or is offline.
+### Hook Install Status (read-only in v0.4)
 
-### Environment Probe
+- **`GET /managed-agents/hook-install-status?runtime_id=<id>&participant_id=<id>`** — returns `{ installed: bool, configPath: string, expectedEntries: HookEntry[], detectedEntries: HookEntry[] }`. The renderer uses this to show "✓ hooks detected" or to surface the manual install instructions with the appropriate `participant_id` baked in. Per-runtime adapters live in `packages/kernel/src/hooks-install/`:
+  - `claude.ts` — parses `~/.claude/settings.json` and looks for `Stop` and `UserPromptSubmit` entries whose `command` contains `f-mark hook auto-stream <participant_id>`.
+  - `codex.ts` — parses `~/.codex/config.toml` and `.codex/config.toml` (project-local) looking for `[[hooks.Stop]]` and `[[hooks.UserPromptSubmit]]` arrays referencing this participant_id.
+  - `gemini.ts` — v0.4 reports `{installed: false, configPath: "", expectedEntries: []}` and the renderer shows: "Gemini CLI uses manual-stream mode in F-Mark v0.4; no hooks needed."
 
-- **`GET /env-probe`**
-  Returns `{ tmux: bool, runtimes: Record<runtime_id, bool>, installer: string | null, os: string }`. `installer` is one of `apt | brew | port | dnf | yum | zypper | wsl | null`. Probe is cheap (`which` calls); cached for 30s in-memory.
+- **`POST /managed-agents/hook-install-instructions?runtime_id=<id>&participant_id=<id>&user_participant_id=<id>`** — *not* a write endpoint; returns `{ markdown: string, manualSteps: { configPath, snippet }[] }`. The renderer pastes the snippet into a modal with a copy button. No mutation of user config files in v0.4.
 
-- **`POST /env/install`**
-  Body: `{ package: string }`
-  Runs the appropriate installer command for `package` (e.g., `tmux`) inside a managed terminal pane so the user can see progress. Returns `{ tmux_session }` (the pane being used for the install). The renderer attaches via the terminal overlay to show output. On exit, the kernel re-runs the probe and broadcasts new env state.
+### Probe
 
-  **This route + its UI is the `delegate-to-subagent` chunk** (see implementation phasing below).
+- **`GET /env-probe`** — returns `{ tmux: bool, tmuxVersion: string | null, runtimes: Record<runtime_id, bool>, installer: string | null }`.
+  `installer` is detected from PATH (apt/brew/dnf/yum/zypper/port/pacman) so the renderer can show the right install command. No `POST /env/install` route in v0.4 — the renderer just shows the command for the user to run themselves in a Terminal pane.
 
-### Guide
+### Guide Endpoint Update
 
-- **`GET /guide?agent_id=<id>&session_id=<id>`**
-  Both params optional. Without params: returns the generic onboarding markdown (current behavior). With `agent_id`: injects "You are participant `<id>`. Use that participant id for all POSTs." With `session_id`: injects "Active session is `<id>`. Start your loop with `GET /sessions/<id>/events?since=`." With both: full kickoff. Always includes the kernel URL + token (or notes `--no-auth` if applicable).
+- **`GET /guide?agent_id=<id>&session_id=<id>&runtime_id=<id>`** (all optional).
+  Backward compatibility: accepts the existing `sessionId` (camelCase) as an alias for `session_id`. Removes the "Hooks (NOT YET SHIPPED)" paragraph. With `agent_id` + `session_id`, the rendered markdown includes runtime-specific hook-install instructions naming the participant_id, the user participant id (queried from `GET /participants?kind=user`), and the session id. Used by:
+  - The renderer's **Reconnect** modal (offline agent → click Reconnect → fetch with that agent_id → show copy-paste command).
+  - The renderer's **Hook Install** modal when the spawn flow detected hooks were missing.
+  - The kernel's internal "send kickoff to managed pane" path when hooks ARE detected — it renders the same markdown, strips it to just the user-facing kickoff text, and `send-keys` it via the input queue.
 
-### Hook Installer
+  Single source of truth across manual and managed paths.
 
-- **`GET /managed-agents/hook-install-status?runtime_id=<id>`**
-  Returns `{ installed: bool, configPath: string, hooksPresent: string[], hooksMissing: string[] }`. The renderer uses this to decide whether to prompt the user before a first spawn.
+## Inbound Pane Input
 
-- **`POST /managed-agents/hook-install`**
-  Body: `{ runtime_id, confirm: true }`. Merges F-Mark's hooks into the runtime's config file (`hookConfig.path` from registry). Format-specific: for `claude-settings` and `gemini-settings` we read+write JSON; for `codex-toml` we read+write TOML preserving comments where possible. Backs up the original to `<configPath>.fmark-backup-<ts>` before writing. Returns `{ installed: true, backupPath }`. Idempotent (re-running is safe).
+`tmux send-keys` is the only universal transport for kernel → pane delivery, but it's not a reliable RPC. Treat it accordingly.
 
-- **`POST /managed-agents/hook-uninstall`**
-  Body: `{ runtime_id, confirm: true }`. Removes only the hooks F-Mark installed (matched by their `command` containing `f-mark hook ensure-supervisor`). Untouchable hooks the user added themselves.
+**Per-pane input queue** (`packages/kernel/src/tmux/input-queue.ts`).
+Serializes all keystrokes that touch a given pane — both kernel-injected (from `/command` or kickoff prompts) and overlay-typed (from WS clients). Strictly FIFO; one outstanding send-keys at a time. Prevents byte-level interleaving.
+
+**Three command modes:**
+
+1. **`interrupt`** — sends `C-c` immediately, bypasses idle gate. Always allowed.
+2. **`slash`** — gated. The renderer checks `presence.state` first; if `online` with no in-flight tool (best-effort, derived from the last hook event being `Stop` / `UserPromptSubmit`), enqueue `/<command><Enter>`. Otherwise the renderer shows "Open terminal to send." Kernel-side it's just an enqueue; the gating is a UI policy.
+3. **`message`** — free text. Always uses `tmux send-keys -t <s> -l -- <text>` (literal mode: keys are interpreted as raw characters, not tmux key names) followed by a separate `tmux send-keys -t <s> -- C-m` for Enter. Control characters in `text` (anything below 0x20 except `\t`) are rejected with 400.
+
+For all three, the kernel appends a log entry (`log.jsonl`) recording the action.
+
+**Cross-runtime reliability:** Claude Code, Codex, and Gemini CLI all run terminal-based TUIs that consume keystrokes. `interrupt` works universally. `slash` and `message` work *as if the user typed them* — meaning they're subject to whatever modal state the agent's TUI happens to be in. The honest framing in the UI: "Send /compact (best effort)" rather than implying reliability. If it doesn't take, the user can open the pane in the overlay and try directly.
 
 ## WebSocket Channels
 
-Existing bus pattern (`packages/kernel/src/ws/bus.ts`) is extended with two new channel types:
+The existing `ws/bus.ts` is a global broadcast. v0.4 keeps it for event-log notifications + new presence and managed-agent broadcasts. Adds a **separate** channel-based subsystem for pane streaming.
 
-### `pane.<tmux_session>` — terminal piping
+### Existing bus (`/ws`) — extended message types
 
-- **Subscribe:** client sends `{ type: "subscribe", channel: "pane.fmark-acme-ag-claude-1a2b" }`.
-  Server's onSubscribe handler runs `tmux capture-pane -t <session> -p -e -J -S -2000` (last 2000 lines, with escape sequences, joined) and sends the snapshot as `{ type: "pane.snapshot", data: <ansi-string> }`. Then starts a `tmux pipe-pane` to a per-subscriber fifo and pipes lines as `{ type: "pane.data", data: <chunk> }`.
-- **Input:** client sends `{ type: "pane.input", data: <keystrokes> }`. Server runs `tmux send-keys -t <session> -- <keystrokes>`. Special keys (Enter, Ctrl-C) sent as escape sequences and translated to `send-keys` arguments (`C-m`, `C-c`).
-- **Unsubscribe / disconnect:** server kills its `pipe-pane`. Other subscribers unaffected.
+- `{ type: "event_added", ... }` — unchanged.
+- `{ type: "event_superseded", ... }` — unchanged.
+- `{ type: "presence", participant_id, state, last_hook_at }` — new in v0.4.
+- `{ type: "managed-agent.spawned", participant_id, tmux_session, runtime_id }`
+- `{ type: "managed-agent.killed", participant_id }`
+- `{ type: "managed-agent.terminal-spawned", tmux_session, label }`
+- `{ type: "managed-agent.log", participant_id, entry }` — last-N log tail
+- `{ type: "env-probe.updated", result }` — manual re-probe broadcast (no install route, but probes can be re-run on user-action)
 
-Multiple subscribers per pane are allowed — they share the snapshot but each gets its own pipe. Input from any subscriber goes to the same pane (no per-client mute; this is intentional for "show your collaborator what's happening").
+### Pane channel (`/ws/pane?session=<id>`)
 
-### Presence events (existing bus, new message type)
-
-- `{ type: "presence", participant_id, online: bool, last_seen: <iso8601> }` broadcast on link/unlink/heartbeat-state-change.
-
-### Telemetry events (existing bus, new message type)
-
-- `{ type: "telemetry", participant_id, patch: { context_pct?, last_tool?, awaiting_approval?, idle_state?, model?, tokens_used?, tokens_total? } }` broadcast on every supervisor telemetry POST. Renderer merges into a per-participant telemetry slice and refreshes the agent chip + any open detail UI.
-
-### Reconnect events (existing bus, new message type)
-
-- `{ type: "managed-agent.spawned", participant_id, tmux_session, runtime_id }` on spawn.
-- `{ type: "managed-agent.killed", participant_id }` on goodbye.
-- `{ type: "managed-agent.terminal-spawned", tmux_session, label }`.
-- `{ type: "env-probe.updated", result: <EnvProbeResult> }` after install or manual re-probe.
-- `{ type: "hook-install.completed", runtime_id, backupPath }` after a successful hook install/uninstall.
-
-## Renderer UI
-
-### Top Bar — Agent + Terminal Chips
-
-Existing top-bar real estate gets a horizontally-scrolling row of chips. Each chip is one of:
-
-- **Agent chip:** runtime icon, participant name, and a small radial telemetry indicator wrapping the icon:
-  - **Outer ring:** presence color (green=online, gray=offline, amber=awaiting_approval, blue=thinking).
-  - **Inner arc:** `context_pct` filled clockwise (0–100%); turns amber above 75%, red above 90%.
-  - **Center pulse:** subtle animation when `last_tool` is set and unresolved (signals "tool running").
-
-  Hover/click reveals telemetry tooltip with full state (model, tokens, last_tool name, idle duration). Click opens the action menu (see below).
-- **Terminal chip:** terminal-monitor icon, `terminal <n>` label. Click opens action menu (rename / kill / open terminal).
-- **`+` button:** trailing chip with `+` icon. Click opens dropdown with: Claude, Codex, Gemini (icons from registry), separator, Terminal (terminal-monitor icon), separator, "Manage runtimes…" (jumps to Settings).
-
-Agents that have been "promoted" from terminals (user ran `claude` inside `terminal 2` and the hook fired) get a small secondary badge on their chip showing the source terminal label. Hovering tells the full story.
-
-### Agent Action Menu
-
-Triggered by clicking an agent chip. Items, all rendering as disabled/grayed-with-tooltip when the runtime or pane state makes them unavailable:
-
-- **Rename** — inline edit of `participant.name`.
-- **Send `/compact`** — `POST /managed-agents/:id/command { type: "slash", command: "compact" }`. Disabled with tooltip "Pane not managed by F-Mark" for un-managed agents (offers "Open in overlay" to adopt). Disabled with tooltip "Awaiting approval — clear that first" while `awaiting_approval` is true.
-- **Send `/clear`** / **Send `/resume`** — same shape; sub-items under "Slash commands…".
-- **Interrupt (Ctrl-C)** — `{ type: "interrupt" }`. Disabled if offline.
-- **Send a message…** — opens an inline text input below the menu. Submit POSTs `{ type: "message", text }`. Used to nudge the agent without leaving F-Mark.
-- **Open terminal** — opens the Terminal Overlay focused on this agent's pane.
-- **Reconnect** — only when offline; opens Reconnect Modal.
-- **Say goodbye** — kills the tmux session + clears `.f-mark/agents/<id>/`; confirmation token gated (see Security Model).
-
-### Terminal Overlay Modal
-
-Single full-screen-ish modal (similar to existing CmdK / Settings modal patterns) hosting an xterm.js terminal. Features:
-
-- Connects to the `pane.<session>` WS channel on open, populates with snapshot, then streams.
-- Input box → keystrokes sent to pane.
-- Tab strip across the top: if the project has multiple open agent/terminal panes, user can switch between them without closing the modal.
-- "Detach" closes the modal but leaves the tmux session alive. "Say goodbye" (agents only) or "Kill terminal" sends the destroy action.
-- Resize: forwards size changes via `tmux resize-window -t <session> -x <cols> -y <rows>`.
-
-### Reconnect Modal
-
-Shown when user clicks "Reconnect" on an offline agent chip. Renders the response of `GET /guide?agent_id=<id>&session_id=<currentSession>` as markdown (using the renderer's existing markdown card), with a prominent **Copy launch command** button. Below the command: a short note explaining "Or open a Terminal here and paste it — I'll detect the connection automatically."
-
-### Hook Install Prompt
-
-Shown before the user's first `+` spawn for a given runtime on this machine, gated by `GET /managed-agents/hook-install-status`. Modal copy:
-
-> **Install F-Mark hooks for Claude Code?**
-> F-Mark needs to add four entries to `~/.claude/settings.json` so it can see Claude's events. We'll back up your current settings to `settings.json.fmark-backup-<ts>`.
-> [Show diff] [Install] [Cancel]
-
-The diff panel renders the precise JSON / TOML insertion the kernel will make. "Cancel" downgrades the spawn to outbound-disabled mode (telemetry won't populate) and remembers the decision via a small `~/.f-mark/preferences.json` so we don't re-prompt every spawn.
-
-Settings → Connected Agents has a "Hooks" row per registered runtime showing `installed | not installed | partial | declined` with an install/uninstall button.
-
-### Settings → Connected Agents
-
-Existing modal section (`packages/renderer/src/modals/settings/Agents.tsx`) gets:
-
-- The existing "Invite new agent" affordance stays — that path is for **un-managed** agents (a participant id without a managed tmux session). Renamed in copy to "Register agent (no spawn)" to distinguish.
-- New section: **Manage Runtimes**. Table of registered runtimes (icon, displayName, command, readyDelayMs, type=builtin/custom). Edit + remove for custom; commands editable for builtins (so `claude` can become `claude --model haiku` if the user wants). Add button → form with all the fields, icon picker (built-in icons + bot fallback).
-
-### Environment Probe Banner
-
-A small status strip beneath the top bar. Shown when `GET /env-probe` reports `tmux: false` OR any registered runtime missing. Two states:
-
-- **Missing tmux:** banner reads "Tmux not installed — managed agents disabled." with **Install tmux** button.
-  - If `installer` is non-null, clicking opens the Terminal Overlay running the install command (e.g., `sudo apt install -y tmux` for apt). On exit, kernel re-probes.
-  - If `installer` is null, button text becomes "Install Homebrew" (or appropriate native installer for OS), opens Terminal Overlay running the install one-liner for that installer. After install, banner cycles to the tmux variant.
-- **Missing runtime(s):** banner reads "X is not on PATH — its `+` option will be disabled." with a runtime list. No install button (we don't know how to install third-party agent CLIs reliably — user handles).
-
-When the banner is shown, the `+` dropdown is rendered but unavailable runtimes are grayed out with their probe failure as tooltip. The Terminal option remains available (the install flow uses it).
-
-## Environment Probe + Installer Flow
-
-Tagged `delegate-to-subagent` in the implementation plan. The kernel side is small (`/env-probe`, `/env/install`); the heuristic logic to detect installers across distros + chained "install installer first" UX is the gnarly part. A subagent gets a self-contained brief covering:
-
-- Installer detection priority: `brew` (macOS), then `apt`/`dnf`/`yum`/`zypper`/`pacman`/`port` (Linux), then WSL probe via `wsl.exe -l` (Windows).
-- Per-installer tmux install command lookup table.
-- Per-OS "install the installer" fallback (e.g., on macOS without brew: render the one-liner from brew.sh; on raw Windows: link to WSL installation docs).
-- Terminal Overlay integration (re-uses the existing pane-WS to show install output; no new UI needed beyond the banner button).
-- Re-probe and broadcast on exit.
-
-## Auto-Stream-Hook Plan Refactor
-
-The existing `docs/superpowers/plans/2026-05-23-auto-stream-hook.md` is in-flight but unstarted (working tree has untracked `packages/kernel/tests/events/toolUse-types.test.ts` and a modified `packages/shared/src/events.ts` — Phase 1 Task 1 work). This spec refactors that plan, but does not invalidate it: phases 1–4 (shared types, kernel routes for `/events/tool-use`, prose `arbitrary` flag) stay verbatim.
-
-What changes:
-
-- **Phase 5 (originally "build the hook subcommand").** Replaced with two subcommands:
-  - `f-mark hook ensure-supervisor <agent_id>` — tiny, flock'd, spawns the daemon detached if not already running. Idempotent. Used by all hook events (Stop, UserPromptSubmit, PreToolUse, PostToolUse).
-  - `f-mark hook supervisor <agent_id> <agent_pid>` — the daemon. Contains the transcript-watching, parsing, and POST logic the original plan distributed across per-Stop fires. Plus the new heartbeat loop and death detection.
-
-- **Phase 6 (renderer cards).** Unchanged — `ToolUseCard`, `ArbitraryGroupCard`, `EventCard` dispatch all work identically since the events themselves are unchanged.
-
-- **Phase 7-8 (Codex / Gemini skill bundles).** Hook command in their settings becomes `f-mark hook ensure-supervisor <agent_id>` instead of the per-Stop transcript parser. Cleaner one-liner.
-
-- **Phase 9 (testing).** Tests reorganize: supervisor daemon gets its own test file with the transcript-watcher logic; ensure-supervisor gets a tiny test for the flock idempotency; the per-Stop tests fold into the supervisor's transcript-watcher tests.
-
-The refactor is captured in a new section of the existing plan rather than a parallel plan — we don't want two planning documents in disagreement. The new spec (this document) becomes the source of truth; the auto-stream plan is amended with a "Note: Phases 5, 7, 8, 9 are restructured per `docs/superpowers/specs/2026-05-23-tmux-agent-orchestration-design.md`" pointer.
+Separate endpoint, per-pane connections (one WS per pane the client wants to watch). Defined in §"Pane I/O" above. Multiple clients per pane share the single in-process pipe-pane stream.
 
 ## Reconcile on Startup
 
 When the kernel starts:
 
-1. **List candidate sessions:** `tmux ls -F '#{session_name}'` filtered to `^fmark-<projectSlug>-`. Skip if `tmux` itself isn't installed (env probe will surface this).
-2. **For each session, verify ownership:** check that the pane's CWD matches the kernel's project root (`tmux display-message -t <s> -p "#{pane_current_path}"`). Drop mismatches — they're another project's sessions sharing the slug.
-3. **Cross-reference with `.f-mark/agents/*/`:**
-   - Agent dir exists + tmux session exists → "managed agent, resurrect presence" — set in-memory state to offline (we have no heartbeat yet), broadcast nothing yet. When the surviving supervisor's next heartbeat arrives (~15s window), presence will flip online naturally.
-   - Agent dir exists + tmux session gone → "managed agent crashed during kernel downtime" — log it, clear the dir, broadcast offline + show in UI with a flagged reconnect prompt.
-   - Tmux session exists + no agent dir → either a terminal session (whose label is in the session name) or an agent whose pointer was deleted. Add to the terminals list; user can re-promote manually.
-4. **Re-attach pipe-pane** is unnecessary — pipe-pane is per-subscriber, set up lazily when the renderer subscribes to `pane.<id>`.
+1. Skip the entire feature if `tmux` is not on PATH; env-probe surfaces it; the `+` button is hidden.
+2. `tmux ls -F '#{session_name} #{?#{==:#{session_attached},0},detached,attached}'`, filter by prefix `fmark-<basename>-<hash8>-`.
+3. For each survivor: read user option `@fmark-project` via `tmux show-options -t <s> -w -v @fmark-project`; drop sessions whose value doesn't match the kernel's project root.
+4. Cross-reference with `.f-mark/agents/*/`:
+   - Agent dir + tmux session exists → "managed agent, presence state = `stale` initially (no recent hook). Will flip to `online` when next hook ping arrives within TTL window."
+   - Agent dir + tmux session gone → managed agent died during kernel downtime. Clear `tmux-session` + `runtime` files (keep `active-session` + `log.jsonl`). Append a `pane-died` log entry. State = `pane-dead`.
+   - Tmux session + no agent dir → either a terminal session or an orphan. Terminals: keep as terminal; orphan agent sessions get killed (we wrote `@fmark-participant` but no agent dir means inconsistent state).
+5. Non-blocking; reconcile completes under 200ms for reasonable session counts.
 
-Reconcile completes in <100ms for a reasonable session count and is non-blocking on the request path.
+## Renderer UI
 
-## Security Model
+### Top Bar — Agent + Terminal Chips
 
-- **Auth required.** All new routes use the existing `registerAuthHook` bearer-token gate. `--no-auth` disables the gate as today; this means anyone on localhost (or whoever you've forwarded the port to) can spawn processes. The startup banner gains a warning when `--no-auth` is combined with any spawn capability — exact copy: "Warning: --no-auth allows any client on this port to spawn processes via the managed-agents API."
-- **Spawn target is always the kernel host.** `--remote` and `--container` modes spawn on the remote / container host respectively. This is intentional and matches the kernel's project-root model. The env-probe surfaces missing prerequisites; users see what's installable.
-- **No shell injection surface.** Runtime config `command` is split on whitespace into argv and passed to `tmux new-session` as separate args, not through a shell. Initial-prompt content is delivered via `tmux send-keys` with `--` separator; no eval, no expansion. The installer route is the exception — it intentionally runs a shell — and lives behind the `delegate-to-subagent` tag where extra care is documented.
-- **`DELETE /managed-agents/:id`** requires a `confirm=<random-token>` query param matching a value the renderer fetched via `GET /managed-agents/:id/confirm-token` (single-use, in-memory, 10s TTL). Prevents accidental kills from misfired requests.
+Horizontally-scrolling row of chips. Each chip:
 
-## Phased Implementation Outline
+- **Agent chip:** runtime icon + participant name + state dot (green/amber/gray, per §"Presence States"). For `pane-dead`, an additional "exited" pill. For `hook-not-installed`, a small wrench icon.
+  Click opens the action menu.
+- **Terminal chip:** terminal icon + `terminal <n>` label. Click opens the terminal action menu.
+- **`+` button:** trailing chip. Click opens dropdown with: Claude, Codex, Gemini (icons from registry, disabled with tooltip if env-probe says missing), separator, Terminal, separator, "Manage runtimes…".
 
-Detailed step-by-step lives in the implementation plan (created via `writing-plans` after this spec is approved). The phasing is:
+**No telemetry ring in v0.4.** Just the state dot.
 
-1. **Phase 1 — Tmux Manager (no UI).** Pure module: spawn, list, kill, capture-pane, send-keys, pipe-pane. Vitest with an injectable command runner (no actual tmux required in tests). Includes the session naming convention and ownership-verification helpers.
-2. **Phase 2 — Runtime Registry (incl. hookConfig).** `.f-mark/runtimes.json` loader, defaults writer (called from `initProject`), CRUD operations. Tests for parsing, defaults, and round-tripping custom entries. Defaults include the full `hookConfig` per built-in runtime.
-3. **Phase 3 — Supervisor Daemon + auto-stream-hook refactor + telemetry.** `f-mark hook supervisor` and `f-mark hook ensure-supervisor` subcommands. Replaces the auto-stream plan's Phase 5. Heartbeat + transcript-watch + death-detect + telemetry derivation (`context_pct` from transcript, `last_tool` from event queue, `awaiting_approval` / `idle_state` from hook events). Per-runtime transcript-format parsers live here.
-4. **Phase 4 — Managed-agents HTTP routes (incl. command + telemetry).** `POST /managed-agents/spawn`, `DELETE`, terminal spawn, list, link/unlink/heartbeat, `POST /agents/:id/telemetry`, `POST /managed-agents/:id/command`.
-5. **Phase 5 — Pane WS channel.** `pane.<id>` subscribe/data/input/snapshot. Server-side `pipe-pane` lifecycle.
-6. **Phase 6 — Hook Installer.** `hook-install-status`, `hook-install`, `hook-uninstall` routes + format adapters (claude-settings JSON, codex-toml, gemini-settings JSON). Backup-before-write. UI is part of Phase 7.
-7. **Phase 7 — Renderer: top-bar chips with telemetry indicator, agent menu (incl. compact/interrupt/message), + button, terminal overlay, Hook Install Prompt, Reconnect Modal.** Wires to all of the above. xterm.js integration in the overlay.
-8. **Phase 8 — Reconcile on startup.** The kernel boot path scans tmux and rebuilds state, including telemetry from `.f-mark/agents/*/telemetry.json` snapshots.
-9. **Phase 9 — Guide endpoint extension.** Query-param-driven substitution.
-10. **Phase 10 — Env probe + installer flow.** **`delegate-to-subagent`.** Heuristics, Linux/macOS/WSL detection, install commands, banner UI, re-probe.
-11. **Phase 11 — Settings → Manage Runtimes UI.** Add/edit/remove for custom; edit-only for builtin command strings; icon picker; hookConfig fields exposed for power users.
-12. **Phase 12 — Docs + skill bundle updates.** README, AGENT.md, skill bundles for the three runtimes mention the orchestrated-spawn path, the supervisor-daemon-driven presence model, and the control plane.
+### Agent Action Menu
+
+- **Rename** — inline edit of `participant.name`.
+- **Send `/compact` (best effort)** — `POST /managed-agents/:id/command { type: "slash", command: "compact" }`. Disabled when state is not `online` (tooltip explains why) and when the agent is unmanaged.
+- **Send `/clear` (best effort)** / **Send `/resume` (best effort)** — sub-items under "Slash commands…".
+- **Interrupt (Ctrl-C)** — `{ type: "interrupt" }`. Disabled if state is `offline` or `pane-dead`.
+- **Send a message…** — opens an inline text input below the menu. Submit posts `{ type: "message", text }`.
+- **Open terminal** — opens the Terminal Overlay focused on this agent's pane.
+- **Reconnect** — only when offline or `pane-dead`. Opens Reconnect Modal (rendered `/guide` markdown with copy button).
+- **Show last failure** — when `log.jsonl` has a recent failure event; opens a small overlay rendering the last 20 log entries.
+- **Say goodbye** — kills the tmux session. Confirmation flow gated by a one-time token (§"Security").
+
+### Terminal Action Menu
+
+- Rename, kill, open in overlay.
+
+### Terminal Overlay (xterm.js)
+
+Full-screen-ish modal hosting an xterm.js terminal connected to the pane WS channel:
+
+- Initial `pane.snapshot` populates scrollback.
+- Streaming `pane.data` writes ANSI passthrough.
+- Input box → WS `pane.input` (text) and `pane.key` (named keys).
+- Resize: `pane.resize` on viewport change.
+- Tab strip: switch between open agent/terminal panes without closing.
+- "Detach" closes the modal but leaves tmux session alive. "Say goodbye" / "Kill terminal" sends the destroy action.
+
+### Hook Install Modal
+
+Shown when:
+- A spawn completes and `hook-install-status` reports hooks missing, OR
+- The user clicks "Install hooks" on a chip whose state is `hook-not-installed`.
+
+Modal renders the response of `POST /managed-agents/hook-install-instructions?...` — runtime-specific manual snippet with **Copy** button. Below it: "After you save the file, your agent should appear as online on the next event."
+
+No automated write. The user pastes the snippet themselves. The next hook fire from that agent triggers `/agents/:id/ping` and the chip flips to online — proof the install worked.
+
+### Reconnect Modal
+
+Shown for offline / pane-dead agent chips. Renders `/guide?agent_id=...&session_id=...&runtime_id=...` with a prominent **Copy launch command** button.
+
+### Settings → Connected Agents
+
+Existing modal section extended:
+- The existing "Invite new agent" affordance stays — that path remains for un-managed agents.
+- New section: **Manage Runtimes**. Table of registered runtimes (icon, displayName, executable, args, type=builtin/custom). Edit + remove for custom; executable + args editable for builtins (so `claude` can become `claude --model haiku`). Add button → form with separate fields for executable, args, env, icon picker. No `command` blob field.
+- New section: **Hook Status**. Per-runtime row showing detected status; "Show install instructions" button for runtimes whose hooks are missing.
+- New section: **Environment Probe**. Last probe result + Re-probe button.
+
+### Env Probe Banner
+
+Below the top bar. Shown when env-probe reports:
+- `tmux: false` → "Tmux not installed — managed agents disabled. Install command: `<package-manager install tmux>`" with a Copy button.
+- `tmux: true, tmuxVersion < 3.0` → "Tmux too old (need 3.0+). Update with: `<command>`".
+- Specific runtime missing → "X not on PATH — its `+` option is disabled. Install at: `<docs URL>`".
+
+Banner does not directly install anything in v0.4.
+
+## Security
+
+The threat model expands meaningfully: v0.4 introduces routes that spawn processes (`POST /managed-agents/spawn`, `POST /managed-agents/terminal`) and inject keystrokes into running TUIs (`POST /managed-agents/:id/command`, `/ws/pane` input). Mitigations:
+
+1. **Bearer-token gate.** All new routes go through the existing `registerAuthHook`. Same as today.
+
+2. **Origin/Host validation for mutating routes when auth came via cookie.** The shipped `auth.ts` accepts the bearer token either as `Authorization` header, query param (which then sets an HttpOnly + SameSite=Strict cookie), or the cookie itself. SameSite=Strict gives strong CSRF protection in modern browsers, but for defense in depth, all new POST/DELETE routes that authenticate via cookie also validate `Origin` (must be a `localhost` / `127.0.0.1` / configured-host scheme) and `Host` headers. Mismatch → 403.
+
+3. **`--no-auth` disables process-spawning routes by default.** Today `--no-auth` disables the bearer gate entirely. In v0.4, the spawn / kill / command / pane-input routes refuse to register if `--no-auth` is set, **unless** the user also passes a new flag `--allow-process-api-no-auth`. The startup banner shows a loud warning when both are set. (We keep `--no-auth` working for read-only API exploration; it just doesn't let an unauthenticated peer execute commands.)
+
+4. **One-time confirm token for `DELETE /managed-agents/:id`.** Renderer calls `GET /managed-agents/:id/confirm-token` (returns a single-use token with 10s TTL); the actual DELETE requires `?confirm=<token>`. Prevents accidental kills from misfired requests.
+
+5. **No shell injection surface.**
+   - `executable` and `args[]` are passed as separate argv to `tmux new-session`, never through a shell.
+   - `executable` is validated against `^[a-zA-Z0-9_./-]+$`.
+   - `message` text rejects control characters (other than `\t`); uses `send-keys -l --` so the bytes are literal, not interpreted as tmux key names. The `--` separator prevents argument injection into tmux.
+   - `slash` command names also validated: `^[a-zA-Z][a-zA-Z0-9_-]{0,32}$`. No spaces — slash command args aren't supported in v0.4 (defer until anyone asks).
+
+6. **Audit log.** Every spawn, kill, send-keys (kernel-side), terminal-spawn, hook-install-status read, and pane WS subscribe is appended to `<agent>/log.jsonl` (per-agent) or `<kernel>/audit.jsonl` (per-kernel for cross-agent actions). Visible via `GET /managed-agents/:id/logs` and (separately) via a future kernel-wide audit view.
+
+7. **Hook install instructions, not writes.** v0.4 never writes to user config files. The Hook Install modal renders text the user copies. (Defers to v0.5+ once the consent-flow + adapter ergonomics are designed.)
 
 ## Testing Strategy
 
-- **Pure functions get unit tests.** Tmux session naming/parsing, ownership verification, runtime config parsing, transcript-walking, token-counting per runtime transcript format, hook-event-to-telemetry translation, hook-config format adapters (claude-settings JSON, codex-toml, gemini-settings JSON read/write).
-- **CLI subcommands get integration tests with mocked `fetch` and an injectable command runner.** The supervisor daemon's loop is testable without spawning a real process — pass in a fake pid + a controllable `aliveCheck` function + a fixture transcript file you can mutate to drive telemetry transitions.
-- **HTTP routes get Fastify-inject tests** following the existing convention in `packages/kernel/tests/routes/`. Tmux command runner is injected; no actual tmux required. Includes `POST /managed-agents/:id/command` (all three command types) and `POST /agents/:id/telemetry`.
-- **Hook installer adapter tests** round-trip realistic config fixtures for all three runtimes, including backup creation, idempotent re-install, partial-state detection, and uninstall preserving user-added hooks.
-- **WS pane channel** gets a unit test that simulates subscribe → snapshot → data → input, asserting the right `tmux capture-pane` / `pipe-pane` / `send-keys` invocations land on the runner. Telemetry-event broadcast tests assert WS payload shape.
-- **Renderer components get RTL tests** for the chip row (including telemetry ring + tool-running pulse), action menus (incl. disabled-state tooltips when commands aren't available), the `+` dropdown, the terminal overlay (xterm.js mocked to a stub), Hook Install Prompt, and the reconnect modal.
-- **Reconcile-on-startup gets an integration test** with a fixture of fake tmux sessions + agent dirs covering the three reconcile cases, including pre-existing `telemetry.json` snapshots being restored to in-memory state.
-- **Per-runtime transcript fixtures** for Claude/Codex/Gemini live in `packages/kernel/tests/fixtures/transcripts/` so the daemon's transcript parsers can be tested against realistic input without spawning the runtimes.
-- **No end-to-end test against real tmux or real runtimes in CI** — the cost/flake tradeoff isn't worth it. We document a manual smoke-test checklist per runtime for releases.
+### Unit tests (Vitest, no real tmux required)
 
-## Out of Scope / Future Work
+- Pure functions: tmux session naming/parsing (incl. path-hash), ownership verification helpers, runtime config parsing + validation, hook-install-status parsing for Claude settings.json + Codex config.toml, presence state machine transitions.
+- CLI subcommands existing in v0.3.0: unchanged tests in `packages/kernel/tests/hooks/`.
+- Routes via Fastify-inject (`packages/kernel/tests/routes/`): spawn, kill, terminal-spawn, list-managed, ping, command (all three types incl. control-char rejection), confirm-token, hook-install-status, env-probe.
+- Pane WS subsystem: simulated subscribe → snapshot → data → input with injectable command runner; asserts single pipe-pane invocation regardless of subscriber count.
+- Renderer (RTL): chip states, action menus (disabled-state tooltips), `+` dropdown, terminal overlay (xterm.js mocked), Hook Install Modal, Reconnect Modal, Env Probe Banner.
+- Reconcile on startup: integration test with fixture tmux output covering the three cases.
 
-- **Multi-machine fleet orchestration.** Could be layered later as a "remote spawn target" runtime config field (`host: "user@machine"`); deferred.
-- **Per-pane recording / replay.** Capture-pane gives us scrollback but no time-series record. Future: optionally archive `pipe-pane` output to disk for later replay in the renderer.
-- **Auto-restart on agent crash.** Currently the supervisor dies with the agent and the user has to reconnect. A `restartPolicy: "on-failure"` could be added per-runtime.
-- **Permission-scoped tokens.** Today all clients see all managed agents. A future enhancement could scope tokens to specific participant ids (useful for shared-team kernels).
-- **Programmatic approval responses.** F-Mark detects `awaiting_approval` but doesn't yet let the user approve/deny from the UI — they still have to switch to the agent's pane (via overlay) and type yes/no. Approve-from-UI would require either runtime-specific RPC (not currently exposed) or send-keys'ing the answer, which is brittle. Defer until a runtime exposes a proper approve/deny RPC.
-- **Permission-prompt grouping for multi-agent sessions.** When several agents are awaiting approval at once, the UI shows them independently. A future enhancement could surface a single "approvals queue" panel.
-- **Slash-command-via-RPC.** If a runtime ever exposes external slash-command invocation (no current evidence), we'd switch from send-keys to the cleaner RPC. Send-keys remains a fallback for older versions.
+### Optional tmux smoke (`packages/kernel/tests/smoke/tmux.smoke.test.ts`)
+
+Runs **only when `tmux` is on PATH and at least 3.0**. Skipped otherwise (via `it.runIf(haveTmux)`). The smoke:
+
+1. Creates a real tmux session in a temp dir.
+2. Sends literal text via `send-keys -l --`.
+3. Captures pane output and asserts it contains the text.
+4. Attaches one pipe via `tmux pipe-pane`; verifies the FIFO receives the same data.
+5. Attaches a second simulated subscriber; verifies in-memory fan-out (the test framework subscribes to the kernel's already-running pipe, not a new one).
+6. Kills the session and verifies cleanup.
+
+Kept conditional in CI so non-tmux dev machines stay green; runs in release CI / pre-release scripts where tmux is guaranteed.
+
+### Manual smoke checklist per release
+
+Per-runtime checks (the user runs these on a real machine):
+
+- **Claude Code:** `+` → Claude. Pane spawns. Hook Install modal appears. User pastes snippet into `~/.claude/settings.json`. Chip flips online on next hook fire. Try `/compact` from menu. Try `interrupt`. Try `message`. Verify terminal overlay shows live output.
+- **Codex:** same flow, with `.codex/config.toml`.
+- **Gemini:** `+` → Gemini. Pane spawns. Hook Install modal shows "Gemini uses manual-stream — no hooks needed." Chip starts in `stale`, flips to `online` after the model registers + streams its first prose event.
+- **Terminal:** `+` → Terminal. Pane spawns with shell. User can manually run any of the three CLIs; presence appears via existing v0.3.0 flow.
+
+Checklist lives in `docs/superpowers/plans/<plan-id>/manual-smoke.md` created by writing-plans.
+
+### Regression coverage for v0.3.0
+
+Critical: v0.3.0 auto-stream tests must continue to pass unchanged. The Phase 1 task of implementation runs the existing kernel test suite as a tripwire — any regression there blocks further work.
+
+## Phased Implementation Outline (v0.4)
+
+Detailed step-by-step lives in the implementation plan (created via `writing-plans` after this spec is approved). Phasing:
+
+1. **Phase 1 — Regression tripwire.** Run existing `pnpm -r test` and capture green baseline. No code changes.
+2. **Phase 2 — Tmux Manager (no UI).** Injectable command runner; session naming with path hash; user-option set/get; spawn/list/kill/capture-pane/send-keys-literal/pipe-pane helpers. Vitest unit coverage.
+3. **Phase 3 — Runtime Registry.** `.f-mark/runtimes.json` loader, defaults writer in `initProject`, CRUD operations, validation. Tests for parsing, defaults, validation rejection cases.
+4. **Phase 4 — Presence Tracker + `POST /agents/:id/ping`.** In-memory state map; state machine implementation; WS broadcast. Tests for transitions.
+5. **Phase 5 — Hook install for v0.3.0 to call `ping`.** Update the shipped `runAutoStream` to POST a ping at the start of every fire. Verify v0.3.0 smoke still passes. Update the skill bundles' hook snippets to reference the same command (no change — the snippet shape stays; only the kernel side starts pinging).
+6. **Phase 6 — Managed-agent routes (spawn/kill/list/terminal/logs/confirm-token).** Fastify-inject tests.
+7. **Phase 7 — Pane WS subsystem.** New endpoint `/ws/pane`; channel routing; pipe-pane fan-out; input queue. Tests with injected command runner.
+8. **Phase 8 — `/command` routes + per-pane input queue + control-char validation.**
+9. **Phase 9 — Reconcile on startup.**
+10. **Phase 10 — Env probe + Guide endpoint update.** Updated `/guide` with runtime-aware substitution + alias for `sessionId`.
+11. **Phase 11 — Hook Install Status (read-only) + instruction renderer.**
+12. **Phase 12 — Renderer UI: top-bar chips, action menu, + button, terminal overlay (xterm.js), Hook Install Modal, Reconnect Modal, Env Probe Banner.**
+13. **Phase 13 — Settings → Manage Runtimes + Hook Status + Re-probe.**
+14. **Phase 14 — Optional tmux smoke test.** Conditional on PATH.
+15. **Phase 15 — Docs + skill bundle updates** (mention managed spawn, terminal overlay, reconnect).
+16. **Phase 16 — Manual smoke pass per runtime.** Verify all three runtimes work end-to-end on a real machine; capture findings in `manual-smoke.md`.
+
+Each phase ends with a `/buddy` verification pass that confirms tests are not just claimed-green but actually run + the assertions actually fired.
+
+## Future Work
+
+### v0.5 — Hook Installer (write side) + Presence Refinement
+
+- Per-runtime config-file write adapters for Claude (`settings.json` JSON merge), Codex (`config.toml` with comment preservation via a TOML library that supports round-tripping), Gemini (`settings.json`, once we have a Gemini-flavored transcript parser justifying hooks at all). Backup-before-write to `<configPath>.fmark-backup-<ts>`. Stable F-Mark-owned hook IDs for matching during uninstall.
+- Codex structured hook events (PreToolUse / PostToolUse / PermissionRequest) consumed directly without transcript parsing, lifting Codex out of "preview" mode.
+- Presence refinements: per-runtime TTL constants, "awaiting approval" detection from Notification / PermissionRequest hooks, configurable thresholds.
+- Audit-log viewer in the UI.
+
+### v0.6 — Telemetry + Context Accounting
+
+- Per-runtime transcript-format parsers with real fixture files captured from live sessions. Live in `packages/kernel/src/transcript-parsers/{claude,codex,gemini}/`.
+- `context_pct` + `tokens_used` derivation. Context window caps **live in runtime config only**, never hardcoded. Unknown model → omit `context_pct` and show "unknown context window."
+- `last_tool` indicator on agent chip.
+- Optional supervisor daemon, justified by a specific concrete user-visible bug (e.g., "manual agent shows offline during a 45-minute silent planning turn"). If/when implemented:
+  - Portable lockfile protocol (`open(path, "wx")` with PID + started_at + last_heartbeat).
+  - Exponential backoff for kernel-down windows.
+  - Durable event queue with atomic writes + idempotency tokens.
+  - Stale-lock recovery + crash recovery tests.
+
+### Beyond v0.6
+
+- Multi-machine spawn targets (`host: "user@machine"` runtime field).
+- Per-pane recording / replay (pipe-pane output archive to disk).
+- Auto-restart-on-crash policies (`restartPolicy: "on-failure"`).
+- Permission-scoped tokens for shared-team kernels.
 
 ---
 
@@ -537,17 +467,17 @@ Detailed step-by-step lives in the implementation plan (created via `writing-pla
 
 | Decision | Chosen | Rationale |
 |---|---|---|
-| Runtime model | Generic data-driven adapter (`.f-mark/runtimes.json`) | Adding a runtime should never be a code change. |
-| Lifecycle on kernel exit | Detach (tmux sessions survive) | Justifies tmux choice; agent context survives kernel restarts and updates. |
-| Presence detection | Hook-driven via supervisor daemon | Decouples identity from tmux ownership; works for both managed and manual agents. |
-| Supervisor daemon location | Standalone Node process (A1) | Survives kernel restart by construction; kernel stays a pure HTTP receiver. |
-| Browser terminal transport | `tmux pipe-pane` + WS (B1) | No native dep; tmux primitives map cleanly to WS messages. |
-| Env-mode availability | All modes; probe-and-banner approach | Remote dev VM is a real workflow; honesty about prerequisites beats lockdown. |
-| Tmux dependency | Hard dep on Linux/macOS; WSL on Windows | Acceptable platform constraint for this feature. |
-| Auto-stream-hook plan | Refactored, not replaced | Phases 1–4 unchanged; phases 5/7/8/9 restructured around the supervisor model. |
-| Installer flow | Delegated to subagent during implementation | Heuristic-heavy, self-contained; benefits from focused brief. |
-| Inbound control transport (kernel→agent) | `tmux send-keys` for managed panes; 409 + offer-overlay for un-managed | Universal — none of the three runtimes expose external action-trigger APIs. |
-| Outbound telemetry derivation | Hook events + transcript parsing inside supervisor | Hooks miss live token counts; transcript parsing fills the gap. |
-| Hook installation | Explicit one-time consent prompt, idempotent merge, backup-before-write | F-Mark modifying `~/.claude/settings.json` requires explicit user buy-in. |
-| Awaiting-approval UI surfacing | Detect via hooks (Notification / PermissionRequest), display badge, do NOT auto-respond | No runtime exposes programmatic approve/deny; sending y/n via send-keys is brittle. |
-| Per-runtime capability honesty | Disabled menu items with explanation tooltips | Pretending Codex has idle detection (when it doesn't) creates confusing UX. |
+| Runtime model | Data-driven adapter (`.f-mark/runtimes.json`) with `{ executable, args[], env? }` | Adding a runtime should never be a code change; argv form is the only safe representation. |
+| Lifecycle on kernel exit | Detach (tmux sessions survive) | Agent context survives kernel restarts and updates. |
+| Presence detection (v0.4) | TTL + tmux liveness, no daemon | Daemon adds complexity for a problem v0.4 doesn't have. Defer to v0.6 behind a concrete bug. |
+| Browser terminal transport | Single `tmux pipe-pane` per pane + in-memory WS fan-out | tmux only supports one active pipe per pane; per-subscriber fifos would break each other. |
+| Inbound control transport | `tmux send-keys` framed as best-effort | Universal; reliable for `interrupt`, idle-gated for `slash`/`message`; honestly labeled in UI. |
+| Hook installation | Read-only detection + manual-paste instructions (v0.4) | Editing user config is a trust cliff; defer write side to v0.5 after consent flow is designed. |
+| Telemetry | Deferred to v0.6 behind real fixtures | Runtime transcripts are not all Claude-shaped; over-promising creates trust debt. |
+| Env install | Probe + copyable command (v0.4) | Installing package managers from F-Mark is unrelated risk; users can copy and run. |
+| Tmux session naming | `fmark-<basename>-<hash8>-{ag,term}-<id>` + `@fmark-project` user option | Avoids global tmux namespace collisions across F-Mark projects sharing a basename. |
+| Minimum tmux version | 3.0 | Reliable user-option support; surfaced via env-probe. |
+| Spawn under `--no-auth` | Disabled unless `--allow-process-api-no-auth` | Unauthenticated process spawning over a network port is RCE. |
+| Migration from v0.3.0 | Strictly additive — `auto-stream` unchanged; new `ping` route added | No regression risk for shipped users. |
+| Per-runtime parity | Feed parity, not mechanism parity | Claude = auto-stream transcript; Codex = preview + hook events; Gemini = manual-stream. Honest. |
+| Scope | v0.4 = managed tmux + terminal overlay + reconcile + guide update. v0.5/v0.6 deferred. | Single-cycle scope; risk profile per release stays tight. |
