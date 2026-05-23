@@ -1,11 +1,16 @@
 import { create } from "zustand";
-import type { AnyEventRecord, Participant } from "@f-mark/shared";
+import type {
+  AnyEventRecord,
+  ManagedAgentWsMessage,
+  Participant,
+} from "@f-mark/shared";
 import type { SessionMeta } from "../api/client.js";
 import {
   DEFAULT_FILTER,
   type LogFilter,
 } from "../popovers/log-filter-types.js";
 import type { CustomPreset } from "../popovers/customPresets.js";
+import { createPresenceSlice, type PresenceSlice } from "./presence.js";
 
 export type LeftRailKey =
   | "sessions"
@@ -74,7 +79,7 @@ function saveViewModeBySession(map: Record<string, ViewMode>): void {
   }
 }
 
-interface State {
+interface State extends PresenceSlice {
   token: string | null;
   sessions: SessionMeta[];
   currentSessionId: string | null;
@@ -127,9 +132,14 @@ interface State {
   openPopover(key: PopoverKey, anchorRect: DOMRect | null): void;
   closePopover(): void;
   setLogFilter(filter: LogFilter): void;
+  /* Routes a typed managed-agent / presence / env-probe WS message into the
+     presence slice. Other message types (e.g. event_added) are handled by
+     the existing flow in App.tsx and must be dispatched separately. */
+  dispatchManagedAgentWsMessage(msg: ManagedAgentWsMessage): void;
 }
 
 export const useStore = create<State>((set, get) => ({
+  ...createPresenceSlice<State>(set),
   token: null,
   sessions: [],
   currentSessionId: null,
@@ -215,4 +225,29 @@ export const useStore = create<State>((set, get) => ({
   closePopover: () =>
     set({ activePopover: { key: null, anchorRect: null } }),
   setLogFilter: (logFilter) => set({ logFilter }),
+  dispatchManagedAgentWsMessage: (msg) => {
+    const s = get();
+    if (msg.type === "presence") {
+      s.setPresence(msg.participant_id, {
+        state: msg.state,
+        last_hook_at: msg.last_hook_at,
+      });
+    } else if (msg.type === "managed-agent.spawned") {
+      s.addManagedAgent({
+        participant_id: msg.participant_id,
+        tmux_session: msg.tmux_session,
+        runtime_id: msg.runtime_id,
+      });
+    } else if (msg.type === "managed-agent.killed") {
+      s.removeManagedAgent(msg.participant_id);
+      s.removePresence(msg.participant_id);
+    } else if (msg.type === "managed-agent.terminal-spawned") {
+      s.addManagedTerminal({
+        tmux_session: msg.tmux_session,
+        label: msg.label,
+      });
+    } else if (msg.type === "env-probe.updated") {
+      s.setEnvProbe(msg.result);
+    }
+  },
 }));
