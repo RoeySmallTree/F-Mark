@@ -12,20 +12,38 @@ export interface BannerInput {
   sshHint: boolean;
 }
 
-function italic(text: string): string {
-  return process.stdout.isTTY ? `\x1b[3m${text}\x1b[0m` : text;
+const ANSI = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  italic: "\x1b[3m",
+  cyan: "\x1b[36m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  magenta: "\x1b[35m",
+};
+
+function wrap(open: string, text: string): string {
+  return process.stdout.isTTY ? `${open}${text}${ANSI.reset}` : text;
 }
+
+const bold = (s: string): string => wrap(ANSI.bold, s);
+const dim = (s: string): string => wrap(ANSI.dim, s);
+const italic = (s: string): string => wrap(ANSI.italic, s);
+const cyan = (s: string): string => wrap(ANSI.cyan, s);
+const green = (s: string): string => wrap(ANSI.green, s);
+const yellow = (s: string): string => wrap(ANSI.yellow, s);
+const magenta = (s: string): string => wrap(ANSI.magenta, s);
 
 function authLine(token: string | null): string {
   return token === null
-    ? "  Auth:     DISABLED (--no-auth)"
-    : `  Token:    ${token}`;
+    ? `  ${dim("Auth:")}     ${yellow("DISABLED (--no-auth)")}`
+    : `  ${dim("Token:")}    ${yellow(token)}`;
 }
 
 function openUrl(port: number, token: string | null): string {
-  return token === null
-    ? `http://localhost:${port}`
-    : `http://localhost:${port}?token=${token}`;
+  const base = `http://localhost:${port}`;
+  return token === null ? base : `${base}?token=${token}`;
 }
 
 function hintBlock(input: BannerInput): string[] {
@@ -38,61 +56,70 @@ function hintBlock(input: BannerInput): string[] {
   ];
 }
 
+function title(text: string): string {
+  return `${magenta("◆")} ${bold(text)}`;
+}
+
 function localBanner(input: BannerInput): string {
   const { port, token } = input;
   return [
-    `F-Mark v${VERSION} running.`,
+    title(`F-Mark v${VERSION} running.`),
     "",
     ...hintBlock(input),
-    `  URL:      http://localhost:${port}`,
+    `  ${dim("URL:")}      ${cyan(`http://localhost:${port}`)}`,
     authLine(token),
     "",
-    `  Open: ${openUrl(port, token)}`,
+    `  ${dim("Open:")}     ${cyan(openUrl(port, token))}`,
     "",
-    "  Press Ctrl+C to stop.",
+    `  ${dim("Press Ctrl+C to stop.")}`,
   ].join("\n");
 }
 
 function remoteBanner(input: BannerInput): string {
   const { port, token, hostname, user } = input;
+  const sshCmd = `ssh -fN -L ${port}:localhost:${port} ${user}@${hostname}`;
+  const stopCmd = `pkill -f 'ssh -fN -L ${port}:localhost:${port}'`;
   return [
-    `F-Mark v${VERSION} running on ${hostname}.`,
+    title(`F-Mark v${VERSION} running on ${hostname}.`),
     "",
     ...hintBlock(input),
-    `  URL:      http://localhost:${port} (on this machine)`,
+    `  ${dim("URL:")}      ${cyan(`http://localhost:${port}`)} ${dim("(on this machine)")}`,
     authLine(token),
     "",
-    "  To access from your laptop, open a new terminal and run:",
+    `  ${dim("From your laptop — start a detached SSH tunnel:")}`,
     "",
-    `    ssh -L ${port}:localhost:${port} ${user}@${hostname}`,
+    `    ${green(sshCmd)}`,
     "",
-    `  Then open: ${openUrl(port, token)}`,
+    `  ${dim("Then open:")} ${cyan(openUrl(port, token))}`,
     "",
-    "  Tip: If you use VS Code or Cursor with Remote-SSH, the port forwards",
-    "  automatically — you can skip the ssh -L command above.",
+    `  ${dim("Stop the tunnel later with:")}`,
     "",
-    "  Press Ctrl+C to stop.",
+    `    ${green(stopCmd)}`,
+    "",
+    `  ${dim(italic("Tip: VS Code / Cursor Remote-SSH forwards ports automatically — skip the ssh step."))}`,
+    "",
+    `  ${dim("Press Ctrl+C to stop F-Mark.")}`,
   ].join("\n");
 }
 
 function containerBanner(input: BannerInput): string {
   const { port, token } = input;
   return [
-    `F-Mark v${VERSION} running.`,
+    title(`F-Mark v${VERSION} running.`),
     "",
     ...hintBlock(input),
-    `  URL:      http://localhost:${port} (inside the container)`,
+    `  ${dim("URL:")}      ${cyan(`http://localhost:${port}`)} ${dim("(inside the container)")}`,
     authLine(token),
     "",
-    `  To access from your host, ensure port ${port} is mapped. For example:`,
-    `    docker run -p ${port}:${port} <image>`,
-    "  Or in docker-compose.yml:",
-    "    ports:",
-    `      - "${port}:${port}"`,
+    `  ${dim(`Map port ${port} to your host. For example:`)}`,
+    `    ${green(`docker run -p ${port}:${port} <image>`)}`,
+    `  ${dim("Or in docker-compose.yml:")}`,
+    `    ${green("ports:")}`,
+    `    ${green(`  - "${port}:${port}"`)}`,
     "",
-    `  Then open: ${openUrl(port, token)}`,
+    `  ${dim("Then open:")} ${cyan(openUrl(port, token))}`,
     "",
-    "  Press Ctrl+C to stop.",
+    `  ${dim("Press Ctrl+C to stop.")}`,
   ].join("\n");
 }
 

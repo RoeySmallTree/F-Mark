@@ -53,4 +53,45 @@ describe("routes /sessions", () => {
       await app.close();
     });
   });
+
+  it("accepts ?token=<token> query param when configured", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: "secret", paths: p });
+      const ok = await app.inject({
+        method: "GET",
+        url: "/sessions?token=secret",
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.headers["set-cookie"]).toMatch(/fmark_token=secret/);
+      const bad = await app.inject({
+        method: "GET",
+        url: "/sessions?token=wrong",
+      });
+      expect(bad.statusCode).toBe(401);
+      await app.close();
+    });
+  });
+
+  it("accepts fmark_token cookie on subsequent requests", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: "secret", paths: p });
+      const ok = await app.inject({
+        method: "GET",
+        url: "/sessions",
+        headers: { cookie: "fmark_token=secret" },
+      });
+      expect(ok.statusCode).toBe(200);
+      const bad = await app.inject({
+        method: "GET",
+        url: "/sessions",
+        headers: { cookie: "fmark_token=wrong" },
+      });
+      expect(bad.statusCode).toBe(401);
+      await app.close();
+    });
+  });
 });

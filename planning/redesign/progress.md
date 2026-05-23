@@ -4,7 +4,7 @@ All 15 phases landed. Renderer: 238 tests across 26 files. Kernel: 123 tests. Bu
 
 Summary: themes (light + 5 dark) · markdown + JSON renderers (rendered/source/accordion + tree/source/table) · backend extended with todos/files/html/raw/presets/skills/search/PATCH-participants · full shell (TopBar/Rails/Panels/Feed/RightPanel/Compose) · 7 event card variants · compose with mode pills + global hotkeys · command palette ⌘K · presets popover ⌘P · skills palette ⌘⇧K · new-session modal with templates · settings modal (Profile/Agents/Appearance/Shortcuts/About) · log filter popover · view toggle (Everything/Document/Conversation) · comment thread overlay with focus dim.
 
-Final commit: `fd9fe36`
+Final commit: `eab7694` (follow-up to `fd9fe36`)
 
 ---
 

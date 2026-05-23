@@ -1,0 +1,16 @@
+{
+  "version": "0.1.0",
+  "port": 7777,
+  "participants": {
+    "us-84b3": {
+      "kind": "user",
+      "name": "Roeyki",
+      "color": "#a83a3a"
+    },
+    "ag-claude": {
+      "kind": "agent",
+      "name": "Claude (Opus 4.7)",
+      "color": "#f59e0b"
+    }
+  }
+}
