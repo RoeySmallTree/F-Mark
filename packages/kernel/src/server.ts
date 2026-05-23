@@ -122,6 +122,9 @@ export function createServer(deps: ServerDeps): CreatedServer {
   });
   const presenceTicker = setInterval(() => tracker.tick(), 5_000);
   presenceTicker.unref();
+  app.addHook("onClose", async () => {
+    clearInterval(presenceTicker);
+  });
 
   registerParticipantRoutes(app, deps.paths);
   registerAgentsRoutes(app, deps.paths);

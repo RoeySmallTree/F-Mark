@@ -69,4 +69,92 @@ describe("PresenceTracker", () => {
     t.ping("ag-x");
     expect(t.snapshot().get("ag-x")?.state).toBe("online");
   });
+
+  it("ping() uses a single now() so a time-warping clock cannot stale the fresh ping", () => {
+    // Simulate a clock that advances by 10 minutes between successive now() reads.
+    // If ping() reads `now()` twice (once to stamp, once to derive), the derived
+    // state will be `offline` (age = 600s). With a single captured `now()` the
+    // derived state must be `online`.
+    let calls = 0;
+    const t = createPresenceTracker({
+      broadcast: () => {},
+      now: () => {
+        const base = 1_000_000;
+        const offset = calls * 600_000;
+        calls += 1;
+        return base + offset;
+      },
+    });
+    t.ping("ag-x");
+    expect(t.snapshot().get("ag-x")?.state).toBe("online");
+  });
+
+  it("launching: setManagedPane with no ping yet leaves state at 'launching'", () => {
+    const t = createPresenceTracker({ broadcast: () => {} });
+    t.setManagedPane("ag-x", { paneAlive: () => true });
+    expect(t.snapshot().get("ag-x")?.state).toBe("launching");
+  });
+
+  it("managed 120s threshold transition broadcasts the stale state", () => {
+    const broadcasts: any[] = [];
+    const t = createPresenceTracker({ broadcast: (m) => broadcasts.push(m) });
+    t.setManagedPane("ag-claude", { paneAlive: () => true });
+    t.ping("ag-claude");
+    broadcasts.length = 0;
+    vi.advanceTimersByTime(121_000);
+    t.tick();
+    expect(t.snapshot().get("ag-claude")?.state).toBe("stale");
+    expect(broadcasts).toHaveLength(1);
+    expect(broadcasts[0]).toMatchObject({
+      type: "presence",
+      participant_id: "ag-claude",
+      state: "stale",
+    });
+  });
+
+  it("pane-dead transition broadcasts the pane-dead state", () => {
+    const broadcasts: any[] = [];
+    const t = createPresenceTracker({ broadcast: (m) => broadcasts.push(m) });
+    let alive = true;
+    t.setManagedPane("ag-x", { paneAlive: () => alive });
+    t.ping("ag-x");
+    broadcasts.length = 0;
+    alive = false;
+    t.tick();
+    expect(t.snapshot().get("ag-x")?.state).toBe("pane-dead");
+    expect(broadcasts).toHaveLength(1);
+    expect(broadcasts[0]).toMatchObject({
+      type: "presence",
+      participant_id: "ag-x",
+      state: "pane-dead",
+    });
+  });
+
+  it("stale -> offline two-step transition: ticks through both states and broadcasts each", () => {
+    const broadcasts: any[] = [];
+    const t = createPresenceTracker({ broadcast: (m) => broadcasts.push(m) });
+    t.ping("ag-x");
+    expect(broadcasts.at(-1).state).toBe("online");
+    // Past 60s -> stale
+    vi.advanceTimersByTime(90_000);
+    t.tick();
+    expect(t.snapshot().get("ag-x")?.state).toBe("stale");
+    expect(broadcasts.at(-1)).toMatchObject({
+      type: "presence",
+      participant_id: "ag-x",
+      state: "stale",
+    });
+    // Push total age past 600s -> offline
+    vi.advanceTimersByTime(600_000);
+    t.tick();
+    expect(t.snapshot().get("ag-x")?.state).toBe("offline");
+    expect(broadcasts.at(-1)).toMatchObject({
+      type: "presence",
+      participant_id: "ag-x",
+      state: "offline",
+    });
+    // Three distinct broadcasts: online -> stale -> offline
+    const states = broadcasts.map((b) => b.state);
+    expect(states).toEqual(["online", "stale", "offline"]);
+  });
 });

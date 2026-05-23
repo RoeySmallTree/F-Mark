@@ -41,11 +41,11 @@ export function createPresenceTracker(deps: CreateTrackerDeps): PresenceTracker 
   const now = deps.now ?? (() => Date.now());
   const map = new Map<string, PresenceEntry>();
 
-  function deriveState(e: PresenceEntry): PresenceState {
+  function deriveState(e: PresenceEntry, nowMs: number): PresenceState {
     if (e.paneAlive && !e.paneAlive()) return "pane-dead";
     if (e.hooksInstalled === false && e.lastHookAt === null) return "hook-not-installed";
     if (e.lastHookAt === null) return "launching";
-    const age = now() - e.lastHookAt;
+    const age = nowMs - e.lastHookAt;
     const onlineCap = e.paneAlive ? ONLINE_MANAGED_TTL_MS : ONLINE_TTL_MS;
     if (age <= onlineCap) return "online";
     if (age <= OFFLINE_TTL_MS) return "stale";
@@ -64,41 +64,46 @@ export function createPresenceTracker(deps: CreateTrackerDeps): PresenceTracker 
 
   return {
     ping(id) {
+      const t = now();
       const cur = map.get(id) ?? { state: "launching", lastHookAt: null };
       const prev = cur.state;
-      cur.lastHookAt = now();
-      cur.state = deriveState(cur);
+      cur.lastHookAt = t;
+      cur.state = deriveState(cur, t);
       map.set(id, cur);
       emit(id, cur, prev);
     },
     setManagedPane(id, { paneAlive }) {
+      const t = now();
       const cur = map.get(id) ?? { state: "launching", lastHookAt: null };
       const prev = cur.state;
       cur.paneAlive = paneAlive;
-      cur.state = deriveState(cur);
+      cur.state = deriveState(cur, t);
       map.set(id, cur);
       emit(id, cur, prev);
     },
     clearManagedPane(id) {
+      const t = now();
       const cur = map.get(id);
       if (!cur) return;
       const prev = cur.state;
       delete cur.paneAlive;
-      cur.state = deriveState(cur);
+      cur.state = deriveState(cur, t);
       emit(id, cur, prev);
     },
     setManagedHookStatus(id, installed) {
+      const t = now();
       const cur = map.get(id) ?? { state: "launching", lastHookAt: null };
       const prev = cur.state;
       cur.hooksInstalled = installed;
-      cur.state = deriveState(cur);
+      cur.state = deriveState(cur, t);
       map.set(id, cur);
       emit(id, cur, prev);
     },
     tick() {
+      const t = now();
       for (const [id, e] of map.entries()) {
         const prev = e.state;
-        e.state = deriveState(e);
+        e.state = deriveState(e, t);
         emit(id, e, prev);
       }
     },

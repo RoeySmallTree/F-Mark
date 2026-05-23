@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import websocketPlugin from "@fastify/websocket";
 import type { WebSocket } from "ws";
+import type { PresenceState } from "../presence/tracker.js";
 
 export interface EventAddedMessage {
   type: "event_added";
@@ -20,7 +21,7 @@ export interface EventSupersededMessage {
 export interface PresenceMessage {
   type: "presence";
   participant_id: string;
-  state: string;
+  state: PresenceState;
   last_hook_at: number | null;
 }
 
