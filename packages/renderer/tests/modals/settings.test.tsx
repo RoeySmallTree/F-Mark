@@ -86,16 +86,19 @@ describe("SettingsModal — side nav", () => {
     cleanup();
   });
 
-  test("renders all five side-nav items", () => {
+  test("renders all eight side-nav items", () => {
     render(<SettingsModal />);
     const nav = screen.getByRole("tablist", { name: /settings sections/i });
     const tabs = within(nav).getAllByRole("tab");
-    expect(tabs).toHaveLength(5);
+    expect(tabs).toHaveLength(8);
     expect(tabs[0]).toHaveTextContent(/profile/i);
     expect(tabs[1]).toHaveTextContent(/connected agents/i);
-    expect(tabs[2]).toHaveTextContent(/appearance/i);
-    expect(tabs[3]).toHaveTextContent(/keyboard shortcuts/i);
-    expect(tabs[4]).toHaveTextContent(/about/i);
+    expect(tabs[2]).toHaveTextContent(/runtimes/i);
+    expect(tabs[3]).toHaveTextContent(/hooks/i);
+    expect(tabs[4]).toHaveTextContent(/env probe/i);
+    expect(tabs[5]).toHaveTextContent(/appearance/i);
+    expect(tabs[6]).toHaveTextContent(/keyboard shortcuts/i);
+    expect(tabs[7]).toHaveTextContent(/about/i);
   });
 
   test("clicking each item switches the main content", async () => {
@@ -110,6 +113,21 @@ describe("SettingsModal — side nav", () => {
     await user.click(screen.getByRole("tab", { name: /connected agents/i }));
     expect(
       screen.getByRole("heading", { level: 3, name: /connected agents/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^runtimes$/i }));
+    expect(
+      screen.getByRole("heading", { level: 3, name: /^runtimes$/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^hooks$/i }));
+    expect(
+      screen.getByRole("heading", { level: 3, name: /hook status/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /env probe/i }));
+    expect(
+      screen.getByRole("heading", { level: 3, name: /env probe/i }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /appearance/i }));
