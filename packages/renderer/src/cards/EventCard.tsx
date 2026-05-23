@@ -38,6 +38,15 @@ interface Props {
   participants: Record<string, Participant>;
   comments: AnyEventRecord[];
   allEvents: AnyEventRecord[];
+  /** Filenames of events that are rendered inside an anchor ProseCard
+   *  (consumed blocks). Top-level dispatch returns null for these so they
+   *  don't show twice. Default `undefined` means "no filter" — keeps
+   *  existing tests + call sites green while Feed.tsx threads the real
+   *  set in. */
+  consumedFilenames?: Set<string>;
+  /** Blocks resolved to this anchor's filename — only used when
+   *  `event` is a prose anchor and `ProseCard` composes them in. */
+  blocks?: AnyEventRecord[];
 }
 
 export function EventCard({
@@ -45,7 +54,25 @@ export function EventCard({
   participants,
   comments,
   allEvents,
+  consumedFilenames,
+  blocks,
 }: Props): JSX.Element | null {
+  /* Consumed-block early-out — runs BEFORE the prose-role dispatch so a
+     comment-mode prose that's also been resolved to an anchor still
+     returns null exactly once. */
+  if (
+    consumedFilenames !== undefined &&
+    consumedFilenames.has(event.filename)
+  ) {
+    return null;
+  }
+
+  /* Orphan signal for non-prose blocks: any non-prose event carrying
+     `append_to` whose live anchor isn't in `consumedFilenames` is an
+     orphan. Phase 13 polish wires `orphanedAppendTo` through to each card
+     variant for the "orphaned embed" badge; today the variants ignore
+     the signal, so we don't thread it yet. */
+
   if (event.kind === "prose") {
     const role = getProseRole(event.payload as ProsePayload);
     /* Comments are rendered inside the target card / right panel, not as
@@ -57,6 +84,7 @@ export function EventCard({
           event={event}
           participants={participants}
           comments={comments}
+          blocks={blocks}
         />
       );
     }

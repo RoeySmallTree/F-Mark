@@ -155,16 +155,27 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
     });
   }
 
-  // Phase 5 deliberately does NOT filter consumed blocks from feed slices.
-  // Phase 6 wires that on, together with the ProseCard composition and
-  // ProseInlineBlock registry — so blocks never "vanish" between phases.
+  /* Consumed blocks are rendered inside their anchor ProseCard, so they
+     must not appear as top-level cards in any feed slice. Orphans (blocks
+     pointing at a missing/cycled parent) stay visible at the top level. */
+  const consumedFilenames = new Set<string>();
+  for (const blocks of consumedBlocksByAnchor.values()) {
+    for (const b of blocks) consumedFilenames.add(b.filename);
+  }
+
   const feed = visible.filter(
-    (e) => !isProseComment(e) && e.kind !== "choice",
+    (e) =>
+      !isProseComment(e) &&
+      e.kind !== "choice" &&
+      !consumedFilenames.has(e.filename),
   );
   const feedDocument = visible.filter(
-    (e) => isNamedAnchor(e) || e.kind === "flow",
+    (e) =>
+      (isNamedAnchor(e) || e.kind === "flow") &&
+      !consumedFilenames.has(e.filename),
   );
   const feedConversation = visible.filter((e) => {
+    if (consumedFilenames.has(e.filename)) return false;
     if (e.kind === "prose") {
       return getProseRole(e.payload as ProsePayload).kind === "message";
     }

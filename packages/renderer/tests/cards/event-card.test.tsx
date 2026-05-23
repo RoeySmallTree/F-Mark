@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import type { ToolUseEventRecord } from "@f-mark/shared";
+import type { AnyEventRecord, ToolUseEventRecord } from "@f-mark/shared";
 import { EventCard } from "../../src/cards/EventCard.js";
 import {
   PARTICIPANTS,
@@ -201,5 +201,48 @@ describe("EventCard dispatcher", () => {
       />,
     );
     expect(screen.getByText("Bash")).toBeInTheDocument();
+  });
+
+  test("consumed-block early-out: event whose filename is in consumedFilenames returns null", () => {
+    /* Even a kind that would normally render (named prose anchor here)
+       must return null when its filename is in the consumed set —
+       the dispatcher's early-out runs BEFORE the role-based switch. */
+    const ev = makeProse(
+      "20260522T101000Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Should be hidden", content: "body" },
+    );
+    const consumed = new Set([ev.filename]);
+    const { container } = render(
+      <EventCard
+        event={ev}
+        participants={PARTICIPANTS}
+        comments={[]}
+        allEvents={[ev]}
+        consumedFilenames={consumed}
+      />,
+    );
+    expect(container.children.length).toBe(0);
+  });
+
+  test("consumed-block early-out applies to non-prose kinds too (flow embedded inside anchor)", () => {
+    const ev: AnyEventRecord = {
+      filename: "20260522T101100Z_ag-c92e.flow.json",
+      timestamp: "20260522T101100Z",
+      participant_id: "ag-c92e",
+      kind: "flow",
+      payload: { id: "fl1", nodes: [], edges: [] },
+    };
+    const consumed = new Set([ev.filename]);
+    const { container } = render(
+      <EventCard
+        event={ev}
+        participants={PARTICIPANTS}
+        comments={[]}
+        allEvents={[ev]}
+        consumedFilenames={consumed}
+      />,
+    );
+    expect(container.children.length).toBe(0);
   });
 });

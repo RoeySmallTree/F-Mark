@@ -233,4 +233,84 @@ describe("aggregate", () => {
       expect(agg.feedConversation).toHaveLength(0);
     });
   });
+
+  describe("consumed-block feed filtering (Phase 6)", () => {
+    function flow(filename: string, payload: Record<string, unknown> = {}): AnyEventRecord {
+      return {
+        filename,
+        timestamp: filename.split("_")[0]!,
+        participant_id: "ag-claude",
+        kind: "flow",
+        payload: { id: "fl1", nodes: [], edges: [], ...payload },
+      };
+    }
+
+    it("excludes consumed blocks (flow appended to anchor) from feed and feedDocument", () => {
+      const anchor = prose("20260523T100001Z_us-x.prose.md", {
+        name: "Doc",
+      });
+      const block = flow("20260523T100002Z_ag-claude.flow.json", {
+        append_to: anchor.filename,
+      });
+      const agg = aggregate([anchor, block]);
+      /* Consumed: anchor stays top-level, flow is rendered inside it. */
+      expect(agg.feed.map((e) => e.filename)).toEqual([anchor.filename]);
+      expect(agg.feedDocument.map((e) => e.filename)).toEqual([anchor.filename]);
+      expect(
+        agg.consumedBlocksByAnchor.get(anchor.filename)?.map((e) => e.filename),
+      ).toEqual([block.filename]);
+    });
+
+    it("excludes consumed prose blocks from feedConversation", () => {
+      const anchor = prose("20260523T100010Z_us-x.prose.md", {
+        name: "Doc",
+      });
+      const block = prose("20260523T100011Z_us-x.prose.md", {
+        content: "section body",
+        append_to: anchor.filename,
+      });
+      const message = prose("20260523T100012Z_us-x.prose.md", {
+        content: "stand-alone msg",
+      });
+      const agg = aggregate([anchor, block, message]);
+      /* Anchor and message are unnamed/named per role; block is consumed
+         and must not appear in any feed slice. */
+      expect(agg.feed.map((e) => e.filename)).toEqual([
+        anchor.filename,
+        message.filename,
+      ]);
+      expect(agg.feedConversation.map((e) => e.filename)).toEqual([
+        message.filename,
+      ]);
+    });
+
+    it("keeps orphan blocks (append_to points at missing parent) visible at top level", () => {
+      /* Block references a parent that doesn't exist in the visible set
+         — must stay in `feed` so the user/agent can see it. */
+      const orphan = flow("20260523T100020Z_ag-claude.flow.json", {
+        append_to: "nonexistent.prose.md",
+      });
+      const agg = aggregate([orphan]);
+      expect(agg.orphanBlocks.has(orphan.filename)).toBe(true);
+      expect(agg.feed.map((e) => e.filename)).toEqual([orphan.filename]);
+    });
+
+    it("excludes consumed blocks whose anchor was superseded (re-binds to live anchor)", () => {
+      const v1 = prose("20260523T100030Z_us-x.prose.md", { name: "Doc" });
+      const v2 = prose("20260523T100031Z_us-x.prose.md", {
+        name: "Doc",
+        supersedes: v1.filename,
+      });
+      const block = flow("20260523T100032Z_ag-claude.flow.json", {
+        append_to: v1.filename,
+      });
+      const agg = aggregate([v1, v2, block]);
+      /* v1 is superseded → not visible; block re-binds to v2 (live).
+         block is consumed, so it must not show top-level. */
+      expect(agg.feed.map((e) => e.filename)).toEqual([v2.filename]);
+      expect(agg.consumedBlocksByAnchor.get(v2.filename)?.map((e) => e.filename)).toEqual(
+        [block.filename],
+      );
+    });
+  });
 });

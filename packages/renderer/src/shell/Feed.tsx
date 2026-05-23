@@ -5,6 +5,7 @@ import { EventCard } from "../cards/EventCard.js";
 import { ArbitraryGroupCard } from "../cards/ArbitraryGroupCard.js";
 import { projectFeed } from "../feed/projectFeed.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
+import { isNamedAnchor } from "@f-mark/shared";
 
 const NAMED_MODE_SHORTCUT = chordToLabel("$mod+N");
 
@@ -21,6 +22,20 @@ export function Feed(): JSX.Element {
       : viewMode === "conversation"
         ? agg.feedConversation
         : agg.feed;
+
+  /* Build the consumed-filename set once at the Feed level — EventCard
+     uses it as the early-out for composed blocks (rendered inside their
+     anchor ProseCard, not at top level). Already pre-filtered out of
+     the feed slices in aggregate.ts, but we still thread it through so
+     the dispatcher can short-circuit any stray paths (e.g. command
+     palette previews). */
+  const consumedFilenames = useMemo(() => {
+    const s = new Set<string>();
+    for (const blocks of agg.consumedBlocksByAnchor.values()) {
+      for (const b of blocks) s.add(b.filename);
+    }
+    return s;
+  }, [agg.consumedBlocksByAnchor]);
 
   /* Projection only applies in `everything` mode. The document slice already
      strips out tool-use + arbitrary prose so projection would be a no-op,
@@ -64,6 +79,12 @@ export function Feed(): JSX.Element {
                       agg.commentsByTarget.get(item.event.filename) ?? []
                     }
                     allEvents={agg.events}
+                    consumedFilenames={consumedFilenames}
+                    blocks={
+                      isNamedAnchor(item.event)
+                        ? agg.consumedBlocksByAnchor.get(item.event.filename) ?? []
+                        : undefined
+                    }
                   />
                 </div>
               ),

@@ -17,23 +17,32 @@ import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
 import { LineCommentRail } from "./LineCommentRail.js";
+import { ProseInlineBlock } from "./ProseInlineBlock.js";
+import { ProseEmptyState } from "./ProseEmptyState.js";
 
 interface Props {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
   comments: AnyEventRecord[];
+  /** Blocks appended to this anchor via `append_to`. Already sorted by
+   *  root-filename slot order in the aggregate. Phase 6+ renders these
+   *  inline beneath the anchor head as `ProseInlineBlock` stubs. */
+  blocks?: AnyEventRecord[];
 }
 
 export function ProseCard({
   event,
   participants,
   comments,
+  blocks = [],
 }: Props): JSX.Element {
   const payload = event.payload as ProsePayload;
   const who = whoOf(event.participant_id, participants);
   const [mode, setMode] = useState<MarkdownMode>("rendered");
   const commentTarget = useStore((s) => s.commentTarget);
   const words = wordCount(payload.content);
+  const hasLegacyContent = payload.content.trim().length > 0;
+  const isTrulyEmpty = !hasLegacyContent && blocks.length === 0;
 
   const isFocused =
     commentTarget !== null && commentTarget.file === event.filename;
@@ -124,6 +133,24 @@ export function ProseCard({
             ))}
           </div>
         )}
+        {hasLegacyContent && (
+          <ProseInlineBlock
+            event={syntheticLegacyBlock(event, payload)}
+            participants={participants}
+            comments={comments}
+            mode={mode}
+          />
+        )}
+        {blocks.map((b) => (
+          <ProseInlineBlock
+            key={b.filename}
+            event={b}
+            participants={participants}
+            comments={[]}
+            mode={mode}
+          />
+        ))}
+        {isTrulyEmpty && <ProseEmptyState />}
         <LineCommentRail
           event={event}
           content={payload.content}
@@ -136,6 +163,24 @@ export function ProseCard({
       </div>
     </article>
   );
+}
+
+/* Build a synthetic block event for the anchor's own legacy content.
+   Phase 6 stub renders this as a "prose block — TODO" placeholder;
+   Phase 13 polish swaps in a LegacyContentMarker. Uses the anchor's
+   filename as its key so right-panel comment focus continues to scroll
+   to the anchor card (matches the LineCommentRail target). */
+function syntheticLegacyBlock(
+  anchor: AnyEventRecord,
+  payload: ProsePayload,
+): AnyEventRecord {
+  return {
+    filename: anchor.filename,
+    timestamp: anchor.timestamp,
+    participant_id: anchor.participant_id,
+    kind: "prose",
+    payload: { content: payload.content } as ProsePayload,
+  };
 }
 
 function wordCount(text: string): number {

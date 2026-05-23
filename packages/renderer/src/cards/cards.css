@@ -280,6 +280,44 @@
   line-height: 1.6;
   color: var(--ink);
 }
+/* Composable-prose embed wrapper. Each block in a ProseCard body sits in
+   one of these frames — Phase 7+ replaces the inner stubs with real
+   embedded variants. The thin top rule separates blocks from the
+   markdown rendering above; padding gives breathing room for the
+   embedded card. */
+.prose-embed-frame {
+  border-top: 1px solid var(--line-2);
+  padding: 12px 0;
+}
+.prose-embed-frame:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.prose-embed-stub {
+  border: 1px dotted var(--line-2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.prose-empty-state {
+  text-align: center;
+  padding: 18px 12px;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-3);
+  font-size: 13.5px;
+}
+.prose-empty-state code {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--panel);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
 .prose-content .num {
   font-family: var(--mono);
   font-style: normal;
