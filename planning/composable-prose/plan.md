@@ -441,8 +441,15 @@ const INLINE_RENDERERS: Partial<Record<EventKind, FC<InlineProps>>> = {
 export function ProseInlineBlock(props: InlineProps): JSX.Element {
   const R = INLINE_RENDERERS[props.event.kind];
   if (!R) return <UnsupportedBlock event={props.event} />;
+  // data-event-filename is REQUIRED — right-panel comment focus scrolls
+  // to `[data-event-filename]` (RightComments.tsx:190). Without it,
+  // comment-click-to-scroll breaks for embedded blocks (review_2 finding C).
   return (
-    <div className="prose-embed-frame" data-block-kind={props.event.kind}>
+    <div
+      className="prose-embed-frame"
+      data-block-kind={props.event.kind}
+      data-event-filename={props.event.filename}
+    >
       <R {...props} />
     </div>
   );
@@ -464,7 +471,9 @@ extension.
 
 Every site that previously read `payload.target.file` switches to
 `getCommentTarget(payload)`. Every site that filtered by "is comment"
-switches to `getProseRole(payload).kind === "comment"`.
+switches to `getProseRole(payload).kind === "comment"`. Helpers are
+**shape-normalisers only** — they do NOT walk supersession; live-parent
+resolution remains aggregate-owned (review_2 finding C).
 
 Migration targets in one atomic Phase (see `phases.md` Phase 2):
 
@@ -473,7 +482,27 @@ Migration targets in one atomic Phase (see `phases.md` Phase 2):
 - `packages/renderer/src/cards/LineCommentRail.tsx` (read + write)
 - `packages/renderer/src/panels/right/RightComments.tsx`
 - `packages/renderer/src/overlays/CommentThreadOverlay.tsx`
+- `packages/renderer/src/compose/Compose.tsx` (writes new comments)
+- `packages/renderer/src/compose/TargetPill.tsx`
+- `packages/renderer/src/api/client.ts` (postProse type + comment helper)
+- `packages/renderer/src/popovers/log-filter-types.ts` (named-only check
+  switches to `isNamedAnchor`)
 - `packages/kernel/src/routes/files.ts` (file-comment serialization)
+
+### Write-body normalization in the prose POST route
+
+The prose POST handler maps legacy `target` on the **request body**
+(before serialization) to the new shape — so an old client that still
+sends `{ content, target: { file, lines } }` is translated to
+`{ content, append_to, mode: "comment", lines }` before the validator and
+`serializeProse` see it. Reject 400 if the body contains BOTH legacy
+`target` and any of the new fields (`append_to`, `mode`, `lines`). This
+covers external authors who haven't yet migrated, while internal callers
+get migrated via the helpers above.
+
+The kernel reader (`packages/kernel/src/events/reader.ts:69`) gets the
+deterministic `timestamp || filename` sort (review_2 finding 4); this
+matches the aggregate so both sides agree on order.
 
 ### Lines target contract (Finding #5)
 
@@ -499,14 +528,24 @@ Migration targets in one atomic Phase (see `phases.md` Phase 2):
 
 ## Block supersession (Finding #3)
 
-- A block can supersede another block, but **must preserve `append_to`**;
-  reject 400 at the kernel if the supersedor's `append_to` differs from
-  the superseded block's `append_to`. (Aggregate doesn't have to guess.)
+- A block can supersede another block; the supersedor SHOULD preserve
+  `append_to` (the renderer relies on it for slot determination via
+  `rootOf`).
+- **Kernel validation is shape-only** by default (no parent lookup).
+  Mismatched `append_to` between a supersedor and its target is handled
+  by the renderer's aggregate: if `supersedor.append_to !== superseded.append_to`,
+  the supersedor is treated as a NEW top-level event (or new orphan if it
+  has its own `append_to` pointing nowhere live). This matches review_2's
+  "kernel-shape-only" constraint without losing the slot-preservation
+  property (review_2 finding 3).
 - The block list inside an anchor is sorted by `rootOf(block).timestamp`
   + `rootOf(block).filename`, so an edit-in-place keeps its original slot.
 - Deletion uses an explicit `removed: true` tombstone on a prose event
-  (Phase 2 schema addition). Aggregate suppresses the tombstoned chain
-  from the anchor's block list and hides any comments that target it.
+  (Phase 2 schema addition). A prose tombstone may supersede ANY block
+  kind — i.e. a tombstone is a generic "this block chain is dead"
+  marker regardless of the original block's kind (review_2 finding C).
+  Aggregate suppresses the tombstoned chain from the anchor's block list
+  and hides any comments that target it.
 - Empty content alone is **not** deletion — a deliberately-empty prose
   block stays visible.
 

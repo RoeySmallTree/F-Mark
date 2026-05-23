@@ -1,21 +1,20 @@
 # Composable Prose — phased implementation
 
-Re-sequenced per `review_1.md`'s phase-boundary recommendations.
+Revision history:
+- v0: initial decomposition
+- v1: re-sequenced per review_1 (helpers before behaviour)
+- **v2 (this): per review_2 — merged old Phase 7 into rendering phase;
+  Phase 2 now atomic with `Compose`/`api/client.ts`/route normaliser;
+  `/guide` deferred until real renderers are live.**
 
 Each phase: atomic, reviewable in isolation, lands as a single commit on
 `main`, keeps every test suite green, leaves the app shippable. The
-feature only "lights up" at Phase 11; earlier phases are additive
-plumbing.
+feature only "lights up" with the prose+flow renderer in Phase 9; earlier
+phases are additive plumbing.
 
-## Phase 0 — clean baseline
+## Phase 0 — clean baseline ✓ DONE (commit 47ae4c1)
 
-**Scope:** commit the current ProseCard rework + runtime_id work that's
-already in the working tree (only files I touched this session).
-
-**Touches:** the small set from the previous session.
-
-**Exit:** `pnpm -F @f-mark/renderer test` and `pnpm -F f-mark test` pass.
-`git log` shows a focused commit.
+ProseCard rework + runtime_id committed.
 
 ## Phase 1 — shared schema additions
 
@@ -28,179 +27,172 @@ change anywhere; existing code ignores the new optional fields.
 - `FlowPayload`, `FileRefPayload`, `HtmlManifest`, `ChoicesPayload`,
   `TodoPayload`, `ToolUsePayload` gain `append_to`.
 
-**Build:** `pnpm --filter @f-mark/shared build` (per workspace memory).
+**Build:** `pnpm --filter @f-mark/shared build` (workspace memory).
 
 **Exit:** `pnpm build` green across all packages.
 
-## Phase 2 — normalization helpers + atomic comment-system migration
+## Phase 2 — normalization helpers + atomic comment-system migration (incl. write paths)
 
-**Scope:** the highest-regression-risk phase (per review_1). Lands as ONE
-commit so the in-memory shape and every consumer change together.
+**Scope:** ONE atomic commit. Includes everything that reads or writes
+the comment shape — review_2 finding 2 + verdict.
 
 **Adds:**
 - `packages/shared/src/proseRoles.ts` — `getProseRole(payload) → ProseRole`,
-  enumerated `ProseRole` union (anchor / named-block / unnamed-block /
-  comment / tombstone / message).
+  enumerated role union.
 - `packages/shared/src/blocks.ts` — `getAppendTo`, `isComposableBlock`,
-  `isNamedAnchor`, `getCommentTarget`.
+  `isNamedAnchor`, `getCommentTarget`. **Helpers normalise shape only;
+  they do NOT walk supersession** (review_2 finding C).
 - `packages/kernel/src/events/prose.ts` — `parseProse` maps legacy `target`
   to new fields on read; warns + prefers new fields if both present.
-  `serializeProse` writes the new shape only; never emits `target`.
+  `serializeProse` writes the new shape only.
 - `packages/kernel/src/events/proseValidate.ts` — mutual-exclusion
-  validator (every rule from `plan.md`'s validation table).
-- Migrate every renderer/kernel consumer to read via the helpers:
-  - `packages/renderer/src/state/aggregate.ts`
-  - `packages/renderer/src/cards/EventCard.tsx`
-  - `packages/renderer/src/cards/LineCommentRail.tsx` (read + post)
-  - `packages/renderer/src/panels/right/RightComments.tsx`
-  - `packages/renderer/src/overlays/CommentThreadOverlay.tsx`
-  - `packages/kernel/src/routes/files.ts` (file-comment serialization)
-  - All `RightNamed` / command palette / search "named" facets switch to
-    `isNamedAnchor()`.
+  validator.
+- `packages/kernel/src/events/reader.ts:69` — deterministic
+  `timestamp || filename` sort (review_2 finding 4).
+- **`packages/kernel/src/routes/events.ts` prose handler — write-body
+  normaliser.** Translates legacy `target` on incoming POST bodies to
+  new fields BEFORE validation/serialization. Rejects 400 if both legacy
+  `target` and any new field appear in the same request.
+
+**Migrate every consumer (atomic with the above):**
+- `packages/renderer/src/state/aggregate.ts`
+- `packages/renderer/src/cards/EventCard.tsx`
+- `packages/renderer/src/cards/LineCommentRail.tsx` (read + post)
+- `packages/renderer/src/panels/right/RightComments.tsx`
+- `packages/renderer/src/overlays/CommentThreadOverlay.tsx`
+- `packages/renderer/src/compose/Compose.tsx`  ← NEW vs phases v1
+- `packages/renderer/src/compose/TargetPill.tsx`
+- `packages/renderer/src/api/client.ts` (postProse type + comment shape) ← NEW
+- `packages/renderer/src/popovers/log-filter-types.ts:141` (named-only
+  filter switches to `isNamedAnchor`) ← NEW
+- `packages/kernel/src/routes/files.ts` (file-comment serialization)
+- `packages/renderer/src/panels/right/RightNamed.tsx` and any search /
+  command-palette named facet (all use `isNamedAnchor`).
 
 **Tests:**
-- `kernel/tests/events/prose.test.ts`: round-trip new fields; legacy
-  `target` → new fields on read; both-present reads warn + prefer new;
-  serializer never emits `target`.
-- `kernel/tests/events/proseValidate.test.ts`: every rule from the
-  mutual-exclusion table.
-- Renderer existing comment tests stay green (LineCommentRail,
-  RightComments, CommentThreadOverlay) under the helper-routed code paths.
+- `kernel/tests/events/prose.test.ts` round-trip + legacy-target read.
+- `kernel/tests/events/proseValidate.test.ts` per validator rule.
+- `kernel/tests/routes/events.test.ts` write-body normaliser:
+  - Legacy-target body POST → server emits new-shape file.
+  - Body with both legacy `target` and new `append_to` → 400.
+- Renderer comment tests stay green under helper routing.
 
-**Exit:** comments still work end-to-end with no UX change. Tests for new
-helpers + parser back-compat green. **No new feature is visible yet.**
+**Exit:** comments still work end-to-end with no UX change. New shape
+flows through everywhere. **No new feature visible yet.**
 
-## Phase 3 — kernel route schemas
+## Phase 3 — kernel route schemas (every non-prose kind)
 
-**Scope:** wire the new fields into every route's JSON Schema. Add
-`additionalProperties: false` to lock down strays (Finding #6).
+**Scope:** wire `append_to` into every non-prose route's JSON Schema.
+Add `additionalProperties: false` to lock down strays everywhere
+(review_2 finding 6 confirms this addresses the `...rest` persistence
+risk).
 
 **Touches:**
-- `packages/kernel/src/routes/events.ts` — prose route: new fields,
-  validator call.
-- `packages/kernel/src/routes/flow.ts` — `append_to`; `additionalProperties:
-  false`.
-- `packages/kernel/src/routes/files.ts` — file route + file-comment helper.
-- `packages/kernel/src/routes/html.ts` (or wherever) — same.
-- `packages/kernel/src/routes/events.ts` — choices/todo/tool-use routes —
-  same.
-- `turn-end` and `choice` routes — lock with `additionalProperties: false`;
-  no `append_to` allowed.
+- `packages/kernel/src/routes/flow.ts` — `append_to`; lock down.
+- `packages/kernel/src/routes/files.ts` (file route).
+- `packages/kernel/src/routes/html.ts` (or wherever).
+- `packages/kernel/src/routes/events.ts` — choices / todo / tool-use
+  routes — `append_to`; lock down.
+- `turn-end` and `choice` — lock with `additionalProperties: false`;
+  no `append_to`.
 
-**Tests:** Layer 1 route-validation rows from `tests.md` (every reject row
-gets a 400 assertion).
+**Tests:** Layer 1 route-validation rows from `tests.md` (every reject
+row gets a 400 assertion).
 
 **Exit:** every kind can be authored as a block at the kernel; rejects
-malformed combinations; renderer still ignores `append_to`.
+malformed combinations. Renderer still ignores `append_to`.
 
 ## Phase 4 — `/best-practices` endpoint
 
-**Scope:** new `packages/kernel/src/routes/bestPractices.ts` returning the
+**Scope:** new `packages/kernel/src/routes/bestPractices.ts` returning
 long-form markdown. Register in `packages/kernel/src/server.ts`.
 
-**Tests:** GET 200, content checks for the canonical four-event example +
+**Tests:** GET 200, content checks for canonical four-event example +
 patterns; auth rules match `/guide`.
 
-**Exit:** documentation surface ready before any renderer composition.
+**Exit:** documentation surface ready — but `/guide` itself doesn't
+mention it yet (deferred to Phase 11, see review_2 finding B).
 
-## Phase 5 — `/guide` recipe
-
-**Scope:** update `packages/kernel/src/routes/guide.ts` to add the
-"Composing documents" section with the 5 pitfalls. Update bundled skill
-markdowns under `packages/kernel/assets/*-skill/f-mark/api.md`.
-
-**Tests:** GET /guide body includes the new section + link to
-`/best-practices`.
-
-**Exit:** authors can discover the feature; guidance is correct.
-
-## Phase 6 — aggregate foundation
+## Phase 5 — aggregate foundation (derivation only, NO behaviour change)
 
 **Scope:** `packages/renderer/src/state/aggregate.ts` — add
 `consumedBlocksByAnchor`, `orphanBlocks`, `liveAnchorOf`, `rootOf`.
 Deterministic `timestamp || filename` sort. Visited-set cycle detection.
 Fork policy (lexicographic).
 
-**Critical:** don't yet filter consumed blocks out of `feed` /
-`feedDocument` / `feedConversation`. Just expose the new derivations.
+**Critical:** the new derivations are added BUT NOT YET CONSUMED.
+`feed`/`feedDocument`/`feedConversation` keep their current filters —
+consumed-block filtering ships in Phase 6 alongside the renderer.
+(Review_2 finding B: Phase 7 alone is not shippable.)
 
-**Tests:** Layer 2 from `tests.md`. Test the comment system on the new
-helpers + aggregate output (regression coverage of every comment scenario).
+**Tests:** Layer 2 derivation tests in `tests.md` — assert
+`consumedBlocksByAnchor`/`orphanBlocks` content WITHOUT asserting feed
+changes. (Feed-filter assertion moves to Phase 6 — also fixes review_2's
+test mis-assignment note.)
 
-**Exit:** state derivation correct; no behaviour change visible.
+**Exit:** state derivation correct; no UX change.
 
-## Phase 7 — feed-slice filter for consumed blocks
+## Phase 6 — turn on filtering + ProseInlineBlock stubs + ProseCard plumbing
 
-**Scope:** apply the `isConsumedBlock` filter to `feed`, `feedDocument`,
-`feedConversation`. Orphans stay (visible at top level).
+**Scope:** ONE atomic commit that lights up the feature in stub form.
+(Merges the old Phases 7/8/9 — review_2 finding B.)
 
-**Tests:** assert consumed blocks vanish from top-level feed; orphans
-remain.
-
-**Exit:** an `append_to` flow disappears from the feed (and reappears as
-an orphan card if its anchor is missing). Anchors render unchanged
-(ProseCard still ignores its `blocks` prop, which Phase 11 wires in).
-
-## Phase 8 — `ProseInlineBlock` registry with stubs
-
-**Scope:** new `packages/renderer/src/cards/ProseInlineBlock.tsx` with the
-registry. Each kind's inline renderer is a stub (renders a placeholder
-saying "TODO: <kind> inline").
-
-**Tests:** dispatch picks the registered renderer; unknown kind falls
-back to `UnsupportedBlock`.
-
-**Exit:** the dispatcher is alive but rendering placeholders.
-
-## Phase 9 — `EventCard` early-out + `ProseCard.blocks` plumbing
-
-**Scope:**
-- `EventCard.tsx`: returns null for consumed blocks; passes
+**Includes:**
+- Feed-slice filter: `feed`/`feedDocument`/`feedConversation` exclude
+  consumed-block filenames. Orphans stay.
+- `EventCard.tsx`: returns null for consumed-block filenames; passes
   `orphanedAppendTo` to top-level cards for orphans.
+- `ProseInlineBlock.tsx` (new): registry dispatcher. Each kind's inline
+  renderer is a STUB for now ("TODO: <kind> inline").
 - `Feed.tsx`: threads `consumedBlocksByAnchor[anchor.filename]` into
   `ProseCard.blocks`.
-- `ProseCard`: renders the `blocks` list via `ProseInlineBlock` (still
-  stubs at this point). Handles the legacy-content fallback (Finding #9)
-  by synthesising a virtual prose-block when `payload.content` is
-  non-empty.
-- `ProseEmptyState` component for the truly-empty anchor.
+- `ProseCard`: renders `blocks` via `ProseInlineBlock` stubs in the body
+  region. Legacy-content fallback synthesises a virtual prose-block when
+  `payload.content` is non-empty.
+- `ProseEmptyState` for the truly-empty anchor.
+- **`ProseInlineBlock` wrapper sets `data-event-filename={block.filename}`**
+  so right-panel comment focus still scrolls to the right node
+  (review_2 finding C).
 
-**Tests:** Layer 3 from `tests.md` minus the embedded-variant assertions.
+**Tests:** Layer 2 feed-filter assertions + Layer 3 dispatch tests minus
+embedded-variant assertions (Phase 7+).
 
-**Exit:** end-to-end visible: an `append_to` flow vanishes from the feed
-and shows as a stub inside its anchor doc. Feature wired, content quality
-TBD.
+**Exit:** end-to-end visible — an `append_to` flow vanishes from the
+top-level feed and shows as a stub inside its anchor. Feature wired.
+Stubs are intentionally ugly; the kernel doesn't yet teach agents to
+create embeds (see Phase 11).
 
-## Phase 10 — embedded variant: prose block
+## Phase 7 — InlineProseBlock (real)
 
-**Scope:** `InlineProseBlock` uses `MarkdownRenderer` (rendered mode) + a
-per-block `LineCommentRail`. Theme-keyed `.prose-embed-frame`.
+**Scope:** `InlineProseBlock` replaces its stub with the real
+`MarkdownRenderer` (rendered mode) + per-block `LineCommentRail`.
+Theme-keyed `.prose-embed-frame` CSS.
 
-**Tests:** prose block renders markdown via `fm-prose`; comments on the
+**Tests:** prose block renders markdown via `.fm-prose`; comments on the
 block appear on the block's own rail.
 
 **Exit:** prose blocks render properly inline.
 
-## Phase 11 — embedded variant: flow
+## Phase 8 — InlineFlowBlock (real)
 
 **Scope:** `FlowCard` gains `variant?: "embedded"`. `InlineFlowBlock`
-replaces the Phase 8 stub.
+uses it. Stub replaced.
 
-**Tests:** Layer 5 flow row; `.flow-head` absent in embedded; canvas
+**Tests:** flow embedded-variant tests; `.flow-head` absent; canvas
 present.
 
-**Exit:** the most-wanted embed kind (flow charts) renders properly.
+**Exit:** the headline embed kind (flow charts) renders properly.
+**This is the first phase where the visible product matches the design.**
 
-## Phase 12 — embedded variants: file / html
+## Phase 9 — InlineFileBlock + InlineHtmlBlock
 
-**Scope:** `FileCard` and `EmbedCard` (html) gain `variant`. Stubs
-replaced.
+**Scope:** `FileCard` and `EmbedCard` gain `variant`. Stubs replaced.
 
 **Tests:** Layer 5 file + html rows.
 
 **Exit:** file + html embeds work inline.
 
-## Phase 13 — embedded variants: choices / todo / tool-use
+## Phase 10 — InlineChoicesBlock + InlineTodoBlock + InlineToolUseBlock
 
 **Scope:** the remaining cards. Stubs replaced.
 
@@ -208,21 +200,35 @@ replaced.
 
 **Exit:** all supported kinds work inline.
 
-## Phase 14 — `BlockAccordion` (new component, keep AccordionMarkdown)
+## Phase 11 — `/guide` recipe update (now safe)
 
-**Scope:** new `packages/renderer/src/render/BlockAccordion.tsx` (Finding
-#7). Each block = one fold; nested blocks = sub-folds. **Lazy mounting**
-of closed folds is required (Finding's perf edge case: FlowCard mounts
-React Flow + runs dagre on every mount).
+**Scope:** update `packages/kernel/src/routes/guide.ts` to add the
+"Composing documents" section with the 5 pitfalls. Update bundled skill
+markdowns under `packages/kernel/assets/*-skill/f-mark/api.md`.
 
-`ProseCard` accordion mode switches to `BlockAccordion` (not
-`MarkdownRenderer`'s accordion path).
+**Deferred to here** because review_2 noted: if `/guide` teaches the
+feature before the renderer is real, agents will create embeds that
+render as TODO stubs. Phases 6–10 finish the renderer first.
+
+**Tests:** GET /guide body includes the new section + link to
+`/best-practices`.
+
+**Exit:** authors discover the feature; renderer is ready to receive it.
+
+## Phase 12 — `BlockAccordion` (new component, keep AccordionMarkdown)
+
+**Scope:** new `packages/renderer/src/render/BlockAccordion.tsx`
+(review_1 finding 7). Each block = one fold; nested blocks = sub-folds.
+**Lazy mounting** of closed folds is required (FlowCard mounts React
+Flow + runs dagre on every mount — `FlowCard.tsx:31`).
+
+`ProseCard` accordion mode switches to `BlockAccordion`.
 
 **Tests:** Layer 4 from `tests.md` + perf test for 100+ blocks.
 
 **Exit:** accordion mode works on composite docs; flat docs unaffected.
 
-## Phase 15 — source mode + word count + polish
+## Phase 13 — source mode + word count + polish
 
 **Scope:**
 - Source mode emits the round-trippable concatenated format
@@ -236,9 +242,9 @@ React Flow + runs dagre on every mount).
 
 **Exit:** the doc looks deliberate.
 
-## Phase 16 — final buddy + sonnet QA loop
+## Phase 14 — final buddy + sonnet QA loop
 
-Per the user's workflow steps 8-11. Triggered after Phase 15 ships.
+Per the user's workflow steps 8-11. Triggered after Phase 13 ships.
 
 - `/buddy` reads the whole feature (plan + every committed change) and
   writes `review_final.md`.
@@ -252,15 +258,37 @@ Per the user's workflow steps 8-11. Triggered after Phase 15 ships.
 
 | Phase | Risk | Mitigation |
 |---|---|---|
-| 2 | Comment migration — every call site touches it at once | Single atomic commit; full comment regression suite in same PR |
-| 6/7 | Feed slice filter — could double-hide events | Split into two phases; Phase 6 doesn't filter, Phase 7 turns it on |
-| 14 | Accordion rewrite | Keep `AccordionMarkdown` alive; new component is additive |
+| 2 | Comment migration — every call site touches it at once, incl. writes | Single atomic commit; write-body normaliser + Compose + client.ts in same PR; full comment regression suite in same commit |
+| 6 | First visible feature change — stub rendering inside ProseCard | Stubs are obviously placeholder; manual sanity check in browser before merging |
+| 12 | Accordion rewrite | Keep `AccordionMarkdown` alive; new `BlockAccordion` is additive |
 
 ## Commit policy
 
 - Each phase: one commit on `main`, message
-  `feat(composable-prose): phase N — <title>` (or `refactor` / `test` as
-  fits).
+  `feat(composable-prose): phase N — <title>` (or `refactor` / `test`).
 - If a phase commit goes red, fix forward — no amend, no force-push.
-- After Phase 15 + the QA loop: tag complete in
+- After Phase 13 + the QA loop: tag complete in
   `planning/composable-prose/DONE.md`.
+
+## Tombstone semantics for non-prose blocks (review_2 finding C)
+
+`removed: true` lives on the prose schema only. A prose event with
+`removed: true` and `supersedes: <X>` may target ANY kind X (flow, file,
+html, etc.) — it acts as a generic "this block chain is dead" tombstone
+regardless of the original kind. Aggregate honours this by suppressing
+the entire revision chain when its live revision is a prose tombstone.
+
+This means a "delete this flow chart" looks like:
+
+```
+POST /events/prose
+{
+  participant_id, content: "",
+  append_to: "<anchor filename>",
+  removed: true,
+  supersedes: "<flow filename>"
+}
+```
+
+The renderer sees the flow chain's live revision is a prose tombstone
+and hides the chain.

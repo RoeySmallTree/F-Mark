@@ -109,3 +109,27 @@ to `plan.md` and `phases.md`. Summary disposition table:
 | — | — | Missing edge cases (10 items) | Added to plan's edge-case table; covered in `tests.md` Layer 2 |
 | — | — | `/guide` should surface pitfalls inline | Added 5-bullet pitfall list to the `/guide` recipe; `/best-practices` still hosts the long-form examples |
 | — | — | Phase boundaries | Re-sequenced `phases.md` to match review_1's recommended 7-step ordering, with helpers landing before behaviour changes |
+
+## Triage of review_2.md (round 2)
+
+review_2 confirmed 5 findings PASS, 4 PARTIAL, raised 3 new issues, and
+flagged sequencing problems. **All addressed in the v2 plan + phases.**
+
+| Item | Disposition |
+|---|---|
+| (2) Write-time `target` compat missed `Compose` / `client.ts` | Phase 2 now explicitly migrates `Compose.tsx`, `TargetPill.tsx`, `api/client.ts`, `log-filter-types.ts:141`, and adds a write-body normaliser at the prose POST handler |
+| (3) Kernel can't enforce `append_to` preservation without lookup | Plan now defers append_to-mismatch handling to the **renderer aggregate**: if supersedor.append_to doesn't match superseded's, the supersedor is treated as a new top-level event. Kernel stays shape-only |
+| (4) Sort everywhere — kernel reader still timestamp-only | Phase 2 includes `packages/kernel/src/events/reader.ts:69` switch to `timestamp \|\| filename` |
+| (8) `isNamedAnchor` adoption missing `log-filter-types.ts:141` | Added to the Phase 2 migration list |
+| (B) Phase 7-before-Phase-9 hides blocks before renderer is real | Phases v2 merges old Phase 7 into Phase 6 (atomic "turn on feature with stubs"); Phase 5 (`/guide`) deferred to Phase 11 after renderers are real |
+| (B) Phase 2 atomicity — needs `Compose`/`client.ts`/normaliser | Phases v2 lists every consumer + normaliser in Phase 2's single commit |
+| (B) Phase 6/7 split test mis-assignment | Phases v2 keeps Phase 5 (was 6) test-scope "derivation only"; feed-filter assertions move to Phase 6 (was 9) |
+| (C) Helpers must NOT walk supersession | Plan now says explicitly: helpers shape-normalise only; aggregate owns live-parent resolution |
+| (C) Inline blocks need `data-event-filename` | `ProseInlineBlock` wrapper sets `data-event-filename={block.filename}` |
+| (C) Tombstone story leaky for non-prose blocks | `phases.md` now has an explicit "Tombstone semantics for non-prose blocks" section: a prose tombstone with `supersedes: <X>` may target any kind X |
+
+**Verdict-resolved:** the v2 plan addresses review_2's "single most
+important remaining issue" (Phase 2 write-time comment compat) by making
+Phase 2's scope explicit and atomic, including `Compose`, `client.ts`,
+and the prose POST normaliser. Proceeding to execute the plan; further
+review happens via `/buddy` at the final-pass step (Phase 14).
