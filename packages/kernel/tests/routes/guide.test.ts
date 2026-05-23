@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createServer } from "../../src/server.js";
-import { initProject } from "../../src/project.js";
+import { initProject, readConfig, writeConfig } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createSession } from "../../src/sessions.js";
 import { withTempProject } from "../helpers/tempdir.js";
@@ -172,6 +172,75 @@ describe("GET /guide", () => {
       const { app } = createServer({ token: null, paths: p });
       const res = await app.inject({ method: "GET", url: "/guide" });
       expect(res.body).toContain("No session selected");
+      await app.close();
+    });
+  });
+
+  it("Claude hook snippet uses the real user participant id from config", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      // Add a known user participant id.
+      const cfg = await readConfig(p);
+      cfg.participants = {
+        "us-alice": { kind: "user", name: "Alice", color: "#3b82f6" },
+      };
+      await writeConfig(p, cfg);
+      const { app } = createServer({ token: null, paths: p });
+      const res = await app.inject({
+        method: "GET",
+        url: "/guide?runtime_id=claude&agent_id=ag-claude-1",
+      });
+      expect(res.statusCode).toBe(200);
+      // The agent placeholder for Stop hook
+      expect(res.body).toContain("ag-claude-1");
+      // The user placeholder for UserPromptSubmit hook must be the real id
+      expect(res.body).toContain("us-alice");
+      // The default placeholder must not appear when a real user exists
+      expect(res.body).not.toContain("us-yourname");
+      await app.close();
+    });
+  });
+
+  it("Codex hook snippet uses the real user participant id from config", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const cfg = await readConfig(p);
+      cfg.participants = {
+        "us-bob": { kind: "user", name: "Bob", color: "#3b82f6" },
+      };
+      await writeConfig(p, cfg);
+      const { app } = createServer({ token: null, paths: p });
+      const res = await app.inject({
+        method: "GET",
+        url: "/guide?runtime_id=codex&agent_id=ag-codex-2",
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain("ag-codex-2");
+      expect(res.body).toContain("us-bob");
+      expect(res.body).not.toContain("us-yourname");
+      await app.close();
+    });
+  });
+
+  it("falls back to us-yourname when no user participant is registered", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      // Replace participants with only agents.
+      const cfg = await readConfig(p);
+      cfg.participants = {
+        "ag-only": { kind: "agent", name: "Solo", color: "#10b981" },
+      };
+      await writeConfig(p, cfg);
+      const { app } = createServer({ token: null, paths: p });
+      const res = await app.inject({
+        method: "GET",
+        url: "/guide?runtime_id=claude&agent_id=ag-claude-9",
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain("us-yourname");
       await app.close();
     });
   });

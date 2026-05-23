@@ -17,6 +17,7 @@ import { registerSkillRoutes } from "./routes/skills.js";
 import { registerSearchRoutes } from "./routes/search.js";
 import { registerGuideRoute } from "./routes/guide.js";
 import { registerEnvProbeRoute, realProbe } from "./routes/envProbe.js";
+import { loadRuntimes } from "./runtimes/registry.js";
 import { registerStaticRoutes } from "./routes/static.js";
 import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
@@ -162,8 +163,25 @@ export function createServer(deps: ServerDeps): CreatedServer {
   // /env-probe is a read-only PATH-detection endpoint; it lives outside the
   // process-API gate so the UI can render the install banner even under
   // --no-auth without --allow-process-api-no-auth.
-  const probeFn = realProbe(["claude", "codex", "gemini"]);
-  registerEnvProbeRoute(app, { probe: probeFn });
+  // The probe reads the registered runtime catalog (.f-mark/runtimes.json)
+  // and probes each entry's configured `executable` via `which`. If the
+  // registry can't be loaded yet, it falls back to an empty list — the UI
+  // still gets tmux/installer detection.
+  const probeFn = realProbe(async () => {
+    try {
+      const cfg = await loadRuntimes(deps.paths.fmarkDir());
+      return Object.entries(cfg.runtimes).map(([id, entry]) => ({
+        id,
+        executable: entry.executable,
+      }));
+    } catch {
+      return [];
+    }
+  });
+  registerEnvProbeRoute(app, {
+    probe: probeFn,
+    broadcast: (m) => busRef.publish(m),
+  });
 
   // Process-spawning routes are gated. They're always enabled when a token is
   // set (bearer auth protects them), and additionally enabled under --no-auth

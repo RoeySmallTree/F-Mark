@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
+import { listParticipants } from "../participants.js";
 
 interface GuideQuery {
   session_id?: string;
@@ -14,8 +15,9 @@ interface GuideQuery {
 function renderHooksSection(
   runtimeId: string | undefined,
   agentId: string | undefined,
+  userParticipantId: string,
 ): string {
-  const userPlaceholder = "us-yourname";
+  const userPlaceholder = userParticipantId;
   const agentPlaceholder = agentId ?? "<your-agent-id>";
   if (runtimeId === "claude") {
     return [
@@ -83,8 +85,9 @@ function buildGuide(opts: {
   sessionId?: string;
   agentId?: string;
   runtimeId?: string;
+  userParticipantId: string;
 }): string {
-  const { baseUrl, agentMd, sessionId, agentId, runtimeId } = opts;
+  const { baseUrl, agentMd, sessionId, agentId, runtimeId, userParticipantId } = opts;
   const agentPlaceholder = agentId ?? "<your-agent-id>";
   const identityLine =
     agentId !== undefined
@@ -117,7 +120,7 @@ Before you send anything, check that you have the F-Mark skill installed locally
    \`\`\`
 3. After copying, read \`.claude/skills/f-mark/SKILL.md\` and \`.claude/skills/f-mark/api.md\` for the full reference.
 
-${renderHooksSection(runtimeId, agentId)}
+${renderHooksSection(runtimeId, agentId, userParticipantId)}
 ${sessionSection}
 ---
 
@@ -142,7 +145,29 @@ export function registerGuideRoute(app: FastifyInstance, p: Paths): void {
       typeof xfProto === "string" && xfProto.length > 0 ? xfProto : "http";
     const baseUrl = `${proto}://${host}`;
     const agentMd = await readFile(p.agentMd(), "utf8");
+    // Find the first registered user participant to substitute into the
+    // UserPromptSubmit hook snippets. If none exists (e.g. an agent-only
+    // project), fall back to the legacy `us-yourname` placeholder.
+    let userParticipantId = "us-yourname";
+    try {
+      const parts = await listParticipants(p);
+      for (const [id, part] of Object.entries(parts)) {
+        if (part.kind === "user") {
+          userParticipantId = id;
+          break;
+        }
+      }
+    } catch {
+      // leave the fallback
+    }
     reply.type("text/markdown; charset=utf-8");
-    return buildGuide({ baseUrl, agentMd, sessionId, agentId, runtimeId });
+    return buildGuide({
+      baseUrl,
+      agentMd,
+      sessionId,
+      agentId,
+      runtimeId,
+      userParticipantId,
+    });
   });
 }
