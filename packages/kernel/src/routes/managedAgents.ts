@@ -17,6 +17,7 @@ import { writeActiveSession } from "../agents/activeSession.js";
 import { appendAgentLog, readAgentLog } from "../agents/logs.js";
 import type { InputQueue } from "../tmux/inputQueue.js";
 import { validateSlashCommand, validateMessageText } from "../runtimes/validation.js";
+import type { Bus } from "../ws/bus.js";
 
 interface SpawnBody {
   runtime_id?: string;
@@ -42,6 +43,13 @@ export interface ManagedAgentsDeps {
    * overlay-typed WS input.
    */
   inputQueue: InputQueue;
+  /**
+   * Broadcast bus for managed-agent WS messages. Used to publish
+   * `managed-agent.spawned`, `managed-agent.killed`, and
+   * `managed-agent.terminal-spawned` after successful route operations,
+   * so the renderer can update chip state without a manual list refresh.
+   */
+  bus: Bus;
 }
 
 const CONFIRM_TTL_MS = 10_000;
@@ -105,7 +113,7 @@ export function registerManagedAgentsRoutes(
   app: FastifyInstance,
   deps: ManagedAgentsDeps,
 ): void {
-  const { paths, tmux, tracker, inputQueue } = deps;
+  const { paths, tmux, tracker, inputQueue, bus } = deps;
 
   // Defence-in-depth: gate cookie-authenticated mutating requests by Origin.
   // Registered before the routes so it runs on every /managed-agents/* call.
@@ -212,6 +220,15 @@ export function registerManagedAgentsRoutes(
       }
       throw err;
     }
+
+    // Publish managed-agent.spawned for the renderer chip strip.
+    bus.publish({
+      type: "managed-agent.spawned",
+      participant_id: participantId,
+      tmux_session: sessionName,
+      runtime_id,
+    });
+
     return {
       participant_id: participantId,
       tmux_session: sessionName,
@@ -256,6 +273,7 @@ export function registerManagedAgentsRoutes(
       await clearManagedSiblings(paths.fmarkDir(), id);
       tracker.clearManagedPane(id);
       await appendAgentLog(paths.fmarkDir(), id, { event: "goodbye" });
+      bus.publish({ type: "managed-agent.killed", participant_id: id });
       return { ok: true };
     },
   );
@@ -268,6 +286,11 @@ export function registerManagedAgentsRoutes(
     const { sessionName } = await tmux.spawnTerminal({ index });
     const name = req.body?.name;
     const label = typeof name === "string" && name.length > 0 ? name : `terminal ${index}`;
+    bus.publish({
+      type: "managed-agent.terminal-spawned",
+      tmux_session: sessionName,
+      label,
+    });
     return { tmux_session: sessionName, label, index };
   });
 

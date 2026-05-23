@@ -63,6 +63,7 @@ async function makeApp() {
     tracker,
     projectRoot: root,
     inputQueue: createInputQueue(),
+    bus: { publish: () => {} },
   });
   return {
     app,

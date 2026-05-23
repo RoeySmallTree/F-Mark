@@ -10,19 +10,38 @@ import { createPresenceTracker } from "../../src/presence/tracker.js";
 import { fakeCommandRunner } from "../../src/tmux/commandRunner.js";
 import { createTmuxManager } from "../../src/tmux/manager.js";
 import { createInputQueue } from "../../src/tmux/inputQueue.js";
+import type { Bus, BusMessage } from "../../src/ws/bus.js";
 
-async function makeApp() {
+function fakeBus(): Bus & { messages: BusMessage[] } {
+  const messages: BusMessage[] = [];
+  return {
+    messages,
+    publish(msg: BusMessage) {
+      messages.push(msg);
+    },
+  };
+}
+
+async function makeApp(opts?: { bus?: Bus }) {
   const root = await mkdtemp(join(tmpdir(), "fmark-mgd-r-"));
   const p = paths(root);
   await initProject(p);
   const runner = fakeCommandRunner();
   const mgr = createTmuxManager({ runner, projectRoot: root });
   const tracker = createPresenceTracker({ broadcast: () => {} });
+  const bus: Bus = opts?.bus ?? { publish: () => {} };
   const app = Fastify();
   // Phase 8 fix: input queue is shared at server scope. Per-test we still
   // create one for `registerManagedAgentsRoutes`; there's no parallel
   // /ws/pane wiring here so a private queue is fine for these tests.
-  registerManagedAgentsRoutes(app, { paths: p, tmux: mgr, tracker, projectRoot: root, inputQueue: createInputQueue() });
+  registerManagedAgentsRoutes(app, {
+    paths: p,
+    tmux: mgr,
+    tracker,
+    projectRoot: root,
+    inputQueue: createInputQueue(),
+    bus,
+  });
   return { app, runner, root, p, tracker, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
@@ -447,6 +466,94 @@ describe("GET /managed-agents/:id/logs", () => {
       url: "/managed-agents/..%2Fetc/logs",
     });
     expect(res.statusCode).toBe(400);
+    await app.close();
+    await cleanup();
+  });
+});
+
+describe("Bus publishing (managed-agent WS messages)", () => {
+  it("POST /managed-agents/spawn publishes managed-agent.spawned", async () => {
+    const bus = fakeBus();
+    const { app, runner, cleanup } = await makeApp({ bus });
+    expectSpawnCalls(runner);
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: { runtime_id: "claude", suggested_participant_id: "ag-claude-bus" },
+    });
+    expect(res.statusCode).toBe(200);
+    const spawned = bus.messages.find((m) => m.type === "managed-agent.spawned");
+    expect(spawned).toBeDefined();
+    expect(spawned).toMatchObject({
+      type: "managed-agent.spawned",
+      participant_id: "ag-claude-bus",
+      runtime_id: "claude",
+    });
+    // tmux_session field should also be present (the route returns it)
+    expect((spawned as { tmux_session: string }).tmux_session).toMatch(
+      /-ag-ag-claude-bus$/,
+    );
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("DELETE /managed-agents/:id publishes managed-agent.killed", async () => {
+    const bus = fakeBus();
+    const { app, runner, cleanup } = await makeApp({ bus });
+    // Spawn first
+    expectSpawnCalls(runner);
+    const spawn = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: { runtime_id: "claude", suggested_participant_id: "ag-claude-kbus" },
+    });
+    expect(spawn.statusCode).toBe(200);
+    // Get confirm token
+    const tok = await app.inject({
+      method: "GET",
+      url: "/managed-agents/ag-claude-kbus/confirm-token",
+    });
+    const token = tok.json().token as string;
+    runner.expect(["tmux", "kill-session"], { stdout: "", stderr: "", exitCode: 0 });
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/managed-agents/ag-claude-kbus?confirm=${token}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const killed = bus.messages.find((m) => m.type === "managed-agent.killed");
+    expect(killed).toBeDefined();
+    expect(killed).toMatchObject({
+      type: "managed-agent.killed",
+      participant_id: "ag-claude-kbus",
+    });
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("POST /managed-agents/terminal publishes managed-agent.terminal-spawned", async () => {
+    const bus = fakeBus();
+    const { app, runner, cleanup } = await makeApp({ bus });
+    runner.expect(["tmux", "ls"], { stdout: "", stderr: "", exitCode: 1 });
+    runner.expect(["tmux", "new-session"], { stdout: "", stderr: "", exitCode: 0 });
+    runner.expect(["tmux", "set-option"], { stdout: "", stderr: "", exitCode: 0 });
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/terminal",
+      payload: { name: "scratch" },
+    });
+    expect(res.statusCode).toBe(200);
+    const term = bus.messages.find(
+      (m) => m.type === "managed-agent.terminal-spawned",
+    );
+    expect(term).toBeDefined();
+    expect(term).toMatchObject({
+      type: "managed-agent.terminal-spawned",
+      label: "scratch",
+    });
+    expect((term as { tmux_session: string }).tmux_session).toMatch(/-term-1$/);
+    runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();
   });

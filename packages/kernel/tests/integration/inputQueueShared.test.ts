@@ -167,6 +167,7 @@ describe("shared input queue across managed-agents and /ws/pane", () => {
         tracker,
         projectRoot: root,
         inputQueue: queue,
+        bus: { publish: () => {} },
       });
       const hub = createPaneHub({ onStart: () => {}, onStop: () => {} });
       registerPaneWebSocket(app, { tmux: fakeTmux, hub, inputQueue: queue });

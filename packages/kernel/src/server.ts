@@ -205,6 +205,9 @@ export function createServer(deps: ServerDeps): CreatedServer {
       tracker,
       projectRoot: deps.paths.root(),
       inputQueue: paneInputQueue,
+      // Pass a thin pass-through bus so route publishes go through the live
+      // `busRef` (which is reassigned once the WebSocket plugin is ready).
+      bus: { publish: (m) => busRef.publish(m) },
     });
     registerHookInstallRoutes(app, deps.paths);
 
