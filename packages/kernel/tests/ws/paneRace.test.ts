@@ -18,6 +18,7 @@ import websocketPlugin from "@fastify/websocket";
 import { stat } from "node:fs/promises";
 import { createPaneHub } from "../../src/ws/paneHub.js";
 import { registerPaneWebSocket } from "../../src/ws/pane.js";
+import { createInputQueue } from "../../src/tmux/inputQueue.js";
 
 interface TmuxCall { method: string; args: unknown[]; }
 
@@ -45,7 +46,7 @@ async function makeApp(tmux: any) {
   const app = Fastify();
   await app.register(websocketPlugin);
   const hub = createPaneHub({ onStart: () => {}, onStop: () => {} });
-  const controls = registerPaneWebSocket(app, { tmux, hub });
+  const controls = registerPaneWebSocket(app, { tmux, hub, inputQueue: createInputQueue() });
   await app.ready();
   return { app, controls };
 }

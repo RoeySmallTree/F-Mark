@@ -9,6 +9,7 @@ import { paths } from "../../src/paths.js";
 import { createPresenceTracker } from "../../src/presence/tracker.js";
 import { fakeCommandRunner } from "../../src/tmux/commandRunner.js";
 import { createTmuxManager } from "../../src/tmux/manager.js";
+import { createInputQueue } from "../../src/tmux/inputQueue.js";
 
 async function makeApp() {
   const root = await mkdtemp(join(tmpdir(), "fmark-mgd-r-"));
@@ -18,7 +19,10 @@ async function makeApp() {
   const mgr = createTmuxManager({ runner, projectRoot: root });
   const tracker = createPresenceTracker({ broadcast: () => {} });
   const app = Fastify();
-  registerManagedAgentsRoutes(app, { paths: p, tmux: mgr, tracker, projectRoot: root });
+  // Phase 8 fix: input queue is shared at server scope. Per-test we still
+  // create one for `registerManagedAgentsRoutes`; there's no parallel
+  // /ws/pane wiring here so a private queue is fine for these tests.
+  registerManagedAgentsRoutes(app, { paths: p, tmux: mgr, tracker, projectRoot: root, inputQueue: createInputQueue() });
   return { app, runner, root, p, tracker, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 

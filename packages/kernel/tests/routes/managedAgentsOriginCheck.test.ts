@@ -7,6 +7,7 @@ import { registerManagedAgentsRoutes } from "../../src/routes/managedAgents.js";
 import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createPresenceTracker } from "../../src/presence/tracker.js";
+import { createInputQueue } from "../../src/tmux/inputQueue.js";
 import type { TmuxManager } from "../../src/tmux/manager.js";
 
 function fakeTmux(): TmuxManager {
@@ -34,7 +35,13 @@ async function makeApp() {
   const tmux = fakeTmux();
   const tracker = createPresenceTracker({ broadcast: () => {} });
   const app = Fastify();
-  registerManagedAgentsRoutes(app, { paths: p, tmux, tracker, projectRoot: root });
+  registerManagedAgentsRoutes(app, {
+    paths: p,
+    tmux,
+    tracker,
+    projectRoot: root,
+    inputQueue: createInputQueue(),
+  });
   return {
     app,
     cleanup: async () => {

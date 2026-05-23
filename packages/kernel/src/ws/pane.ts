@@ -7,7 +7,7 @@ import type { FastifyInstance } from "fastify";
 import type { TmuxManager } from "../tmux/manager.js";
 import { validateMessageText } from "../runtimes/validation.js";
 import { seqLog, LogLevel } from "../lib/seq-log.js";
-import { createInputQueue } from "../tmux/inputQueue.js";
+import { createInputQueue, type InputQueue } from "../tmux/inputQueue.js";
 import type { PaneHub } from "./paneHub.js";
 
 export interface PaneWsRegistration {
@@ -37,11 +37,23 @@ async function bestEffortRmdir(path: string): Promise<void> {
   try { await rmdir(path); } catch { /* already gone */ }
 }
 
+export interface PaneWsDeps {
+  tmux: TmuxManager;
+  hub: PaneHub;
+  /**
+   * Shared per-pane input queue. Lifted to server scope (createServer)
+   * so this module and `registerManagedAgentsRoutes` enqueue tmux sends
+   * against the same queue object, preventing byte-level interleaving
+   * between overlay-typed input and kernel-injected slash commands.
+   */
+  inputQueue: InputQueue;
+}
+
 export function registerPaneWebSocket(
   app: FastifyInstance,
-  deps: { tmux: TmuxManager; hub: PaneHub },
+  deps: PaneWsDeps,
 ): PaneWsRegistration {
-  const { tmux, hub } = deps;
+  const { tmux, hub, inputQueue } = deps;
   const pipes = new Map<string, PipeState>();
   // Per-pane FIFO serialization. Reusing the same primitive as Phase 2's
   // tmux input queue so start/stop/start sequences are guaranteed to apply
@@ -153,12 +165,23 @@ export function registerPaneWebSocket(
         try { msg = JSON.parse(raw.toString()); } catch { return; }
         try {
           if (msg.type === "pane.input" && typeof msg.data === "string") {
-            validateMessageText(msg.data);
-            await tmux.sendLiteralText(paneId, msg.data);
+            // validateMessageText is synchronous; we run it BEFORE enqueueing
+            // so an invalid payload surfaces a pane.error immediately and the
+            // shared queue never sees a doomed task.
+            const data = msg.data;
+            validateMessageText(data);
+            await inputQueue.enqueue(paneId, () => tmux.sendLiteralText(paneId, data));
           } else if (msg.type === "pane.key" && typeof msg.key === "string") {
-            await tmux.sendKey(paneId, msg.key);
+            const key = msg.key;
+            await inputQueue.enqueue(paneId, () => tmux.sendKey(paneId, key));
           } else if (msg.type === "pane.resize") {
-            await tmux.resize(paneId, Number(msg.cols), Number(msg.rows));
+            const cols = Number(msg.cols);
+            const rows = Number(msg.rows);
+            // Resize is technically not keystroke input, but it can interfere
+            // with the agent's redraw if it lands between a slash command's
+            // literal text and Enter. Serialising through the same per-pane
+            // queue keeps the tmux byte stream coherent.
+            await inputQueue.enqueue(paneId, () => tmux.resize(paneId, cols, rows));
           }
         } catch (e: any) {
           try { socket.send(JSON.stringify({ type: "pane.error", error: e.message })); } catch {}

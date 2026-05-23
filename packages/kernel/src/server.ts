@@ -27,6 +27,7 @@ import { createPaneHub } from "./ws/paneHub.js";
 import { registerPaneWebSocket } from "./ws/pane.js";
 import { createTmuxManager } from "./tmux/manager.js";
 import { realCommandRunner, type CommandRunner } from "./tmux/commandRunner.js";
+import { createInputQueue } from "./tmux/inputQueue.js";
 
 export interface ServerDeps {
   token: string | null;
@@ -174,11 +175,18 @@ export function createServer(deps: ServerDeps): CreatedServer {
       runner: deps.commandRunner ?? realCommandRunner(),
       projectRoot: deps.paths.root(),
     });
+    // One per-pane input queue shared between /managed-agents/:id/command
+    // and /ws/pane so kernel-injected keystrokes (slash commands) and
+    // overlay-typed WS input cannot interleave at the tmux byte stream.
+    // The queue keys on tmux session name; both subsystems enqueue against
+    // the same key for the same pane.
+    const paneInputQueue = createInputQueue();
     registerManagedAgentsRoutes(app, {
       paths: deps.paths,
       tmux,
       tracker,
       projectRoot: deps.paths.root(),
+      inputQueue: paneInputQueue,
     });
     registerHookInstallRoutes(app);
 
@@ -194,7 +202,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
       onStart: (id) => { void pipeControls.startPipe(id); },
       onStop: (id) => { void pipeControls.stopPipe(id); },
     });
-    pipeControls = registerPaneWebSocket(app, { tmux, hub: paneHub });
+    pipeControls = registerPaneWebSocket(app, { tmux, hub: paneHub, inputQueue: paneInputQueue });
   } else {
     // Fallback: respond with a clear 404 explaining why the API is off.
     const handler = async (

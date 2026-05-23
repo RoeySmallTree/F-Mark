@@ -15,7 +15,7 @@ import {
 } from "../agents/managed.js";
 import { writeActiveSession } from "../agents/activeSession.js";
 import { appendAgentLog, readAgentLog } from "../agents/logs.js";
-import { createInputQueue } from "../tmux/inputQueue.js";
+import type { InputQueue } from "../tmux/inputQueue.js";
 import { validateSlashCommand, validateMessageText } from "../runtimes/validation.js";
 
 interface SpawnBody {
@@ -34,6 +34,14 @@ export interface ManagedAgentsDeps {
   tmux: TmuxManager;
   tracker: PresenceTracker;
   projectRoot: string;
+  /**
+   * Shared per-pane input queue. Lifted to server scope (createServer)
+   * so both `registerManagedAgentsRoutes` and `registerPaneWebSocket`
+   * enqueue tmux sends against the same queue object, preventing byte-
+   * level interleaving between kernel-injected slash commands and
+   * overlay-typed WS input.
+   */
+  inputQueue: InputQueue;
 }
 
 const CONFIRM_TTL_MS = 10_000;
@@ -97,7 +105,7 @@ export function registerManagedAgentsRoutes(
   app: FastifyInstance,
   deps: ManagedAgentsDeps,
 ): void {
-  const { paths, tmux, tracker } = deps;
+  const { paths, tmux, tracker, inputQueue } = deps;
 
   // Defence-in-depth: gate cookie-authenticated mutating requests by Origin.
   // Registered before the routes so it runs on every /managed-agents/* call.
@@ -108,10 +116,10 @@ export function registerManagedAgentsRoutes(
   // other's tokens.
   const confirmTokens = new Map<string, ConfirmEntry>();
 
-  // Per-registration input queue so user-typed and kernel-injected keystrokes
-  // serialize per pane. Each route handler enqueues its tmux sends against
-  // the agent's tmux-session as the pane key.
-  const inputQueue = createInputQueue();
+  // `inputQueue` is the per-pane queue *shared* with /ws/pane (created in
+  // createServer). All tmux sends from this module enqueue against the
+  // agent's tmux-session as the pane key, so kernel-injected commands and
+  // overlay-typed WS input cannot interleave at the tmux byte level.
 
   function mintConfirm(id: string): string {
     const token = randomBytes(8).toString("hex");
