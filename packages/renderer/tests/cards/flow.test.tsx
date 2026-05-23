@@ -5,7 +5,6 @@ import type { FlowEventRecord, Participant } from "@f-mark/shared";
 
 const participants: Record<string, Participant> = {
   "ag-claude": {
-    id: "ag-claude",
     kind: "agent",
     name: "Claude",
     color: "#b86a1f",

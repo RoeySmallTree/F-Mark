@@ -4,7 +4,6 @@ import {
   ReactFlowProvider,
   Background,
   Controls,
-  useReactFlow,
   type Node as RfNode,
   type Edge as RfEdge,
 } from "@xyflow/react";
@@ -44,6 +43,9 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
       })),
     [positioned],
   );
+  // FlowEdge (custom edge) doesn't render edge-level labels yet — labels are
+  // accepted by the schema and persisted, but not displayed. Drop the `label`
+  // prop here until FlowEdge gains an EdgeLabelRenderer pass.
   const rfEdges = useMemo<RfEdge[]>(
     () =>
       payload.edges.map((e) => ({
@@ -52,11 +54,9 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
         target: e.target,
         type: "flow",
         data: { data: e },
-        label: e.label,
       })),
     [payload],
   );
-  const rf = useReactFlow();
   const focusedId = useMemo(
     () => payload.nodes.find((n) => n.focused === true)?.id,
     [payload],
@@ -68,12 +68,12 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
       edges={rfEdges}
       nodeTypes={NODE_TYPES}
       edgeTypes={EDGE_TYPES}
-      fitView
-      onInit={() => {
+      fitView={focusedId === undefined}
+      onInit={(instance) => {
         if (focusedId !== undefined) {
-          const node = rf.getNode(focusedId);
+          const node = instance.getNode(focusedId);
           if (node !== undefined) {
-            rf.fitView({ nodes: [node], padding: 0.3 });
+            instance.fitView({ nodes: [node], padding: 0.3 });
           }
         }
       }}
