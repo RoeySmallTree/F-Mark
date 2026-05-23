@@ -1,33 +1,28 @@
-/* SendButton — the right-side action cluster in the compose bar.
+/* SendButton — the primary action at the right edge of the compose row.
 
-   Design: a single bordered cluster ("send-cluster") that visually fuses
-   Send + End-turn as one tightly-coupled control. The "ends turn" state
-   lives as a clickable Link/Unlink glyph BETWEEN the two halves — the
-   chain icon literally reads as "Send chains into End-turn". Click the
-   chain to break it; click again to re-link.
+   Design: a single bordered "send-cluster" pill that always presents the
+   user's act-of-finishing as one confident control. The cluster has two
+   slots:
+     - Send (left)      — only visible when textarea has content.
+     - End turn (right) — always visible.
 
-   Layouts:
-     - comment            → [Post comment]                       (single)
-     - named              → [End turn]                            (single)
-     - message + content  → [Send  ⌘↵ | ⛓ | End turn]            (cluster)
-     - message + empty    → [End turn]                            (cluster, collapsed)
+   Mode behavior:
+     - comment            → [Post comment]                       (single button, no cluster)
+     - named              → [End turn]                           (single button, no cluster)
+     - message + content  → [Send  ⌘↵ | End turn]                (cluster, both slots)
+     - message + empty    → [End turn]                           (cluster, single slot)
 */
 
 import { type JSX } from "react";
-import { CornerDownLeft, Link2, Unlink2 } from "lucide-react";
+import { CornerDownLeft } from "lucide-react";
+import { readEnterToSend } from "../state/settings.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
-
-const SEND_SHORTCUT = chordToLabel("$mod+Enter");
 
 interface Props {
   mode: "message" | "named" | "comment";
   canSubmit: boolean;
   busy: boolean;
   hasContent: boolean;
-  messageEndsTurn: boolean;
-  onMessageEndsTurnChange(next: boolean): void;
-  /* In message mode the parent's onSubmit already chains submit → endTurn
-     when messageEndsTurn=true, so SendButton stays a dumb view component. */
   onSubmit(): void;
   onEndTurn(): void;
 }
@@ -37,11 +32,12 @@ export function SendButton({
   canSubmit,
   busy,
   hasContent,
-  messageEndsTurn,
-  onMessageEndsTurnChange,
   onSubmit,
   onEndTurn,
 }: Props): JSX.Element {
+  const enterToSend = readEnterToSend();
+  const sendShortcut = enterToSend ? "↵" : chordToLabel("$mod+Enter");
+
   if (mode === "comment") {
     return (
       <button
@@ -52,7 +48,7 @@ export function SendButton({
         aria-label="Post comment"
       >
         Post comment
-        <span className="kbd">{SEND_SHORTCUT}</span>
+        <span className="kbd">{sendShortcut}</span>
       </button>
     );
   }
@@ -67,20 +63,17 @@ export function SendButton({
         aria-label="End turn with named contribution"
       >
         End turn
-        <CornerDownLeft size={12} aria-hidden />
-        <span className="kbd">{SEND_SHORTCUT}</span>
+        <CornerDownLeft size={14} aria-hidden />
+        <span className="kbd">{sendShortcut}</span>
       </button>
     );
   }
 
-  /* message mode → unified cluster: Send · chain · End-turn. */
+  /* message mode → cluster with Send (when content) + End-turn (always). */
   const sendDisabled = busy || !canSubmit;
-  const chainOn = messageEndsTurn;
   return (
     <div
-      className={`send-cluster${chainOn ? " chained" : " unchained"}${
-        hasContent ? " has-send" : " empty"
-      }`}
+      className={`send-cluster${hasContent ? " has-send" : " empty"}`}
       role="group"
       aria-label="Send and end-turn actions"
     >
@@ -90,37 +83,11 @@ export function SendButton({
           className="send-btn send-cluster-send"
           onClick={onSubmit}
           disabled={sendDisabled}
-          aria-label={
-            chainOn ? "Send message and end turn" : "Send message"
-          }
+          aria-label="Send message"
         >
-          <span className="send-cluster-send-label">Send</span>
-          <CornerDownLeft size={11} aria-hidden className="send-cluster-icon" />
-          <span className="kbd">{SEND_SHORTCUT}</span>
-        </button>
-      )}
-      {hasContent && (
-        <button
-          type="button"
-          className="send-chain"
-          onClick={() => onMessageEndsTurnChange(!chainOn)}
-          aria-pressed={chainOn}
-          aria-label={
-            chainOn
-              ? "Chained: Send will end the turn. Click to unlink."
-              : "Unlinked: Send only. Click to chain into End turn."
-          }
-          title={
-            chainOn
-              ? "Sending ends the turn — click to unlink"
-              : "Send only — click to chain into End turn"
-          }
-        >
-          {chainOn ? (
-            <Link2 size={12} aria-hidden />
-          ) : (
-            <Unlink2 size={12} aria-hidden />
-          )}
+          Send
+          <CornerDownLeft size={13} aria-hidden className="send-cluster-icon" />
+          <span className="kbd">{sendShortcut}</span>
         </button>
       )}
       <button
@@ -140,3 +107,4 @@ export function SendButton({
     </div>
   );
 }
+

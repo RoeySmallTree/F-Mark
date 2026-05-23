@@ -16,12 +16,14 @@
      - escape    → clear commentTarget if set; else blur textarea
 */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { useHotkeys, type HotkeyMap } from "../hooks/useHotkeys.js";
 import {
+  readEnterToSend,
   readMessageEndsTurn,
+  writeEnterToSend,
   writeMessageEndsTurn,
 } from "../state/settings.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
@@ -29,8 +31,10 @@ import { ModeBar } from "./ModeBar.js";
 import { NameInput } from "./NameInput.js";
 import { TargetPill } from "./TargetPill.js";
 import { SendButton } from "./SendButton.js";
+import { CreateTodoPopover } from "./CreateTodoPopover.js";
 import { PresetsPopover } from "../popovers/PresetsPopover.js";
-import { Zap, Sparkles } from "lucide-react";
+import { Zap, Sparkles, Link2, Unlink2, ListChecks, Settings2 } from "lucide-react";
+import { ComposeSettingsPopover } from "./ComposeSettingsPopover.js";
 
 const NAMED_SHORTCUT = chordToLabel("$mod+N");
 const PRESETS_SHORTCUT = chordToLabel("$mod+P");
@@ -66,14 +70,26 @@ export function Compose(): JSX.Element {
   const [messageEndsTurn, setMessageEndsTurn] = useState<boolean>(() =>
     readMessageEndsTurn(),
   );
+  const [enterToSend, setEnterToSend] = useState<boolean>(() =>
+    readEnterToSend(),
+  );
 
   const handleMessageEndsTurnChange = useCallback((next: boolean): void => {
     setMessageEndsTurn(next);
     writeMessageEndsTurn(next);
   }, []);
 
+  const handleEnterToSendChange = useCallback((next: boolean): void => {
+    setEnterToSend(next);
+    writeEnterToSend(next);
+  }, []);
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const presetsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const createTodoBtnRef = useRef<HTMLButtonElement | null>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [createTodoAnchorRect, setCreateTodoAnchorRect] =
+    useState<DOMRect | null>(null);
 
   // canSubmit mirrors legacy Composer.
   const canSubmit = useMemo(() => {
@@ -150,8 +166,33 @@ export function Compose(): JSX.Element {
      have settled at memo-construction time). */
   const openPresets = useCallback((): void => {
     const rect = presetsBtnRef.current?.getBoundingClientRect() ?? null;
+    setCreateTodoAnchorRect(null);
     openPopover("presets", rect);
   }, [openPopover]);
+
+  const openSettings = useCallback((): void => {
+    const rect = settingsBtnRef.current?.getBoundingClientRect() ?? null;
+    setCreateTodoAnchorRect(null);
+    openPopover("compose-settings", rect);
+  }, [openPopover]);
+
+  const openCreateTodo = useCallback((): void => {
+    const rect = createTodoBtnRef.current?.getBoundingClientRect() ?? null;
+    closePopover();
+    setCreateTodoAnchorRect(rect);
+  }, [closePopover]);
+
+  const closeCreateTodo = useCallback((): void => {
+    setCreateTodoAnchorRect(null);
+  }, []);
+
+  const createTodoEndsTurn = mode === "message" && messageEndsTurn;
+
+  const handleCreateTodoCreated = useCallback(async (): Promise<void> => {
+    if (createTodoEndsTurn) {
+      await endTurn();
+    }
+  }, [createTodoEndsTurn, endTurn]);
 
   const handleEscape = useCallback((): boolean => {
     if (commentTarget !== null) {
@@ -216,7 +257,7 @@ export function Compose(): JSX.Element {
      Always clears the draft after consuming so a second open of the same
      preset still inserts again. After insertion, focus the textarea and
      place the caret at the end. */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (composeDraft === null) return;
     setContent((prev) => {
       const trimmed = prev.trim();
@@ -244,7 +285,7 @@ export function Compose(): JSX.Element {
   // it will return to 'message' on next composeMode update by ModeBar.
 
   // Auto-grow the textarea up to its max-height (140px from CSS).
-  useEffect(() => {
+  useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (ta === null) return;
     ta.style.height = "auto";
@@ -255,6 +296,14 @@ export function Compose(): JSX.Element {
   function onTextareaKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === "Escape" && handleEscape()) {
       e.preventDefault();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (enterToSend) {
+        e.preventDefault();
+        e.stopPropagation();
+        void sendOrEndTurn();
+      }
     }
   }
 
@@ -280,44 +329,89 @@ export function Compose(): JSX.Element {
           aria-label="Compose message"
         />
         <div className="compose-actions">
-          <ModeBar />
-          <button
-            ref={presetsBtnRef}
-            type="button"
-            className="mode-btn"
-            onClick={openPresets}
-            aria-label="Open presets"
-            title={`Open presets (${PRESETS_SHORTCUT})`}
-          >
-            <Zap size={11} aria-hidden />
-            Presets <span className="kbd">{PRESETS_SHORTCUT}</span>
-          </button>
-          <button
-            type="button"
-            className="mode-btn"
-            onClick={() => openModal("skills")}
-            aria-label="Open skills palette"
-            title={`Open skills palette (${SKILLS_SHORTCUT})`}
-          >
-            <Sparkles size={11} aria-hidden />
-            Skills <span className="kbd">{SKILLS_SHORTCUT}</span>
-          </button>
-          <SendButton
-            mode={mode}
-            canSubmit={canSubmit}
-            busy={busy}
-            hasContent={content.trim().length > 0}
-            messageEndsTurn={messageEndsTurn}
-            onMessageEndsTurnChange={handleMessageEndsTurnChange}
-            onSubmit={() => void submitAndMaybeEndTurn()}
-            onEndTurn={() => void endTurn()}
-          />
+          {/* Zone 1 — mode setters (Name it · Comment). */}
+          <div className="compose-zone compose-zone-modes">
+            <ModeBar />
+          </div>
+          
+          <div className="dock-divider" />
+
+          {/* Zone 2 — augment launchers (Presets · Skills). */}
+          <div className="compose-zone compose-zone-augments">
+            <button
+              ref={presetsBtnRef}
+              type="button"
+              className="mode-btn"
+              onClick={openPresets}
+              aria-label="Open presets"
+              title={`Open presets (${PRESETS_SHORTCUT})`}
+            >
+              <Zap size={14} aria-hidden />
+              <span className="dock-label">Presets</span>
+            </button>
+            <button
+              type="button"
+              className="mode-btn"
+              onClick={() => {
+                closeCreateTodo();
+                openModal("skills");
+              }}
+              aria-label="Open skills palette"
+              title={`Open skills palette (${SKILLS_SHORTCUT})`}
+            >
+              <Sparkles size={14} aria-hidden />
+              <span className="dock-label">Skills</span>
+            </button>
+            <button
+              ref={createTodoBtnRef}
+              type="button"
+              className="mode-btn"
+              onClick={openCreateTodo}
+              aria-label="Open create todo"
+              title="Create Todo"
+            >
+              <ListChecks size={14} aria-hidden />
+              <span className="dock-label">Task</span>
+            </button>
+          </div>
+
+          <div className="dock-spacer" />
+
+          {/* Zone 3 — primary action: optional ends-turn chip + Send cluster. */}
+          <div className="compose-zone compose-zone-act">
+            <button
+              ref={settingsBtnRef}
+              type="button"
+              className="mode-btn"
+              onClick={openSettings}
+              aria-label="Compose settings"
+              title="Compose settings"
+            >
+              <Settings2 size={14} aria-hidden />
+            </button>
+            <SendButton
+              mode={mode}
+              canSubmit={canSubmit}
+              busy={busy}
+              hasContent={content.trim().length > 0}
+              onSubmit={() => void submitAndMaybeEndTurn()}
+              onEndTurn={() => void endTurn()}
+            />
+          </div>
         </div>
       </div>
       {activePopover.key === "presets" ? (
         <PresetsPopover
           anchorRect={activePopover.anchorRect}
           onClose={closePopover}
+        />
+      ) : null}
+      {createTodoAnchorRect !== null ? (
+        <CreateTodoPopover
+          anchorRect={createTodoAnchorRect}
+          onClose={closeCreateTodo}
+          endTurnAfter={createTodoEndsTurn}
+          onCreated={handleCreateTodoCreated}
         />
       ) : null}
     </div>

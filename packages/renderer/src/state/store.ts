@@ -34,7 +34,7 @@ export type ModalKey =
 /* Popover state — additive to the modal state above. Popovers anchor to a
    DOM element (the caller passes the anchor's bounding rect) so they can
    position themselves relative to it. Only one popover is open at a time. */
-export type PopoverKey = null | "log-filter" | "presets" | "skills";
+export type PopoverKey = null | "log-filter" | "presets" | "skills" | "compose-settings";
 
 export interface PopoverState {
   key: PopoverKey;

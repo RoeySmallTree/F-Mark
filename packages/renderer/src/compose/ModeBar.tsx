@@ -1,14 +1,17 @@
-/* ModeBar — three mode pills (Message / Named / Comment) used inside the
-   compose-actions row. Each pill mirrors `.mode-btn` from design.html and
-   shows a small shortcut hint per the prototype.
+/* ModeBar — mode pills for the compose-actions row.
+
+   The Message mode pill was removed in the cluster-redesign pass: the
+   Send button on the right edge of the compose row is the message-mode
+   action verb, so a left-side "Message" toggle pill was a duplicate.
+   The Message MODE itself still exists in the store and is the implicit
+   default; clicking an active Name-it or Comment pill flips back to it.
 
    Behavior:
-   - Clicking the active mode goes back to 'message' (toggle behavior, matches
-     the app.jsx prototype: `setMode(isComment ? 'message' : 'comment')`).
-   - The Comment pill is disabled when there's no `commentTarget` — without
-     a target, there's nothing to comment on. It still renders so users can
-     see the keybinding hint.
-*/
+   - Two pills: Name it (⌘N) and Comment (⌘/).
+   - Clicking the active pill flips composeMode back to "message".
+   - The Comment pill is disabled when there's no commentTarget — without
+     a target there's nothing to comment on. It still renders so users
+     see the keybinding hint and the disabled affordance. */
 
 import { type JSX } from "react";
 import { FileText, MessageSquare } from "lucide-react";
@@ -16,7 +19,6 @@ import { useStore } from "../state/store.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
 
 const PILLS = [
-  { id: "message" as const, label: "Message", combo: "$mod+/" },
   { id: "named" as const, label: "Name it", combo: "$mod+N" },
   { id: "comment" as const, label: "Comment", combo: "$mod+/" },
 ];
@@ -27,7 +29,7 @@ export function ModeBar(): JSX.Element {
   const commentTarget = useStore((s) => s.commentTarget);
   const commentEnabled = commentTarget !== null;
 
-  function onClick(id: "message" | "named" | "comment"): void {
+  function onClick(id: "named" | "comment"): void {
     if (id === "comment" && !commentEnabled) return;
     if (mode === id) {
       setMode("message");
@@ -43,10 +45,10 @@ export function ModeBar(): JSX.Element {
         const disabled = p.id === "comment" && !commentEnabled;
         const icon =
           p.id === "comment" ? (
-            <MessageSquare size={11} aria-hidden />
-          ) : p.id === "named" ? (
-            <FileText size={11} aria-hidden />
-          ) : null;
+            <MessageSquare size={13} aria-hidden />
+          ) : (
+            <FileText size={13} aria-hidden />
+          );
         return (
           <button
             key={p.id}

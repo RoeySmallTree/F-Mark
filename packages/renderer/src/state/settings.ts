@@ -15,6 +15,7 @@
 export const SETTINGS_PREFIX = "fmark:settings:";
 
 export const KEY_MESSAGE_ENDS_TURN = `${SETTINGS_PREFIX}message-ends-turn`;
+export const KEY_ENTER_TO_SEND = `${SETTINGS_PREFIX}enter-to-send`;
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -42,4 +43,12 @@ export function readMessageEndsTurn(): boolean {
 
 export function writeMessageEndsTurn(value: boolean): void {
   writeBool(KEY_MESSAGE_ENDS_TURN, value);
+}
+
+export function readEnterToSend(): boolean {
+  return readBool(KEY_ENTER_TO_SEND, false);
+}
+
+export function writeEnterToSend(value: boolean): void {
+  writeBool(KEY_ENTER_TO_SEND, value);
 }
