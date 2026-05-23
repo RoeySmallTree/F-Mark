@@ -1,0 +1,404 @@
+/* Component-local styles for AgentChip, TerminalChip, PlusButton, and the
+   AgentActionMenu dropdown (Phase 12). Colors resolve through the theme
+   tokens in tokens.css so all six themes render correctly.
+
+   The chips are designed to live in the top bar alongside `.avatar` and
+   `.turn-pill`. They reuse the same height (22-26px) and rounded-pill
+   visual language so the participant strip reads as one row. */
+
+/* ============ AgentChip + TerminalChip — shared frame ============ */
+.agent-chip,
+.terminal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+.agent-chip {
+  font-family: var(--sans);
+  font-weight: 500;
+}
+.agent-chip:hover,
+.terminal-chip:hover {
+  background: var(--bg);
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+.agent-chip:focus-visible,
+.terminal-chip:focus-visible {
+  outline: 2px solid var(--ink-4);
+  outline-offset: 2px;
+}
+/* Resetting button affordances so the chip looks identical whether
+   rendered as <button> or <div>. */
+.agent-chip,
+.terminal-chip,
+.plus-btn {
+  appearance: none;
+  font: inherit;
+}
+
+/* Runtime initial — sits in a small panel-tinted square so the letter
+   pops without dominating the row. */
+.agent-chip-runtime {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agent-chip-name {
+  letter-spacing: 0.01em;
+  color: inherit;
+}
+
+/* State dot — rendered after the name. Color resolves through the theme. */
+.agent-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ink-4);
+}
+.agent-chip-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 0 2px var(--green-tint);
+}
+.agent-chip-dot.stale,
+.agent-chip-dot.launching {
+  background: var(--agent);
+  box-shadow: 0 0 0 2px var(--agent-tint);
+}
+.agent-chip-dot.offline {
+  background: var(--ink-4);
+  opacity: 0.55;
+}
+.agent-chip-dot.pane-dead {
+  background: var(--rose);
+}
+.agent-chip-dot.hook-not-installed {
+  background: var(--ink-4);
+  opacity: 0.7;
+}
+
+/* "exited" pill — sits to the right of the chip for pane-dead state. */
+.agent-chip-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--rose);
+  color: var(--canvas);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-left: 2px;
+}
+.agent-chip-wrench {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+
+/* ============ TerminalChip ============ */
+.terminal-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--canvas);
+  border-radius: 4px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.terminal-chip-label {
+  letter-spacing: 0.01em;
+}
+
+/* ============ PlusButton ============ */
+.plus-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+.plus-btn:hover {
+  background: var(--bg);
+  border-style: solid;
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+.plus-btn:focus-visible {
+  outline: 2px solid var(--ink-4);
+  outline-offset: 2px;
+}
+.plus-btn[aria-expanded="true"] {
+  background: var(--bg);
+  border-style: solid;
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+
+/* PlusButton dropdown — anchored panel reusing the popover frame.
+   Uses an inline-positioned absolutely-positioned panel since this
+   dropdown is small (no need for full Popover positioning logic). */
+.plus-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 220px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 40px rgba(40, 30, 15, 0.18),
+    0 2px 8px rgba(40, 30, 15, 0.06);
+  z-index: 80;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.plus-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 5px;
+  background: none;
+  border: 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.plus-menu-item:hover:not(:disabled),
+.plus-menu-item:focus-visible {
+  background: var(--panel);
+  outline: 0;
+}
+.plus-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.plus-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.plus-menu-label {
+  flex: 1;
+}
+.plus-menu-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0.02em;
+}
+.plus-menu-sep {
+  height: 1px;
+  background: var(--line-3);
+  margin: 4px 6px;
+}
+
+/* PlusButton wrapper — relative so the absolutely-positioned dropdown
+   anchors next to the button itself. */
+.plus-btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ============ AgentActionMenu ============ */
+.agent-action-menu {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 40px rgba(40, 30, 15, 0.18),
+    0 2px 8px rgba(40, 30, 15, 0.06);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  gap: 1px;
+}
+.agent-action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 5px;
+  background: none;
+  border: 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.agent-action-menu-item:hover:not(:disabled),
+.agent-action-menu-item:focus-visible {
+  background: var(--panel);
+  outline: 0;
+}
+.agent-action-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.agent-action-menu-item.destructive {
+  color: var(--rose);
+}
+.agent-action-menu-item.destructive:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--rose) 12%, var(--canvas));
+}
+.agent-action-menu-sep {
+  height: 1px;
+  background: var(--line-3);
+  margin: 4px 6px;
+}
+.agent-action-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.agent-action-menu-rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+}
+.agent-action-menu-rename input,
+.agent-action-menu-msg input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  outline: 0;
+  min-width: 0;
+}
+.agent-action-menu-rename input:focus,
+.agent-action-menu-msg input:focus {
+  border-color: var(--ink-4);
+}
+.agent-action-menu-rename button,
+.agent-action-menu-msg button {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.agent-action-menu-rename button:hover,
+.agent-action-menu-msg button:hover {
+  background: var(--bg);
+  border-color: var(--ink-4);
+}
+.agent-action-menu-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.agent-action-menu-confirm .confirm-yes {
+  background: var(--rose);
+  color: var(--canvas);
+  border: 0;
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.agent-action-menu-confirm .confirm-no {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* Submenu (slash commands) — inline disclosure, shown in-place when toggled. */
+.agent-action-menu-sub {
+  display: flex;
+  flex-direction: column;
+  padding-left: 8px;
+  border-left: 1px dashed var(--line-2);
+  margin: 2px 0 2px 18px;
+}
