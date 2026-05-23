@@ -169,6 +169,7 @@ export interface FlowEdge {
   target: string;
   label?: string;
   style?: FlowEdgeStyle;
+  /** Visual variant (CSS class). Not a React Flow routing type. */
   type?: FlowEdgeType;
 }
 
