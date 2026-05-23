@@ -1,0 +1,4 @@
+{"role":"user","content":[{"type":"text","text":"list files"}]}
+{"role":"assistant","content":[{"type":"text","text":"I'll search."},{"type":"tool_use","id":"tu_1","name":"Bash","input":{"command":"ls"}}]}
+{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu_1","content":"a\nb\n"}]}
+{"role":"assistant","content":[{"type":"text","text":"Found two files: a, b."}]}

@@ -1,0 +1,4 @@
+{"role":"user","content":[{"type":"text","text":"first"}]}
+{"role":"assistant","content":[{"type":"text","text":"reply1"}]}
+{"role":"user","content":[{"type":"text","text":"second"}]}
+{"role":"assistant","content":[{"type":"text","text":"reply2"}]}
