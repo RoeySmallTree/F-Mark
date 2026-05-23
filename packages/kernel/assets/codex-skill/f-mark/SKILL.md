@@ -70,7 +70,9 @@ You do NOT POST these manually.
 - **Comments anchored to lines**: `POST /events/prose` with `target: { file, lines }`.
 - **Replies**: `POST /events/prose` with `in_reply_to`.
 - **Revisions**: `POST /events/prose` with `supersedes`.
-- **Todos / choices / file / html**: their dedicated endpoints.
+- **Todos / choices / file / html / flow**: their dedicated endpoints.
+
+**Flow charts / diagrams.** When the user asks for a diagram, flowchart, pipeline, or decision tree — or whenever you'd otherwise reach for ASCII art — POST `/sessions/<id>/events/flow` with `{ id, nodes, edges }`. See `api.md` for the full schema. Nodes support `itemType` (info/success/danger/disabled), `focused: true` for emphasis, and `popover: { html, css?, js? }` for click-to-reveal detail. Edges support `style: flowing` for animated dashes.
 
 When you POST manually, do NOT set `arbitrary: true` — manual posts are by definition deliberate.
 

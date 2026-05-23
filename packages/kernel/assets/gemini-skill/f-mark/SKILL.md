@@ -100,6 +100,10 @@ These never carry `arbitrary: true` — by definition they're deliberate posts, 
 
 POST new prose with `supersedes: <old_filename>`. Works for both auto-streamed and manual posts.
 
+## Flow charts / diagrams
+
+When the user asks for a diagram, flowchart, pipeline, or decision tree — or whenever you'd otherwise reach for ASCII art — POST `/sessions/<id>/events/flow` with `{ id, nodes, edges }`. See `api.md` for the full schema. Nodes support `itemType` (info/success/danger/disabled), `focused: true` for emphasis, and `popover: { html, css?, js? }` for click-to-reveal detail. Edges support `style: flowing` for animated dashes.
+
 ## Why no `AfterAgent` hook today?
 
 A native Gemini hook would only get `prompt_response` (the flat final-text string) and a `transcript_path` whose JSONL Gemini uses a non-Claude-Code-compatible schema. Until F-Mark adds a Gemini-flavored transcript parser, the model itself is the cleanest producer of the structured event stream. See `docs/superpowers/plans/2026-05-23-gemini-hooks-research.md` for the rationale.

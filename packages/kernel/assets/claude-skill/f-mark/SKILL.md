@@ -79,6 +79,10 @@ When you POST manually, do NOT set `arbitrary: true` — manual posts are by def
 ## Revising
 POST new prose with `supersedes: <old_filename>`. Works for both auto-streamed and manual posts.
 
+## Flow charts / diagrams
+
+When the user asks for a diagram, flowchart, pipeline, or decision tree — or whenever you'd otherwise reach for ASCII art — POST `/sessions/<id>/events/flow` with `{ id, nodes, edges }`. See `api.md` for the full schema. Nodes support `itemType` (info/success/danger/disabled), `focused: true` for emphasis, and `popover: { html, css?, js? }` for click-to-reveal detail. Edges support `style: flowing` for animated dashes.
+
 ## Don't
 - Don't disable the hook to "save tokens" — that's its job.
 - Don't write directly into `.f-mark/sessions/...`. Always go through the API.

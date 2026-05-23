@@ -75,11 +75,53 @@ All frontmatter fields are optional.
 }
 ```
 
+`POST /sessions/<id>/events/todo`
+
+```json
+{
+  "participant_id": "ag-gemini",
+  "id": "td-research",
+  "title": "Research launch risks",
+  "body": "Summarize the top three blockers.",
+  "status": "open",
+  "assigned_to": "ag-gemini",
+  "parent_id": "td-launch-plan",
+  "supersedes": "20260522T143512Z_ag-gemini.todo.json"
+}
+```
+
+`status` is `open`, `wip`, `done`, or `removed`. `body`,
+`assigned_to`, `parent_id`, and `supersedes` are optional. Use the same
+`id` plus `supersedes` to update, complete, reassign, reparent, or remove a
+todo. Removing a parent todo also removes its visible subtasks.
+
 `POST /sessions/<id>/events/turn-end`
 
 ```json
 { "participant_id": "ag-gemini" }
 ```
+
+`POST /sessions/<id>/events/flow`
+
+```json
+{
+  "participant_id": "ag-gemini",
+  "id": "fl_arch",
+  "title": "System architecture",
+  "nodes": [
+    { "id": "n1", "label": "Client", "itemType": "info" },
+    { "id": "n2", "label": "Gateway", "itemType": "default" },
+    { "id": "n3", "label": "Worker", "itemType": "success", "focused": true,
+      "popover": { "html": "<p>Auto-scaled on CPU.</p>" } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "n1", "target": "n2", "style": "solid" },
+    { "id": "e2", "source": "n2", "target": "n3", "style": "flowing", "type": "success" }
+  ]
+}
+```
+
+Use for diagrams, flowcharts, dependency graphs, decision trees, pipelines. The renderer auto-lays-out the graph when `position` is omitted on any node. `popover.html` is rendered inside a sandboxed iframe; `css` and `js` are optional companions.
 
 ## Reading events
 
@@ -90,6 +132,19 @@ All frontmatter fields are optional.
 `since` is an ISO compact timestamp like `20260522T143012Z`. Strict-newer filter (`>`, not `>=`).
 
 `kinds` is a comma-separated list of `prose, choices, choice, turn-end, todo, html, file`.
+
+## Reading todos
+
+`GET /sessions/<id>/todos`
+
+→ `{ open, wip, done, tree }`.
+
+Prefer this endpoint over rebuilding task state from raw events. `tree`
+contains the aligned task hierarchy, with each parent followed by subtasks,
+and each item includes title, optional `body`, status, assignee, and parent id.
+
+`GET /sessions/<id>/todos?assigned_to=<participant_id>` filters both the
+buckets and the tree to one assignee.
 
 ## WebSocket
 

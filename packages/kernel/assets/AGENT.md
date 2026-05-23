@@ -44,6 +44,46 @@ Every event is a file. You never write files directly — POST and the kernel wr
 
 - `POST /sessions/:id/events/choice` — body `{ participant_id, choices_id, selected: [optionId...] }`. The user usually posts this from the UI, but you may post on your own behalf if needed.
 
+- `POST /sessions/:id/events/todo` — body `{ participant_id, id, title, body?, status, assigned_to?, parent_id?, supersedes? }`.
+  - `status` is one of `open`, `wip`, `done`, or `removed`.
+  - `body` is the optional task description.
+  - `assigned_to` is a participant id.
+  - `parent_id` makes the todo a subtask. In the aligned tree, subtasks appear directly under their parent.
+  - To update, complete, reassign, reparent, or remove a todo, POST a new todo event with the same `id` and `supersedes` set to that todo's latest event filename.
+  - Removing a parent todo also removes its visible children.
+
+- `POST /sessions/:id/events/flow` — body `{ participant_id, id, title?, nodes, edges, supersedes? }`. Use whenever you want to show the user a **diagram, flowchart, dependency graph, decision tree, or pipeline**. Prefer this over ASCII art or markdown lists for any non-trivial graph.
+
+  - `id` — your own stable string (e.g. `fl_arch`). Re-use it with `supersedes` to revise.
+  - `nodes` — array. Each: `{ id, label, title?, content?, popover?, itemType?, focused?, position? }`.
+    - `itemType` ∈ `default | info | success | danger | disabled` — drives the node's color and weight.
+    - `focused: true` — at most one. The renderer centers the viewport on it and adds a highlight ring.
+    - `popover` — `{ html, css?, js? }`. Rendered inside a sandboxed iframe on click. Use for rich detail (tables, mini-charts, links).
+    - `position` — `{ x, y }` in pixels. **Omit it if you want auto-layout.** If ANY node lacks a position, the whole graph is auto-laid-out (left-to-right). "All or nothing" — don't mix.
+  - `edges` — array. Each: `{ id, source, target, label?, style?, type? }`.
+    - `style` ∈ `solid | dashed | dotted | flowing`. `flowing` = animated marching dashes.
+    - `type` ∈ `default | info | success | danger`. Drives the stroke color.
+
+  Example:
+
+  ```json
+  {
+    "participant_id": "ag-claude",
+    "id": "fl_release",
+    "title": "Release pipeline",
+    "nodes": [
+      { "id": "p1", "label": "Build",  "itemType": "default" },
+      { "id": "p2", "label": "Test",   "itemType": "info"    },
+      { "id": "p3", "label": "Deploy", "itemType": "success", "focused": true,
+        "popover": { "html": "<p>Deploys to <b>prod</b> via GitHub Actions.</p>" } }
+    ],
+    "edges": [
+      { "id": "e1", "source": "p1", "target": "p2", "style": "solid" },
+      { "id": "e2", "source": "p2", "target": "p3", "style": "flowing", "type": "success" }
+    ]
+  }
+  ```
+
 - `POST /sessions/:id/events/turn-end` — body `{ participant_id }`. Marks your turn done.
 
 ## Reading state
@@ -52,6 +92,8 @@ Every event is a file. You never write files directly — POST and the kernel wr
 - `since=20260522T143012Z` filters strictly newer.
 - `kinds=prose,choice` filters by kind.
 - `participant=us-a7f3` filters by author.
+- `GET /sessions/:id/todos` returns `{ open, wip, done, tree }`. Prefer this endpoint for task state: `tree` is already aligned for agent use, includes task descriptions, statuses, assignees, and renders each parent immediately followed by its subtasks.
+- `GET /sessions/:id/todos?assigned_to=<participant_id>` filters the buckets and tree to one assignee.
 
 ## Authentication
 
