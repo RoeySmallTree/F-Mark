@@ -323,6 +323,28 @@
   line-height: 1.6;
   color: var(--ink);
 }
+
+/* Orphan-embed badge — flagged by Feed.tsx for any top-level event
+   whose `append_to` points at a missing/superseded anchor. The badge
+   sits above the card so the card itself stays unmodified. Theme-keyed
+   with the warning tint. */
+.feed-item-orphan {
+  margin-top: 6px;
+}
+.orphan-embed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--agent-tint);
+  color: var(--agent);
+  border: 1px solid var(--agent-tint-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
 .prose-empty-state {
   text-align: center;
   padding: 18px 12px;

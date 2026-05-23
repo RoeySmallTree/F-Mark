@@ -71,7 +71,20 @@ export function Feed(): JSX.Element {
                 <div
                   key={item.event.filename}
                   data-event-filename={item.event.filename}
+                  data-orphan-embed={
+                    agg.orphanBlocks.has(item.event.filename) ? "true" : undefined
+                  }
+                  className={
+                    agg.orphanBlocks.has(item.event.filename)
+                      ? "feed-item-orphan"
+                      : undefined
+                  }
                 >
+                  {agg.orphanBlocks.has(item.event.filename) && (
+                    <div className="orphan-embed-badge" role="note">
+                      orphaned embed — append_to points at a missing anchor
+                    </div>
+                  )}
                   <EventCard
                     event={item.event}
                     participants={participants}
