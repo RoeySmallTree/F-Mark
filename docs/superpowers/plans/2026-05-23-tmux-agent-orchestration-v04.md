@@ -118,7 +118,7 @@ Tests live next to source via project convention (`packages/kernel/tests/<area>/
 - [ ] **Step 1: Run full kernel test suite**
 
 ```bash
-pnpm --filter @f-mark/kernel test
+pnpm --filter f-mark test
 ```
 
 Expected: PASS. If not, STOP — the v0.3.0 codebase is already broken and must be fixed before any v0.4 work begins.
@@ -233,7 +233,7 @@ describe("tmux naming", () => {
 - [ ] **Step 2: Run test (expect FAIL)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/tmux/naming.test.ts
+pnpm --filter f-mark test tests/tmux/naming.test.ts
 ```
 
 Expected: FAIL with "Cannot find module".
@@ -298,7 +298,7 @@ export function parseFmarkSessionName(name: string): ParsedSession | null {
 - [ ] **Step 4: Run test (expect PASS)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/tmux/naming.test.ts
+pnpm --filter f-mark test tests/tmux/naming.test.ts
 ```
 
 Expected: 6 tests pass.
@@ -363,7 +363,7 @@ describe("fakeCommandRunner", () => {
 - [ ] **Step 2: Run (expect FAIL)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/tmux/commandRunner.test.ts
+pnpm --filter f-mark test tests/tmux/commandRunner.test.ts
 ```
 
 - [ ] **Step 3: Implement**
@@ -433,7 +433,7 @@ export function fakeCommandRunner(): FakeCommandRunner {
 - [ ] **Step 4: Run (expect PASS)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/tmux/commandRunner.test.ts
+pnpm --filter f-mark test tests/tmux/commandRunner.test.ts
 ```
 
 - [ ] **Step 5: Commit**
@@ -557,7 +557,7 @@ describe("TmuxManager", () => {
 - [ ] **Step 2: Run (expect FAIL)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/tmux/manager.test.ts
+pnpm --filter f-mark test tests/tmux/manager.test.ts
 ```
 
 - [ ] **Step 3: Implement**
@@ -707,7 +707,7 @@ export function createTmuxManager(deps: {
 - [ ] **Step 4: Run (expect PASS)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/tmux/manager.test.ts
+pnpm --filter f-mark test tests/tmux/manager.test.ts
 ```
 
 - [ ] **Step 5: Commit**
@@ -796,7 +796,7 @@ git commit -m "feat(kernel/tmux): per-pane FIFO input queue"
 
 Use the `buddy` skill with this brief:
 
-> Verify Phase 2 of the tmux orchestration v0.4 plan. Read `docs/superpowers/plans/2026-05-23-tmux-agent-orchestration-v04.md` Phase 2 tasks 2.1–2.4 and the resulting source/tests. Run `pnpm --filter @f-mark/kernel test tests/tmux/` and confirm every test actually runs + asserts (not just exits 0 with zero assertions). Spot-check the manager's argv shapes match the test expectations and confirm the fake command runner is not silently swallowing failures. Write findings to `planning/buddy-reviews/2026-05-23-tmux-orchestration-phase-2.md`. Severity-tag any issues. Don't approve if the tests don't actually exercise the code.
+> Verify Phase 2 of the tmux orchestration v0.4 plan. Read `docs/superpowers/plans/2026-05-23-tmux-agent-orchestration-v04.md` Phase 2 tasks 2.1–2.4 and the resulting source/tests. Run `pnpm --filter f-mark test tests/tmux/` and confirm every test actually runs + asserts (not just exits 0 with zero assertions). Spot-check the manager's argv shapes match the test expectations and confirm the fake command runner is not silently swallowing failures. Write findings to `planning/buddy-reviews/2026-05-23-tmux-orchestration-phase-2.md`. Severity-tag any issues. Don't approve if the tests don't actually exercise the code.
 
 After buddy review:
 - If findings exist → address them → re-run tests → commit fixes.
@@ -1121,7 +1121,7 @@ expect(runtimes.runtimes.gemini).toBeDefined();
 - [ ] **Step 3: Run (expect FAIL)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/project.test.ts
+pnpm --filter f-mark test tests/project.test.ts
 ```
 
 - [ ] **Step 4: Implement**
@@ -1148,7 +1148,7 @@ git commit -m "feat(kernel/project): initProject seeds runtimes.json with defaul
 
 - [ ] **Step P3-V: `/buddy` verifies registry + initProject integration**
 
-Brief: "Verify Phase 3. Confirm `pnpm --filter @f-mark/kernel test tests/runtimes/` and `tests/project.test.ts` pass with non-trivial assertions, the validation rejects shell metacharacters as designed, `initRuntimesFile` is truly idempotent (does not clobber user edits), and the V0.3.0 regression baseline (`pnpm --filter @f-mark/kernel test`) is unaffected. Write `planning/buddy-reviews/2026-05-23-tmux-orchestration-phase-3.md`."
+Brief: "Verify Phase 3. Confirm `pnpm --filter f-mark test tests/runtimes/` and `tests/project.test.ts` pass with non-trivial assertions, the validation rejects shell metacharacters as designed, `initRuntimesFile` is truly idempotent (does not clobber user edits), and the V0.3.0 regression baseline (`pnpm --filter f-mark test`) is unaffected. Write `planning/buddy-reviews/2026-05-23-tmux-orchestration-phase-3.md`."
 
 ---
 
@@ -1534,7 +1534,7 @@ git commit -m "feat(kernel/ws): extend bus message types for presence + managed-
 
 - [ ] **Step P4-V: `/buddy` verification**
 
-Brief: "Verify Phase 4. Confirm presence state machine tests cover all six states (launching, online, stale, offline, pane-dead, hook-not-installed) and transitions between them. Confirm the route test actually inspects the tracker mutation (not just status code). Confirm server.ts wiring doesn't leak intervals or break v0.3.0 regression baseline. `pnpm --filter @f-mark/kernel test` must be green. Write `planning/buddy-reviews/2026-05-23-tmux-orchestration-phase-4.md`."
+Brief: "Verify Phase 4. Confirm presence state machine tests cover all six states (launching, online, stale, offline, pane-dead, hook-not-installed) and transitions between them. Confirm the route test actually inspects the tracker mutation (not just status code). Confirm server.ts wiring doesn't leak intervals or break v0.3.0 regression baseline. `pnpm --filter f-mark test` must be green. Write `planning/buddy-reviews/2026-05-23-tmux-orchestration-phase-4.md`."
 
 ---
 
@@ -1609,13 +1609,13 @@ await postPing(ctx, participantId);
 - [ ] **Step 5: Run (expect PASS)**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/hooks/
+pnpm --filter f-mark test tests/hooks/
 ```
 
 - [ ] **Step 6: Run full kernel suite to confirm v0.3.0 regression OK**
 
 ```bash
-pnpm --filter @f-mark/kernel test
+pnpm --filter f-mark test
 ```
 
 - [ ] **Step 7: Commit**
@@ -2933,7 +2933,7 @@ Same pattern as 11.1 but parses TOML.
 - [ ] **Step 1: Add TOML parser dep**
 
 ```bash
-pnpm --filter @f-mark/kernel add smol-toml
+pnpm --filter f-mark add smol-toml
 ```
 
 (Verify the kernel package already has `gray-matter` etc.; if `smol-toml` isn't desired, use a regex-based extractor for v0.4 — the only thing we need is matching `[[hooks.Stop]] command = "..."` arrays. A regex parser is acceptable given Codex's TOML hook section is narrowly shaped.)
@@ -3318,7 +3318,7 @@ describe.runIf(await haveTmux())("tmux smoke", () => {
 - [ ] **Step 2: Run**
 
 ```bash
-pnpm --filter @f-mark/kernel test tests/smoke/tmux.smoke.test.ts
+pnpm --filter f-mark test tests/smoke/tmux.smoke.test.ts
 ```
 
 - On a machine with tmux 3.0+: PASS.
@@ -3436,10 +3436,10 @@ Brief: "Verify Phase 16. Confirm the manual smoke document exists and is compreh
 
 After all phases:
 
-- [ ] **Full kernel suite:** `pnpm --filter @f-mark/kernel test` → green.
+- [ ] **Full kernel suite:** `pnpm --filter f-mark test` → green.
 - [ ] **Full renderer suite:** `pnpm --filter @f-mark/renderer test` → green.
 - [ ] **Build:** `pnpm -r build` → green.
-- [ ] **Tmux smoke (if available):** `pnpm --filter @f-mark/kernel test tests/smoke/` → green.
+- [ ] **Tmux smoke (if available):** `pnpm --filter f-mark test tests/smoke/` → green.
 - [ ] **Manual smoke checklist:** completed and recorded.
 - [ ] **Bump version to 0.4.0:** `package.json` + each package.json.
 - [ ] **Final commit + tag:**
