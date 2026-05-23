@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import websocketPlugin from "@fastify/websocket";
 import type { WebSocket } from "ws";
 import type { PresenceState } from "../presence/tracker.js";
 
@@ -61,8 +60,15 @@ export interface Bus {
   publish(message: BusMessage): void;
 }
 
-export async function registerWebSocket(app: FastifyInstance): Promise<Bus> {
-  await app.register(websocketPlugin);
+/**
+ * Registers the global `/ws` broadcast route on the given Fastify scope.
+ *
+ * Requires `@fastify/websocket` to already be available on this scope (or an
+ * ancestor scope). In F-Mark, `createServer()` registers the plugin once at
+ * the root so this function and `registerPaneWebSocket` can both attach
+ * `{ websocket: true }` routes.
+ */
+export function registerWebSocket(app: FastifyInstance): Bus {
   const clients = new Set<WebSocket>();
 
   app.get("/ws", { websocket: true }, (socket) => {

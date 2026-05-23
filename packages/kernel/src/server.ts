@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import websocketPlugin from "@fastify/websocket";
 import { VERSION } from "./config.js";
 import { registerAuthHook } from "./auth.js";
 import { seqLog, LogLevel } from "./lib/seq-log.js";
@@ -25,7 +26,7 @@ import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
 import { createPaneHub } from "./ws/paneHub.js";
 import { registerPaneWebSocket } from "./ws/pane.js";
 import { createTmuxManager } from "./tmux/manager.js";
-import { realCommandRunner } from "./tmux/commandRunner.js";
+import { realCommandRunner, type CommandRunner } from "./tmux/commandRunner.js";
 
 export interface ServerDeps {
   token: string | null;
@@ -40,6 +41,12 @@ export interface ServerDeps {
    * routes in that mode.
    */
   allowProcessApiNoAuth?: boolean;
+  /**
+   * Optional CommandRunner override for tests. When omitted the server uses
+   * `realCommandRunner()` (process spawn). Tests inject a fake to drive the
+   * tmux manager without forking subprocesses.
+   */
+  commandRunner?: CommandRunner;
 }
 
 export interface CreatedServer {
@@ -115,9 +122,16 @@ export function createServer(deps: ServerDeps): CreatedServer {
     version: VERSION,
   }));
 
+  // Hoist @fastify/websocket to the root scope so BOTH /ws (global broadcast)
+  // and /ws/pane (per-pane channel router) can register `{ websocket: true }`
+  // routes against the same plugin instance. Previously the plugin was
+  // registered inside an inner scope that only owned /ws, which caused
+  // /ws/pane (registered on the outer app) to return HTTP 500.
+  // (Phase 7 buddy review FAIL.)
   let busRef: Bus = { publish(_m: BusMessage) {} };
+  app.register(websocketPlugin);
   app.register(async (instance) => {
-    busRef = await registerWebSocket(instance);
+    busRef = registerWebSocket(instance);
     void seqLog("websocket plugin ready", { module: "server" });
   });
 
@@ -157,7 +171,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
     deps.token !== null || deps.allowProcessApiNoAuth === true;
   if (processApiEnabled) {
     const tmux = createTmuxManager({
-      runner: realCommandRunner(),
+      runner: deps.commandRunner ?? realCommandRunner(),
       projectRoot: deps.paths.root(),
     });
     registerManagedAgentsRoutes(app, {

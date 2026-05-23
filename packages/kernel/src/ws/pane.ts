@@ -6,6 +6,8 @@ import { spawn } from "node:child_process";
 import type { FastifyInstance } from "fastify";
 import type { TmuxManager } from "../tmux/manager.js";
 import { validateMessageText } from "../runtimes/validation.js";
+import { seqLog, LogLevel } from "../lib/seq-log.js";
+import { createInputQueue } from "../tmux/inputQueue.js";
 import type { PaneHub } from "./paneHub.js";
 
 export interface PaneWsRegistration {
@@ -27,35 +29,102 @@ async function mkfifo(path: string): Promise<void> {
   });
 }
 
+async function bestEffortUnlink(path: string): Promise<void> {
+  try { await unlink(path); } catch { /* already gone */ }
+}
+
+async function bestEffortRmdir(path: string): Promise<void> {
+  try { await rmdir(path); } catch { /* already gone */ }
+}
+
 export function registerPaneWebSocket(
   app: FastifyInstance,
   deps: { tmux: TmuxManager; hub: PaneHub },
 ): PaneWsRegistration {
   const { tmux, hub } = deps;
   const pipes = new Map<string, PipeState>();
+  // Per-pane FIFO serialization. Reusing the same primitive as Phase 2's
+  // tmux input queue so start/stop/start sequences are guaranteed to apply
+  // in caller order. This prevents three classes of bug the buddy review
+  // identified for Phase 7:
+  //   (a) two starts overlapping → duplicate FIFOs + tmux pipe-pane calls;
+  //   (b) stop running before an in-flight start completes → stale pipe
+  //       map entry, stranded tmux pipe;
+  //   (c) old stop closing the wrong generation when start→stop→start
+  //       interleaves.
+  const pipeQueue = createInputQueue();
+
+  function logStream(level: LogLevel, message: string, paneId: string, extra: Record<string, unknown> = {}): void {
+    void seqLog(message, { module: "ws.pane", paneId, ...extra }, level);
+  }
+
+  async function tearDown(paneId: string, state: PipeState, attemptTmuxStop: boolean): Promise<void> {
+    try { state.stream.destroy(); } catch { /* fall through */ }
+    if (attemptTmuxStop) {
+      try { await tmux.stopPipePane(paneId); } catch { /* fall through */ }
+    }
+    await bestEffortUnlink(state.fifoPath);
+    await bestEffortRmdir(state.fifoDir);
+  }
 
   async function startPipe(paneId: string): Promise<void> {
-    if (pipes.has(paneId)) return;
-    const dir = await mkdtemp(join(tmpdir(), "fmark-pipe-"));
-    const fifo = join(dir, "fifo");
-    await mkfifo(fifo);
-    await tmux.startPipePane(paneId, fifo);
-    const stream = createReadStream(fifo, { encoding: "utf8" });
-    stream.on("data", (chunk) => hub.feed(paneId, String(chunk)));
-    stream.on("error", () => { /* fifo gone, just stop */ });
-    pipes.set(paneId, { fifoPath: fifo, fifoDir: dir, stream });
+    await pipeQueue.enqueue(paneId, async () => {
+      if (pipes.has(paneId)) return;
+      const dir = await mkdtemp(join(tmpdir(), "fmark-pipe-"));
+      const fifo = join(dir, "fifo");
+      let mkfifoOk = false;
+      try {
+        await mkfifo(fifo);
+        mkfifoOk = true;
+        await tmux.startPipePane(paneId, fifo);
+        const stream = createReadStream(fifo, { encoding: "utf8" });
+        stream.on("data", (chunk) => hub.feed(paneId, String(chunk)));
+        stream.on("error", (err) => {
+          logStream(LogLevel.Warning, "pane stream error", paneId, {
+            errorMessage: err.message,
+            errorName: err.name,
+          });
+          // Schedule cleanup; ignore failures (stop may race with manual stopPipe).
+          void stopPipe(paneId);
+        });
+        stream.on("end", () => {
+          logStream(LogLevel.Debug, "pane stream ended", paneId);
+          void stopPipe(paneId);
+        });
+        pipes.set(paneId, { fifoPath: fifo, fifoDir: dir, stream });
+      } catch (err) {
+        // Roll back any partial state. tmux.stopPipePane is only safe to
+        // call if startPipePane has run; we approximate that by checking
+        // whether mkfifo succeeded — if it didn't, we never called tmux.
+        const attemptTmuxStop = mkfifoOk;
+        if (attemptTmuxStop) {
+          try { await tmux.stopPipePane(paneId); } catch { /* ignore */ }
+        }
+        if (mkfifoOk) await bestEffortUnlink(fifo);
+        await bestEffortRmdir(dir);
+        logStream(LogLevel.Warning, "pane startPipe failed", paneId, {
+          errorMessage: (err as Error).message,
+        });
+        throw err;
+      }
+    });
   }
 
   async function stopPipe(paneId: string): Promise<void> {
-    const s = pipes.get(paneId);
-    if (!s) return;
-    pipes.delete(paneId);
-    try { s.stream.destroy(); } catch {}
-    try { await tmux.stopPipePane(paneId); } catch {}
-    try { await unlink(s.fifoPath); } catch {}
-    try { await rmdir(s.fifoDir); } catch {}
+    await pipeQueue.enqueue(paneId, async () => {
+      const s = pipes.get(paneId);
+      if (!s) return;
+      pipes.delete(paneId);
+      await tearDown(paneId, s, true);
+    });
   }
 
+  // Route registration is wrapped in `app.register(async (instance) => …)` so
+  // it runs AFTER the websocket plugin has been loaded by the outer scope.
+  // Without the wrapper, the route would be added before the plugin's onRoute
+  // hook runs, and `{ websocket: true }` would silently degrade to a normal
+  // HTTP handler — yielding "socket.close is not a function" when the handler
+  // tries to call socket.close().
   app.register(async (instance) => {
     instance.get("/ws/pane", { websocket: true }, async (socket, req) => {
       const url = new URL(req.url ?? "/", "http://internal");
