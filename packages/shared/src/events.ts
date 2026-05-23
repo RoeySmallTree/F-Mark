@@ -14,8 +14,33 @@ export interface ProseTarget {
   lines?: [number, number];
 }
 
+/**
+ * Role an event plays inside a parent. Only meaningful when `append_to` is
+ * set on a prose payload — non-prose embeds are always "content".
+ */
+export type BlockMode = "content" | "comment";
+
 export interface ProseFrontmatter {
+  /** Anchor-document name OR named sub-section name. */
   name?: string;
+  /** Filename of the parent event (anchor prose, or another block).
+   *  When set, this event is composed inside its parent, not at the
+   *  top level. */
+  append_to?: string;
+  /** Role inside the parent: "content" (default when append_to is set)
+   *  for a block of the doc; "comment" for a line/card-targeted comment.
+   *  Ignored when `append_to` is unset. */
+  mode?: BlockMode;
+  /** Inclusive 1-based line range inside the parent's rendered content.
+   *  Valid only when `mode === "comment"` AND the parent is a prose-like
+   *  rendered-text target. */
+  lines?: [number, number];
+  /** Generic tombstone. A prose event with `removed: true` and
+   *  `supersedes: <X>` marks the chain at X as dead regardless of X's
+   *  kind — flow / file / html / etc. */
+  removed?: boolean;
+  /** @deprecated Use `append_to` + `mode: "comment"` + `lines`. Read by
+   *  the parser for back-compat; serializer never emits it. */
   target?: ProseTarget;
   in_reply_to?: string;
   supersedes?: string;
@@ -42,6 +67,9 @@ export interface ChoicesPayload {
   options: ChoicesOption[];
   multi: boolean;
   supersedes?: string;
+  /** Parent event filename. When set, this choices block is embedded
+   *  inside an anchor prose document rather than shown standalone. */
+  append_to?: string;
 }
 
 export interface ChoicePayload {
@@ -61,6 +89,9 @@ export interface TodoPayload {
   assigned_to?: string;
   parent_id?: string;
   supersedes?: string;
+  /** Parent event filename. When set, this todo is embedded inside an
+   *  anchor prose document rather than shown standalone. */
+  append_to?: string;
 }
 
 export interface TodoTreeNode {
@@ -73,11 +104,29 @@ export interface TodoTreeNode {
   children: TodoTreeNode[];
 }
 
+export type FilePreviewKind =
+  | "image"
+  | "text"
+  | "pdf"
+  | "csv"
+  | "docx"
+  | "xlsx"
+  | "pptx"
+  | "file";
+
 export interface FileRefPayload {
+  schema?: "fmark.file.v1";
   id: string;
+  display_name?: string;
   path: string;
   mime_type: string;
+  size_bytes?: number;
+  preview_kind?: FilePreviewKind;
   description?: string;
+  supersedes?: string;
+  /** Parent event filename. When set, this file is embedded inside an
+   *  anchor prose document rather than shown standalone. */
+  append_to?: string;
 }
 
 export interface EventRecord<T = unknown> {
@@ -116,6 +165,9 @@ export interface HtmlManifest {
   id: string;
   title?: string;
   dependencies?: string[];
+  /** Parent event filename. When set, this html widget is embedded
+   *  inside an anchor prose document rather than shown standalone. */
+  append_to?: string;
 }
 
 export interface HtmlEventRecord extends EventRecord<HtmlManifest> {
@@ -129,6 +181,9 @@ export interface ToolUsePayload {
   result?: unknown;
   success: boolean;
   duration_ms?: number;
+  /** Parent event filename. When set, this tool-use panel is embedded
+   *  inside an anchor prose document rather than shown standalone. */
+  append_to?: string;
 }
 
 export interface ToolUseEventRecord extends EventRecord<ToolUsePayload> {
@@ -180,6 +235,9 @@ export interface FlowPayload {
   nodes: FlowNode[];
   edges: FlowEdge[];
   supersedes?: string;
+  /** Parent event filename. When set, this flow chart is embedded inside
+   *  an anchor prose document rather than shown standalone. */
+  append_to?: string;
 }
 
 export interface FlowEventRecord extends EventRecord<FlowPayload> {
