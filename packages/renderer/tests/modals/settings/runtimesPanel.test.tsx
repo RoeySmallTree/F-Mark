@@ -259,4 +259,60 @@ describe("RuntimesPanel", () => {
       }),
     );
   });
+
+  it("renders the readOnlyNote when provided", () => {
+    const NOTE = "v0.4: edit .f-mark/runtimes.json directly to change runtimes.";
+    render(
+      <RuntimesPanel
+        runtimes={BASE_RUNTIMES}
+        onAdd={() => noopAsync()}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+        readOnlyNote={NOTE}
+      />,
+    );
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it("disables Edit/Remove and hides the Add button when readOnlyNote is set", () => {
+    const extras: Record<string, RuntimeEntry> = {
+      ...BASE_RUNTIMES,
+      mybot: {
+        displayName: "My Bot",
+        executable: "mybot",
+        args: [],
+        icon: "bot",
+      },
+    };
+    render(
+      <RuntimesPanel
+        runtimes={extras}
+        onAdd={() => noopAsync()}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+        readOnlyNote="v0.4: edit .f-mark/runtimes.json directly."
+      />,
+    );
+    /* All Edit buttons are disabled — both builtin and custom rows. */
+    for (const row of [
+      screen.getByTestId("runtime-row-claude"),
+      screen.getByTestId("runtime-row-codex"),
+      screen.getByTestId("runtime-row-gemini"),
+      screen.getByTestId("runtime-row-mybot"),
+    ]) {
+      const editBtn = within(row).getByRole("button", { name: /edit/i });
+      expect(editBtn).toBeDisabled();
+    }
+    /* Custom row's Remove button should also be disabled in read-only mode
+       (in non-read-only mode it would be enabled for the custom entry). */
+    const customRow = screen.getByTestId("runtime-row-mybot");
+    const removeBtn = within(customRow).getByRole("button", {
+      name: /remove/i,
+    });
+    expect(removeBtn).toBeDisabled();
+    /* No Add runtime button in read-only mode. */
+    expect(
+      screen.queryByRole("button", { name: /add runtime/i }),
+    ).toBeNull();
+  });
 });

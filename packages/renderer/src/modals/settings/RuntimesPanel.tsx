@@ -85,6 +85,14 @@ export function RuntimesPanel({
   const [busy, setBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
+  /* When the panel is in read-only mode (v0.4 — kernel exposes no /runtimes
+     CRUD endpoints), every mutation surface is suppressed: Edit and Remove
+     buttons go disabled, the Add Runtime button is hidden, and the inline
+     form does not render. The user sees the catalog as a transparent
+     listing plus the `readOnlyNote` explaining how to mutate via the
+     filesystem. Avoids the prior "Save does nothing" UX. */
+  const readOnly = readOnlyNote !== undefined;
+
   const rows = useMemo(() => {
     return Object.entries(runtimes)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -338,6 +346,12 @@ export function RuntimesPanel({
                   type="button"
                   className="btn-ghost"
                   style={{ padding: "4px 10px", fontSize: 12, marginRight: 6 }}
+                  disabled={readOnly}
+                  title={
+                    readOnly
+                      ? "Read-only: edit .f-mark/runtimes.json directly"
+                      : undefined
+                  }
                   onClick={() => openEdit(id, entry)}
                 >
                   Edit
@@ -346,11 +360,13 @@ export function RuntimesPanel({
                   type="button"
                   className="btn-ghost"
                   style={{ padding: "4px 10px", fontSize: 12 }}
-                  disabled={builtin}
+                  disabled={readOnly || builtin}
                   title={
-                    builtin
-                      ? "Built-in runtimes cannot be removed"
-                      : undefined
+                    readOnly
+                      ? "Read-only: edit .f-mark/runtimes.json directly"
+                      : builtin
+                        ? "Built-in runtimes cannot be removed"
+                        : undefined
                   }
                   onClick={() => {
                     void handleRemove(id);
@@ -386,11 +402,13 @@ export function RuntimesPanel({
       ) : null}
 
       {form.mode === "closed" ? (
-        <div style={{ marginTop: 12 }}>
-          <button type="button" className="btn-solid" onClick={openAdd}>
-            + Add runtime
-          </button>
-        </div>
+        readOnly ? null : (
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="btn-solid" onClick={openAdd}>
+              + Add runtime
+            </button>
+          </div>
+        )
       ) : (
         <div
           style={{
