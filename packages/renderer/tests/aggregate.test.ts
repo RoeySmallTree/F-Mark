@@ -210,4 +210,27 @@ describe("aggregate", () => {
       expect(aggregate([named]).feedConversation).toEqual([]);
     });
   });
+
+  describe("flow events", () => {
+    function flow(filename: string): AnyEventRecord {
+      return {
+        filename,
+        timestamp: filename.split("_")[0]!,
+        participant_id: "ag-claude",
+        kind: "flow",
+        payload: { id: "fl1", nodes: [], edges: [] },
+      };
+    }
+
+    it("includes flow events in feedDocument", () => {
+      const agg = aggregate([flow("20260523T100000Z_ag-claude.flow.json")]);
+      expect(agg.feedDocument).toHaveLength(1);
+      expect(agg.feedDocument[0]!.kind).toBe("flow");
+    });
+
+    it("does NOT include flow events in feedConversation", () => {
+      const agg = aggregate([flow("20260523T100000Z_ag-claude.flow.json")]);
+      expect(agg.feedConversation).toHaveLength(0);
+    });
+  });
 });
