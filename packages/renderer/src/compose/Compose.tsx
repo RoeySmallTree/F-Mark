@@ -409,8 +409,10 @@ export function Compose(): JSX.Element {
               canSubmit={canSubmit}
               busy={busy}
               hasContent={content.trim().length > 0}
+              isAgentTurn={false}
               onSubmit={() => void submitAndMaybeEndTurn()}
               onEndTurn={() => void endTurn()}
+              onInterrupt={() => {}}
             />
           </div>
         </div>

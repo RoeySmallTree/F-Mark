@@ -60,7 +60,13 @@ export function EventCard({
         />
       );
     }
-    return <MessageCard event={event} participants={participants} />;
+    return (
+      <MessageCard
+        event={event}
+        participants={participants}
+        comments={comments}
+      />
+    );
   }
   if (event.kind === "choices") {
     return (
