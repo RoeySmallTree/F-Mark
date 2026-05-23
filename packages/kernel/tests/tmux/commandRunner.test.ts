@@ -15,6 +15,14 @@ describe("realCommandRunner", () => {
     const r = await runner.run(["sh", "-c", "exit 7"]);
     expect(r.exitCode).toBe(7);
   });
+
+  it("does not crash when the executable is missing; returns exitCode 127", async () => {
+    const r = await runner.run(["definitely-not-a-binary-xyz-12345"]);
+    expect(r.exitCode).toBe(127);
+    expect(r.stdout).toBe("");
+    // stderr should carry the underlying ENOENT-ish message.
+    expect(r.stderr.length).toBeGreaterThan(0);
+  });
 });
 
 describe("fakeCommandRunner", () => {
@@ -35,5 +43,19 @@ describe("fakeCommandRunner", () => {
   it("throws if an unexpected command is run", async () => {
     const fake = fakeCommandRunner();
     await expect(fake.run(["tmux", "kill-session"])).rejects.toThrow(/unexpected/);
+  });
+
+  it("verifyExpectationsConsumed throws when expectations remain unconsumed", async () => {
+    const fake = fakeCommandRunner();
+    fake.expect(["tmux", "set-option"], { stdout: "", stderr: "", exitCode: 0 });
+    // We never run anything; queued expectation remains.
+    expect(() => fake.verifyExpectationsConsumed()).toThrow(/unconsumed/i);
+  });
+
+  it("verifyExpectationsConsumed passes when all expectations have been consumed", async () => {
+    const fake = fakeCommandRunner();
+    fake.expect(["tmux", "ls"], { stdout: "", stderr: "", exitCode: 0 });
+    await fake.run(["tmux", "ls", "-F", "x"]);
+    expect(() => fake.verifyExpectationsConsumed()).not.toThrow();
   });
 });

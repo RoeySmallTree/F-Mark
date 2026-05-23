@@ -35,6 +35,11 @@ export interface ListedSession {
   index?: number;
 }
 
+// FIFO paths embedded in a shell command must be restricted to characters that
+// have no shell-special meaning. The mkdtemp + path.join callers in F-Mark
+// already produce such paths, but we keep the check as a defensive boundary.
+const SAFE_FIFO_PATH = /^[a-zA-Z0-9_./-]+$/;
+
 export function createTmuxManager(deps: {
   runner: CommandRunner;
   projectRoot: string;
@@ -42,7 +47,8 @@ export function createTmuxManager(deps: {
   const { runner, projectRoot } = deps;
 
   async function setUserOption(session: string, opt: `@${string}`, value: string): Promise<void> {
-    await runner.run(["tmux", "set-option", "-t", session, opt, value]);
+    const r = await runner.run(["tmux", "set-option", "-t", session, opt, value]);
+    if (r.exitCode !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
   }
 
   async function getUserOption(session: string, opt: `@${string}`): Promise<string | null> {
@@ -56,7 +62,22 @@ export function createTmuxManager(deps: {
       const sessionName = fmarkAgentSessionName(projectRoot, participantId);
       const envArgs: string[] = [];
       for (const [k, v] of Object.entries(env ?? {})) envArgs.push("-e", `${k}=${v}`);
-      const argv = ["tmux", "new-session", "-d", "-s", sessionName, ...envArgs, "-c", projectRoot, executable, ...args];
+      // `--` separates tmux's own flags from the runtime command argv so that
+      // executable/args with leading dashes are never reinterpreted as tmux
+      // options.
+      const argv = [
+        "tmux",
+        "new-session",
+        "-d",
+        "-s",
+        sessionName,
+        ...envArgs,
+        "-c",
+        projectRoot,
+        "--",
+        executable,
+        ...args,
+      ];
       const r = await runner.run(argv);
       if (r.exitCode !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
       await setUserOption(sessionName, "@fmark-project", projectRoot);
@@ -68,7 +89,15 @@ export function createTmuxManager(deps: {
       const sessionName = fmarkTerminalSessionName(projectRoot, index);
       const shell = process.env.SHELL ?? "/bin/sh";
       const r = await runner.run([
-        "tmux", "new-session", "-d", "-s", sessionName, "-c", projectRoot, shell,
+        "tmux",
+        "new-session",
+        "-d",
+        "-s",
+        sessionName,
+        "-c",
+        projectRoot,
+        "--",
+        shell,
       ]);
       if (r.exitCode !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
       await setUserOption(sessionName, "@fmark-project", projectRoot);
@@ -91,33 +120,44 @@ export function createTmuxManager(deps: {
     },
 
     async killSession(sessionName) {
-      await runner.run(["tmux", "kill-session", "-t", sessionName]);
+      const r = await runner.run(["tmux", "kill-session", "-t", sessionName]);
+      if (r.exitCode !== 0) throw new Error(`tmux kill-session failed: ${r.stderr.trim()}`);
     },
 
     async captureSnapshot(sessionName) {
       const r = await runner.run(["tmux", "capture-pane", "-t", sessionName, "-p", "-e", "-J", "-S", "-2000"]);
+      if (r.exitCode !== 0) throw new Error(`tmux capture-pane failed: ${r.stderr.trim()}`);
       return r.stdout;
     },
 
     async startPipePane(sessionName, fifo) {
-      // -O appends; -I would be input; default opens output pipe.
-      await runner.run(["tmux", "pipe-pane", "-t", sessionName, "-o", `cat >> ${fifo}`]);
+      if (!SAFE_FIFO_PATH.test(fifo)) {
+        throw new Error(`invalid fifo path (must match ${SAFE_FIFO_PATH}): ${fifo}`);
+      }
+      // -o opens the pipe only if not already piped; tmux runs the command via
+      // its shell, so we keep the command string restricted to a safe fifo.
+      const r = await runner.run(["tmux", "pipe-pane", "-t", sessionName, "-o", `cat >> ${fifo}`]);
+      if (r.exitCode !== 0) throw new Error(`tmux pipe-pane failed: ${r.stderr.trim()}`);
     },
 
     async stopPipePane(sessionName) {
-      await runner.run(["tmux", "pipe-pane", "-t", sessionName]);
+      const r = await runner.run(["tmux", "pipe-pane", "-t", sessionName]);
+      if (r.exitCode !== 0) throw new Error(`tmux pipe-pane failed: ${r.stderr.trim()}`);
     },
 
     async sendLiteralText(sessionName, text) {
-      await runner.run(["tmux", "send-keys", "-t", sessionName, "-l", "--", text]);
+      const r = await runner.run(["tmux", "send-keys", "-t", sessionName, "-l", "--", text]);
+      if (r.exitCode !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
     },
 
     async sendKey(sessionName, key) {
-      await runner.run(["tmux", "send-keys", "-t", sessionName, "--", key]);
+      const r = await runner.run(["tmux", "send-keys", "-t", sessionName, "--", key]);
+      if (r.exitCode !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
     },
 
     async resize(sessionName, cols, rows) {
-      await runner.run(["tmux", "resize-window", "-t", sessionName, "-x", String(cols), "-y", String(rows)]);
+      const r = await runner.run(["tmux", "resize-window", "-t", sessionName, "-x", String(cols), "-y", String(rows)]);
+      if (r.exitCode !== 0) throw new Error(`tmux resize-window failed: ${r.stderr.trim()}`);
     },
 
     async paneAlive(sessionName) {

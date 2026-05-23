@@ -20,9 +20,21 @@ export function realCommandRunner(): CommandRunner {
         const child = spawn(cmd, args, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
+        let settled = false;
+        const settle = (r: CommandResult) => {
+          if (settled) return;
+          settled = true;
+          resolve(r);
+        };
         child.stdout.on("data", (d) => { stdout += d.toString(); });
         child.stderr.on("data", (d) => { stderr += d.toString(); });
-        child.on("close", (code) => resolve({ stdout, stderr, exitCode: code ?? 0 }));
+        child.on("error", (err) => {
+          // Emitted before `close` when the executable cannot be spawned
+          // (ENOENT, EACCES, etc.). Return a structured 127 result so callers
+          // can decide how to handle a missing binary instead of crashing.
+          settle({ stdout: "", stderr: err.message, exitCode: 127 });
+        });
+        child.on("close", (code) => settle({ stdout, stderr, exitCode: code ?? 0 }));
         if (opts.input !== undefined) {
           child.stdin.write(opts.input);
           child.stdin.end();
@@ -36,6 +48,12 @@ export function realCommandRunner(): CommandRunner {
 
 export interface FakeCommandRunner extends CommandRunner {
   expect(prefix: string[], result: CommandResult): void;
+  /**
+   * Throws if any queued expectation was not consumed by a `run()` call.
+   * Tests should invoke this at the end to lock in that every expected tmux
+   * call was actually issued.
+   */
+  verifyExpectationsConsumed(): void;
   readonly calls: string[][];
 }
 
@@ -44,6 +62,12 @@ export function fakeCommandRunner(): FakeCommandRunner {
   const calls: string[][] = [];
   return {
     expect(prefix, result) { queue.push({ prefix, result }); },
+    verifyExpectationsConsumed() {
+      if (queue.length > 0) {
+        const remaining = queue.map((q) => q.prefix.join(" ")).join("; ");
+        throw new Error(`unconsumed fake-runner expectations: ${remaining}`);
+      }
+    },
     get calls() { return calls; },
     async run(argv) {
       calls.push(argv);
