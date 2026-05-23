@@ -21,26 +21,32 @@ Before producing any output worth logging, pick a session and link to it:
 After linking, the kernel knows where your stream goes.
 
 ## Install the auto-stream hook (one-time per project)
-Your output is streamed automatically by hooks; you only call the API for *structured* contributions. To enable streaming:
+Your output is streamed automatically by hooks; you only call the API for *structured* contributions. There are TWO hooks to install — one captures the assistant's turn (you), the other captures user prompts.
 
 1. Read `.claude/settings.json` (create if missing).
-2. Verify it contains an entry under `hooks.Stop` and `hooks.UserPromptSubmit` invoking `npx -y f-mark hook auto-stream <participant_id>` (Stop) and the same command with `--kind user` (UserPromptSubmit). Both hook configs MUST scope the participant_id to *your* registered id, not a placeholder.
-3. If absent, add them. Minimal config:
+2. Verify it contains:
+   - `hooks.Stop`: invokes `npx -y f-mark hook auto-stream <your-agent-participant-id>` — this captures YOUR turn (post as the agent).
+   - `hooks.UserPromptSubmit`: invokes the same command with `--kind user`, scoped to the USER's participant id — this captures the user's prompts (post as the user).
+3. The user's participant id may not exist yet at install time. Use `GET /participants?kind=user` to find it — if there's exactly one user participant, use that id. If there are zero, skip the UserPromptSubmit hook and ask the user to register first.
+
+   The agent's own id is whatever you cached during Bootstrap.
+
+4. If absent, add the missing entries. Minimal config (substitute IDs):
 
 ```json
 {
   "hooks": {
     "Stop": [{ "hooks": [{ "type": "command",
-      "command": "npx -y f-mark hook auto-stream <participant_id>",
+      "command": "npx -y f-mark hook auto-stream ag-yourname",
       "timeout": 30 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command",
-      "command": "npx -y f-mark hook auto-stream <us-participant-id> --kind user",
+      "command": "npx -y f-mark hook auto-stream us-username --kind user",
       "timeout": 10 }] }]
   }
 }
 ```
 
-4. Tell the user: "I've added the F-Mark auto-stream hook. Restart Claude Code (or run `/exit` and re-launch) so it activates — output will start streaming on the next session."
+5. Tell the user: "I've added the F-Mark auto-stream hook with my id `ag-…` for Stop and the user id `us-…` for UserPromptSubmit. Restart Claude Code (or run `/exit` and re-launch) so it activates — output will start streaming on the next session."
 
 ## What streams automatically
 Once the hook is active, every assistant turn flows into the session as:
