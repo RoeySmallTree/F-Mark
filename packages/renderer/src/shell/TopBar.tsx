@@ -61,6 +61,8 @@ export function TopBar(): JSX.Element {
   const managedTerminals = useStore((s) => s.managedTerminals);
   const presence = useStore((s) => s.presence);
   const envProbe = useStore((s) => s.envProbe);
+  const addManagedAgent = useStore((s) => s.addManagedAgent);
+  const addManagedTerminal = useStore((s) => s.addManagedTerminal);
   const modalCtx = useContext(TopBarModalContext);
 
   /* Local UI: which AgentChip's action menu is open (anchored to that
@@ -138,11 +140,20 @@ export function TopBar(): JSX.Element {
      marks the agent as having installed hooks when it sees them. */
   const onSpawnComplete = useCallback(
     (resp: SpawnResponse) => {
+      /* Add the spawned agent to local chip state immediately so the user
+         sees the chip without waiting for the WS managed-agent.spawned
+         round-trip. The WS handler dedupes on participant_id, so even if
+         both fire, only one entry persists. */
+      addManagedAgent({
+        participant_id: resp.participant_id,
+        tmux_session: resp.tmux_session,
+        runtime_id: resp.runtime_id,
+      });
       if (resp.hooks_status !== "installed" && modalCtx !== null) {
         modalCtx.openHookInstall(resp.runtime_id, resp.participant_id);
       }
     },
-    [modalCtx],
+    [addManagedAgent, modalCtx],
   );
 
   const onSpawnRuntime = useCallback(
@@ -164,11 +175,21 @@ export function TopBar(): JSX.Element {
   );
 
   const onSpawnTerminal = useCallback(() => {
-    void apiClient.spawnTerminal().catch((e: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error("spawn terminal failed", e);
-    });
-  }, [apiClient]);
+    void apiClient
+      .spawnTerminal()
+      .then((resp) => {
+        /* Symmetric to onSpawnComplete: add the spawned terminal to local
+           chip state immediately. */
+        addManagedTerminal({
+          tmux_session: resp.tmux_session,
+          label: resp.label,
+        });
+      })
+      .catch((e: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("spawn terminal failed", e);
+      });
+  }, [apiClient, addManagedTerminal]);
 
   const onManageRuntimes = useCallback(() => {
     openModal("settings");

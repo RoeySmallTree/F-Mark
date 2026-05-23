@@ -276,4 +276,73 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
     );
     expect(useStore.getState().activeModal).toBe("settings");
   });
+
+  test("clicking + then Claude adds the new AgentChip to local state immediately after the spawn response", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<TopBar />);
+    /* No chips before the spawn click. */
+    expect(container.querySelectorAll(".agent-chip").length).toBe(0);
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(
+      within(menu).getByRole("menuitem", { name: /claude/i }),
+    );
+    /* The renderer should add the spawn response to local state immediately;
+       no WS round-trip needed. Wait a microtask for the promise chain to
+       settle. */
+    await new Promise<void>((r) => setTimeout(r, 0));
+    const chips = container.querySelectorAll(".agent-chip");
+    expect(chips.length).toBe(1);
+    expect(chips[0]!.getAttribute("data-participant-id")).toBe("ag-new");
+    /* Store reflects the added agent. */
+    const agents = useStore.getState().managedAgents;
+    expect(agents.find((a) => a.participant_id === "ag-new")).toBeDefined();
+  });
+});
+
+describe("TopBar — terminal spawn local state (Phase 12)", () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
+  beforeEach(() => {
+    globalThis.localStorage?.clear();
+    resetStore({ envProbe: HEALTHY_PROBE });
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            tmux_session: "fmark-term-new",
+            label: "terminal 1",
+            index: 1,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+  });
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    cleanup();
+    globalThis.localStorage?.clear();
+  });
+
+  test("clicking + then Terminal adds the new TerminalChip to local state immediately", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<TopBar />);
+    expect(container.querySelectorAll(".terminal-chip").length).toBe(0);
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(
+      within(menu).getByRole("menuitem", { name: /^terminal$/i }),
+    );
+    await new Promise<void>((r) => setTimeout(r, 0));
+    const chips = container.querySelectorAll(".terminal-chip");
+    expect(chips.length).toBe(1);
+    const terminals = useStore.getState().managedTerminals;
+    expect(
+      terminals.find((t) => t.tmux_session === "fmark-term-new"),
+    ).toBeDefined();
+  });
 });
