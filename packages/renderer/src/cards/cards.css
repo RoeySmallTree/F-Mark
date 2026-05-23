@@ -960,3 +960,101 @@
   border-radius: 3px;
   color: var(--ink-2);
 }
+
+/* === Tool-use card === */
+.tool-use-card {
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--canvas);
+  overflow: hidden;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+.tool-use-card.error {
+  border-color: color-mix(in oklch, var(--line-2) 50%, var(--agent) 50%);
+  background: color-mix(in oklch, var(--canvas) 90%, var(--agent) 6%);
+}
+.tool-use-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink);
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.tool-use-head:hover {
+  background: var(--panel);
+}
+.tool-use-head:focus-visible {
+  outline: 2px solid var(--user);
+  outline-offset: -2px;
+}
+.tool-use-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+.tool-use-head svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.tool-use-name {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.tool-use-status {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--panel) 60%, var(--agent) 30%);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.tool-use-duration {
+  margin-left: auto;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.tool-use-body {
+  border-top: 1px dashed var(--line-3);
+  padding: 8px 10px 10px;
+  background: color-mix(in oklch, var(--canvas) 92%, var(--panel) 8%);
+}
+.tool-use-section + .tool-use-section {
+  margin-top: 8px;
+}
+.tool-use-section h4 {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.tool-use-section pre {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line-3);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
