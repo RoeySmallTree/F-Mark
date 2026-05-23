@@ -97,7 +97,13 @@ export function EventCard({
     );
   }
   if (event.kind === "file") {
-    return <FileCard event={event} participants={participants} />;
+    return (
+      <FileCard
+        event={event}
+        participants={participants}
+        comments={comments}
+      />
+    );
   }
   if (event.kind === "tool-use") {
     return <ToolUseCard event={event as ToolUseEventRecord} />;
