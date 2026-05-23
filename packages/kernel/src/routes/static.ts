@@ -22,6 +22,25 @@ function rendererDir(): string | null {
     here,
     probes,
   });
+  /* Warn loudly when more than one candidate is present. The kernel build
+     wipes `dist/renderer/` before tsc precisely so that in dev only the
+     live `packages/renderer/dist/` is found; if BOTH exist, someone has
+     either run `build:bundle` and then forgotten to refresh, or has a
+     manual copy lying around. Either way the older one wins the lookup
+     and silently masks renderer changes — exactly the meta-bug we hit
+     during v0.4 ship. Surface it so it can't hide again. */
+  const present = probes.filter((p) => p.hasIndexHtml);
+  if (present.length > 1) {
+    void seqLog(
+      "static multiple renderer dirs found — first will win; delete stale ones to avoid serving outdated bundle",
+      {
+        module: "static",
+        winner: present[0]!.candidate,
+        also_present: present.slice(1).map((p) => p.candidate),
+      },
+      LogLevel.Warning,
+    );
+  }
   for (const probe of probes) {
     if (probe.hasIndexHtml) return probe.candidate;
   }

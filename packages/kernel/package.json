@@ -17,7 +17,7 @@
     "assets"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist/renderer && tsc",
     "build:bundle": "node scripts/bundle-renderer.mjs && node scripts/bundle-deps.mjs && node scripts/rewrite-shared-imports.mjs",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
