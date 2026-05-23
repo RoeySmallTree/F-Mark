@@ -2,6 +2,8 @@ import { useMemo, type JSX } from "react";
 import { useStore } from "../state/store.js";
 import { aggregate } from "../state/aggregate.js";
 import { EventCard } from "../cards/EventCard.js";
+import { ArbitraryGroupCard } from "../cards/ArbitraryGroupCard.js";
+import { projectFeed } from "../feed/projectFeed.js";
 
 export function Feed(): JSX.Element {
   const events = useStore((s) => s.events);
@@ -17,6 +19,18 @@ export function Feed(): JSX.Element {
         ? agg.feedConversation
         : agg.feed;
 
+  /* Projection only applies in `everything` mode. The document slice already
+     strips out tool-use + arbitrary prose so projection would be a no-op,
+     and the conversation slice strips tool-use too — projecting there would
+     wrap arbitrary prose into pointless "0 tools" single-item groups. */
+  const items = useMemo(
+    () =>
+      viewMode === "everything"
+        ? projectFeed(slice)
+        : slice.map((event) => ({ type: "event" as const, event })),
+    [slice, viewMode],
+  );
+
   return (
     <section className="feed-col" aria-label="Feed">
       <div
@@ -24,19 +38,33 @@ export function Feed(): JSX.Element {
         data-dimmed={commentTarget !== null}
       >
         <div className="feed-inner">
-          {slice.length === 0 ? (
+          {items.length === 0 ? (
             <EmptyState viewMode={viewMode} />
           ) : (
-            slice.map((event) => (
-              <div key={event.filename} data-event-filename={event.filename}>
-                <EventCard
-                  event={event}
+            items.map((item) =>
+              item.type === "group" ? (
+                <ArbitraryGroupCard
+                  key={`grp-${item.items[0]!.filename}`}
+                  group={item}
                   participants={participants}
-                  comments={agg.commentsByTarget.get(event.filename) ?? []}
                   allEvents={agg.events}
                 />
-              </div>
-            ))
+              ) : (
+                <div
+                  key={item.event.filename}
+                  data-event-filename={item.event.filename}
+                >
+                  <EventCard
+                    event={item.event}
+                    participants={participants}
+                    comments={
+                      agg.commentsByTarget.get(item.event.filename) ?? []
+                    }
+                    allEvents={agg.events}
+                  />
+                </div>
+              ),
+            )
           )}
         </div>
       </div>
