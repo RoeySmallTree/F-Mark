@@ -1,37 +1,68 @@
 ---
 name: f-mark
-description: Use whenever the user is collaborating with you inside an F-Mark session. Detect by the presence of a .f-mark/ directory in the project. Lets you read the event log and post prose, choices, comments, and turn-end events.
+description: Use whenever the user is collaborating inside an F-Mark session (presence of a `.f-mark/` directory in cwd, or the user references "the session" / "the document").
 ---
 
-# F-Mark collaboration
-
-You are participating in an F-Mark session. The user runs the kernel in their project; you contribute via the local HTTP API.
-
 ## Detect
-
-If the current working directory contains a `.f-mark/` directory, F-Mark is active. The full protocol reference is at `.f-mark/AGENT.md` in that project — read it first.
+If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up-to-date protocol before doing anything else.
 
 ## Bootstrap
+1. Read `.f-mark/AGENT.md` once per session.
+2. Read `.f-mark/config.json` for the kernel port (default 7777).
+3. Read `.f-mark/.token` for the bearer token.
+4. Register your participant: `POST /participants/register`. Cache the returned `participant_id`.
 
-1. Read `.f-mark/AGENT.md` for the protocol.
-2. Read `.f-mark/config.json` to find the port (default 7777) and existing participants.
-3. Read `.f-mark/.token` for the bearer token (skip if `--no-auth`).
-4. If you do not have a participant id yet, register one (see `api.md`).
-5. Find the active session: `GET /sessions` and use the newest, or use the session id supplied by the user.
+## Link into a session
+Before producing any output worth logging, pick a session and link to it:
 
-## Your turn
+1. `GET /sessions` and choose (newest, named-by-user, or ask via a `choices` event).
+2. `POST /agents/<participant_id>/link` with `{ "session_id": "<chosen>" }`.
 
-1. `GET /sessions/<id>/events?since=<last_seen>` to read everything new.
-2. Plan your contribution.
-3. POST events:
-   - Named prose for durable contributions (`POST /events/prose` with `name`).
-   - Unnamed prose for messages.
-   - Choices for asking the user to pick.
-   - Comments (prose with `target`) for commenting on a specific file.
-4. POST `turn-end` when finished.
+After linking, the kernel knows where your stream goes.
+
+## Install the auto-stream hook (one-time per project)
+Your output is streamed automatically by hooks; you only call the API for *structured* contributions. To enable streaming:
+
+1. Read `.claude/settings.json` (create if missing).
+2. Verify it contains an entry under `hooks.Stop` and `hooks.UserPromptSubmit` invoking `npx -y f-mark hook auto-stream <participant_id>` (Stop) and the same command with `--kind user` (UserPromptSubmit). Both hook configs MUST scope the participant_id to *your* registered id, not a placeholder.
+3. If absent, add them. Minimal config:
+
+```json
+{
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command",
+      "command": "npx -y f-mark hook auto-stream <participant_id>",
+      "timeout": 30 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command",
+      "command": "npx -y f-mark hook auto-stream <us-participant-id> --kind user",
+      "timeout": 10 }] }]
+  }
+}
+```
+
+4. Tell the user: "I've added the F-Mark auto-stream hook. Restart Claude Code (or run `/exit` and re-launch) so it activates — output will start streaming on the next session."
+
+## What streams automatically
+Once the hook is active, every assistant turn flows into the session as:
+- mid-turn text → prose with `arbitrary: true`
+- tool calls → `tool-use` events
+- final text → prose with `arbitrary: false`, followed by `turn-end`
+
+You do NOT POST these manually.
+
+## What you still POST manually
+- **Named contributions** (documents, plans): `POST /events/prose` with `name` set.
+- **Comments anchored to lines**: `POST /events/prose` with `target: { file, lines }`.
+- **Replies**: `POST /events/prose` with `in_reply_to`.
+- **Revisions**: `POST /events/prose` with `supersedes`.
+- **Todos / choices / file / html**: their dedicated endpoints.
+
+When you POST manually, do NOT set `arbitrary: true` — manual posts are by definition deliberate.
 
 ## Revising
+POST new prose with `supersedes: <old_filename>`. Works for both auto-streamed and manual posts.
 
-Never edit files directly. To revise a contribution, POST a new prose with `supersedes: <old_filename>`. Keep the same `name` if it's a named contribution.
-
-See `api.md` for the full HTTP reference.
+## Don't
+- Don't disable the hook to "save tokens" — that's its job.
+- Don't write directly into `.f-mark/sessions/...`. Always go through the API.
+- Don't fabricate participant_ids.

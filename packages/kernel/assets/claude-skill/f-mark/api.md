@@ -107,3 +107,40 @@ Format: `{ISO_TIMESTAMP}_{PARTICIPANT_ID}.{KIND}.{EXT}`
 - `20260522T143012Z_us-a7f3.prose.md`
 - `20260522T143245Z_ag-c92e.choices.json`
 - `20260522T143512Z_us-a7f3.turn-end.json`
+
+## POST /agents/:participant_id/link
+
+Sets the active session for a participant. The auto-stream hook reads this pointer to know where to POST.
+
+**Request:**
+```json
+{ "session_id": "2026-05-22-launch-plan" }
+```
+
+**Response (200):**
+```json
+{ "participant_id": "ag-claude", "session_id": "2026-05-22-launch-plan" }
+```
+
+Errors: 400 invalid participant_id, 404 session not found, 401 missing/bad token.
+
+## POST /sessions/:id/events/tool-use
+
+Logs a tool invocation. The auto-stream hook emits these automatically; you should only POST directly if writing a custom integration.
+
+**Request:**
+```json
+{
+  "participant_id": "ag-claude",
+  "tool_name": "Bash",
+  "tool_use_id": "tu_01HXYZ",
+  "input": { "command": "ls -la" },
+  "result": "total 0\n",
+  "success": true,
+  "duration_ms": 14
+}
+```
+
+## POST /sessions/:id/events/prose with `arbitrary`
+
+When set to `true`, the renderer groups the message into the collapsible mid-turn box. The auto-stream hook sets this on every text block except the final one of a turn. Do not set it manually.
