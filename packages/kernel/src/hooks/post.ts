@@ -20,7 +20,9 @@ export async function postProjectedEvents(
   participantId: string,
   sessionId: string,
   events: ProjectedEvent[],
+  options: { emitTurnEnd?: boolean } = {},
 ): Promise<void> {
+  const emitTurnEnd = options.emitTurnEnd ?? true;
   let lastWasConcluding = false;
   for (const ev of events) {
     if (ev.kind === "prose") {
@@ -42,7 +44,7 @@ export async function postProjectedEvents(
       lastWasConcluding = false;
     }
   }
-  if (lastWasConcluding) {
+  if (lastWasConcluding && emitTurnEnd) {
     await httpPost(`${ctx.kernelUrl}/sessions/${sessionId}/events/turn-end`, ctx.token, {
       participant_id: participantId,
     });

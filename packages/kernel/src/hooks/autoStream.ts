@@ -76,24 +76,17 @@ export async function runAutoStream(
   const text = (u.prompt ?? u.user_input ?? "").trim();
   if (!text) return 0;
   // User prompts post a single prose event and never emit turn-end (turns are
-  // owned by assistants). Skip postProjectedEvents (which appends turn-end
-  // after concluding prose) and POST directly.
-  const res = await fetch(`${ctx.kernelUrl}/sessions/${sessionId}/events/prose`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${ctx.token}`,
-    },
-    body: JSON.stringify({
-      participant_id: participantId,
-      content: text,
-      arbitrary: false,
-    }),
-  });
-  if (!res.ok) {
-    process.stderr.write(
-      `f-mark auto-stream: POST /events/prose → ${res.status}\n`,
+  // owned by assistants).
+  try {
+    await postProjectedEvents(
+      ctx,
+      participantId,
+      sessionId,
+      [{ kind: "prose", content: text, arbitrary: false }],
+      { emitTurnEnd: false },
     );
+  } catch (err: any) {
+    process.stderr.write(`f-mark auto-stream: POST /events/prose → ${err.message}\n`);
   }
   return 0;
 }

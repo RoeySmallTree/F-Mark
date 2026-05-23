@@ -69,4 +69,17 @@ describe("postProjectedEvents", () => {
       ]),
     ).rejects.toThrow(/401/);
   });
+
+  it("suppresses turn-end when emitTurnEnd: false", async () => {
+    await postProjectedEvents(
+      ctx,
+      "us-roey",
+      "sess-1",
+      [{ kind: "prose", content: "hi", arbitrary: false }],
+      { emitTurnEnd: false },
+    );
+    const f = (globalThis.fetch as any) as ReturnType<typeof vi.fn>;
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(f.mock.calls[0][0]).not.toContain("turn-end");
+  });
 });
