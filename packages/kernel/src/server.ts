@@ -11,6 +11,7 @@ import { registerEventRoutes } from "./routes/events.js";
 import { registerTodoRoutes } from "./routes/todos.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerHtmlRoutes } from "./routes/html.js";
+import { registerFlowRoutes } from "./routes/flow.js";
 import { registerRawRoutes } from "./routes/raw.js";
 import { registerPresetRoutes } from "./routes/presets.js";
 import { registerSkillRoutes } from "./routes/skills.js";
@@ -153,6 +154,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerTodoRoutes(app, deps.paths, () => busRef);
   registerFileRoutes(app, deps.paths, () => busRef);
   registerHtmlRoutes(app, deps.paths, () => busRef);
+  registerFlowRoutes(app, deps.paths, () => busRef);
   registerRawRoutes(app, deps.paths);
   registerPresetRoutes(app, deps.paths);
   registerSkillRoutes(app);
