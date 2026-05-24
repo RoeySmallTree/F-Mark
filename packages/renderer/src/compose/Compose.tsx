@@ -41,6 +41,15 @@ function placeholderFor(mode: "message" | "named"): string {
   return `Write a message or ${NAMED_SHORTCUT} to name a contribution…`;
 }
 
+function filesFromClipboard(data: DataTransfer): File[] {
+  const directFiles = Array.from(data.files ?? []);
+  if (directFiles.length > 0) return directFiles;
+  return Array.from(data.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+}
+
 export function Compose(): JSX.Element {
   const token = useStore((s) => s.token);
   const sessionId = useStore((s) => s.currentSessionId);
@@ -57,6 +66,7 @@ export function Compose(): JSX.Element {
   const [content, setContent] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [messageEndsTurn, setMessageEndsTurn] = useState<boolean>(() =>
     readMessageEndsTurn(),
   );
@@ -187,6 +197,38 @@ export function Compose(): JSX.Element {
     }
   }, [createTodoEndsTurn, endTurn]);
 
+  const uploadClipboardFiles = useCallback(
+    async (files: File[]): Promise<void> => {
+      if (files.length === 0 || sessionId === null || userId === null) return;
+      const client = createClient({ baseUrl: "", token });
+      setAttachmentBusy(true);
+      try {
+        for (const file of files) {
+          await client.uploadAttachment(sessionId, {
+            participant_id: userId,
+            file,
+            display_name: file.name || undefined,
+          });
+        }
+      } finally {
+        setAttachmentBusy(false);
+      }
+    },
+    [sessionId, token, userId],
+  );
+
+  const handleTextareaPaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+      const files = filesFromClipboard(e.clipboardData);
+      if (files.length === 0) return;
+      e.preventDefault();
+      void uploadClipboardFiles(files).catch((err: unknown) => {
+        console.error("Attachment upload failed", err);
+      });
+    },
+    [uploadClipboardFiles],
+  );
+
   const handleEscape = useCallback((): boolean => {
     if (
       textareaRef.current !== null &&
@@ -304,6 +346,7 @@ export function Compose(): JSX.Element {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={onTextareaKey}
+          onPaste={handleTextareaPaste}
           placeholder={placeholderFor(activeMode)}
           rows={activeMode === "named" ? 4 : 1}
           aria-label="Compose message"
@@ -315,7 +358,7 @@ export function Compose(): JSX.Element {
             <SendButton
               mode={activeMode}
               canSubmit={canSubmit}
-              busy={busy}
+              busy={busy || attachmentBusy}
               hasContent={content.trim().length > 0}
               isAgentTurn={false}
               onSubmit={() => void submitAndMaybeEndTurn()}

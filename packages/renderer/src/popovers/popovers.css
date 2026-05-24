@@ -28,7 +28,7 @@
   flex-direction: column;
   z-index: 91;
   transform-origin: top center;
-  animation: popover-enter var(--dur-fast) var(--ease-out-quint) both;
+  animation: popover-enter var(--dur-fast) var(--ease-out-quint) backwards;
 }
 .popover.log-filter-popover {
   min-width: 320px;

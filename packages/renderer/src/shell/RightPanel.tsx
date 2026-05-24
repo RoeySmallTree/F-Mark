@@ -90,12 +90,10 @@ export function RightPanel(): JSX.Element {
         in <b style={{ color: "var(--ink-2)", fontWeight: 500 }}>{slug}</b>
       </div>
       <div className="panel-scroll">
-        <div className="right-pane-content" key={rightTab}>
-          {rightTab === "todos" && <RightTodos />}
-          {rightTab === "comments" && <RightComments />}
-          {rightTab === "named" && <RightNamed />}
-          {rightTab === "log" && <RightLog />}
-        </div>
+        {rightTab === "todos" && <RightTodos />}
+        {rightTab === "comments" && <RightComments />}
+        {rightTab === "named" && <RightNamed />}
+        {rightTab === "log" && <RightLog />}
       </div>
     </aside>
   );

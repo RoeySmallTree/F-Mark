@@ -55,7 +55,6 @@
   width: 100vw;
   max-width: 100vw;
   min-width: 0;
-  overflow: hidden;
 }
 .brand {
   display: flex;
@@ -560,11 +559,6 @@
   line-height: 1;
 }
 
-@keyframes panel-content-enter {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 .left-panel {
   width: 288px;
   background: var(--panel);
@@ -572,11 +566,6 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  animation: panel-content-enter var(--dur-fast) var(--ease-out-quart) both;
-}
-
-.right-pane-content {
-  animation: panel-content-enter var(--dur-fast) var(--ease-out-quart) both;
 }
 .panel-head {
   display: flex;
@@ -1127,13 +1116,19 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* `backwards` fill holds the FROM state before the animation starts, then
+   the element settles back to its natural styles (no transform) when the
+   animation ends. Without that, the residual `transform: translateY(0)`
+   would create a containing block that traps the fixed-positioned
+   PresetsPopover / CreateTodoPopover / ComposeSettingsPopover rendered
+   inside .compose-inner. */
 .compose-inner {
   max-width: 780px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--compose-inner-gap);
-  animation: compose-enter var(--dur-slow) var(--ease-out-quart) both;
+  animation: compose-enter var(--dur-slow) var(--ease-out-quart) backwards;
 }
 .compose-target {
   display: flex;
@@ -1192,7 +1187,7 @@
     color 160ms var(--ease-out-quint),
     border-color 160ms var(--ease-out-quint);
   margin: 0 var(--compose-pad-x);
-  animation: name-chip-enter var(--dur-base) var(--ease-out-quart) both;
+  animation: name-chip-enter var(--dur-base) var(--ease-out-quart) backwards;
 }
 .name-chip:hover {
   background: var(--bg);

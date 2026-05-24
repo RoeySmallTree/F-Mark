@@ -49,34 +49,40 @@ export function Feed(): JSX.Element {
     [slice, viewMode],
   );
 
-  /* Fresh-item tracking — animate only newly-added cards. On first render,
-     every item is fresh (cascade in). On subsequent renders, only items
-     not in the seen-set get the entrance animation; existing cards stay
-     put. After commit, sync the seen-set to the current item keys. */
-  const seenKeysRef = useRef<Set<string> | null>(null);
+  /* Fresh-item tracking — animate only when the items array is a strict
+     append of the previous one. Initial cascade: first render with no
+     prior state, all items fresh. Pure appends (e.g. a new event arrives
+     and lands at the end): only the appended items are fresh. Anything
+     else (replacements, supersedes, reorderings) skips animation entirely
+     so state-change events don't pop in like a glitch. */
+  const seenKeysRef = useRef<string[] | null>(null);
   const freshKeys = useMemo(() => {
-    const seen = seenKeysRef.current;
+    const prev = seenKeysRef.current;
     const fresh = new Set<string>();
-    for (const item of items) {
-      const key =
-        item.type === "group"
-          ? `grp-${item.items[0]!.filename}`
-          : item.event.filename;
-      if (seen === null || !seen.has(key)) fresh.add(key);
+    const keyOf = (item: typeof items[number]): string =>
+      item.type === "group"
+        ? `grp-${item.items[0]!.filename}`
+        : item.event.filename;
+    if (prev === null) {
+      for (const item of items) fresh.add(keyOf(item));
+      return fresh;
+    }
+    if (items.length <= prev.length) return fresh;
+    for (let i = 0; i < prev.length; i++) {
+      if (keyOf(items[i]!) !== prev[i]) return fresh;
+    }
+    for (let i = prev.length; i < items.length; i++) {
+      fresh.add(keyOf(items[i]!));
     }
     return fresh;
   }, [items]);
 
   useEffect(() => {
-    const next = new Set<string>();
-    for (const item of items) {
-      next.add(
-        item.type === "group"
-          ? `grp-${item.items[0]!.filename}`
-          : item.event.filename,
-      );
-    }
-    seenKeysRef.current = next;
+    seenKeysRef.current = items.map((item) =>
+      item.type === "group"
+        ? `grp-${item.items[0]!.filename}`
+        : item.event.filename,
+    );
   }, [items]);
 
   return (

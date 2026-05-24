@@ -7,6 +7,7 @@ import {
   cleanup,
   act,
   waitFor,
+  fireEvent,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Participant, TodoPayload, TodoTreeNode } from "@f-mark/shared";
@@ -336,6 +337,108 @@ describe("Compose — hotkeys", () => {
     await user.keyboard("{Escape}");
     expect(document.activeElement).not.toBe(ta);
     expect(useStore.getState().commentTarget).not.toBeNull();
+  });
+});
+
+describe("Compose — pasted attachments", () => {
+  beforeEach(() => {
+    resetStore();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  test("pasting a file into the textarea uploads it as an attachment", async () => {
+    const file = new File(["image-bytes"], "screenshot.png", {
+      type: "image/png",
+    });
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      jsonResponse({
+        filename: "20260524T120000Z_us-a7f3.file.json",
+        timestamp: "20260524T120000Z",
+        participant_id: "us-a7f3",
+        kind: "file",
+        payload: {
+          schema: "fmark.file.v1",
+          id: "att_test",
+          display_name: "screenshot.png",
+          path: "attachments/att_test/screenshot.png",
+          mime_type: "image/png",
+          size_bytes: 11,
+          preview_kind: "image",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Compose />);
+
+    const textarea = screen.getByLabelText(/compose message/i);
+    const event = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [file], items: [] },
+    });
+
+    fireEvent(textarea, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe(`/sessions/${MOCK_SESSION.id}/attachments`);
+    expect((init as RequestInit).method).toBe("POST");
+    const body = (init as RequestInit).body as FormData;
+    expect(body.get("participant_id")).toBe("us-a7f3");
+    expect(body.get("display_name")).toBe("screenshot.png");
+    expect(body.get("file")).toBe(file);
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+  });
+
+  test("pasted clipboard image items also upload as attachments", async () => {
+    const file = new File(["png"], "image.png", { type: "image/png" });
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      jsonResponse({
+        filename: "20260524T120000Z_us-a7f3.file.json",
+        timestamp: "20260524T120000Z",
+        participant_id: "us-a7f3",
+        kind: "file",
+        payload: {
+          schema: "fmark.file.v1",
+          id: "att_item",
+          display_name: "image.png",
+          path: "attachments/att_item/image.png",
+          mime_type: "image/png",
+          size_bytes: 3,
+          preview_kind: "image",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Compose />);
+
+    const textarea = screen.getByLabelText(/compose message/i);
+    const event = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        items: [{ kind: "file", getAsFile: () => file }],
+      },
+    });
+
+    fireEvent(textarea, event);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(((init as RequestInit).body as FormData).get("file")).toBe(file);
   });
 });
 

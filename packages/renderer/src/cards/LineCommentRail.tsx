@@ -101,7 +101,7 @@ function layoutMarkers<T extends { lines: LineRange }>(
   lineHeight: number,
 ): MarkerLayout<T>[] {
   let nextCenter = Number.NEGATIVE_INFINITY;
-  const minGap = 30;
+  const minGap = 34;
   return [...items]
     .sort(
       (a, b) =>
@@ -285,7 +285,7 @@ export function LineCommentRail({
       if (popoverRef.current?.contains(target) === true) return;
       if (wrapRef.current?.contains(target) === true) {
         const el = target instanceof Element ? target : target.parentElement;
-        if (el?.closest(".line-comment-marker") !== null) return;
+        if (el?.closest(".line-comment-hit") !== null) return;
       }
       closeDraft();
     }
@@ -563,32 +563,42 @@ function LineMarker({
     "--icon-top": `${iconCenter - top}px`,
   } as CSSProperties;
   return (
-    <button
-      type="button"
+    <div
       className={[
-        "line-comment-marker",
+        "line-comment-anchor",
         kind,
         active ? "active" : "",
         resolved ? "resolved" : "",
       ].join(" ").trim()}
       style={style}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClick();
-      }}
-      aria-label={label}
       data-target-lines={`${lines[0]}:${lines[1]}`}
     >
       <span className="line-comment-bar" aria-hidden />
-      <span className="line-comment-icon" aria-hidden>
-        <MessageSquare size={13} />
-      </span>
-      {count !== null && count > 1 && (
-        <span className="line-comment-count" aria-hidden>
-          {count}
+      <button
+        type="button"
+        className={[
+          "line-comment-marker",
+          "line-comment-hit",
+          kind,
+          active ? "active" : "",
+          resolved ? "resolved" : "",
+        ].join(" ").trim()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick();
+        }}
+        aria-label={label}
+      >
+        <span className="line-comment-icon" aria-hidden>
+          <MessageSquare size={13} />
         </span>
-      )}
-    </button>
+        {count !== null && count > 1 && (
+          <span className="line-comment-count" aria-hidden>
+            {count}
+          </span>
+        )}
+      </button>
+    </div>
   );
 }

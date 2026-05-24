@@ -31,14 +31,18 @@ body {
 
 /* Shared list-row stagger utility — applied to row elements in panels and
    popover lists. Set --i on each row (0-indexed, capped) to control the
-   cascade timing. */
+   cascade timing. `backwards` fill holds the FROM state during the stagger
+   delay so rows don't flash visible before their slot, but clears once
+   the animation completes — important because any non-default transform
+   on an ancestor would create a containing block that traps fixed-
+   positioned popover descendants. */
 @keyframes list-row-enter {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .staggered-row {
-  animation: list-row-enter var(--dur-base) var(--ease-out-quart) both;
+  animation: list-row-enter var(--dur-base) var(--ease-out-quart) backwards;
   animation-delay: calc(var(--i, 0) * 30ms);
 }
 

@@ -12,7 +12,7 @@
 }
 
 .feed-item.is-fresh {
-  animation: feed-card-enter var(--dur-base) var(--ease-out-quart) both;
+  animation: feed-card-enter var(--dur-base) var(--ease-out-quart) backwards;
   animation-delay: calc(var(--i, 0) * var(--dur-stagger));
 }
 
@@ -402,34 +402,45 @@
 .line-comment-rail-draft {
   right: 38px;
 }
-.line-comment-marker {
+.line-comment-anchor {
   --rail-color: var(--user);
   position: absolute;
   right: 0;
   width: 30px;
   min-height: 22px;
-  padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--rail-color);
   pointer-events: none;
-  cursor: pointer;
 }
 .line-comment-bar {
   position: absolute;
   top: var(--bar-top, 2px);
   bottom: var(--bar-bottom, 2px);
-  right: 13px;
+  right: 14px;
   width: 2px;
   border-radius: 2px;
   background: var(--rail-color);
   opacity: 0.34;
 }
-.line-comment-icon {
+.line-comment-marker {
   position: absolute;
   top: var(--icon-top, 50%);
-  right: 3px;
+  right: 0;
   transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--rail-color);
+  pointer-events: auto;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.14s;
+}
+.line-comment-icon {
+  position: relative;
   width: 22px;
   height: 22px;
   border-radius: 999px;
@@ -440,17 +451,14 @@
   border: 1px solid color-mix(in srgb, var(--rail-color) 48%, var(--line));
   color: var(--rail-color);
   box-shadow: var(--shadow);
-  pointer-events: auto;
   transition:
-    transform 0.14s,
     background 0.14s,
     color 0.14s;
 }
 .line-comment-count {
   position: absolute;
-  top: var(--icon-top, 50%);
-  right: -3px;
-  transform: translateY(-110%);
+  top: 1px;
+  right: -1px;
   min-width: 14px;
   height: 14px;
   border-radius: 999px;
@@ -462,37 +470,40 @@
   line-height: 14px;
   text-align: center;
   box-shadow: var(--shadow);
-  pointer-events: auto;
+  pointer-events: none;
 }
 .line-comment-marker:hover .line-comment-icon,
 .line-comment-marker.active .line-comment-icon {
   background: var(--rail-color);
   color: var(--canvas);
+}
+.line-comment-marker:hover,
+.line-comment-marker.active {
   transform: translateY(-50%) translateX(-2px);
 }
-.line-comment-marker.active .line-comment-bar {
+.line-comment-anchor.active .line-comment-bar {
   opacity: 0.8;
 }
-.line-comment-marker.draft {
+.line-comment-anchor.draft {
   opacity: 0;
   transition: opacity 0.12s;
 }
-.commentable:hover .line-comment-marker.draft,
-.line-comment-marker.draft.active {
+.commentable:hover .line-comment-anchor.draft,
+.line-comment-anchor.draft.active {
   opacity: 1;
 }
-.line-comment-marker.draft .line-comment-bar,
-.line-comment-marker.saved-draft .line-comment-bar {
+.line-comment-anchor.draft .line-comment-bar,
+.line-comment-anchor.saved-draft .line-comment-bar {
   opacity: 0.22;
 }
 .line-comment-marker.draft .line-comment-icon,
 .line-comment-marker.saved-draft .line-comment-icon {
   border-style: dashed;
 }
-.line-comment-marker.saved-draft {
+.line-comment-anchor.saved-draft {
   opacity: 1;
 }
-.line-comment-marker.saved-draft .line-comment-bar {
+.line-comment-anchor.saved-draft .line-comment-bar {
   background:
     repeating-linear-gradient(
       to bottom,
@@ -503,7 +514,7 @@
 .line-comment-marker.saved-draft .line-comment-icon {
   background: color-mix(in srgb, var(--rail-color) 10%, var(--canvas));
 }
-.line-comment-marker.resolved {
+.line-comment-anchor.resolved {
   opacity: 0.72;
 }
 .line-comment-marker.resolved .line-comment-icon {

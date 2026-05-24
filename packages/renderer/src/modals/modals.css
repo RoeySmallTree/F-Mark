@@ -24,7 +24,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: modal-backdrop-enter var(--dur-fast) var(--ease-out-quart) both;
+  animation: modal-backdrop-enter var(--dur-fast) var(--ease-out-quart) backwards;
 }
 .modal {
   background: var(--canvas);
@@ -37,7 +37,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: modal-content-enter 280ms var(--ease-out-quint) both;
+  animation: modal-content-enter 280ms var(--ease-out-quint) backwards;
 }
 .modal.top {
   align-self: flex-start;
