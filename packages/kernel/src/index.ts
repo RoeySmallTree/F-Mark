@@ -99,6 +99,7 @@ const { app, getBus, getTracker } = createServer({
   paths: p,
   allowProcessApiNoAuth: options.allowProcessApiNoAuth,
   pathContextRef,
+  quietCrossPathHooks: options.quietCrossPathHooks,
 });
 
 let port = requestedPort;

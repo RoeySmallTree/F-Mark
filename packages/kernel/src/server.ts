@@ -63,6 +63,10 @@ export interface ServerDeps {
    * so global state.json isn't touched.
    */
   pathContextRef?: PathContextRef;
+  /** When true, hooks from a backgrounded path (different pathId than
+   *  active) are accepted instead of 409 STALE_PATH. CLI flag
+   *  --quiet-cross-path-hooks. */
+  quietCrossPathHooks?: boolean;
 }
 
 export interface CreatedServer {
@@ -171,7 +175,11 @@ export function createServer(deps: ServerDeps): CreatedServer {
   // All path-scoped routes get { fallback, ref } so they resolve paths
   // against the active path when one is wired (multi-path mode), falling
   // back to deps.paths for the existing single-path test harness.
-  const pathDeps = { fallback: deps.paths, ref: deps.pathContextRef };
+  const pathDeps = {
+    fallback: deps.paths,
+    ref: deps.pathContextRef,
+    quietCrossPathHooks: deps.quietCrossPathHooks ?? false,
+  };
   registerParticipantRoutes(app, pathDeps);
   registerAgentsRoutes(app, deps.paths);
   registerSessionRoutes(app, pathDeps);

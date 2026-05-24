@@ -13,6 +13,10 @@ export interface PathDeps {
   /** When set and `ref.get().active !== null`, the route resolves paths
       against the active path instead of the fallback. */
   ref?: PathContextRef;
+  /** When true, event POSTs from a backgrounded path (different pathId
+      than active) bypass the 409 STALE_PATH check. CLI flag
+      --quiet-cross-path-hooks; server.ts threads it in. */
+  quietCrossPathHooks?: boolean;
 }
 
 export function normaliseDeps(arg: Paths | PathDeps): PathDeps {

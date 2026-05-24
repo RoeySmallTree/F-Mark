@@ -30,6 +30,7 @@ export async function postProjectedEvents(
         participant_id: participantId,
         content: ev.content,
         arbitrary: ev.arbitrary,
+        path: ctx.path,
       });
       lastWasConcluding = !ev.arbitrary;
     } else {
@@ -40,6 +41,7 @@ export async function postProjectedEvents(
         input: ev.input,
         result: ev.result,
         success: ev.success,
+        path: ctx.path,
       });
       lastWasConcluding = false;
     }
@@ -47,6 +49,7 @@ export async function postProjectedEvents(
   if (lastWasConcluding && emitTurnEnd) {
     await httpPost(`${ctx.kernelUrl}/sessions/${sessionId}/events/turn-end`, ctx.token, {
       participant_id: participantId,
+      path: ctx.path,
     });
   }
 }

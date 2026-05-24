@@ -12,6 +12,7 @@ import {
 } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
 import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
+import { checkPathAgainstActive } from "./stalePath.js";
 
 interface ProseBody extends Omit<ProsePayload, "content"> {
   participant_id: string;
@@ -19,6 +20,10 @@ interface ProseBody extends Omit<ProsePayload, "content"> {
   /** Legacy field accepted for back-compat. Normalised to `append_to` +
    *  `mode: "comment"` + `lines` before validation / serialization. */
   target?: ProseTarget;
+  /** Hook envelope — when present, kernel verifies the path matches the
+   *  active path and returns 409 STALE_PATH on mismatch (unless
+   *  --quiet-cross-path-hooks was set on boot). */
+  path?: string;
 }
 
 /**
@@ -145,11 +150,20 @@ export function registerEventRoutes(
             // checked after coercion would have applied and rejects non-booleans
             // with 400. See Task 6 / Task 2 reviewer's strict-boolean note.
             arbitrary: { enum: [true, false] },
+            /* Hook STALE_PATH envelope — kernel verifies against active path. */
+            path: { type: "string" },
           },
         },
       },
     },
     async (req, reply) => {
+      const sp = checkPathAgainstActive(req.body?.path, deps, {
+        quietCrossPathHooks: deps.quietCrossPathHooks,
+      });
+      if (!sp.ok) {
+        reply.code(sp.status);
+        return sp.body;
+      }
       const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       const normalised = normaliseProseBody(req.body);
@@ -209,6 +223,7 @@ export function registerEventRoutes(
       success: boolean;
       duration_ms?: number;
       append_to?: string;
+      path?: string;
     };
   }>(
     "/sessions/:id/events/tool-use",
@@ -238,11 +253,16 @@ export function registerEventRoutes(
             success: { type: "boolean" },
             duration_ms: { type: "number" },
             append_to: { type: "string", minLength: 1 },
+            path: { type: "string" },
           },
         },
       },
     },
     async (req, reply) => {
+      const sp = checkPathAgainstActive((req.body as { path?: unknown })?.path, deps, {
+        quietCrossPathHooks: deps.quietCrossPathHooks,
+      });
+      if (!sp.ok) { reply.code(sp.status); return sp.body; }
       const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
@@ -404,7 +424,7 @@ export function registerEventRoutes(
 
   app.post<{
     Params: { id: string };
-    Body: { participant_id: string };
+    Body: { participant_id: string; path?: string };
   }>(
     "/sessions/:id/events/turn-end",
     {
@@ -412,12 +432,18 @@ export function registerEventRoutes(
         body: {
           type: "object",
           required: ["participant_id"],
-          additionalProperties: false,
-          properties: { participant_id: { type: "string" } },
+          properties: {
+            participant_id: { type: "string" },
+            path: { type: "string" },
+          },
         },
       },
     },
     async (req, reply) => {
+      const sp = checkPathAgainstActive(req.body?.path, deps, {
+        quietCrossPathHooks: deps.quietCrossPathHooks,
+      });
+      if (!sp.ok) { reply.code(sp.status); return sp.body; }
       const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {

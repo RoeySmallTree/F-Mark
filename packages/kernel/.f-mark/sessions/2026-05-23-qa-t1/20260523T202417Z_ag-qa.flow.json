@@ -1,0 +1,32 @@
+{
+  "id": "fl_t1",
+  "title": "Event flow",
+  "append_to": "20260523T202407Z_ag-qa.prose.md",
+  "nodes": [
+    {
+      "id": "a",
+      "label": "Author"
+    },
+    {
+      "id": "b",
+      "label": "Kernel"
+    },
+    {
+      "id": "c",
+      "label": "Renderer"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "a",
+      "target": "b"
+    },
+    {
+      "id": "e2",
+      "source": "b",
+      "target": "c",
+      "style": "flowing"
+    }
+  ]
+}

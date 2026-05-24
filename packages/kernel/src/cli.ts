@@ -10,6 +10,12 @@ export interface CliOptions {
   path?: string;
   noAuth: boolean;
   allowProcessApiNoAuth: boolean;
+  /** Accept hook POSTs from backgrounded paths instead of returning 409
+   *  STALE_PATH. Useful when running long-lived agents in multiple paths
+   *  simultaneously. Default off; with this flag on, the kernel writes the
+   *  event to the path the hook identified (via F_MARK_PATH / body.path)
+   *  regardless of the kernel's currently active path. */
+  quietCrossPathHooks: boolean;
   help: boolean;
 }
 
@@ -19,6 +25,7 @@ export function parseArgs(argv: string[]): CliOptions {
     container: false,
     noAuth: false,
     allowProcessApiNoAuth: false,
+    quietCrossPathHooks: false,
     help: false,
   };
 
@@ -38,6 +45,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break;
       case "--allow-process-api-no-auth":
         options.allowProcessApiNoAuth = true;
+        break;
+      case "--quiet-cross-path-hooks":
+        options.quietCrossPathHooks = true;
         break;
       case "--help":
       case "-h":
@@ -113,6 +123,10 @@ Options:
                       Allow the process-spawning API (managed-agents, pane WS)
                       under --no-auth. Off by default — without this flag,
                       --no-auth disables those routes entirely.
+  --quiet-cross-path-hooks
+                      Accept event POSTs from hooks bound to a backgrounded
+                      path (default: 409 STALE_PATH). Use when you want
+                      long-lived agents in idle paths to keep posting.
   --help, -h          Show this help`);
 }
 
