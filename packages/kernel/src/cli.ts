@@ -5,6 +5,9 @@ export interface CliOptions {
   container: boolean;
   port?: number;
   password?: string;
+  /** Absolute path the kernel uses as its initial active path. Overrides
+   *  whatever state.json says. Missing → boot with cwd, transitional. */
+  path?: string;
   noAuth: boolean;
   allowProcessApiNoAuth: boolean;
   help: boolean;
@@ -67,6 +70,18 @@ export function parseArgs(argv: string[]): CliOptions {
         i++;
         break;
       }
+      case "--path": {
+        const value = argv[i + 1];
+        if (value === undefined || value === "" || value.startsWith("--")) {
+          throw new Error("--path requires an absolute directory");
+        }
+        if (!value.startsWith("/")) {
+          throw new Error(`--path must be absolute: ${value}`);
+        }
+        options.path = value;
+        i++;
+        break;
+      }
       default:
         throw new Error(`unknown argument: ${arg}`);
     }
@@ -90,6 +105,8 @@ Options:
   --remote            Print SSH port forwarding instructions
   --container         Print container port mapping instructions
   --port <n>          HTTP port (default 7777)
+  --path <abs-dir>    Absolute folder to set as the initial active path.
+                      Overrides the persisted state.json activePath.
   --password <value>  Use a specific auth token instead of generating one
   --no-auth           Disable auth entirely (prints a warning)
   --allow-process-api-no-auth

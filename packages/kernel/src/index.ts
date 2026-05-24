@@ -20,7 +20,6 @@ import { reconcile } from "./reconcile.js";
 import { createServer } from "./server.js";
 import { realCommandRunner } from "./tmux/commandRunner.js";
 import { createTmuxManager } from "./tmux/manager.js";
-import { startWatcher } from "./watcher.js";
 
 function hasErrnoCode(err: unknown, code: string): boolean {
   return (
@@ -58,12 +57,15 @@ if (options.help) {
   process.exit(0);
 }
 
-const projectRoot = process.env.INIT_CWD ?? process.cwd();
+// --path overrides INIT_CWD/cwd. Used by scripts that want to point the
+// kernel at a specific project without relying on shell cwd; persisted to
+// the global state.json below so subsequent boots without --path remember.
+const projectRoot = options.path ?? process.env.INIT_CWD ?? process.cwd();
 const p = paths(projectRoot);
 const requestedPort = options.port ?? DEFAULT_PORT;
 await initProject(p, requestedPort);
 
-// P1 transitional: cwd is the active path by default so existing UI/hooks
+// P1 transitional: cwd (or --path) is the active path so existing UI/hooks
 // keep working. Removed in P4 once the picker UI is in place.
 const gPaths = globalPaths();
 await mkdir(gPaths.configDir(), { recursive: true });
@@ -71,6 +73,18 @@ const pathContextRef = new PathContextRef({
   global: gPaths,
   active: activePaths(projectRoot),
 });
+
+// Persist the boot-time active path to state.json so the renderer (and any
+// PathSwitcher dropdown) sees it immediately. We also push to knownPaths so
+// it shows up under recents on the next launch.
+{
+  const { updateState, mruPush, bumpRevision } = await import(
+    "./state/store.js"
+  );
+  await updateState(gPaths, (s) =>
+    bumpRevision(mruPush({ ...s, activePath: projectRoot }, projectRoot)),
+  );
+}
 
 let token: string | null = null;
 if (options.noAuth) {
@@ -129,10 +143,6 @@ try {
   logger.warn(`Could not sync port to config.json: ${msg}`);
 }
 
-const stopWatcher = await startWatcher(p, {
-  publish: (m) => getBus().publish(m),
-});
-
 // Reconcile surviving tmux sessions against .f-mark/agents/*. Best-effort: a
 // reconcile failure must not crash startup. We construct a dedicated tmux
 // manager here since `createServer` doesn't expose its own — tmux is stateless
@@ -171,7 +181,6 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info(`Received ${signal}. Shutting down...`);
-  await stopWatcher();
   await app.close();
   if (token !== null) await deleteTokenFile(p);
   process.exit(0);
