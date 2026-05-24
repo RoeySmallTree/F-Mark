@@ -140,16 +140,24 @@ try {
   logger.warn(`Could not sync port to config.json: ${msg}`);
 }
 
-// Reconcile surviving tmux sessions against .f-mark/agents/*. Best-effort: a
-// reconcile failure must not crash startup. We construct a dedicated tmux
-// manager here since `createServer` doesn't expose its own — tmux is stateless
-// server-side, so a duplicate handle is fine.
+// Reconcile surviving tmux sessions. Best-effort: failures must not crash
+// startup. We construct a dedicated tmux manager here since createServer
+// doesn't expose its own — tmux is stateless server-side, so a duplicate
+// handle is fine. agentsDir comes from the active path's location: under
+// ~/.config/f-mark/projects/<pathId>/agents/ for multi-path boots, falling
+// back to <cwd>/.f-mark/agents/ for legacy.
 try {
   const reconcileTmux = createTmuxManager({
     runner: realCommandRunner(),
     projectRoot: p.root(),
   });
-  await reconcile({ paths: p, tmux: reconcileTmux, tracker: getTracker() });
+  const { agentsDirFor } = await import("./agents/locator.js");
+  await reconcile({
+    paths: p,
+    tmux: reconcileTmux,
+    tracker: getTracker(),
+    agentsDir: agentsDirFor({ ref: pathContextRef, fallback: p }),
+  });
 } catch (err) {
   const msg = err instanceof Error ? err.message : String(err);
   process.stderr.write(`reconcile failed: ${msg}\n`);

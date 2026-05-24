@@ -33,7 +33,7 @@ import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
 import { wrapBusWithEnvelope } from "./ws/envelope.js";
 import { createPaneHub } from "./ws/paneHub.js";
 import { registerPaneWebSocket } from "./ws/pane.js";
-import { createTmuxManager } from "./tmux/manager.js";
+import { createTmuxManager, type TmuxManager } from "./tmux/manager.js";
 import { realCommandRunner, type CommandRunner } from "./tmux/commandRunner.js";
 import { createInputQueue } from "./tmux/inputQueue.js";
 
@@ -189,7 +189,12 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerPresenceRoutes(app, () => tracker);
 
   if (deps.pathContextRef) {
-    registerPathRoutes(app, deps.pathContextRef, () => busRef);
+    registerPathRoutes(
+      app,
+      deps.pathContextRef,
+      () => busRef,
+      () => tmuxRef,
+    );
   }
   registerFsRoutes(app);
 
@@ -221,6 +226,11 @@ export function createServer(deps: ServerDeps): CreatedServer {
   // Process-spawning routes are gated. They're always enabled when a token is
   // set (bearer auth protects them), and additionally enabled under --no-auth
   // only when the operator explicitly opts in with --allow-process-api-no-auth.
+  // tmuxRef is hoisted so registerPathRoutes (registered earlier in scope)
+  // can call tmux.rebind on path switch via its getter. Stays null when
+  // the process-API is disabled — registerPathRoutes treats that case as
+  // "no tmux manager to rebind".
+  let tmuxRef: TmuxManager | null = null;
   const processApiEnabled =
     deps.token !== null || deps.allowProcessApiNoAuth === true;
   if (processApiEnabled) {
@@ -228,6 +238,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
       runner: deps.commandRunner ?? realCommandRunner(),
       projectRoot: deps.paths.root(),
     });
+    tmuxRef = tmux;
     // One per-pane input queue shared between /managed-agents/:id/command
     // and /ws/pane so kernel-injected keystrokes (slash commands) and
     // overlay-typed WS input cannot interleave at the tmux byte stream.
@@ -243,6 +254,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
       // Pass a thin pass-through bus so route publishes go through the live
       // `busRef` (which is reassigned once the WebSocket plugin is ready).
       bus: { publish: (m) => busRef.publish(m) },
+      pathContextRef: deps.pathContextRef,
     });
     registerHookInstallRoutes(app, pathDeps);
 

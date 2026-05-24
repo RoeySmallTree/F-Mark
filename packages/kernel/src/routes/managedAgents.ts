@@ -25,6 +25,8 @@ import type { InputQueue } from "../tmux/inputQueue.js";
 import { validateSlashCommand, validateMessageText } from "../runtimes/validation.js";
 import { checkHookInstallStatus as defaultCheckHookInstallStatus } from "../hooksInstall/index.js";
 import type { Bus } from "../ws/bus.js";
+import type { PathContextRef } from "../paths/contextRef.js";
+import { agentsDirFor } from "../agents/locator.js";
 
 interface SpawnBody {
   runtime_id?: string;
@@ -64,6 +66,13 @@ export interface ManagedAgentsDeps {
    * files.
    */
   checkHookInstallStatus?: typeof defaultCheckHookInstallStatus;
+  /**
+   * Optional multi-path ref. When wired with an active path, agent state
+   * lives under ~/.config/f-mark/projects/<pathId>/agents/ instead of the
+   * per-path <root>/.f-mark/agents/. Tests omit this and keep the legacy
+   * per-path layout.
+   */
+  pathContextRef?: PathContextRef;
 }
 
 const CONFIRM_TTL_MS = 10_000;
@@ -129,11 +138,12 @@ export function registerManagedAgentsRoutes(
 ): void {
   const { paths, tmux, tracker, inputQueue, bus } = deps;
   const hookStatusCheck = deps.checkHookInstallStatus ?? defaultCheckHookInstallStatus;
-  // v0.4: per-path agents dir. v0.5 (D2 follow-up): global,
-  // pathId-partitioned. Today we still use the per-path location; the
-  // per-message envelope (D1) plus the migration shim (D4) keep things
-  // consistent until callers pass a pathId-derived agentsDir.
-  const agentsDir = join(paths.fmarkDir(), "agents");
+  // Per-request agentsDir resolution. When a multi-path ref is wired with
+  // an active path, agent state lives under ~/.config/f-mark/projects/
+  // <pathId>/agents/. Otherwise (legacy / tests) it lives at
+  // <root>/.f-mark/agents/. agentsDirFor() picks the right one.
+  const agentsDir = (): string =>
+    agentsDirFor({ ref: deps.pathContextRef, fallback: paths });
 
   // Defence-in-depth: gate cookie-authenticated mutating requests by Origin.
   // Registered before the routes so it runs on every /managed-agents/* call.
@@ -220,17 +230,17 @@ export function registerManagedAgentsRoutes(
     // leave an orphan tmux session behind. Roll back by killing the session
     // before re-raising.
     try {
-      await writeTmuxSession(agentsDir, participantId, sessionName);
-      await writeRuntime(agentsDir, participantId, runtime_id);
+      await writeTmuxSession(agentsDir(), participantId, sessionName);
+      await writeRuntime(agentsDir(), participantId, runtime_id);
       if (body.session_id !== undefined) {
-        await writeActiveSession(agentsDir, participantId, body.session_id);
+        await writeActiveSession(agentsDir(), participantId, body.session_id);
       }
       // v0.4: optimistic paneAlive — the presence ticker / pane-died detection
       // happens elsewhere. We pass a closure that returns true so the tracker
       // bucket exists; downstream code can replace this when it has authoritative
       // pane state.
       tracker.setManagedPane(participantId, { paneAlive: () => true });
-      await appendAgentLog(agentsDir, participantId, {
+      await appendAgentLog(agentsDir(), participantId, {
         event: "spawn",
         runtime: runtime_id,
         tmux_session: sessionName,
@@ -366,7 +376,7 @@ export function registerManagedAgentsRoutes(
         reply.code(403);
         return { error: "missing or stale confirm token" };
       }
-      const session = await readTmuxSession(agentsDir, id);
+      const session = await readTmuxSession(agentsDir(), id);
       if (session) {
         try {
           await tmux.killSession(session);
@@ -374,9 +384,9 @@ export function registerManagedAgentsRoutes(
           // tolerate already-dead session — the goal is to clear state
         }
       }
-      await clearManagedSiblings(agentsDir, id);
+      await clearManagedSiblings(agentsDir(), id);
       tracker.clearManagedPane(id);
-      await appendAgentLog(agentsDir, id, { event: "goodbye" });
+      await appendAgentLog(agentsDir(), id, { event: "goodbye" });
       bus.publish({ type: "managed-agent.killed", participant_id: id });
       return { ok: true };
     },
@@ -401,7 +411,7 @@ export function registerManagedAgentsRoutes(
   app.get("/managed-agents", async () => {
     const sessions = await tmux.listFmarkSessions();
     const liveSessionNames = new Set(sessions.map((s) => s.sessionName));
-    const agentIds = await listManagedAgentIds(agentsDir);
+    const agentIds = await listManagedAgentIds(agentsDir());
     const agents: Array<{
       participant_id: string;
       tmux_session: string | null;
@@ -409,8 +419,8 @@ export function registerManagedAgentsRoutes(
       alive: boolean;
     }> = [];
     for (const aid of agentIds) {
-      const tmuxSession = await readTmuxSession(agentsDir, aid);
-      const runtimeId = await readRuntime(agentsDir, aid);
+      const tmuxSession = await readTmuxSession(agentsDir(), aid);
+      const runtimeId = await readRuntime(agentsDir(), aid);
       // alive iff the recorded tmux session is in the live-sessions set.
       // Stale agent directories (session died, files left behind) are still
       // surfaced — the UI can use alive=false to offer "Reconnect" or cleanup.
@@ -442,7 +452,7 @@ export function registerManagedAgentsRoutes(
       }
       const limitRaw = req.query.since;
       const limit = limitRaw !== undefined ? Number(limitRaw) : 50;
-      const entries = await readAgentLog(agentsDir, id, { limit });
+      const entries = await readAgentLog(agentsDir(), id, { limit });
       return { entries };
     },
   );
@@ -456,7 +466,7 @@ export function registerManagedAgentsRoutes(
       reply.code(400);
       return { error: "invalid id" };
     }
-    const session = await readTmuxSession(agentsDir, id);
+    const session = await readTmuxSession(agentsDir(), id);
     if (!session) {
       reply.code(409);
       return { reason: "unmanaged_pane", offer: "open_overlay" };
@@ -495,7 +505,7 @@ export function registerManagedAgentsRoutes(
         reply.code(400);
         return { error: "unknown command type" };
       }
-      await appendAgentLog(agentsDir, id, {
+      await appendAgentLog(agentsDir(), id, {
         event: "command",
         type: body.type,
       });

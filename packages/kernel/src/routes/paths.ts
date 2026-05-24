@@ -12,6 +12,7 @@ import {
   type KernelState,
 } from "../state/store.js";
 import type { Bus } from "../ws/bus.js";
+import type { TmuxManager } from "../tmux/manager.js";
 
 interface PathErrorShape {
   code: string;
@@ -100,6 +101,11 @@ export function registerPathRoutes(
   app: FastifyInstance,
   ref: PathContextRef,
   busGetter?: () => Bus,
+  /* Optional tmux manager. When provided, /paths/active and DELETE
+     /paths/active call manager.rebind so subsequent spawns + listFmark
+     scope to the new path. Pre-existing tmux sessions retain their old
+     tag and stay visible only from the path they were spawned in. */
+  tmuxGetter?: () => TmuxManager | null,
 ): void {
   function broadcastSwitch(state: KernelState): void {
     if (!busGetter) return;
@@ -151,6 +157,8 @@ export function registerPathRoutes(
     });
     ref.setActive(activePaths(validation.canonical));
     ref.setRevision(next.activeRevision);
+    // Rebind tmux so subsequent spawns + filtering scope to the new path.
+    tmuxGetter?.()?.rebind({ projectRoot: validation.canonical });
     broadcastSwitch(next);
     return buildResponse(next);
   });

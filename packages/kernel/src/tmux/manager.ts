@@ -26,6 +26,13 @@ export interface TmuxManager {
   paneAlive(sessionName: string): Promise<boolean>;
   getVersion(): Promise<{ major: number; minor: number; raw: string } | null>;
   getUserOption(sessionName: string, name: `@${string}`): Promise<string | null>;
+  /* Update the project-root the manager scopes to. New spawns and listFmark
+     filtering switch over; existing sessions keep their original @fmark-project
+     tag so they remain visible from the old projectRoot only. Called from
+     /paths/active after a multi-path switch. */
+  rebind(input: { projectRoot: string }): void;
+  /* Current projectRoot — exposed for tests and for diagnostic logging. */
+  currentProjectRoot(): string;
 }
 
 export interface ListedSession {
@@ -44,7 +51,11 @@ export function createTmuxManager(deps: {
   runner: CommandRunner;
   projectRoot: string;
 }): TmuxManager {
-  const { runner, projectRoot } = deps;
+  const { runner } = deps;
+  // projectRoot is mutable so the manager survives a path switch without
+  // being torn down/recreated. New spawns and listFmark scope to the latest
+  // value; pre-rebind sessions retain their original @fmark-project tag.
+  let projectRoot = deps.projectRoot;
 
   async function setUserOption(session: string, opt: `@${string}`, value: string): Promise<void> {
     const r = await runner.run(["tmux", "set-option", "-t", session, opt, value]);
@@ -175,5 +186,8 @@ export function createTmuxManager(deps: {
     },
 
     async getUserOption(sessionName, name) { return getUserOption(sessionName, name); },
+
+    rebind({ projectRoot: next }) { projectRoot = next; },
+    currentProjectRoot() { return projectRoot; },
   };
 }
