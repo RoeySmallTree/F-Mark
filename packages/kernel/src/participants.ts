@@ -1,6 +1,33 @@
 import { randomBytes } from "node:crypto";
 import { readConfig, writeConfig, type Participant } from "./project.js";
 import type { Paths } from "./paths.js";
+import { loadRuntimes } from "./runtimes/registry.js";
+
+/** Hard cap on display-name length. Mirrors the JSON-schema constraint
+ *  on /participants/register so direct kernel callers see the same
+ *  rejection. Long enough for "GPT-4 Turbo (preview build)" but tight
+ *  enough to prevent the 10K-char audit probe. */
+export const PARTICIPANT_NAME_MAX = 60;
+
+function validateName(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    throw new Error("name must be non-empty");
+  }
+  if (trimmed.length > PARTICIPANT_NAME_MAX) {
+    throw new Error(
+      `name too long (${trimmed.length} chars, max ${PARTICIPANT_NAME_MAX})`,
+    );
+  }
+  return trimmed;
+}
+
+async function assertKnownRuntime(p: Paths, runtimeId: string): Promise<void> {
+  const file = await loadRuntimes(p.fmarkDir());
+  if (!(runtimeId in file.runtimes)) {
+    throw new Error(`unknown runtime_id: ${runtimeId}`);
+  }
+}
 
 const AGENT_COLORS = [
   "#f59e0b",
@@ -64,6 +91,10 @@ export async function registerAgent(
   p: Paths,
   input: RegisterAgentInput,
 ): Promise<RegisteredAgent> {
+  const name = validateName(input.name);
+  if (input.runtime_id !== undefined) {
+    await assertKnownRuntime(p, input.runtime_id);
+  }
   const cfg = await readConfig(p);
   let id: string;
   if (input.suggested_id !== undefined) {
@@ -80,7 +111,7 @@ export async function registerAgent(
   const color = nextColor(cfg.participants);
   const participant: Participant = {
     kind: "agent",
-    name: input.name,
+    name,
     color,
   };
   if (input.runtime_id !== undefined) {
@@ -88,7 +119,7 @@ export async function registerAgent(
   }
   cfg.participants[id] = participant;
   await writeConfig(p, cfg);
-  return { id, name: input.name, color };
+  return { id, name, color };
 }
 
 /* Idempotent: backfills runtime_id on an existing participant. Used by the
@@ -100,6 +131,7 @@ export async function setParticipantRuntime(
   id: string,
   runtimeId: string,
 ): Promise<void> {
+  await assertKnownRuntime(p, runtimeId);
   const cfg = await readConfig(p);
   const current = cfg.participants[id];
   if (current === undefined) return;
@@ -133,11 +165,7 @@ export async function updateParticipant(
     throw new Error(`participant not found: ${id}`);
   }
   if (input.name !== undefined) {
-    const trimmed = input.name.trim();
-    if (trimmed.length === 0) {
-      throw new Error("name must be non-empty");
-    }
-    current.name = trimmed;
+    current.name = validateName(input.name);
   }
   if (input.color !== undefined) {
     if (!isValidHexColor(input.color)) {

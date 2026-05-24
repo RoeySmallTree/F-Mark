@@ -35,7 +35,7 @@ export function registerParticipantRoutes(app: FastifyInstance, p: Paths): void 
           required: ["kind", "name"],
           properties: {
             kind: { type: "string", enum: ["agent"] },
-            name: { type: "string", minLength: 1 },
+            name: { type: "string", minLength: 1, maxLength: 60 },
             suggested_id: { type: "string" },
           },
         },
@@ -69,7 +69,7 @@ export function registerParticipantRoutes(app: FastifyInstance, p: Paths): void 
           type: "object",
           additionalProperties: false,
           properties: {
-            name: { type: "string", minLength: 1 },
+            name: { type: "string", minLength: 1, maxLength: 60 },
             color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
           },
         },

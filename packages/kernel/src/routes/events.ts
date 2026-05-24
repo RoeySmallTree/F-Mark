@@ -227,8 +227,8 @@ export function registerEventRoutes(
           additionalProperties: false,
           properties: {
             participant_id: { type: "string", minLength: 1 },
-            tool_name: { type: "string", minLength: 1 },
-            tool_use_id: { type: "string", minLength: 1 },
+            tool_name: { type: "string", minLength: 1, maxLength: 80 },
+            tool_use_id: { type: "string", minLength: 1, maxLength: 80 },
             input: {},
             result: {},
             success: { type: "boolean" },
