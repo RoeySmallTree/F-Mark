@@ -16,6 +16,7 @@ import { activePaths } from "./paths/active.js";
 import { PathContextRef } from "./paths/contextRef.js";
 import { globalPaths } from "./paths/global.js";
 import { bumpRevision, mruPush, updateState } from "./state/store.js";
+import { runV04Migration } from "./boot/migration.js";
 import { initProject, readConfig, writeConfig } from "./project.js";
 import { reconcile } from "./reconcile.js";
 import { createServer } from "./server.js";
@@ -70,6 +71,17 @@ await initProject(p, requestedPort);
 // keep working. Removed in P4 once the picker UI is in place.
 const gPaths = globalPaths();
 await mkdir(gPaths.configDir(), { recursive: true });
+
+// One-shot v0.4 → v0.5 migration. No-op when state.json already exists.
+// On first run, moves <cwd>/.f-mark/agents/, runtimes.json, and splits
+// config.json into the global tree under ~/.config/f-mark/projects/<pathId>/.
+try {
+  await runV04Migration(projectRoot, gPaths);
+} catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`v0.4 migration failed: ${msg}\n`);
+}
+
 const pathContextRef = new PathContextRef({
   global: gPaths,
   active: activePaths(projectRoot),
@@ -77,7 +89,8 @@ const pathContextRef = new PathContextRef({
 
 // Persist the boot-time active path to state.json so the renderer (and any
 // PathSwitcher dropdown) sees it immediately. Also push to knownPaths so it
-// shows up under recents on the next launch.
+// shows up under recents on the next launch. (After migration this is a
+// no-op when state.json was just initialized by the shim.)
 const bootState = await updateState(gPaths, (s) =>
   bumpRevision(mruPush({ ...s, activePath: projectRoot }, projectRoot)),
 );
