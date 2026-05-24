@@ -48,7 +48,17 @@ export function registerParticipantRoutes(
     "fallback" in pOrDeps ? pOrDeps : { fallback: pOrDeps };
 
   app.get("/participants", async () => {
-    return { participants: await listParticipants(resolvePaths(deps)) };
+    try {
+      return { participants: await listParticipants(resolvePaths(deps)) };
+    } catch (err) {
+      /* Active path may not have a .f-mark/ yet — e.g., user just picked a
+         fresh folder via PathSwitcher but hasn't created a session. Show
+         an empty roster rather than 500-ing the renderer's bootstrap. */
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        return { participants: {} };
+      }
+      throw err;
+    }
   });
 
   app.post<{ Body: RegisterBody }>(

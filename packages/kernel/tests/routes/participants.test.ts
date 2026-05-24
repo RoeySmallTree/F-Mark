@@ -133,6 +133,35 @@ describe("routes /participants", () => {
   });
 
   describe("multi-path scoping", () => {
+    it("returns empty when the active path has no .f-mark/ yet", async () => {
+      await withTempProject(async (fallbackRoot) => {
+        const fresh = mkdtempSync(join(tmpdir(), "fmark-pt-fresh-"));
+        const configRoot = mkdtempSync(join(tmpdir(), "fmark-pt-cfg-"));
+        try {
+          const fallback = paths(fallbackRoot);
+          await initProject(fallback);
+          // Note: fresh dir is NOT initialized — no .f-mark/.
+          const g = globalPaths(configRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePaths(fresh),
+          });
+          const { app } = createServer({
+            token: null,
+            paths: fallback,
+            pathContextRef: ref,
+          });
+          const res = await app.inject({ method: "GET", url: "/participants" });
+          expect(res.statusCode).toBe(200);
+          expect(res.json().participants).toEqual({});
+          await app.close();
+        } finally {
+          rmSync(fresh, { recursive: true, force: true });
+          rmSync(configRoot, { recursive: true, force: true });
+        }
+      });
+    });
+
     it("reads participants from the active path, not the fallback", async () => {
       await withTempProject(async (fallbackRoot) => {
         const otherRoot = mkdtempSync(join(tmpdir(), "fmark-pt-other-"));
