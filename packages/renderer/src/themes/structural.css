@@ -37,21 +37,23 @@ body.theme-cyber .turn-pill, body.theme-cyber .prose-pin{ box-shadow:0 0 16px rg
 body.theme-cyber .card.user .stripe{ box-shadow:0 0 12px var(--user) }
 body.theme-cyber .card.agent .stripe{ box-shadow:0 0 12px var(--agent) }
 body.theme-cyber .prose-card{ box-shadow:0 0 24px rgba(255,43,214,.06), 0 4px 14px rgba(0,0,0,.4) }
-body.theme-cyber .send-btn{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000; font-weight:600 }
+body.theme-cyber .primary-action{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000; font-weight:600; border-color:transparent }
 body.theme-cyber .btn-solid{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000 }
 body.theme-cyber .choice-opt.chosen{ box-shadow:0 0 16px rgba(125,255,90,.2) }
 body.theme-cyber .rail-btn.active::before{ background:linear-gradient(180deg, var(--user), var(--agent)) }
 body.theme-cyber .topbar, body.theme-cyber .left-panel, body.theme-cyber .right-panel{ border-color:var(--line) }
 body.theme-cyber .prose-title{ background:linear-gradient(90deg, var(--ink), var(--user) 80%); -webkit-background-clip:text; background-clip:text; color:transparent }
 
-/* All dark themes — kill the linear gradient on prose-head that uses rgba(0,0,0,.012) */
+/* All dark themes — swap the rgba(0,0,0,.012) gradient overlay for a white-tint
+   one, but keep the opaque var(--canvas) base so the sticky prose-head doesn't
+   bleed body content through when it's pinned. */
 body.theme-terminal .prose-head, body.theme-ide .prose-head, body.theme-solarized .prose-head, body.theme-brutalist .prose-head, body.theme-cyber .prose-head,
 body.theme-terminal .prose-foot, body.theme-ide .prose-foot, body.theme-solarized .prose-foot, body.theme-brutalist .prose-foot, body.theme-cyber .prose-foot,
 body.theme-terminal .embed-foot, body.theme-ide .embed-foot, body.theme-solarized .embed-foot, body.theme-brutalist .embed-foot, body.theme-cyber .embed-foot,
 body.theme-terminal .modal-foot, body.theme-ide .modal-foot, body.theme-solarized .modal-foot, body.theme-brutalist .modal-foot, body.theme-cyber .modal-foot,
 body.theme-terminal .pop-foot, body.theme-ide .pop-foot, body.theme-solarized .pop-foot, body.theme-brutalist .pop-foot, body.theme-cyber .pop-foot,
 body.theme-terminal .cmdk-foot, body.theme-ide .cmdk-foot, body.theme-solarized .cmdk-foot, body.theme-brutalist .cmdk-foot, body.theme-cyber .cmdk-foot{
-  background:rgba(255,255,255,.02) !important;
+  background:linear-gradient(to bottom, rgba(255,255,255,.02), transparent), var(--canvas) !important;
 }
 /* Choice opt hover in dark themes */
 body.theme-terminal .choice-opt:hover, body.theme-ide .choice-opt:hover, body.theme-solarized .choice-opt:hover, body.theme-brutalist .choice-opt:hover, body.theme-cyber .choice-opt:hover{

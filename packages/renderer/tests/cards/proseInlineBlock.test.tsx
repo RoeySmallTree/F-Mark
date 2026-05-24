@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import { render, cleanup, waitFor } from "@testing-library/react";
 import type { AnyEventRecord } from "@f-mark/shared";
 import { ProseInlineBlock } from "../../src/cards/ProseInlineBlock.js";
 import { PARTICIPANTS, makeProse } from "./_helpers.js";
@@ -134,10 +134,13 @@ describe("ProseInlineBlock registry dispatcher", () => {
     }
   });
 
-  test("flow block renders real embedded FlowCard (no longer a stub)", () => {
+  test("flow block renders real embedded FlowCard (no longer a stub)", async () => {
     /* Phase 8 replaced the flow stub with FlowCard variant="embedded".
        The embedded variant drops the .flow-head chrome but keeps the
-       canvas and (optional) title. */
+       canvas and (optional) title.
+       FlowCard is loaded lazily (React.lazy) to keep @xyflow/react +
+       dagre out of the main bundle — so the "Pipeline" title only appears
+       after Suspense resolves, hence the waitFor. */
     const ev: AnyEventRecord = {
       filename: "20260522T120150Z_ag-c92e.flow.json",
       timestamp: "20260522T120150Z",
@@ -162,7 +165,9 @@ describe("ProseInlineBlock registry dispatcher", () => {
     expect(container.querySelector(".flow-card-embedded")).not.toBeNull();
     expect(container.querySelector(".flow-head")).toBeNull();
     expect(container.querySelector(".prose-embed-stub")).toBeNull();
-    expect(container.textContent).toContain("Pipeline");
+    await waitFor(() =>
+      expect(container.textContent).toContain("Pipeline"),
+    );
   });
 
   test("unknown kind falls back to UnsupportedBlock", () => {

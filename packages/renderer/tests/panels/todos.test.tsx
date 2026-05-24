@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
   within,
+  act,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TodoPayload, TodoTreeNode } from "@f-mark/shared";
@@ -120,6 +121,37 @@ const siblingTree = (): TodoTreeNode[] => [
   },
 ];
 
+const mixedStatusTree = (): TodoTreeNode[] => [
+  {
+    id: "open-user",
+    title: "Open user task",
+    status: "open",
+    assigned_to: "us-a7f3",
+    children: [],
+  },
+  {
+    id: "done-agent",
+    title: "Done agent task",
+    status: "done",
+    assigned_to: "ag-c92e",
+    children: [],
+  },
+  {
+    id: "wip-agent",
+    title: "WIP agent task",
+    status: "wip",
+    assigned_to: "ag-c92e",
+    children: [],
+  },
+  {
+    id: "open-agent",
+    title: "Open agent task",
+    status: "open",
+    assigned_to: "ag-c92e",
+    children: [],
+  },
+];
+
 function titleInput(id: string): HTMLInputElement {
   return within(screen.getByTestId(`todo-item-${id}`)).getByLabelText(
     "Task title",
@@ -163,6 +195,46 @@ describe("Todos panel — unified tree item flow", () => {
     expect(screen.getByRole("button", { name: /^Add task$/i })).toBeEnabled();
   });
 
+  test("groups visible siblings by status and then assignee", async () => {
+    installTodoFetch({ current: mixedStatusTree() });
+    const { container } = render(<Todos />);
+    await screen.findByDisplayValue("WIP agent task");
+
+    const itemIds = Array.from(container.querySelectorAll(".todo-item")).map(
+      (item) => item.getAttribute("data-testid"),
+    );
+    expect(itemIds).toEqual([
+      "todo-item-wip-agent",
+      "todo-item-open-agent",
+      "todo-item-open-user",
+      "todo-item-done-agent",
+    ]);
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getAllByText("Claude").length).toBeGreaterThan(0);
+  });
+
+  test("counter chips toggle status filters", async () => {
+    installTodoFetch({ current: mixedStatusTree() });
+    const user = userEvent.setup();
+    render(<Todos />);
+    await screen.findByDisplayValue("WIP agent task");
+
+    const openChip = screen.getByRole("button", { name: /Open 2/i });
+    const wipChip = screen.getByRole("button", { name: /In progress 1/i });
+    const doneChip = screen.getByRole("button", { name: /Done 1/i });
+    expect(openChip).toHaveAttribute("aria-pressed", "true");
+    expect(wipChip).toHaveAttribute("aria-pressed", "true");
+    expect(doneChip).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(openChip);
+
+    expect(openChip).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByDisplayValue("Open agent task")).toBeNull();
+    expect(screen.queryByDisplayValue("Open user task")).toBeNull();
+    expect(screen.getByDisplayValue("WIP agent task")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Done agent task")).toBeInTheDocument();
+  });
+
   test("tick toggles status using the latest todo filename", async () => {
     const treeRef = { current: singleTree() };
     const { posts } = installTodoFetch(treeRef);
@@ -190,6 +262,58 @@ describe("Todos panel — unified tree item flow", () => {
       id: "t1",
       status: "done",
       supersedes: "20260522T110000Z_us-a7f3.todo.json",
+    });
+  });
+
+  test("in-progress button toggles WIP while the check controls done/open", async () => {
+    const treeRef = { current: singleTree() };
+    const { posts } = installTodoFetch(treeRef);
+    const user = userEvent.setup();
+    render(<Todos />);
+    await screen.findByDisplayValue("Draft plan");
+
+    await user.click(
+      screen.getByRole("button", { name: /Mark as in progress/i }),
+    );
+    treeRef.current = [
+      {
+        ...singleTree()[0]!,
+        status: "wip",
+      },
+    ];
+
+    await waitFor(() => {
+      expect(posts).toHaveLength(1);
+    });
+    expect(posts[0]).toMatchObject({
+      id: "t1",
+      status: "wip",
+    });
+    act(() => {
+      useStore.setState({
+        events: [
+          makeTodo("20260522T110100Z_us-a7f3.todo.json", "us-a7f3", {
+            id: "t1",
+            title: "Draft plan",
+            body: "phase 1",
+            status: "wip",
+            assigned_to: "ag-c92e",
+          }),
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("in progress")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /Mark as done/i }));
+
+    await waitFor(() => {
+      expect(posts).toHaveLength(2);
+    });
+    expect(posts[1]).toMatchObject({
+      id: "t1",
+      status: "done",
     });
   });
 
@@ -405,7 +529,7 @@ describe("Todos panel — unified tree item flow", () => {
       .find((input) => input instanceof HTMLInputElement && input.value === "");
     expect(draftTitle).toBeInstanceOf(HTMLInputElement);
     await user.type(draftTitle as HTMLInputElement, "Sibling task");
-    await user.tab();
+    fireEvent.blur(draftTitle as HTMLInputElement);
 
     await waitFor(() => {
       expect(posts).toHaveLength(1);
@@ -440,7 +564,7 @@ describe("Todos panel — unified tree item flow", () => {
       .getAllByPlaceholderText("Task title")
       .find((input) => input instanceof HTMLInputElement && input.value === "");
     await user.type(draftTitle as HTMLInputElement, "Child task");
-    await user.tab();
+    fireEvent.blur(draftTitle as HTMLInputElement);
 
     await waitFor(() => {
       expect(posts).toHaveLength(1);
@@ -596,6 +720,33 @@ describe("Todos panel — unified tree item flow", () => {
     });
   });
 
+  test("Cmd+Enter preserves a dirty title before blur", async () => {
+    const treeRef = { current: singleTree() };
+    const { posts } = installTodoFetch(treeRef);
+    const user = userEvent.setup();
+    render(<Todos />);
+    const title = await screen.findByDisplayValue("Draft plan");
+    await user.clear(title);
+    await user.type(title, "Renamed before toggle");
+
+    expect(
+      fireEvent.keyDown(title, {
+        key: "Enter",
+        code: "Enter",
+        metaKey: true,
+      }),
+    ).toBe(false);
+
+    await waitFor(() => {
+      expect(posts).toHaveLength(1);
+    });
+    expect(posts[0]).toMatchObject({
+      id: "t1",
+      title: "Renamed before toggle",
+      status: "done",
+    });
+  });
+
   test("Cmd+Backspace removes the focused todo", async () => {
     const treeRef = { current: singleTree() };
     const { posts } = installTodoFetch(treeRef);
@@ -644,6 +795,78 @@ describe("Todos panel — unified tree item flow", () => {
     expect(screen.getByLabelText("Todo counts")).toHaveTextContent("Open 1");
     expect(screen.getByTestId("todo-item-t1")).toHaveClass("compact");
     expect(screen.getByRole("button", { name: /^Add task$/i })).toBeEnabled();
+  });
+
+  test("an old in-flight todo write cannot reload todos into a new session", async () => {
+    const oldSessionId = "2026-05-22-launch-planning";
+    const newSessionId = "2026-05-23-new-session";
+    let resolvePost: (response: Response) => void = () => undefined;
+    const postPromise = new Promise<Response>((resolve) => {
+      resolvePost = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (
+          url.includes(`/sessions/${oldSessionId}/events/todo`) &&
+          (init?.method ?? "GET") === "POST"
+        ) {
+          return postPromise;
+        }
+        if (url.includes(`/sessions/${oldSessionId}/todos`)) {
+          return jsonResponse(responseFor(singleTree()));
+        }
+        if (url.includes(`/sessions/${newSessionId}/todos`)) {
+          return jsonResponse(
+            responseFor([
+              {
+                id: "new-task",
+                title: "New session task",
+                status: "open",
+                children: [],
+              },
+            ]),
+          );
+        }
+        return jsonResponse({});
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    resetStore({
+      sessions: [
+        {
+          id: oldSessionId,
+          slug: "launch-planning",
+          created_at: "2026-05-22T10:00:00Z",
+        },
+        {
+          id: newSessionId,
+          slug: "new-session",
+          created_at: "2026-05-23T10:00:00Z",
+        },
+      ],
+      currentSessionId: oldSessionId,
+    });
+    const user = userEvent.setup();
+    render(<Todos />);
+    await screen.findByDisplayValue("Draft plan");
+
+    await user.click(screen.getByRole("button", { name: /Mark as done/i }));
+    act(() => {
+      useStore.getState().setCurrentSession(newSessionId);
+    });
+    await screen.findByDisplayValue("New session task");
+
+    resolvePost(jsonResponse({ filename: "20260522T110100Z_us.todo.json" }));
+
+    await waitFor(() => {
+      const oldLoads = fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes(`/sessions/${oldSessionId}/todos`),
+      );
+      expect(oldLoads).toHaveLength(1);
+      expect(screen.getByDisplayValue("New session task")).toBeInTheDocument();
+    });
+    expect(screen.queryByDisplayValue("Draft plan")).toBeNull();
   });
 
   test("disables Add task when no session or no user is set", () => {

@@ -117,6 +117,45 @@ describe("TodoCard", () => {
     expect(body.supersedes).toBe(ev.filename);
   });
 
+  test("Add subtask in an inline todo creates an editable draft before posting", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ filename: "20260522T110350Z_us-a7f3.todo.json" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const ev = makeTodo(
+      "20260522T110000Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "parent", title: "Parent task", status: "open" },
+    );
+    const { container } = render(
+      <TodoCard event={ev} participants={PARTICIPANTS} />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /Add subtask to Parent task/i }),
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const draft = container.querySelector('.todo-item[data-draft="true"]');
+    expect(draft).not.toBeNull();
+    expect(draft!.getAttribute("data-depth")).toBe("1");
+    const draftTitle = draft!.querySelector<HTMLInputElement>("input.todo-title");
+    expect(draftTitle).not.toBeNull();
+    await user.type(draftTitle!, "Child task");
+    fireEvent.blur(draftTitle!);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toMatchObject({
+      title: "Child task",
+      parent_id: "parent",
+      assigned_to: "ag-c92e",
+    });
+  });
+
   test("assignee dropdown opens and selecting an assignee posts an update", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ filename: "20260522T110400Z_us-a7f3.todo.json" }),
@@ -172,7 +211,7 @@ describe("TodoCard", () => {
     const description = screen.getByLabelText("Task description");
     await user.clear(description);
     await user.type(description, "New body");
-    await user.tab();
+    fireEvent.blur(description);
 
     await waitFor(() => {
       expect(posted.length).toBe(2);
@@ -187,7 +226,7 @@ describe("TodoCard", () => {
       id: "t1",
       title: "New title",
       body: "New body",
-      supersedes: ev.filename,
+      supersedes: "20260522T110500Z_us-a7f3.todo.json",
     });
   });
 
@@ -237,7 +276,37 @@ describe("TodoCard", () => {
     );
   });
 
-  test("inline TodoCard ignores tree-only keyboard chords", () => {
+  test("inline checkbox preserves dirty title before blur", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ filename: "20260522T110650Z_us-a7f3.todo.json" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const ev = makeTodo(
+      "20260522T110000Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "t1", title: "Old task", status: "open" },
+    );
+    render(<TodoCard event={ev} participants={PARTICIPANTS} />);
+    const title = screen.getByLabelText("Task title");
+    await user.clear(title);
+    await user.type(title, "Dirty task");
+
+    await user.click(screen.getByRole("button", { name: /Mark as done/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject(
+      {
+        id: "t1",
+        title: "Dirty task",
+        status: "done",
+      },
+    );
+  });
+
+  test("inline TodoCard prevents tree keyboard chords even when they are no-ops", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ filename: "20260522T110700Z_us-a7f3.todo.json" }),
     );
@@ -250,13 +319,88 @@ describe("TodoCard", () => {
     render(<TodoCard event={ev} participants={PARTICIPANTS} />);
     const title = screen.getByLabelText("Task title");
 
-    expect(fireEvent.keyDown(title, { key: "Tab", code: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(title, { key: "Tab", code: "Tab" })).toBe(false);
     expect(
       fireEvent.keyDown(title, { key: "ArrowDown", code: "ArrowDown" }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       fireEvent.keyDown(title, { key: "ArrowUp", code: "ArrowUp" }),
-    ).toBe(true);
+    ).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("inline TodoCard tabs a todo under the previous same-level item", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ filename: "20260522T110800Z_us-a7f3.todo.json" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const first = makeTodo(
+      "20260522T110000Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "first", title: "First task", status: "open" },
+    );
+    const second = makeTodo(
+      "20260522T110100Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "second", title: "Second task", status: "open" },
+    );
+    render(
+      <TodoCard
+        event={second}
+        participants={PARTICIPANTS}
+        allEvents={[first, second]}
+      />,
+    );
+    const title = screen.getByLabelText("Task title");
+
+    expect(fireEvent.keyDown(title, { key: "Tab", code: "Tab" })).toBe(false);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toMatchObject({
+      id: "second",
+      parent_id: "first",
+      title: "Second task",
+    });
+  });
+
+  test("inline TodoCard hides children of a removed parent", () => {
+    const parent = makeTodo(
+      "20260522T110000Z_us-a7f3.todo.json",
+      "us-a7f3",
+      { id: "parent", title: "Parent task", status: "open" },
+    );
+    const child = makeTodo(
+      "20260522T110100Z_us-a7f3.todo.json",
+      "us-a7f3",
+      {
+        id: "child",
+        title: "Child task",
+        status: "open",
+        parent_id: "parent",
+      },
+    );
+    const removedParent = makeTodo(
+      "20260522T110200Z_us-a7f3.todo.json",
+      "us-a7f3",
+      {
+        id: "parent",
+        title: "Parent task",
+        status: "removed",
+        supersedes: parent.filename,
+      },
+    );
+
+    const { container } = render(
+      <TodoCard
+        event={child}
+        participants={PARTICIPANTS}
+        allEvents={[parent, child, removedParent]}
+      />,
+    );
+
+    expect(container.querySelector(".todo-card")).toBeNull();
   });
 });

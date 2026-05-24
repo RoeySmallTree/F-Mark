@@ -27,7 +27,7 @@ describe("writeEventFile", () => {
         contents: "hello world",
       });
       expect(filename).toMatch(
-        new RegExp(`^\\d{8}T\\d{6}Z_${pid}\\.prose\\.md$`),
+        new RegExp(`^\\d{8}T\\d{6}\\.\\d{3}Z_${pid}\\.prose\\.md$`),
       );
       const txt = await readFile(join(p.sessionDir(session.id), filename), "utf8");
       expect(txt).toBe("hello world");

@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import type { Participant, TodoPayload, TodoTreeNode } from "@f-mark/shared";
-import { Check, CornerDownRight, Plus, X } from "lucide-react";
+import { Check, CircleDot, CornerDownRight, Plus, X } from "lucide-react";
 import { fieldValue, countDescendants } from "../panels/todoPanelUtils.js";
 import { whoOf } from "./format.js";
 
@@ -24,6 +24,11 @@ export interface TodoItemNode {
 
 export type TodoInputField = "title" | "body";
 
+export interface TodoItemValues {
+  title: string;
+  body: string;
+}
+
 export interface TodoInputRefs {
   title: HTMLInputElement;
   body: HTMLTextAreaElement;
@@ -35,10 +40,17 @@ interface TodoItemProps {
   participants: Record<string, Participant>;
   agentIds: string[];
   onUpdate: (patch: Partial<TodoPayload>) => Promise<void>;
-  onToggleDone: () => Promise<void>;
-  onRemove: (field?: TodoInputField) => Promise<void>;
-  onAddSubtask: () => Promise<void> | void;
-  onReassign: (participantId: string | null) => Promise<void>;
+  onToggleDone: (values: TodoItemValues) => Promise<void>;
+  onToggleWip: (values: TodoItemValues) => Promise<void>;
+  onRemove: (
+    field?: TodoInputField,
+    values?: TodoItemValues,
+  ) => Promise<void>;
+  onAddSubtask: (values: TodoItemValues) => Promise<void> | void;
+  onReassign: (
+    participantId: string | null,
+    values: TodoItemValues,
+  ) => Promise<void>;
   registerInputs?: (id: string, inputs: TodoInputRefs | null) => void;
   onIndent?: (
     field: TodoInputField,
@@ -81,6 +93,7 @@ export function TodoItem({
   agentIds: _agentIds,
   onUpdate,
   onToggleDone,
+  onToggleWip,
   onRemove,
   onAddSubtask,
   onReassign,
@@ -97,6 +110,7 @@ export function TodoItem({
   showAddSubtask = true,
 }: TodoItemProps): JSX.Element {
   const done = node.status === "done";
+  const wip = node.status === "wip";
   const [title, setTitle] = useState(fieldValue(node.title));
   const [body, setBody] = useState(fieldValue(node.body));
   const [assigneeOpen, setAssigneeOpen] = useState(false);
@@ -158,6 +172,18 @@ export function TodoItem({
     [participants],
   );
 
+  function currentValues(): TodoItemValues {
+    return { title, body };
+  }
+
+  function skipActiveInputBlurCommit(): void {
+    if (document.activeElement === titleRef.current) {
+      skipBlurCommitRef.current = "title";
+    } else if (document.activeElement === bodyRef.current) {
+      skipBlurCommitRef.current = "body";
+    }
+  }
+
   async function commitTitle(): Promise<void> {
     if (skipBlurCommitRef.current === "title") {
       skipBlurCommitRef.current = null;
@@ -184,12 +210,12 @@ export function TodoItem({
       setConfirmingRemove(true);
       return;
     }
-    await onRemove();
+    await onRemove(undefined, currentValues());
     setConfirmingRemove(false);
   }
 
   async function selectAssignee(participantId: string | null): Promise<void> {
-    await onReassign(participantId);
+    await onReassign(participantId, currentValues());
     setAssigneeOpen(false);
     assigneeButtonRef.current?.focus();
   }
@@ -217,14 +243,14 @@ export function TodoItem({
 
     if (event.key === "Enter" && isMod) {
       event.preventDefault();
-      void onToggleDone();
+      void onToggleDone(currentValues());
       return;
     }
 
     if (event.key === "Backspace" && isMod) {
       event.preventDefault();
       skipBlurCommitRef.current = field;
-      void onRemove(field);
+      void onRemove(field, currentValues());
       return;
     }
 
@@ -269,6 +295,7 @@ export function TodoItem({
       className={[
         "todo-item",
         done ? "done" : "",
+        wip ? "wip" : "",
         compact ? "compact" : "",
         draft ? "draft" : "",
       ]
@@ -276,6 +303,7 @@ export function TodoItem({
         .join(" ")}
       data-testid={`todo-item-${node.id}`}
       data-depth={depth}
+      data-status={node.status}
       data-draft={draft ? "true" : undefined}
       style={style}
       onKeyDown={onLocalKeyDown}
@@ -286,7 +314,8 @@ export function TodoItem({
           className={["todo-check", done ? "done" : ""].join(" ").trim()}
           aria-pressed={done}
           aria-label={done ? "Mark as open" : "Mark as done"}
-          onClick={() => void onToggleDone()}
+          onMouseDown={skipActiveInputBlurCommit}
+          onClick={() => void onToggleDone(currentValues())}
         >
           {done ? <Check size={12} strokeWidth={3.2} aria-hidden /> : null}
         </button>
@@ -313,6 +342,9 @@ export function TodoItem({
             onBlur={() => void commitBody()}
           />
           <div className="todo-meta">
+            {wip ? (
+              <span className="todo-status-pill wip">in progress</span>
+            ) : null}
             <div className="todo-assignee">
               <button
                 ref={assigneeButtonRef}
@@ -392,7 +424,8 @@ export function TodoItem({
                 className="todo-icon-btn"
                 aria-label={`Add subtask to ${titleLabel}`}
                 title="Add subtask"
-                onClick={() => void onAddSubtask()}
+                onMouseDown={skipActiveInputBlurCommit}
+                onClick={() => void onAddSubtask(currentValues())}
               >
                 <CornerDownRight size={13} aria-hidden />
                 <Plus size={12} aria-hidden />
@@ -400,9 +433,23 @@ export function TodoItem({
             ) : null}
             <button
               type="button"
+              className={["todo-icon-btn", "todo-wip-btn", wip ? "active" : ""]
+                .filter(Boolean)
+                .join(" ")}
+              aria-pressed={wip}
+              aria-label={wip ? "Mark as open" : "Mark as in progress"}
+              title={wip ? "Mark as open" : "Mark as in progress"}
+              onMouseDown={skipActiveInputBlurCommit}
+              onClick={() => void onToggleWip(currentValues())}
+            >
+              <CircleDot size={13} aria-hidden />
+            </button>
+            <button
+              type="button"
               className="todo-icon-btn danger"
               aria-label={`Remove task ${titleLabel}`}
               title="Remove"
+              onMouseDown={skipActiveInputBlurCommit}
               onClick={() => void remove()}
             >
               <X size={13} aria-hidden />

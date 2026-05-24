@@ -90,6 +90,25 @@ describe("/ws/pane endpoint", () => {
     }
   });
 
+  it("resizes before capturing the initial snapshot when cols/rows are provided", async () => {
+    const { app, tmux, port } = await makeApp();
+    try {
+      const ws = new WebSocket(
+        `ws://localhost:${port}/ws/pane?session=fmark-x&cols=132&rows=41`,
+      );
+      await new Promise<void>((resolve) => {
+        ws.on("message", () => resolve());
+      });
+      expect(tmux.calls.slice(0, 2)).toEqual([
+        { method: "resize", args: ["fmark-x", 132, 41] },
+        { method: "captureSnapshot", args: ["fmark-x"] },
+      ]);
+      ws.close();
+    } finally {
+      await app.close();
+    }
+  });
+
   it("forwards pane.input to tmux.sendLiteralText", async () => {
     const { app, tmux, port } = await makeApp();
     try {

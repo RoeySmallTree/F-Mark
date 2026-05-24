@@ -62,12 +62,13 @@ export function activeFilterCount(filter: LogFilter): number {
 }
 
 /* Parse the event timestamp into a Date. Events use the compact
-   "20260522T101530Z" form (see filenames.ts in shared). */
+   "20260522T101530Z" (second precision) or "20260522T101530.123Z"
+   (millisecond precision) form — see filenames.ts in shared. */
 export function parseEventTimestamp(ts: string): Date | null {
   let iso = ts;
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(ts);
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\.\d{3})?Z$/.exec(ts);
   if (m !== null) {
-    iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`;
+    iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7] ?? ""}Z`;
   }
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;

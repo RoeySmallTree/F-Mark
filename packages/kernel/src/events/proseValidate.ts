@@ -24,7 +24,7 @@ export interface ValidateInput {
 export type ValidateResult = { ok: true } | { ok: false; error: string };
 
 export const EVENT_FILENAME_RE =
-  /^\d{8}T\d{6}Z_(?:us|ag|sys|grp)-[a-z0-9-]{2,12}\.[a-z-]+(?:\.[a-z0-9]+)?$/;
+  /^\d{8}T\d{6}(?:\.\d{3})?Z_(?:us|ag|sys|grp)-[a-z0-9-]{2,12}\.[a-z-]+(?:\.[a-z0-9]+)?$/;
 
 /** Shared `append_to` shape check for non-prose routes. Non-prose
  *  payloads have no `mode`/`lines`/`target`/`name`-vs-append_to rules to

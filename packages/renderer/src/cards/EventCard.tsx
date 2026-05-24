@@ -15,7 +15,7 @@
      flow                           → FlowCard
 */
 
-import { type JSX } from "react";
+import { type JSX, lazy, Suspense } from "react";
 import type {
   AnyEventRecord,
   Participant,
@@ -31,7 +31,12 @@ import { TodoCard } from "./TodoCard.js";
 import { FileCard } from "./FileCard.js";
 import { ToolUseCard } from "./ToolUseCard.js";
 import { TurnEndDivider } from "./TurnEndDivider.js";
-import { FlowCard } from "./FlowCard.js";
+/* FlowCard pulls @xyflow/react (~250 KB) + dagre (~150 KB). Lazy-load so
+   the main bundle stays slim — flow events are uncommon and the feed
+   already renders incrementally. */
+const FlowCard = lazy(() =>
+  import("./FlowCard.js").then((m) => ({ default: m.FlowCard })),
+);
 
 interface Props {
   event: AnyEventRecord;
@@ -145,7 +150,11 @@ export function EventCard({
     return <TurnEndDivider event={event} participants={participants} />;
   }
   if (event.kind === "flow") {
-    return <FlowCard event={event} participants={participants} />;
+    return (
+      <Suspense fallback={<div className="flow-card" data-event-kind="flow" />}>
+        <FlowCard event={event} participants={participants} />
+      </Suspense>
+    );
   }
   return null;
 }

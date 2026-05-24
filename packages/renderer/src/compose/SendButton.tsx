@@ -1,30 +1,53 @@
-/* SendButton — the primary action at the right edge of the compose row.
+/* PrimaryAction — the single morphing action button on the right side of
+   the compose stage. Replaces the prior Send | End-turn cluster.
 
-   Design: a single bordered "send-cluster" pill that always presents the
-   user's act-of-finishing as one confident control. The cluster has two
-   slots:
-     - Send (left)      — only visible when textarea has content.
-     - End turn (right) — always visible.
+   One slot, four labels. The slot never grows or shrinks: all four labels
+   live in the same grid cell, sized to the longest, and crossfade between
+   each other on state change. No layout shifts.
 
-   Mode behavior:
-     - comment            → [Post comment]                       (single button, no cluster)
-     - named              → [End turn]                           (single button, no cluster)
-     - message + content  → [Send  ⌘↵ | End turn]                (cluster, both slots)
-     - message + empty    → [End turn]                           (cluster, single slot)
-*/
+   State derivation (priority order):
+     - Agent's turn (any agent online/stale + currentTurn === "ag")
+         → "Stop run"  · click = onInterrupt
+     - mode === "comment"
+         → "Post comment"  · click = onSubmit  · disabled if !canSubmit
+     - mode === "message" && hasContent
+         → "Send"  · click = onSubmit  · disabled if !canSubmit
+     - mode === "named"
+         → "End turn"  · click = onSubmit  · disabled if !canSubmit
+     - otherwise (mode === "message" empty)
+         → "End turn"  · click = onEndTurn  · always enabled when not busy
+
+   The "Stop run" state recolors the button to the agent palette so the
+   user immediately recognizes it's no longer the same action — a quiet
+   amber tint, not a loud red alarm. F-Mark stays calm even when
+   interrupting. */
 
 import { type JSX } from "react";
-import { CornerDownLeft } from "lucide-react";
-import { readEnterToSend } from "../state/settings.js";
-import { chordToLabel } from "../modals/settings/shortcut-registry.js";
+import { CornerDownLeft, Square } from "lucide-react";
+
+type Kind = "stop" | "send" | "post-comment" | "end-turn";
 
 interface Props {
   mode: "message" | "named" | "comment";
   canSubmit: boolean;
   busy: boolean;
   hasContent: boolean;
+  isAgentTurn: boolean;
   onSubmit(): void;
   onEndTurn(): void;
+  onInterrupt(): void;
+}
+
+function deriveKind(
+  mode: Props["mode"],
+  hasContent: boolean,
+  isAgentTurn: boolean,
+): Kind {
+  if (isAgentTurn) return "stop";
+  if (mode === "comment") return "post-comment";
+  if (mode === "message" && hasContent) return "send";
+  if (mode === "named") return "end-turn";
+  return "end-turn";
 }
 
 export function SendButton({
@@ -32,79 +55,82 @@ export function SendButton({
   canSubmit,
   busy,
   hasContent,
+  isAgentTurn,
   onSubmit,
   onEndTurn,
+  onInterrupt,
 }: Props): JSX.Element {
-  const enterToSend = readEnterToSend();
-  const sendShortcut = enterToSend ? "↵" : chordToLabel("$mod+Enter");
+  const kind = deriveKind(mode, hasContent, isAgentTurn);
 
-  if (mode === "comment") {
-    return (
-      <button
-        type="button"
-        className="send-btn standalone"
-        onClick={onSubmit}
-        disabled={busy || !canSubmit}
-        aria-label="Post comment"
-      >
-        Post comment
-        <span className="kbd">{sendShortcut}</span>
-      </button>
-    );
+  /* Disabled per kind. Stop is always clickable while agent is running.
+     End-turn is clickable unless we're mid-request. The submit kinds
+     (send / post-comment / named end-turn) gate on canSubmit. */
+  const disabled =
+    kind === "stop"
+      ? false
+      : kind === "end-turn" && mode === "message"
+        ? busy
+        : busy || !canSubmit;
+
+  const ariaLabel =
+    kind === "stop"
+      ? "Stop run — interrupt all agents"
+      : kind === "send"
+        ? "Send message"
+        : kind === "post-comment"
+          ? "Post comment"
+          : mode === "named"
+            ? "End turn with named contribution"
+            : "End turn";
+
+  function handleClick(): void {
+    if (kind === "stop") return onInterrupt();
+    if (kind === "send" || kind === "post-comment") return onSubmit();
+    if (mode === "named") return onSubmit();
+    return onEndTurn();
   }
 
-  if (mode === "named") {
-    return (
-      <button
-        type="button"
-        className="send-btn standalone"
-        onClick={onSubmit}
-        disabled={busy || !canSubmit}
-        aria-label="End turn with named contribution"
-      >
-        End turn
-        <CornerDownLeft size={14} aria-hidden />
-        <span className="kbd">{sendShortcut}</span>
-      </button>
-    );
-  }
-
-  /* message mode → cluster with Send (when content) + End-turn (always). */
-  const sendDisabled = busy || !canSubmit;
   return (
-    <div
-      className={`send-cluster${hasContent ? " has-send" : " empty"}`}
-      role="group"
-      aria-label="Send and end-turn actions"
+    <button
+      type="button"
+      className={`primary-action is-${kind}`}
+      onClick={handleClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      data-state={kind}
     >
-      {hasContent && (
-        <button
-          type="button"
-          className="send-btn send-cluster-send"
-          onClick={onSubmit}
-          disabled={sendDisabled}
-          aria-label="Send message"
-        >
-          Send
-          <CornerDownLeft size={13} aria-hidden className="send-cluster-icon" />
-          <span className="kbd">{sendShortcut}</span>
-        </button>
-      )}
-      <button
-        type="button"
-        className="end-turn-btn"
-        onClick={onEndTurn}
-        disabled={busy}
-        aria-label="End turn"
-        title={
-          hasContent
-            ? "End turn without sending"
-            : "End your turn without posting anything"
-        }
-      >
-        End turn
-      </button>
-    </div>
+      <Label active={kind === "stop"}>
+        <Square size={12} aria-hidden fill="currentColor" />
+        <span>Stop run</span>
+      </Label>
+      <Label active={kind === "send"}>
+        <span>Send</span>
+        <CornerDownLeft size={13} aria-hidden className="action-arrow" />
+      </Label>
+      <Label active={kind === "post-comment"}>
+        <span>Post comment</span>
+      </Label>
+      <Label active={kind === "end-turn"}>
+        <span>End turn</span>
+        <CornerDownLeft size={13} aria-hidden />
+      </Label>
+    </button>
   );
 }
 
+function Label({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <span
+      className={`primary-action__label${active ? " is-active" : ""}`}
+      aria-hidden={!active}
+    >
+      {children}
+    </span>
+  );
+}

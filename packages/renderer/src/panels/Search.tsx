@@ -161,11 +161,11 @@ export function Search(): JSX.Element {
             No results.
           </p>
         ) : null}
-        {hits.map((hit) => (
+        {hits.map((hit, idx) => (
           <div
             key={`${hit.session_id}:${hit.event.filename}`}
-            className="session-item"
-            style={{ padding: "8px 10px" }}
+            className="session-item staggered-row"
+            style={{ padding: "8px 10px", ["--i" as string]: Math.min(idx, 5) }}
           >
             <div className="row1">
               <span className="slug">{hit.event.kind}</span>

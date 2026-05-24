@@ -230,6 +230,148 @@ describe("GET /sessions/:id/todos", () => {
     });
   });
 
+  it("annotates viewer ownership without hiding other todos", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const owner = await registerAgent(p, { name: "Owner" });
+      const other = await registerAgent(p, { name: "Other" });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "owned-parent",
+          title: "Owned parent",
+          body: "Parent description for the model",
+          status: "open",
+          assigned_to: owner.id,
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "other-child",
+          title: "Other child",
+          body: "Child description for the model",
+          status: "open",
+          assigned_to: other.id,
+          parent_id: "owned-parent",
+        },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/todo`,
+        payload: {
+          participant_id: pid,
+          id: "unassigned",
+          title: "Unassigned",
+          status: "wip",
+        },
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/todos?viewer=${owner.id}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.viewer).toBe(owner.id);
+      expect(body.open).toHaveLength(2);
+      expect(body.wip).toHaveLength(1);
+
+      const parent = body.tree.find(
+        (todo: { id: string }) => todo.id === "owned-parent",
+      );
+      expect(parent).toMatchObject({
+        id: "owned-parent",
+        body: "Parent description for the model",
+        owned_by_viewer: true,
+        ownership: "owned",
+      });
+      expect(parent.children[0]).toMatchObject({
+        id: "other-child",
+        body: "Child description for the model",
+        assigned_to: other.id,
+        owned_by_viewer: false,
+        ownership: "NOT owned",
+      });
+      expect(body.wip[0]).toMatchObject({
+        id: "unassigned",
+        owned_by_viewer: false,
+        ownership: "NOT owned",
+      });
+      await app.close();
+    });
+  });
+
+  it("groups tree siblings by status and then assignee", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const owner = await registerAgent(p, {
+        name: "Owner",
+        suggested_id: "ag-alpha",
+      });
+      const other = await registerAgent(p, {
+        name: "Other",
+        suggested_id: "ag-zulu",
+      });
+      const todos = [
+        {
+          id: "open-other",
+          title: "Open other",
+          status: "open",
+          assigned_to: other.id,
+        },
+        {
+          id: "done-owner",
+          title: "Done owner",
+          status: "done",
+          assigned_to: owner.id,
+        },
+        {
+          id: "wip-other",
+          title: "WIP other",
+          status: "wip",
+          assigned_to: other.id,
+        },
+        {
+          id: "open-owner",
+          title: "Open owner",
+          status: "open",
+          assigned_to: owner.id,
+        },
+      ];
+      for (const todo of todos) {
+        await app.inject({
+          method: "POST",
+          url: `/sessions/${sessionId}/events/todo`,
+          payload: {
+            participant_id: pid,
+            ...todo,
+          },
+        });
+      }
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/todos`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.tree.map((todo: { id: string }) => todo.id)).toEqual([
+        "wip-other",
+        "open-owner",
+        "open-other",
+        "done-owner",
+      ]);
+      await app.close();
+    });
+  });
+
   it("cascades removed status to transitive descendants", async () => {
     await withTempProject(async (root) => {
       const { app, sessionId, pid } = await setup(root);

@@ -148,6 +148,16 @@ export function registerPaneWebSocket(
 
       // Send initial snapshot.
       try {
+        const cols = Number(url.searchParams.get("cols"));
+        const rows = Number(url.searchParams.get("rows"));
+        if (
+          Number.isInteger(cols) &&
+          Number.isInteger(rows) &&
+          cols >= 20 &&
+          rows >= 5
+        ) {
+          await tmux.resize(paneId, cols, rows);
+        }
         const snapshot = await tmux.captureSnapshot(paneId);
         socket.send(JSON.stringify({ type: "pane.snapshot", data: snapshot }));
       } catch (e: any) {

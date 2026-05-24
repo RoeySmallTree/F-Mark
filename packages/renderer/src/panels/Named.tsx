@@ -60,7 +60,7 @@ export function Named(): JSX.Element {
             No named contributions yet.
           </p>
         ) : (
-          namedEvents.map((ev) => {
+          namedEvents.map((ev, idx) => {
             const payload = ev.payload as ProsePayload;
             const author = participants[ev.participant_id]?.name ?? ev.participant_id;
             return (
@@ -68,8 +68,8 @@ export function Named(): JSX.Element {
                 key={ev.filename}
                 role="button"
                 tabIndex={0}
-                className="session-item"
-                style={{ padding: "10px 8px" }}
+                className="session-item staggered-row"
+                style={{ padding: "10px 8px", ["--i" as string]: Math.min(idx, 5) }}
                 onClick={() => jumpTo(ev.filename)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {

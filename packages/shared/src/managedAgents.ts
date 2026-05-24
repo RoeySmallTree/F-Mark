@@ -43,7 +43,10 @@ export interface SpawnResponse {
   participant_id: string;
   tmux_session: string;
   runtime_id: string;
-  hooks_status?: "installed" | "missing" | "unknown";
+  /* Session this agent was bound to at spawn time (the spawn request's
+     `session_id`). Null when spawn was called without a session_id. */
+  active_session: string | null;
+  hooks_status?: "installed" | "missing" | "not_required" | "unknown";
 }
 
 export interface ManagedAgentsListResponse {
@@ -83,6 +86,10 @@ export interface ManagedAgentSpawnedMessage {
   participant_id: string;
   tmux_session: string;
   runtime_id: string;
+  /* Session the spawned agent is bound to. Null when spawn was called
+     without a session_id. Renderer uses this to upsert the participant's
+     active_session in the store on cross-tab spawn broadcasts. */
+  active_session: string | null;
 }
 
 export interface ManagedAgentKilledMessage {

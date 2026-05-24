@@ -8,7 +8,7 @@ import { withTempProject } from "./helpers/tempdir.js";
 import { WebSocket } from "ws";
 
 describe("websocket /ws", () => {
-  it("broadcasts event_added on prose POST", async () => {
+  it("broadcasts event_added exactly once on prose POST", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -19,26 +19,22 @@ describe("websocket /ws", () => {
       const address = app.server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-      const message = new Promise<unknown>((resolve, reject) => {
-        ws.on("message", (data) => resolve(JSON.parse(data.toString())));
-        ws.on("error", reject);
-      });
+      const messages: { type: string; kind?: string; session_id?: string }[] =
+        [];
+      ws.on("message", (data) => messages.push(JSON.parse(data.toString())));
       await new Promise<void>((resolve) => ws.once("open", () => resolve()));
       await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
         payload: { participant_id: pid, content: "hello" },
       });
-      const event = (await message) as {
-        type: string;
-        session_id: string;
-        kind: string;
-        participant_id: string;
-        filename: string;
-      };
-      expect(event.type).toBe("event_added");
-      expect(event.session_id).toBe(session.id);
-      expect(event.kind).toBe("prose");
+      // Collect for a window long enough that any stray duplicate publisher
+      // (e.g. the legacy chokidar watcher) would have surfaced.
+      await new Promise((r) => setTimeout(r, 300));
+      const added = messages.filter((m) => m.type === "event_added");
+      expect(added).toHaveLength(1);
+      expect(added[0].session_id).toBe(session.id);
+      expect(added[0].kind).toBe("prose");
       ws.close();
       await app.close();
     });

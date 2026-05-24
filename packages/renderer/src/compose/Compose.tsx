@@ -6,14 +6,12 @@
    Modes (from store.composeMode):
      - message  → POST prose { participant_id, content }
      - named    → POST prose { participant_id, content, name }
-     - comment  → POST prose { participant_id, content, target }, clears target
 
    Hotkeys (via useHotkeys):
-     - $mod+/    → toggle comment (only if a target is set; otherwise toggle Message)
      - $mod+n    → toggle named
      - $mod+p    → open the ⚡ Presets popover anchored at the presets button
      - $mod+enter→ submit the active mode
-     - escape    → clear commentTarget if set; else blur textarea
+     - escape    → blur textarea
 */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
@@ -27,24 +25,18 @@ import {
   writeMessageEndsTurn,
 } from "../state/settings.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
-import { ModeBar } from "./ModeBar.js";
-import { NameInput } from "./NameInput.js";
-import { TargetPill } from "./TargetPill.js";
+import { NameChip } from "./NameChip.js";
 import { SendButton } from "./SendButton.js";
 import { CreateTodoPopover } from "./CreateTodoPopover.js";
 import { PresetsPopover } from "../popovers/PresetsPopover.js";
-import { Zap, Sparkles, Link2, Unlink2, ListChecks, Settings2 } from "lucide-react";
+import { Zap, Sparkles, ListChecks, Settings2 } from "lucide-react";
 import { ComposeSettingsPopover } from "./ComposeSettingsPopover.js";
 
 const NAMED_SHORTCUT = chordToLabel("$mod+N");
 const PRESETS_SHORTCUT = chordToLabel("$mod+P");
 const SKILLS_SHORTCUT = chordToLabel("$mod+Shift+K");
 
-function placeholderFor(
-  mode: "message" | "named" | "comment",
-  hasTarget: boolean,
-): string {
-  if (mode === "comment" || hasTarget) return "Write your comment…";
+function placeholderFor(mode: "message" | "named"): string {
   if (mode === "named") return "Write the contribution content…";
   return `Write a message or ${NAMED_SHORTCUT} to name a contribution…`;
 }
@@ -55,8 +47,6 @@ export function Compose(): JSX.Element {
   const userId = useStore((s) => s.currentUserId);
   const mode = useStore((s) => s.composeMode);
   const setMode = useStore((s) => s.setComposeMode);
-  const commentTarget = useStore((s) => s.commentTarget);
-  const setCommentTarget = useStore((s) => s.setCommentTarget);
   const composeDraft = useStore((s) => s.composeDraft);
   const setComposeDraft = useStore((s) => s.setComposeDraft);
   const openPopover = useStore((s) => s.openPopover);
@@ -90,16 +80,21 @@ export function Compose(): JSX.Element {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const [createTodoAnchorRect, setCreateTodoAnchorRect] =
     useState<DOMRect | null>(null);
+  const activeMode: "message" | "named" =
+    mode === "named" ? "named" : "message";
+
+  useEffect(() => {
+    if (mode === "comment") setMode("message");
+  }, [mode, setMode]);
 
   // canSubmit mirrors legacy Composer.
   const canSubmit = useMemo(() => {
     if (sessionId === null) return false;
     if (userId === null) return false;
     if (content.trim().length === 0) return false;
-    if (mode === "named" && name.trim().length === 0) return false;
-    if (mode === "comment" && commentTarget === null) return false;
+    if (activeMode === "named" && name.trim().length === 0) return false;
     return true;
-  }, [sessionId, userId, content, mode, name, commentTarget]);
+  }, [sessionId, userId, content, activeMode, name]);
 
   const submit = useCallback(async (): Promise<void> => {
     if (!canSubmit || sessionId === null || userId === null) return;
@@ -110,24 +105,11 @@ export function Compose(): JSX.Element {
         participant_id: string;
         content: string;
         name?: string;
-        append_to?: string;
-        mode?: "content" | "comment";
-        lines?: [number, number];
       } = { participant_id: userId, content };
-      if (mode === "named") body.name = name.trim();
-      if (mode === "comment" && commentTarget !== null) {
-        /* Composable-prose Phase 2: POST comments in the new shape
-           (append_to + mode: "comment" + lines?) instead of legacy
-           `target`. The kernel still accepts legacy `target` and
-           normalises it on the way in. */
-        body.append_to = commentTarget.file;
-        body.mode = "comment";
-        if (commentTarget.lines !== undefined) body.lines = commentTarget.lines;
-      }
+      if (activeMode === "named") body.name = name.trim();
       await client.postProse(sessionId, body);
       setContent("");
-      if (mode === "named") setName("");
-      if (mode === "comment") setCommentTarget(null);
+      if (activeMode === "named") setName("");
     } finally {
       setBusy(false);
     }
@@ -136,11 +118,9 @@ export function Compose(): JSX.Element {
     sessionId,
     userId,
     token,
-    mode,
+    activeMode,
     content,
     name,
-    commentTarget,
-    setCommentTarget,
   ]);
 
   const endTurn = useCallback(async (): Promise<void> => {
@@ -155,18 +135,18 @@ export function Compose(): JSX.Element {
      turn-end before its contribution. */
   const submitAndMaybeEndTurn = useCallback(async (): Promise<void> => {
     await submit();
-    if (mode === "message" && messageEndsTurn) {
+    if (activeMode === "message" && messageEndsTurn) {
       await endTurn();
     }
-  }, [submit, endTurn, mode, messageEndsTurn]);
+  }, [submit, endTurn, activeMode, messageEndsTurn]);
 
   const sendOrEndTurn = useCallback(async (): Promise<void> => {
-    if (mode === "message" && !canSubmit) {
+    if (activeMode === "message" && !canSubmit) {
       await endTurn();
       return;
     }
     await submitAndMaybeEndTurn();
-  }, [mode, canSubmit, endTurn, submitAndMaybeEndTurn]);
+  }, [activeMode, canSubmit, endTurn, submitAndMaybeEndTurn]);
 
   /* openPresets — anchor the presets popover under the ⚡ button. Called
      by the button click handler and by the $mod+P hotkey. Reads the current
@@ -199,7 +179,7 @@ export function Compose(): JSX.Element {
     setCreateTodoAnchorRect(null);
   }, []);
 
-  const createTodoEndsTurn = mode === "message" && messageEndsTurn;
+  const createTodoEndsTurn = activeMode === "message" && messageEndsTurn;
 
   const handleCreateTodoCreated = useCallback(async (): Promise<void> => {
     if (createTodoEndsTurn) {
@@ -208,10 +188,6 @@ export function Compose(): JSX.Element {
   }, [createTodoEndsTurn, endTurn]);
 
   const handleEscape = useCallback((): boolean => {
-    if (commentTarget !== null) {
-      setCommentTarget(null);
-      return true;
-    }
     if (
       textareaRef.current !== null &&
       document.activeElement === textareaRef.current
@@ -220,22 +196,13 @@ export function Compose(): JSX.Element {
       return true;
     }
     return false;
-  }, [commentTarget, setCommentTarget]);
+  }, []);
 
   // Hotkey map — stable per-render via dependency-aware memo.
   const hotkeyMap = useMemo<HotkeyMap>(
     () => ({
-      "$mod+/": () => {
-        // Per spec: toggle comment mode if a target is set; otherwise force
-        // back to Message (you can't comment without a target).
-        if (commentTarget !== null) {
-          setMode(mode === "comment" ? "message" : "comment");
-        } else {
-          setMode("message");
-        }
-      },
       "$mod+n": () => {
-        setMode(mode === "named" ? "message" : "named");
+        setMode(activeMode === "named" ? "message" : "named");
       },
       "$mod+p": () => {
         openPresets();
@@ -252,8 +219,7 @@ export function Compose(): JSX.Element {
       },
     }),
     [
-      mode,
-      commentTarget,
+      activeMode,
       setMode,
       openPresets,
       openModal,
@@ -293,12 +259,6 @@ export function Compose(): JSX.Element {
     });
   }, [composeDraft, setComposeDraft]);
 
-  // When commentTarget appears, the store also sets mode='comment' (see
-  // store.setCommentTarget). When it's cleared by escape we leave mode alone;
-  // it will return to 'message' on next composeMode update by ModeBar.
-
-  // Auto-grow the textarea up to its max-height (140px from CSS).
-
   // Auto-grow the textarea up to its max-height (140px from CSS).
   useLayoutEffect(() => {
     const ta = textareaRef.current;
@@ -306,7 +266,7 @@ export function Compose(): JSX.Element {
     ta.style.height = "24px";
     const next = Math.min(ta.scrollHeight, 140);
     ta.style.height = `${next}px`;
-  }, [content, mode]);
+  }, [content, activeMode]);
 
   function onTextareaKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === "Escape" && handleEscape()) {
@@ -322,16 +282,21 @@ export function Compose(): JSX.Element {
     }
   }
 
+  const onCancelName = useCallback((): void => {
+    setMode("message");
+    setName("");
+  }, [setMode]);
+
   return (
     <div className="compose-inner">
-      {commentTarget !== null && (
-        <TargetPill
-          target={commentTarget}
-          onClose={() => setCommentTarget(null)}
+      {(content.length > 0 || activeMode === "named") && (
+        <NameChip
+          active={activeMode === "named"}
+          value={name}
+          onChange={setName}
+          onActivate={() => setMode("named")}
+          onCancel={onCancelName}
         />
-      )}
-      {mode === "named" && (
-        <NameInput value={name} onChange={setName} />
       )}
       <div className="compose-box">
         <textarea
@@ -339,61 +304,66 @@ export function Compose(): JSX.Element {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={onTextareaKey}
-          placeholder={placeholderFor(mode, commentTarget !== null)}
-          rows={mode === "named" ? 4 : 1}
+          placeholder={placeholderFor(activeMode)}
+          rows={activeMode === "named" ? 4 : 1}
           aria-label="Compose message"
         />
         <div className="compose-actions">
-          {/* Zone 1 — mode setters (Name it · Comment). */}
-          <div className="compose-zone compose-zone-modes">
-            <ModeBar />
-          </div>
-          
-          <div className="dock-divider" />
-
-          {/* Zone 2 — augment launchers (Presets · Skills). */}
-          <div className="compose-zone compose-zone-augments">
-            <button
-              ref={presetsBtnRef}
-              type="button"
-              className="mode-btn"
-              onClick={openPresets}
-              aria-label="Open presets"
-              title={`Open presets (${PRESETS_SHORTCUT})`}
-            >
-              <Zap size={14} aria-hidden />
-              <span className="dock-label">Presets</span>
-            </button>
-            <button
-              type="button"
-              className="mode-btn"
-              onClick={() => {
-                closeCreateTodo();
-                openModal("skills");
-              }}
-              aria-label="Open skills palette"
-              title={`Open skills palette (${SKILLS_SHORTCUT})`}
-            >
-              <Sparkles size={14} aria-hidden />
-              <span className="dock-label">Skills</span>
-            </button>
-            <button
-              ref={createTodoBtnRef}
-              type="button"
-              className="mode-btn"
-              onClick={openCreateTodo}
-              aria-label="Open create todo"
-              title="Create Todo"
-            >
-              <ListChecks size={14} aria-hidden />
-              <span className="dock-label">Task</span>
-            </button>
+          {/* Row 1 — primary stage: the morphing primary action, centered.
+              The Name-it affordance now lives as a chip above the textarea. */}
+          <div className="compose-actions-row compose-actions-primary">
+            <SendButton
+              mode={activeMode}
+              canSubmit={canSubmit}
+              busy={busy}
+              hasContent={content.trim().length > 0}
+              isAgentTurn={false}
+              onSubmit={() => void submitAndMaybeEndTurn()}
+              onEndTurn={() => void endTurn()}
+              onInterrupt={() => {}}
+            />
           </div>
 
-          <div className="dock-spacer" />
-
-          {/* Zone 3 — primary action: optional ends-turn chip + Send cluster. */}
-          <div className="compose-zone compose-zone-act">
+          {/* Row 2 — augment launchers (Presets · Skills · Task) on the left,
+              compose-settings toggle on the right (space-between). */}
+          <div className="compose-actions-row compose-actions-secondary">
+            <div className="compose-zone compose-zone-augments">
+              <button
+                ref={presetsBtnRef}
+                type="button"
+                className="mode-btn"
+                onClick={openPresets}
+                aria-label="Open presets"
+                title={`Open presets (${PRESETS_SHORTCUT})`}
+              >
+                <Zap size={14} aria-hidden />
+                <span className="dock-label">Presets</span>
+              </button>
+              <button
+                type="button"
+                className="mode-btn"
+                onClick={() => {
+                  closeCreateTodo();
+                  openModal("skills");
+                }}
+                aria-label="Open skills palette"
+                title={`Open skills palette (${SKILLS_SHORTCUT})`}
+              >
+                <Sparkles size={14} aria-hidden />
+                <span className="dock-label">Skills</span>
+              </button>
+              <button
+                ref={createTodoBtnRef}
+                type="button"
+                className="mode-btn"
+                onClick={openCreateTodo}
+                aria-label="Open create todo"
+                title="Create Todo"
+              >
+                <ListChecks size={14} aria-hidden />
+                <span className="dock-label">Task</span>
+              </button>
+            </div>
             <button
               ref={settingsBtnRef}
               type="button"
@@ -404,16 +374,6 @@ export function Compose(): JSX.Element {
             >
               <Settings2 size={14} aria-hidden />
             </button>
-            <SendButton
-              mode={mode}
-              canSubmit={canSubmit}
-              busy={busy}
-              hasContent={content.trim().length > 0}
-              isAgentTurn={false}
-              onSubmit={() => void submitAndMaybeEndTurn()}
-              onEndTurn={() => void endTurn()}
-              onInterrupt={() => {}}
-            />
           </div>
         </div>
       </div>

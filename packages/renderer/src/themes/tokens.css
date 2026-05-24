@@ -31,6 +31,20 @@
   --radius-lg: 10px;
   --radius-pill: 999px;
   --border-w: 1px;
+
+  /* Motion tokens — durations + easings. Use across all enter/exit/transition
+     rules. Reduced-motion override lives in styles.css; nothing here needs
+     to be aware of it. */
+  --dur-instant: 120ms;
+  --dur-fast: 180ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --dur-stagger: 35ms;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-quart:  cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-inout:     cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 /* === THEME: terminal === */

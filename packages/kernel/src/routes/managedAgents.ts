@@ -312,18 +312,25 @@ export function registerManagedAgentsRoutes(
       // Detection failed — leave status "unknown" and presence untouched.
     }
 
+    // active-session was written above when body.session_id was provided;
+    // surface it on the response + broadcast so the renderer can scope the
+    // chip strip to the current session without a /participants refetch.
+    const activeSession = body.session_id ?? null;
+
     // Publish managed-agent.spawned for the renderer chip strip.
     bus.publish({
       type: "managed-agent.spawned",
       participant_id: participantId,
       tmux_session: sessionName,
       runtime_id,
+      active_session: activeSession,
     });
 
     return {
       participant_id: participantId,
       tmux_session: sessionName,
       runtime_id,
+      active_session: activeSession,
       hooks_status: hooksStatus,
     };
   });

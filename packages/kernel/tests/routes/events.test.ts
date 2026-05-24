@@ -430,7 +430,7 @@ describe("POST /sessions/:id/events/tool-use", () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.filename).toMatch(
-        new RegExp(`\\d{8}T\\d{6}Z_${pid}\\.tool-use\\.json$`),
+        new RegExp(`\\d{8}T\\d{6}\\.\\d{3}Z_${pid}\\.tool-use\\.json$`),
       );
       expect(body.kind).toBe("tool-use");
 

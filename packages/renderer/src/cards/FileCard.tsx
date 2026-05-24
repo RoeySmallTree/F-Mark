@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { Download, FileText, MessageSquare, Pencil, Save, X } from "lucide-react";
-import mammoth from "mammoth";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+/* mammoth (~400 KB) and xlsx (~600 KB) are loaded dynamically inside
+   their respective preview effects — same pattern as pptx-preview below.
+   Only the type is imported eagerly (erased at build time). */
+import type { WorkBook } from "xlsx";
 import type {
   AnyEventRecord,
   FilePreviewKind,
@@ -160,10 +162,13 @@ function DocxPreview({ url }: { url: string }): JSX.Element {
     setError(null);
     void (async () => {
       try {
-        const res = await fetch(url);
+        const [mammothMod, res] = await Promise.all([
+          import("mammoth"),
+          fetch(url),
+        ]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
-        const result = await mammoth.convertToHtml({ arrayBuffer });
+        const result = await mammothMod.default.convertToHtml({ arrayBuffer });
         if (!cancelled) setHtml(result.value);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -184,9 +189,13 @@ function DocxPreview({ url }: { url: string }): JSX.Element {
 }
 
 function XlsxPreview({ url }: { url: string }): JSX.Element {
-  const [book, setBook] = useState<XLSX.WorkBook | null>(null);
+  const [book, setBook] = useState<WorkBook | null>(null);
   const [sheetName, setSheetName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* xlsx is dynamically loaded, but `sheet_to_json` is called below during
+     render to derive `rows`. Stash the imported module so the render pass
+     can use it once the workbook is ready. */
+  const xlsxRef = useRef<typeof import("xlsx") | null>(null);
   useEffect(() => {
     if (url === "#") return;
     let cancelled = false;
@@ -195,11 +204,15 @@ function XlsxPreview({ url }: { url: string }): JSX.Element {
     setError(null);
     void (async () => {
       try {
-        const res = await fetch(url);
+        const [xlsxMod, res] = await Promise.all([
+          import("xlsx"),
+          fetch(url),
+        ]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
-        const nextBook = XLSX.read(arrayBuffer, { type: "array" });
+        const nextBook = xlsxMod.read(arrayBuffer, { type: "array" });
         if (!cancelled) {
+          xlsxRef.current = xlsxMod;
           setBook(nextBook);
           setSheetName(nextBook.SheetNames[0] ?? null);
         }
@@ -212,13 +225,13 @@ function XlsxPreview({ url }: { url: string }): JSX.Element {
     };
   }, [url]);
   if (error !== null) return <div className="file-preview-note">{error}</div>;
-  if (book === null || sheetName === null) {
+  if (book === null || sheetName === null || xlsxRef.current === null) {
     return <div className="file-preview-note">Loading workbook…</div>;
   }
   const sheet = book.Sheets[sheetName];
   const rows = sheet === undefined
     ? []
-    : XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false });
+    : xlsxRef.current.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false });
   return (
     <div>
       <div className="file-sheet-tabs" role="tablist" aria-label="Sheets">

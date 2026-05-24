@@ -32,11 +32,15 @@ type RowStatus =
   | { kind: "unknown" }
   | { kind: "loading" }
   | { kind: "installed"; configPath: string }
+  | { kind: "not-required"; configPath: string }
   | { kind: "partial"; configPath: string }
   | { kind: "missing"; configPath: string }
   | { kind: "error"; message: string };
 
-function classify(status: HookInstallStatus): RowStatus {
+function classify(runtimeId: string, status: HookInstallStatus): RowStatus {
+  if (runtimeId === "gemini" || status.expectedEntries.length === 0) {
+    return { kind: "not-required", configPath: status.configPath };
+  }
   if (status.installed) {
     return { kind: "installed", configPath: status.configPath };
   }
@@ -60,6 +64,10 @@ function StatusPill({ status }: { status: RowStatus }): JSX.Element {
       break;
     case "installed":
       label = "installed";
+      tone = "var(--green, var(--ink))";
+      break;
+    case "not-required":
+      label = "not required";
       tone = "var(--green, var(--ink))";
       break;
     case "partial":
@@ -127,7 +135,7 @@ export function HookStatusPanel({
         })
         .then((r) => {
           if (!alive) return;
-          setStatuses((cur) => ({ ...cur, [id]: classify(r) }));
+          setStatuses((cur) => ({ ...cur, [id]: classify(id, r) }));
         })
         .catch((err: unknown) => {
           if (!alive) return;
@@ -147,9 +155,8 @@ export function HookStatusPanel({
     <>
       <h3 className="settings-h">Hook status</h3>
       <div className="settings-sub">
-        Each runtime needs a Stop hook wired up so F-Mark can hear its
-        turn-ends. Use the install instructions to add it to the runtime's
-        config file.
+        Claude and Codex need Stop hooks so F-Mark can hear turn-ends.
+        Gemini uses manual-stream mode in v0.4, so it has no hook to install.
       </div>
 
       <div
@@ -181,6 +188,7 @@ export function HookStatusPanel({
             const status: RowStatus = statuses[id] ?? { kind: "unknown" };
             const hasParticipant =
               participant !== undefined && participant.length > 0;
+            const manualStreamMode = id === "gemini";
             return (
               <div
                 key={id}
@@ -239,7 +247,9 @@ export function HookStatusPanel({
                   disabled={!hasParticipant}
                   title={
                     hasParticipant
-                      ? "Show manual install steps"
+                      ? manualStreamMode
+                        ? "Show manual-stream note"
+                        : "Show manual install steps"
                       : "Register a participant for this runtime first"
                   }
                   onClick={() => {
@@ -248,7 +258,9 @@ export function HookStatusPanel({
                     }
                   }}
                 >
-                  Show install instructions
+                  {manualStreamMode
+                    ? "Show manual-stream note"
+                    : "Show install instructions"}
                 </button>
               </div>
             );

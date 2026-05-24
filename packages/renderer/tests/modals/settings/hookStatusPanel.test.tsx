@@ -34,6 +34,12 @@ const RUNTIMES: Record<string, RuntimeEntry> = {
     args: [],
     icon: "codex",
   },
+  gemini: {
+    displayName: "Gemini",
+    executable: "gemini",
+    args: [],
+    icon: "gemini",
+  },
 };
 
 function makeClient(
@@ -191,6 +197,30 @@ describe("HookStatusPanel", () => {
     await flush();
     const row = screen.getByTestId("hook-row-claude");
     expect(within(row).getByText(/not installed/i)).toBeInTheDocument();
+  });
+
+  it("shows Gemini as not required instead of not installed", async () => {
+    const client = makeClient({
+      installed: false,
+      configPath: "(manual-stream mode — no hooks needed in v0.4)",
+      detectedEntries: [],
+      expectedEntries: [],
+    });
+    render(
+      <HookStatusPanel
+        runtimes={{ gemini: RUNTIMES.gemini! }}
+        participantIdForRuntime={{ gemini: "ag-gemini" }}
+        userParticipantId="us-a7f3"
+        apiClient={client as never}
+        onShowInstructions={() => {}}
+      />,
+    );
+    await flush();
+    const row = screen.getByTestId("hook-row-gemini");
+    expect(within(row).getByText(/not required/i)).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: /manual-stream note/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows 'error' when the status fetch rejects", async () => {

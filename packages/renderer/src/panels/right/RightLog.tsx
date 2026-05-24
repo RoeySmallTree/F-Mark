@@ -110,8 +110,12 @@ function shortSummary(ev: AnyEventRecord): string {
     return `“${p.title ?? p.id ?? "html"}”`;
   }
   if (ev.kind === "file") {
-    const p = ev.payload as { path?: string; description?: string };
-    return p.description ?? p.path ?? "file";
+    const p = ev.payload as {
+      path?: string;
+      description?: string;
+      display_name?: string;
+    };
+    return p.description ?? p.display_name ?? p.path ?? "file";
   }
   return ev.kind;
 }
@@ -285,7 +289,7 @@ export function RightLog(): JSX.Element {
         </p>
       ) : (
         <div role="list" className="log-list">
-          {filtered.map((ev) => {
+          {filtered.map((ev, idx) => {
             const p = participants[ev.participant_id];
             const kind = p?.kind === "user" ? "user" : "agent";
             const initial = (p?.name[0] ?? "?").toUpperCase();
@@ -295,7 +299,8 @@ export function RightLog(): JSX.Element {
                 type="button"
                 role="listitem"
                 key={ev.filename}
-                className="log-row"
+                className="log-row staggered-row"
+                style={{ ["--i" as string]: Math.min(idx, 5) }}
                 data-event-filename={ev.filename}
                 data-event-kind={ev.kind}
                 onClick={() => jumpTo(ev.filename)}

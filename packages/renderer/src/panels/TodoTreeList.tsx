@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type JSX,
   useCallback,
   useEffect,
@@ -14,6 +15,7 @@ import {
   type TodoInputField,
   type TodoInputRefs,
   type TodoItemNode,
+  type TodoItemValues,
 } from "../cards/TodoItem.js";
 import { useStore } from "../state/store.js";
 import {
@@ -32,6 +34,7 @@ import {
   titleForPost,
 } from "./todoPanelUtils.js";
 import type { TodoListResponse } from "../api/client.js";
+import { whoOf } from "../cards/format.js";
 
 interface TodoTreeListProps {
   className?: string;
@@ -49,6 +52,36 @@ interface DraftTodo {
 type PendingFocus =
   | { kind: "todo"; id: string; field: TodoInputField }
   | { kind: "add-row" };
+
+type VisibleTodoStatus = TodoTreeNode["status"];
+
+const STATUS_FILTERS: Array<{
+  status: VisibleTodoStatus;
+  label: string;
+}> = [
+  { status: "open", label: "Open" },
+  { status: "wip", label: "In progress" },
+  { status: "done", label: "Done" },
+];
+
+const STATUS_GROUP_RANK: Record<VisibleTodoStatus, number> = {
+  wip: 0,
+  open: 1,
+  done: 2,
+};
+
+const STATUS_GROUP_LABEL: Record<VisibleTodoStatus, string> = {
+  wip: "In progress",
+  open: "Open",
+  done: "Done",
+};
+
+type StatusFilterState = Record<VisibleTodoStatus, boolean>;
+
+function depthOffset(depth: number): string {
+  if (depth <= 0) return "0px";
+  return `calc(${Array.from({ length: depth }, () => "var(--todo-indent-step)").join(" + ")})`;
+}
 
 function draftNode(draft: DraftTodo): TodoItemNode {
   const node: TodoItemNode = {
@@ -74,10 +107,69 @@ function nodeForItem(node: TodoTreeNode): TodoItemNode {
   };
 }
 
+function collectNodeMap(nodes: TodoTreeNode[]): Map<string, TodoTreeNode> {
+  const map = new Map<string, TodoTreeNode>();
+  const visit = (items: TodoTreeNode[]): void => {
+    for (const item of items) {
+      map.set(item.id, item);
+      visit(item.children);
+    }
+  };
+  visit(nodes);
+  return map;
+}
+
+function assigneeSortKey(
+  node: TodoTreeNode,
+  participants: Record<string, { name: string }>,
+): string {
+  if (node.assigned_to === undefined) return "\uffff";
+  return (
+    participants[node.assigned_to]?.name.toLocaleLowerCase() ??
+    node.assigned_to
+  );
+}
+
+function orderSiblings(
+  nodes: TodoTreeNode[],
+  participants: Record<string, { name: string }>,
+): TodoTreeNode[] {
+  return nodes
+    .map((node, index) => ({ node, index }))
+    .sort((a, b) => {
+      const status =
+        STATUS_GROUP_RANK[a.node.status] - STATUS_GROUP_RANK[b.node.status];
+      if (status !== 0) return status;
+      const assignee = assigneeSortKey(a.node, participants).localeCompare(
+        assigneeSortKey(b.node, participants),
+      );
+      if (assignee !== 0) return assignee;
+      return a.index - b.index;
+    })
+    .map(({ node }) => node);
+}
+
+function visibleOrderedTree(
+  nodes: TodoTreeNode[],
+  filters: StatusFilterState,
+  participants: Record<string, { name: string }>,
+): TodoTreeNode[] {
+  const visible: TodoTreeNode[] = [];
+  for (const node of orderSiblings(nodes, participants)) {
+    const children = visibleOrderedTree(node.children, filters, participants);
+    if (filters[node.status]) {
+      visible.push({ ...node, children });
+    } else {
+      visible.push(...children);
+    }
+  }
+  return visible;
+}
+
 export function TodoTreeList({
   className,
   compact = false,
-  showCounts = false,
+  showCounts = true,
 }: TodoTreeListProps): JSX.Element {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const token = useStore((s) => s.token);
@@ -89,6 +181,11 @@ export function TodoTreeList({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftTodo | null>(null);
+  const [statusFilters, setStatusFilters] = useState<StatusFilterState>({
+    open: true,
+    wip: true,
+    done: true,
+  });
   const [autoFirstTodoId, setAutoFirstTodoId] = useState<string | null>(null);
   const [latestOverrides, setLatestOverrides] = useState<Record<string, string>>(
     {},
@@ -98,9 +195,24 @@ export function TodoTreeList({
   const pendingFocusRef = useRef<PendingFocus | null>(null);
   const loadRequestRef = useRef(0);
   const loadedSessionIdRef = useRef<string | null>(null);
+  const currentSessionIdRef = useRef<string | null>(currentSessionId);
+
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+    setDraft(null);
+    setAutoFirstTodoId(null);
+    setLatestOverrides({});
+    inputRefs.current.clear();
+    pendingFocusRef.current = null;
+  }, [currentSessionId]);
 
   const agentIds = useMemo(() => getAgentIds(participants), [participants]);
-  const flat = useMemo(() => flattenTree(todos.tree), [todos.tree]);
+  const allNodeById = useMemo(() => collectNodeMap(todos.tree), [todos.tree]);
+  const visibleTree = useMemo(
+    () => visibleOrderedTree(todos.tree, statusFilters, participants),
+    [todos.tree, statusFilters, participants],
+  );
+  const flat = useMemo(() => flattenTree(visibleTree), [visibleTree]);
   const flatById = useMemo(
     () => new Map(flat.map((item) => [item.id, item])),
     [flat],
@@ -116,31 +228,48 @@ export function TodoTreeList({
 
   const loadTodos = useCallback(async (): Promise<void> => {
     const requestId = ++loadRequestRef.current;
-    if (currentSessionId === null) {
-      if (requestId !== loadRequestRef.current) return;
+    const sessionId = currentSessionId;
+    if (sessionId === null) {
+      if (
+        requestId !== loadRequestRef.current ||
+        currentSessionIdRef.current !== null
+      ) {
+        return;
+      }
       setTodos(EMPTY_TODOS);
       loadedSessionIdRef.current = null;
       setLoadedSessionId(null);
       return;
     }
+    if (currentSessionIdRef.current !== sessionId) return;
     const client = createClient({ baseUrl: "", token });
     try {
-      const next = normalizeTodos(await client.listTodos(currentSessionId));
-      if (requestId !== loadRequestRef.current) return;
+      const next = normalizeTodos(await client.listTodos(sessionId));
+      if (
+        requestId !== loadRequestRef.current ||
+        currentSessionIdRef.current !== sessionId
+      ) {
+        return;
+      }
       setTodos(next);
-      loadedSessionIdRef.current = currentSessionId;
-      setLoadedSessionId(currentSessionId);
+      loadedSessionIdRef.current = sessionId;
+      setLoadedSessionId(sessionId);
       setLoadError(null);
     } catch (err) {
-      if (requestId !== loadRequestRef.current) return;
+      if (
+        requestId !== loadRequestRef.current ||
+        currentSessionIdRef.current !== sessionId
+      ) {
+        return;
+      }
       /* Preserve last-good data when this session was already loaded —
          a transient kernel error shouldn't wipe the panel. Only clear
          when we have no good state for this session yet. */
-      if (loadedSessionIdRef.current !== currentSessionId) {
+      if (loadedSessionIdRef.current !== sessionId) {
         setTodos(EMPTY_TODOS);
       }
-      loadedSessionIdRef.current = currentSessionId;
-      setLoadedSessionId(currentSessionId);
+      loadedSessionIdRef.current = sessionId;
+      setLoadedSessionId(sessionId);
       setLoadError(err instanceof Error ? err.message : String(err));
     }
   }, [currentSessionId, token]);
@@ -162,9 +291,11 @@ export function TodoTreeList({
 
   const postTodo = useCallback(
     async (body: PostTodoBody): Promise<void> => {
-      if (currentSessionId === null) return;
+      const sessionId = currentSessionId;
+      if (sessionId === null) return;
       const client = createClient({ baseUrl: "", token });
-      const result = await client.postTodo(currentSessionId, body);
+      const result = await client.postTodo(sessionId, body);
+      if (currentSessionIdRef.current !== sessionId) return;
       rememberLatest(body.id, result.filename);
       await loadTodos();
     },
@@ -212,15 +343,20 @@ export function TodoTreeList({
   const actorId = userId;
 
   const makeCreateBody = useCallback(
-    (id: string, patch: Partial<TodoPayload>, parentId?: string): PostTodoBody | null => {
+    (
+      id: string,
+      patch: Partial<TodoPayload>,
+      parentId?: string,
+    ): PostTodoBody | null => {
       if (actorId === null) return null;
       const body: PostTodoBody = {
         participant_id: actorId,
         id,
         title: titleForPost(String(patch.title ?? "")),
-        status: "open",
+        status: patch.status ?? "open",
       };
-      const assignedTo = draft?.id === id ? draft.assignedTo : pickRandomAgentId(agentIds);
+      const assignedTo =
+        draft?.id === id ? draft.assignedTo : pickRandomAgentId(agentIds);
       if (assignedTo !== undefined) body.assigned_to = assignedTo;
       if (parentId !== undefined) body.parent_id = parentId;
       if (patch.body !== undefined) body.body = patch.body;
@@ -285,6 +421,7 @@ export function TodoTreeList({
     void (async () => {
       try {
         await postTodo(body);
+        releaseAutoFirstTodo(currentSessionId);
         setActionError(null);
       } catch (err) {
         releaseAutoFirstTodo(currentSessionId);
@@ -331,6 +468,17 @@ export function TodoTreeList({
       setActionError(err instanceof Error ? err.message : String(err));
       return false;
     }
+  }
+
+  function dirtyValuesPatch(
+    node: TodoTreeNode,
+    values: TodoItemValues | undefined,
+  ): Partial<TodoPayload> {
+    if (values === undefined) return {};
+    const patch: Partial<TodoPayload> = {};
+    if (values.title !== fieldValue(node.title)) patch.title = values.title;
+    if (values.body !== fieldValue(node.body)) patch.body = values.body;
+    return patch;
   }
 
   async function createDraft(
@@ -429,9 +577,102 @@ export function TodoTreeList({
     if (targetId !== null) focusTodo(targetId, "title");
   }
 
+  function toggleStatusFilter(status: VisibleTodoStatus): void {
+    setStatusFilters((current) => ({
+      ...current,
+      [status]: !current[status],
+    }));
+  }
+
+  function groupKey(node: TodoTreeNode): string {
+    return `${node.status}:${node.assigned_to ?? "unassigned"}`;
+  }
+
+  function assigneeLabel(node: TodoTreeNode): string {
+    if (node.assigned_to === undefined) return "Unassigned";
+    return whoOf(node.assigned_to, participants).name;
+  }
+
+  function renderGroupLabel(
+    node: TodoTreeNode,
+    depth: number,
+  ): JSX.Element {
+    return (
+      <div
+        key={`group-${depth}-${groupKey(node)}`}
+        className="todo-group-label"
+        data-status={node.status}
+        style={
+          {
+            "--todo-depth-offset": depthOffset(depth),
+          } as CSSProperties
+        }
+      >
+        <span>{STATUS_GROUP_LABEL[node.status]}</span>
+        <span>{assigneeLabel(node)}</span>
+      </div>
+    );
+  }
+
+  function previousSameDepthIdForDraft(
+    currentDraft: DraftTodo,
+    depth: number,
+  ): string | null {
+    let searchFrom = flat.length - 1;
+    if (currentDraft.afterId !== undefined) {
+      const idx = flat.findIndex((item) => item.id === currentDraft.afterId);
+      if (idx >= 0) searchFrom = idx;
+    } else if (currentDraft.parentId !== undefined) {
+      const parentIdx = flat.findIndex(
+        (item) => item.id === currentDraft.parentId,
+      );
+      const parentDepth = flatById.get(currentDraft.parentId)?.depth;
+      if (parentIdx >= 0 && parentDepth !== undefined) {
+        searchFrom = parentIdx;
+        for (
+          let idx = parentIdx + 1;
+          idx < flat.length && flat[idx]!.depth > parentDepth;
+          idx += 1
+        ) {
+          searchFrom = idx;
+        }
+      }
+    }
+    for (let idx = searchFrom; idx >= 0; idx -= 1) {
+      const item = flat[idx]!;
+      if (item.depth === depth) return item.id;
+    }
+    return null;
+  }
+
+  function indentDraft(currentDraft: DraftTodo, depth: number): void {
+    const parentId = previousSameDepthIdForDraft(currentDraft, depth);
+    if (parentId === null) return;
+    setDraft((current) =>
+      current?.id === currentDraft.id
+        ? { ...current, parentId, afterId: undefined }
+        : current,
+    );
+  }
+
+  function outdentDraft(currentDraft: DraftTodo): void {
+    if (currentDraft.parentId === undefined) return;
+    const parent = flatById.get(currentDraft.parentId);
+    setDraft((current) =>
+      current?.id === currentDraft.id
+        ? {
+            ...current,
+            parentId: parent?.parentId,
+            afterId: currentDraft.parentId,
+          }
+        : current,
+    );
+  }
+
   async function removeTodo(
     node: TodoTreeNode,
     field?: TodoInputField,
+    values?: TodoItemValues,
   ): Promise<void> {
     const item = flatById.get(node.id);
     const targetId = item?.prevId ?? item?.nextId ?? null;
@@ -444,7 +685,10 @@ export function TodoTreeList({
         field: field ?? "title",
       };
     }
-    const removed = await updateExisting(node, { status: "removed" });
+    const removed = await updateExisting(node, {
+      ...dirtyValuesPatch(node, values),
+      status: "removed",
+    });
     if (!removed) pendingFocusRef.current = null;
   }
 
@@ -493,11 +737,18 @@ export function TodoTreeList({
         onUpdate={async (patch) => {
           await createDraft(currentDraft, patch);
         }}
-        onToggleDone={async () => undefined}
+        onToggleDone={async (values) => {
+          await createDraft(currentDraft, { ...values, status: "done" });
+        }}
+        onToggleWip={async (values) => {
+          await createDraft(currentDraft, { ...values, status: "wip" });
+        }}
         onRemove={async () => {
           setDraft(null);
         }}
-        onAddSubtask={() => {
+        onAddSubtask={async (values) => {
+          const created = await createDraft(currentDraft, values);
+          if (!created) return;
           setDraft({
             id: generateTodoId(),
             parentId: currentDraft.id,
@@ -517,18 +768,30 @@ export function TodoTreeList({
         onCommitAndCreateBelow={(patch) =>
           commitDraftAndCreateBelow(currentDraft, patch)
         }
+        onIndent={() => indentDraft(currentDraft, depth)}
+        onOutdent={() => outdentDraft(currentDraft)}
+        onFocusPrev={() => {
+          const targetId =
+            currentDraft.afterId ??
+            currentDraft.parentId ??
+            flat[flat.length - 1]?.id ??
+            null;
+          if (targetId !== null) focusTodo(targetId, "title");
+        }}
       />
     );
   }
 
   function renderNode(node: TodoTreeNode, depth: number): JSX.Element {
-    const done = node.status === "done";
+    const sourceNode = allNodeById.get(node.id) ?? node;
+    const done = sourceNode.status === "done";
+    const wip = sourceNode.status === "wip";
     const titlePlaceholder =
       autoFirstTodoId === node.id ? "First task title" : "Task title";
     return (
       <div key={node.id} className="todo-branch">
         <TodoItem
-          node={nodeForItem(node)}
+          node={nodeForItem(sourceNode)}
           depth={depth}
           participants={participants}
           agentIds={agentIds}
@@ -537,27 +800,45 @@ export function TodoTreeList({
           autoFocusTitle={autoFirstTodoId === node.id}
           registerInputs={registerInputs}
           onUpdate={async (patch) => {
-            await updateExisting(node, patch);
+            await updateExisting(sourceNode, patch);
           }}
-          onToggleDone={async () => {
-            await updateExisting(node, { status: done ? "open" : "done" });
+          onToggleDone={async (values) => {
+            await updateExisting(sourceNode, {
+              ...dirtyValuesPatch(sourceNode, values),
+              status: done ? "open" : "done",
+            });
           }}
-          onRemove={(field) => removeTodo(node, field)}
-          onAddSubtask={() => startChildDraft(node.id)}
-          onReassign={(participantId) =>
-            updateExisting(node, {}, participantId).then(() => undefined)
+          onToggleWip={async (values) => {
+            await updateExisting(sourceNode, {
+              ...dirtyValuesPatch(sourceNode, values),
+              status: wip ? "open" : "wip",
+            });
+          }}
+          onRemove={(field, values) => removeTodo(sourceNode, field, values)}
+          onAddSubtask={async (values) => {
+            const patch = dirtyValuesPatch(sourceNode, values);
+            if (Object.keys(patch).length > 0) {
+              const updated = await updateExisting(sourceNode, patch);
+              if (!updated) return;
+            }
+            startChildDraft(sourceNode.id);
+          }}
+          onReassign={(participantId, values) =>
+            updateExisting(
+              sourceNode,
+              dirtyValuesPatch(sourceNode, values),
+              participantId,
+            ).then(() => undefined)
           }
-          onIndent={(field, patch) => indentTodo(node, field, patch)}
-          onOutdent={(field, patch) => outdentTodo(node, field, patch)}
-          onFocusPrev={() => focusPreviousTodo(node.id)}
-          onFocusNext={() => focusNextTodo(node.id)}
+          onIndent={(field, patch) => indentTodo(sourceNode, field, patch)}
+          onOutdent={(field, patch) => outdentTodo(sourceNode, field, patch)}
+          onFocusPrev={() => focusPreviousTodo(sourceNode.id)}
+          onFocusNext={() => focusNextTodo(sourceNode.id)}
           onCommitAndCreateBelow={(patch) =>
-            commitExistingAndCreateBelow(node, patch)
+            commitExistingAndCreateBelow(sourceNode, patch)
           }
         />
-        {node.children.flatMap((child) =>
-          renderNodeWithSiblingDraft(child, depth + 1),
-        )}
+        {renderLevel(node.children, depth + 1)}
         {draft?.parentId === node.id && draft.afterId === undefined
           ? renderDraft(draft, depth + 1)
           : null}
@@ -580,6 +861,21 @@ export function TodoTreeList({
     return elements;
   }
 
+  function renderLevel(nodes: TodoTreeNode[], depth: number): JSX.Element[] {
+    const elements: JSX.Element[] = [];
+    const groupCount = new Set(nodes.map(groupKey)).size;
+    let previousGroupKey: string | null = null;
+    for (const node of nodes) {
+      const nextGroupKey = groupKey(node);
+      if (groupCount > 1 && nextGroupKey !== previousGroupKey) {
+        elements.push(renderGroupLabel(node, depth));
+        previousGroupKey = nextGroupKey;
+      }
+      elements.push(...renderNodeWithSiblingDraft(node, depth));
+    }
+    return elements;
+  }
+
   const counts = {
     open: todos.open.length,
     wip: todos.wip.length,
@@ -594,13 +890,21 @@ export function TodoTreeList({
     <div className={className}>
       {showCounts ? (
         <div className="todo-counts" aria-label="Todo counts">
-          <span>Open {counts.open}</span>
-          <span>WIP {counts.wip}</span>
-          <span>Done {counts.done}</span>
+          {STATUS_FILTERS.map(({ status, label }) => (
+            <button
+              key={status}
+              type="button"
+              className="todo-count-chip"
+              aria-pressed={statusFilters[status]}
+              onClick={() => toggleStatusFilter(status)}
+            >
+              {label} {counts[status]}
+            </button>
+          ))}
         </div>
       ) : null}
       <div className="todo-tree">
-        {todos.tree.flatMap((node) => renderNodeWithSiblingDraft(node, 0))}
+        {renderLevel(visibleTree, 0)}
         {shouldRenderRootDraft && draft !== null
           ? renderDraft(draft, 0)
           : null}

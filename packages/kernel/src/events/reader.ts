@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  normalizeTimestampForSort,
   parseFilename,
   type AnyEventRecord,
   type EventKind,
@@ -48,7 +49,12 @@ export async function readEvents(
   for (const entry of entries) {
     const parts = parseFilename(entry.name);
     if (parts === null) continue;
-    if (opts.since !== undefined && parts.timestamp <= opts.since) continue;
+    if (
+      opts.since !== undefined &&
+      normalizeTimestampForSort(parts.timestamp) <=
+        normalizeTimestampForSort(opts.since)
+    )
+      continue;
     if (opts.kinds !== undefined && !opts.kinds.includes(parts.kind)) continue;
     if (
       opts.participant !== undefined &&
@@ -67,7 +73,9 @@ export async function readEvents(
     });
   }
   records.sort((a, b) => {
-    const t = a.timestamp.localeCompare(b.timestamp);
+    const t = normalizeTimestampForSort(a.timestamp).localeCompare(
+      normalizeTimestampForSort(b.timestamp),
+    );
     return t !== 0 ? t : a.filename.localeCompare(b.filename);
   });
   return records;

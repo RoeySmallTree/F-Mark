@@ -74,31 +74,35 @@ describe("CommentThreadOverlay — routing via RightPanel", () => {
     ).toBeInTheDocument();
   });
 
-  test("when commentTarget is set, RightPanel shows the overlay instead of tabs", () => {
+  test("when commentTarget is set, RightPanel switches to the comments tab", () => {
     const target = makeProse(
       "20260522T120000Z_ag-c92e.prose.md",
       "ag-c92e",
       { name: "Launch Plan", content: "Hello world\nLine two\nLine three" },
     );
+    const comment = makeProse(
+      "20260522T120100Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "Pin this",
+        append_to: target.filename,
+        mode: "comment",
+      },
+    );
     useStore.setState({
-      events: [target],
+      events: [target, comment],
       commentTarget: { file: target.filename },
     });
 
     render(<RightPanel />);
-    // No tabs.
     expect(
-      screen.queryByRole("tablist", { name: /right panel tabs/i }),
-    ).toBeNull();
-    // Overlay aria-label present.
-    expect(
-      screen.getByRole("complementary", { name: /comment thread overlay/i }),
+      screen.getByRole("tablist", { name: /right panel tabs/i }),
     ).toBeInTheDocument();
-    // Title shows the target name in the comments-on line.
-    const commentsOn = document.querySelector("p.comments-on");
-    expect(commentsOn).not.toBeNull();
-    expect(commentsOn!.textContent).toContain("Comments on");
+    expect(
+      screen.getByRole("tab", { name: /comments/i }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Launch Plan")).toBeInTheDocument();
+    expect(screen.getByText(/Pin this/i)).toBeInTheDocument();
   });
 });
 
@@ -231,28 +235,33 @@ describe("CommentThreadOverlay — close button", () => {
     cleanup();
   });
 
-  test("clicking the × close button clears commentTarget and restores the tab UI", async () => {
-    const user = userEvent.setup();
+  test("focused comments keep the tab UI visible", () => {
     const target = makeProse(
       "20260522T120000Z_ag-c92e.prose.md",
       "ag-c92e",
       { name: "Plan", content: "body" },
     );
+    const comment = makeProse(
+      "20260522T120100Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "Thread",
+        append_to: target.filename,
+        mode: "comment",
+      },
+    );
     useStore.setState({
-      events: [target],
+      events: [target, comment],
       commentTarget: { file: target.filename },
     });
 
     render(<RightPanel />);
 
     expect(useStore.getState().commentTarget).not.toBeNull();
-    const closeBtn = screen.getByRole("button", { name: /close thread/i });
-    await user.click(closeBtn);
-    expect(useStore.getState().commentTarget).toBeNull();
-    // Tabs are back.
     expect(
       screen.getByRole("tablist", { name: /right panel tabs/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Thread")).toBeInTheDocument();
   });
 });
 

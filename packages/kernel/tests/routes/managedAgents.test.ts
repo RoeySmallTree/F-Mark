@@ -120,6 +120,27 @@ describe("POST /managed-agents/spawn", () => {
       "utf8",
     );
     expect(active).toBe("sess-abc");
+    // Response surfaces active_session so the renderer can scope the chip
+    // strip without a /participants refetch.
+    expect(res.json().active_session).toBe("sess-abc");
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("response active_session is null when spawn omits session_id", async () => {
+    const { app, runner, cleanup } = await makeApp();
+    expectSpawnCalls(runner);
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-claude-ns",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().active_session).toBeNull();
     runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();
@@ -489,7 +510,11 @@ describe("Bus publishing (managed-agent WS messages)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/managed-agents/spawn",
-      payload: { runtime_id: "claude", suggested_participant_id: "ag-claude-bus" },
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-claude-bus",
+        session_id: "sess-bus",
+      },
     });
     expect(res.statusCode).toBe(200);
     const spawned = bus.messages.find((m) => m.type === "managed-agent.spawned");
@@ -498,6 +523,7 @@ describe("Bus publishing (managed-agent WS messages)", () => {
       type: "managed-agent.spawned",
       participant_id: "ag-claude-bus",
       runtime_id: "claude",
+      active_session: "sess-bus",
     });
     // tmux_session field should also be present (the route returns it)
     expect((spawned as { tmux_session: string }).tmux_session).toMatch(
@@ -649,7 +675,12 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
       installed: false,
       configPath: "~/.claude/settings.json",
       detectedEntries: [],
-      expectedEntries: [],
+      expectedEntries: [
+        {
+          event: "Stop",
+          command: "f-mark hook auto-stream ag-hk-no",
+        },
+      ],
     });
     const { app, runner, p, cleanup } = await makeApp({
       checkHookInstallStatus: fakeCheck,
@@ -668,6 +699,35 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().hooks_status).toBe("missing");
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("returns hooks_status='not_required' and seeds stale presence when the runtime has no hook entries", async () => {
+    const fakeCheck = async (): Promise<DetectResult> => ({
+      installed: false,
+      configPath: "(manual-stream mode — no hooks needed in v0.4)",
+      detectedEntries: [],
+      expectedEntries: [],
+    });
+    const { app, runner, p, tracker, cleanup } = await makeApp({
+      checkHookInstallStatus: fakeCheck,
+    });
+    await setZeroDelayClaude(p);
+    expectSpawnCalls(runner);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-hk-manual",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().hooks_status).toBe("not_required");
+    expect(tracker.snapshot().get("ag-hk-manual")?.state).toBe("stale");
     runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();

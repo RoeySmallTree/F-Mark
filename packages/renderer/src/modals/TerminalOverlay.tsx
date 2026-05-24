@@ -38,10 +38,16 @@ function buildWsUrl(
   baseUrl: string,
   tmuxSession: string,
   token: string | null,
+  cols?: number,
+  rows?: number,
 ): string {
   const wsBase = baseUrl.replace(/^http/, "ws");
   const params = new URLSearchParams();
   params.set("session", tmuxSession);
+  if (cols !== undefined && rows !== undefined) {
+    params.set("cols", String(cols));
+    params.set("rows", String(rows));
+  }
   if (token !== null && token.length > 0) params.set("token", token);
   return `${wsBase}/ws/pane?${params.toString()}`;
 }
@@ -60,9 +66,16 @@ export function TerminalOverlay({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(containerRef.current);
+    try {
+      fit.fit();
+    } catch {
+      /* swallow — fit can throw if container is not yet measured */
+    }
 
     const listeners: ((msg: unknown) => void)[] = [];
-    const ws = new WebSocket(buildWsUrl(baseUrl, tmuxSession, token));
+    const ws = new WebSocket(
+      buildWsUrl(baseUrl, tmuxSession, token, term.cols, term.rows),
+    );
     const socket: PaneSocketLike = {
       send(data) {
         // WebSocket.OPEN === 1. In jsdom tests the mock exposes the static
@@ -92,14 +105,8 @@ export function TerminalOverlay({
 
     const bridge = createXtermBridge(socket);
     bridge.attach(term);
-    /* fit() and an initial resize over the WS. In tests these are no-op
-       on the fake addon / fake socket; in production xterm picks up the
-       container size and the kernel adjusts the tmux pane. */
-    try {
-      fit.fit();
-    } catch {
-      /* swallow — fit can throw if container is not yet measured */
-    }
+    /* Initial resize over the WS. The dimensions also go into the connection
+       URL so the kernel can resize tmux before capture-pane snapshots. */
     bridge.resize(term.cols, term.rows);
 
     return () => {

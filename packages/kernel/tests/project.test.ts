@@ -25,6 +25,15 @@ describe("project", () => {
     });
   });
 
+  it("initProject writes the passed port into a fresh config (A-BUG-1)", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p, 19283);
+      const config = JSON.parse(await readFile(p.configFile(), "utf8"));
+      expect(config.port).toBe(19283);
+    });
+  });
+
   it("initProject is idempotent: existing config preserved", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);

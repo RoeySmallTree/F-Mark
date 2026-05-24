@@ -30,14 +30,24 @@ describe("filename", () => {
     expect(parseFilename("not_an_id.prose.md")).toBeNull();
   });
 
-  it("isoTimestamp produces a 16-char Z-suffixed string", () => {
+  it("isoTimestamp produces a millisecond-precision Z-suffixed string", () => {
     const ts = isoTimestamp();
-    expect(ts).toMatch(/^\d{8}T\d{6}Z$/);
+    expect(ts).toMatch(/^\d{8}T\d{6}\.\d{3}Z$/);
   });
 
   it("toIsoTimestamp converts a Date", () => {
-    const d = new Date("2026-05-22T14:30:12.000Z");
-    expect(toIsoTimestamp(d)).toBe("20260522T143012Z");
+    const d = new Date("2026-05-22T14:30:12.456Z");
+    expect(toIsoTimestamp(d)).toBe("20260522T143012.456Z");
+  });
+
+  it("parseFilename accepts legacy second-precision timestamps", () => {
+    const parsed = parseFilename("20260522T143012Z_us-a7f3.prose.md");
+    expect(parsed?.timestamp).toBe("20260522T143012Z");
+  });
+
+  it("parseFilename accepts millisecond-precision timestamps", () => {
+    const parsed = parseFilename("20260522T143012.789Z_us-a7f3.prose.md");
+    expect(parsed?.timestamp).toBe("20260522T143012.789Z");
   });
 
   it("composeFilename for html bundle uses no ext", () => {

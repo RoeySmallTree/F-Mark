@@ -80,7 +80,7 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
             userParticipantId,
             projectRoot: paths.root(),
           });
-          if (status.installed) {
+          if (status.installed || status.expectedEntries.length === 0) {
             // Hooks are installed but we have no recent ping — surface as
             // "stale" until the next ping flips state back to "online".
             // Note: this also (re)sets paneAlive, which is fine.

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { CheckSquare, FileText, MessageSquare } from "lucide-react";
 import { useStore } from "../state/store.js";
 import { aggregate } from "../state/aggregate.js";
@@ -6,7 +6,6 @@ import { RightTodos } from "../panels/right/RightTodos.js";
 import { RightComments } from "../panels/right/RightComments.js";
 import { RightNamed } from "../panels/right/RightNamed.js";
 import { RightLog } from "../panels/right/RightLog.js";
-import { CommentThreadOverlay } from "../overlays/CommentThreadOverlay.js";
 
 export function RightPanel(): JSX.Element {
   const rightTab = useStore((s) => s.rightTab);
@@ -30,20 +29,11 @@ export function RightPanel(): JSX.Element {
   }, [agg]);
   const namedCount = agg.named.length;
 
-  // P14: When a pin is focused, replace the tab content with the
-  // comment-thread overlay. The overlay reads from the same
-  // commentsByTarget aggregation so no extra plumbing is needed.
-  if (commentTarget !== null) {
-    const comments = agg.commentsByTarget.get(commentTarget.file) ?? [];
-    return (
-      <aside className="right-panel" aria-label="Comment thread overlay">
-        <CommentThreadOverlay
-          targetFile={commentTarget.file}
-          comments={comments}
-        />
-      </aside>
-    );
-  }
+  useEffect(() => {
+    if (commentTarget !== null && rightTab !== "comments") {
+      setRightTab("comments");
+    }
+  }, [commentTarget, rightTab, setRightTab]);
 
   return (
     <aside className="right-panel" aria-label="Right panel">
@@ -100,10 +90,12 @@ export function RightPanel(): JSX.Element {
         in <b style={{ color: "var(--ink-2)", fontWeight: 500 }}>{slug}</b>
       </div>
       <div className="panel-scroll">
-        {rightTab === "todos" && <RightTodos />}
-        {rightTab === "comments" && <RightComments />}
-        {rightTab === "named" && <RightNamed />}
-        {rightTab === "log" && <RightLog />}
+        <div className="right-pane-content" key={rightTab}>
+          {rightTab === "todos" && <RightTodos />}
+          {rightTab === "comments" && <RightComments />}
+          {rightTab === "named" && <RightNamed />}
+          {rightTab === "log" && <RightLog />}
+        </div>
       </div>
     </aside>
   );

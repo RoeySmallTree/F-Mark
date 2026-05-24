@@ -146,53 +146,60 @@ export function Sessions(): JSX.Element {
             No sessions yet. Press + New.
           </p>
         ) : (
-          GROUP_ORDER.map((key) => {
-            const items = groups.get(key) ?? [];
-            if (items.length === 0) return null;
-            return (
-              <div key={key}>
-                <div className="group-label">{key.toUpperCase()}</div>
-                {items.map((s) => {
-                  const active = s.id === currentSessionId;
-                  return (
-                    <div
-                      key={s.id}
-                      role="button"
-                      tabIndex={0}
-                      className={[
-                        "session-item",
-                        active ? "active" : "",
-                      ]
-                        .join(" ")
-                        .trim()}
-                      onClick={() => setCurrentSession(s.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setCurrentSession(s.id);
-                        }
-                      }}
-                      aria-pressed={active}
-                    >
-                      <div className="row1">
-                        <span
-                          className={[
-                            "status-dot",
-                            active ? "active" : "idle",
-                          ].join(" ")}
-                          aria-hidden="true"
-                        />
-                        <span className="slug">{s.slug}</span>
+          (() => {
+            let staggerIdx = -1;
+            return GROUP_ORDER.map((key) => {
+              const items = groups.get(key) ?? [];
+              if (items.length === 0) return null;
+              return (
+                <div key={key}>
+                  <div className="group-label">{key.toUpperCase()}</div>
+                  {items.map((s) => {
+                    const active = s.id === currentSessionId;
+                    staggerIdx += 1;
+                    const i = Math.min(staggerIdx, 5);
+                    return (
+                      <div
+                        key={s.id}
+                        role="button"
+                        tabIndex={0}
+                        className={[
+                          "session-item",
+                          "staggered-row",
+                          active ? "active" : "",
+                        ]
+                          .join(" ")
+                          .trim()}
+                        style={{ ["--i" as string]: i }}
+                        onClick={() => setCurrentSession(s.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setCurrentSession(s.id);
+                          }
+                        }}
+                        aria-pressed={active}
+                      >
+                        <div className="row1">
+                          <span
+                            className={[
+                              "status-dot",
+                              active ? "active" : "idle",
+                            ].join(" ")}
+                            aria-hidden="true"
+                          />
+                          <span className="slug">{s.slug}</span>
+                        </div>
+                        <div className="meta">
+                          <span>{formatRelative(s.created_at, now)}</span>
+                        </div>
                       </div>
-                      <div className="meta">
-                        <span>{formatRelative(s.created_at, now)}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })
+                    );
+                  })}
+                </div>
+              );
+            });
+          })()
         )}
       </div>
     </aside>

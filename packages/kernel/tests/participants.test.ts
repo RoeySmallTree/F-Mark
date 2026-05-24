@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { initProject } from "../src/project.js";
 import { paths } from "../src/paths.js";
 import { listParticipants, registerAgent } from "../src/participants.js";
+import { writeActiveSession } from "../src/agents/activeSession.js";
 import { withTempProject } from "./helpers/tempdir.js";
 
 describe("participants", () => {
@@ -29,7 +30,28 @@ describe("participants", () => {
         kind: "agent",
         name: "Claude",
         color: created.color,
+        active_session: null,
       });
+    });
+  });
+
+  it("listParticipants enriches each agent with active_session from disk", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const bound = await registerAgent(p, { name: "Bound" });
+      const unbound = await registerAgent(p, { name: "Unbound" });
+      await writeActiveSession(p.fmarkDir(), bound.id, "2026-05-24-active");
+
+      const list = await listParticipants(p);
+      expect(list[bound.id]?.active_session).toBe("2026-05-24-active");
+      expect(list[unbound.id]?.active_session).toBeNull();
+      // Users always get null — they are not session-bound.
+      const userId = Object.entries(list).find(
+        ([, v]) => v.kind === "user",
+      )?.[0];
+      expect(userId).toBeDefined();
+      expect(list[userId!]?.active_session).toBeNull();
     });
   });
 

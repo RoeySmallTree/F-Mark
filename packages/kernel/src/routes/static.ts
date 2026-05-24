@@ -47,6 +47,19 @@ function rendererDir(): string | null {
   return null;
 }
 
+const API_PREFIXES = [
+  "/sessions",
+  "/participants",
+  "/agents",
+  "/managed-agents",
+  "/env-probe",
+  "/guide",
+  "/presets",
+  "/skills",
+  "/search",
+  "/ws",
+];
+
 export async function registerStaticRoutes(app: FastifyInstance): Promise<void> {
   const dir = rendererDir();
   if (dir === null) {
@@ -64,14 +77,9 @@ export async function registerStaticRoutes(app: FastifyInstance): Promise<void> 
   });
   app.setNotFoundHandler(async (req, reply) => {
     const url = req.raw.url ?? "";
-    const isApi =
-      url.startsWith("/sessions") ||
-      url.startsWith("/participants") ||
-      url.startsWith("/guide") ||
-      url.startsWith("/presets") ||
-      url.startsWith("/skills") ||
-      url.startsWith("/search") ||
-      url === "/ws";
+    const isApi = API_PREFIXES.some(
+      (prefix) => url === prefix || url.startsWith(`${prefix}/`),
+    );
     void seqLog("static notFoundHandler {url}", {
       module: "static",
       url,

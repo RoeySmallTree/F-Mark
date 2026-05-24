@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createSession } from "../../src/sessions.js";
@@ -103,6 +103,51 @@ describe("readEvents", () => {
       });
       const events = await readEvents(p, session.id, { participant: "ag-none" });
       expect(events).toHaveLength(0);
+    });
+  });
+
+  describe("write-order preservation across event kinds", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("returns events in write order when prose and turn-end land in the same wall-clock second", async () => {
+      await withTempProject(async (root) => {
+        vi.useFakeTimers({ shouldAdvanceTime: false });
+        vi.setSystemTime(new Date("2026-05-24T12:00:00.000Z"));
+        const p = paths(root);
+        await initProject(p);
+        const session = await createSession(p, { slug: "x" });
+        const pid = await userId(p);
+
+        await writeEventFile(p, session.id, {
+          participant_id: pid,
+          kind: "prose",
+          ext: "md",
+          contents: serializeProse({ content: "first prose" }),
+        });
+        vi.advanceTimersByTime(1);
+        await writeEventFile(p, session.id, {
+          participant_id: pid,
+          kind: "prose",
+          ext: "md",
+          contents: serializeProse({ content: "concluding prose" }),
+        });
+        vi.advanceTimersByTime(1);
+        await writeEventFile(p, session.id, {
+          participant_id: pid,
+          kind: "turn-end",
+          ext: "json",
+          contents: JSON.stringify({ participant_id: pid }),
+        });
+
+        const events = await readEvents(p, session.id, {});
+        expect(events.map((e) => e.kind)).toEqual([
+          "prose",
+          "prose",
+          "turn-end",
+        ]);
+      });
     });
   });
 });

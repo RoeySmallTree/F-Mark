@@ -32,6 +32,7 @@ interface FakeXtermInstance {
   writes: string[];
   onData: ReturnType<typeof vi.fn>;
   loadAddon: ReturnType<typeof vi.fn>;
+  reset: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
   disposed: boolean;
   /** Driven by tests: simulate the user typing into xterm. */
@@ -51,6 +52,7 @@ vi.mock("@xterm/xterm", () => {
 
       open = vi.fn();
       loadAddon = vi.fn();
+      reset = vi.fn();
       write = vi.fn((s: string) => {
         this.writes.push(s);
       });
@@ -160,6 +162,8 @@ describe("TerminalOverlay", () => {
     expect(wsInstances.length).toBe(1);
     expect(wsInstances[0]!.url).toContain("ws://localhost:7777/ws/pane");
     expect(wsInstances[0]!.url).toContain("session=fmark-ag-c92e");
+    expect(wsInstances[0]!.url).toContain("cols=80");
+    expect(wsInstances[0]!.url).toContain("rows=24");
   });
 
   it("upgrades https → wss", async () => {
@@ -205,6 +209,7 @@ describe("TerminalOverlay", () => {
       });
     });
     const term = instances[0]!;
+    expect(term.reset).toHaveBeenCalled();
     expect(term.writes).toContain("snap-A");
   });
 

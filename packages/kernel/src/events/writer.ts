@@ -25,14 +25,15 @@ function assertWithinSession(p: Paths, sessionId: string, target: string): void 
 }
 
 function parseCompactTs(ts: string): Date {
+  const ms = ts.length === 20 ? ts.slice(16, 19) : "000";
   return new Date(
-    `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}T${ts.slice(9, 11)}:${ts.slice(11, 13)}:${ts.slice(13, 15)}Z`,
+    `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}T${ts.slice(9, 11)}:${ts.slice(11, 13)}:${ts.slice(13, 15)}.${ms}Z`,
   );
 }
 
-function bumpSecond(ts: string): string {
+function bumpMillisecond(ts: string): string {
   const d = parseCompactTs(ts);
-  d.setUTCSeconds(d.getUTCSeconds() + 1);
+  d.setUTCMilliseconds(d.getUTCMilliseconds() + 1);
   return toIsoTimestamp(d);
 }
 
@@ -66,7 +67,7 @@ export async function writeEventFile(
       return filename;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-        stamped = bumpSecond(stamped);
+        stamped = bumpMillisecond(stamped);
         continue;
       }
       throw err;

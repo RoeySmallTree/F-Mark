@@ -6,6 +6,12 @@ import type {
 } from "@f-mark/shared";
 import type { TodoListResponse } from "../api/client.js";
 
+const TODO_STATUS_RANK: Record<TodoTreeNode["status"], number> = {
+  wip: 0,
+  open: 1,
+  done: 2,
+};
+
 export const EMPTY_TODOS: TodoListResponse = {
   open: [],
   wip: [],
@@ -95,12 +101,149 @@ export function latestTodoFilenames(
   events: AnyEventRecord[],
 ): Map<string, string> {
   const latest = new Map<string, string>();
-  for (const event of events) {
-    if (event.kind !== "todo") continue;
+  const todoEvents = sortedTodoEvents(events);
+  const superseded = supersededTodoFilenames(todoEvents);
+  for (const event of todoEvents) {
+    if (superseded.has(event.filename)) continue;
     const payload = event.payload as TodoPayload;
     latest.set(payload.id, event.filename);
   }
   return latest;
+}
+
+function compareEvents(a: AnyEventRecord, b: AnyEventRecord): number {
+  return (
+    a.timestamp.localeCompare(b.timestamp) ||
+    a.filename.localeCompare(b.filename)
+  );
+}
+
+function sortedTodoEvents(events: AnyEventRecord[]): AnyEventRecord[] {
+  return events.filter((event) => event.kind === "todo").sort(compareEvents);
+}
+
+function supersededTodoFilenames(events: AnyEventRecord[]): Set<string> {
+  const superseded = new Set<string>();
+  for (const event of events) {
+    const supersedes = (event.payload as TodoPayload).supersedes;
+    if (typeof supersedes === "string" && supersedes.length > 0) {
+      superseded.add(supersedes);
+    }
+  }
+  return superseded;
+}
+
+function isVisibleTodo(payload: TodoPayload): boolean {
+  return (
+    payload.status === "open" ||
+    payload.status === "wip" ||
+    payload.status === "done"
+  );
+}
+
+function todoNodeFromPayload(payload: TodoPayload): TodoTreeNode {
+  const node: TodoTreeNode = {
+    id: payload.id,
+    title: payload.title,
+    status: payload.status as TodoTreeNode["status"],
+    children: [],
+  };
+  if (payload.body !== undefined) node.body = payload.body;
+  if (payload.assigned_to !== undefined) node.assigned_to = payload.assigned_to;
+  if (payload.parent_id !== undefined) node.parent_id = payload.parent_id;
+  return node;
+}
+
+function wouldCreateCycle(
+  id: string,
+  parentId: string,
+  payloadById: Map<string, TodoPayload>,
+): boolean {
+  const seen = new Set<string>();
+  let current: string | undefined = parentId;
+  while (current !== undefined) {
+    if (current === id || seen.has(current)) return true;
+    seen.add(current);
+    current = payloadById.get(current)?.parent_id;
+  }
+  return false;
+}
+
+function hasHiddenAncestor(
+  payload: TodoPayload,
+  latestById: Map<string, TodoPayload>,
+): boolean {
+  const seen = new Set<string>();
+  let parentId = payload.parent_id;
+  while (parentId !== undefined) {
+    if (seen.has(parentId)) return false;
+    seen.add(parentId);
+    const parent = latestById.get(parentId);
+    if (parent === undefined) return false;
+    if (!isVisibleTodo(parent)) return true;
+    parentId = parent.parent_id;
+  }
+  return false;
+}
+
+export function buildTodoTreeFromEvents(
+  events: AnyEventRecord[],
+): TodoTreeNode[] {
+  const todoEvents = sortedTodoEvents(events);
+  const superseded = supersededTodoFilenames(todoEvents);
+  const latestById = new Map<string, TodoPayload>();
+  const createdAtById = new Map<string, string>();
+
+  for (const event of todoEvents) {
+    const payload = event.payload as TodoPayload;
+    if (typeof payload.id !== "string" || payload.id.length === 0) continue;
+    const createdAt = createdAtById.get(payload.id);
+    if (createdAt === undefined || event.timestamp < createdAt) {
+      createdAtById.set(payload.id, event.timestamp);
+    }
+    if (superseded.has(event.filename)) continue;
+    latestById.set(payload.id, payload);
+  }
+
+  const nodeById = new Map<string, TodoTreeNode>();
+  const payloadById = new Map<string, TodoPayload>();
+  for (const payload of latestById.values()) {
+    if (!isVisibleTodo(payload)) continue;
+    if (hasHiddenAncestor(payload, latestById)) continue;
+    nodeById.set(payload.id, todoNodeFromPayload(payload));
+    payloadById.set(payload.id, payload);
+  }
+
+  const roots: TodoTreeNode[] = [];
+  for (const payload of payloadById.values()) {
+    const node = nodeById.get(payload.id);
+    if (node === undefined) continue;
+    const parent =
+      payload.parent_id !== undefined &&
+      !wouldCreateCycle(payload.id, payload.parent_id, payloadById)
+        ? nodeById.get(payload.parent_id)
+        : undefined;
+    if (parent === undefined) roots.push(node);
+    else parent.children.push(node);
+  }
+
+  const compareByCreation = (a: TodoTreeNode, b: TodoTreeNode): number => {
+    const status = TODO_STATUS_RANK[a.status] - TODO_STATUS_RANK[b.status];
+    if (status !== 0) return status;
+    const assignee = (a.assigned_to ?? "\uffff").localeCompare(
+      b.assigned_to ?? "\uffff",
+    );
+    if (assignee !== 0) return assignee;
+    const aCreatedAt = createdAtById.get(a.id) ?? "";
+    const bCreatedAt = createdAtById.get(b.id) ?? "";
+    return aCreatedAt.localeCompare(bCreatedAt) || a.id.localeCompare(b.id);
+  };
+  const sortNodes = (nodes: TodoTreeNode[]): void => {
+    nodes.sort(compareByCreation);
+    for (const node of nodes) sortNodes(node.children);
+  };
+  sortNodes(roots);
+  return roots;
 }
 
 export function countTree(nodes: TodoTreeNode[]): number {

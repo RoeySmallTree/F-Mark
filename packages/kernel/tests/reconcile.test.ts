@@ -78,15 +78,15 @@ describe("reconcile", () => {
     expect(tracker.snapshot().size).toBe(0);
   });
 
-  it("CASE A: agent dir + live tmux session → tracker.setManagedPane + tracker.setManagedHookStatus", async () => {
+  it("CASE A: manual-stream runtime with a live tmux session reconciles as stale", async () => {
     const { paths: p } = await makeFixture();
     await writeTmuxSession(
       p.fmarkDir(),
       "ag-claude",
       "fmark-x-12345678-ag-ag-claude",
     );
-    // gemini runtime → checkHookInstallStatus reports installed=false →
-    // tracker.setManagedHookStatus(false) → state: "hook-not-installed".
+    // gemini runtime → checkHookInstallStatus reports no expected hook entries,
+    // so this is manual-stream mode rather than a missing-hook problem.
     await writeRuntime(p.fmarkDir(), "ag-claude", "gemini");
 
     const tmux = fakeTmux({
@@ -104,7 +104,7 @@ describe("reconcile", () => {
 
     const s = tracker.snapshot().get("ag-claude");
     expect(s).toBeDefined();
-    expect(s?.state).toBe("hook-not-installed");
+    expect(s?.state).toBe("stale");
   });
 
   it("CASE A (hooks installed): surviving managed agent with installed hooks → tracker state 'stale'", async () => {

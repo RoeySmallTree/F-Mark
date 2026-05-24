@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   render,
   screen,
-  within,
   cleanup,
   act,
   waitFor,
@@ -125,44 +124,39 @@ describe("Compose — mode buttons", () => {
     cleanup();
   });
 
-  test("renders two mode buttons; clicking each updates store.composeMode", async () => {
+  test("Name-it chip activates named mode; × cancels back to message", async () => {
     const user = userEvent.setup();
-    /* Provide a comment target so the Comment pill is enabled. The
-       Message pill was removed in the cluster-redesign pass — message
-       is the implicit default mode (no pill needed for it). */
-    resetStore({
-      commentTarget: { file: "test.prose.md", lines: [1, 1] },
-      composeMode: "message",
-    });
+    resetStore({ composeMode: "message" });
     render(<Compose />);
 
     expect(
       screen.queryByRole("button", { name: /message mode/i }),
     ).toBeNull();
-    const namedBtn = screen.getByRole("button", { name: /name it mode/i });
-    const commentBtn = screen.getByRole("button", { name: /comment mode/i });
-    expect(namedBtn).toBeInTheDocument();
-    expect(commentBtn).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /comment mode/i }),
+    ).toBeNull();
 
-    await user.click(namedBtn);
+    // Chip is hidden when the textarea is empty.
+    expect(
+      screen.queryByRole("button", { name: /name this contribution/i }),
+    ).toBeNull();
+
+    // Typing in the textarea reveals the collapsed chip.
+    const textarea = screen.getByLabelText(/compose message/i);
+    await user.type(textarea, "hello");
+
+    // Collapsed chip → activates named mode.
+    const chip = screen.getByRole("button", {
+      name: /name this contribution/i,
+    });
+    expect(chip).toBeInTheDocument();
+    await user.click(chip);
     expect(useStore.getState().composeMode).toBe("named");
 
-    /* Clicking the active mode toggles back to message (the implicit
-       default). */
-    await user.click(namedBtn);
+    // Expanded form has a × cancel button that returns to message mode.
+    const cancel = screen.getByRole("button", { name: /cancel naming/i });
+    await user.click(cancel);
     expect(useStore.getState().composeMode).toBe("message");
-
-    await user.click(commentBtn);
-    expect(useStore.getState().composeMode).toBe("comment");
-    await user.click(commentBtn);
-    expect(useStore.getState().composeMode).toBe("message");
-  });
-
-  test("Comment pill is disabled when there's no commentTarget", () => {
-    resetStore({ commentTarget: null, composeMode: "message" });
-    render(<Compose />);
-    const commentBtn = screen.getByRole("button", { name: /comment mode/i });
-    expect(commentBtn).toBeDisabled();
   });
 });
 
@@ -180,11 +174,11 @@ describe("Compose — hotkeys", () => {
     const { container } = render(<Compose />);
 
     expect(useStore.getState().composeMode).toBe("message");
-    expect(container.querySelector(".compose-name")).toBeNull();
+    expect(container.querySelector(".name-chip-expanded")).toBeNull();
 
     await user.keyboard(`${MOD_OPEN}n${MOD_CLOSE}`);
     expect(useStore.getState().composeMode).toBe("named");
-    expect(container.querySelector(".compose-name")).not.toBeNull();
+    expect(container.querySelector(".name-chip-expanded")).not.toBeNull();
     expect(
       screen.getByPlaceholderText(/Name this contribution/i),
     ).toBeInTheDocument();
@@ -192,32 +186,7 @@ describe("Compose — hotkeys", () => {
     // Press ⌘N again → toggles back to message.
     await user.keyboard(`${MOD_OPEN}n${MOD_CLOSE}`);
     expect(useStore.getState().composeMode).toBe("message");
-    expect(container.querySelector(".compose-name")).toBeNull();
-  });
-
-  test("⌘/ toggles comment mode when commentTarget is set; otherwise forces Message", async () => {
-    const user = userEvent.setup();
-    // No target first: starts named, ⌘/ should force message.
-    resetStore({ commentTarget: null, composeMode: "named" });
-    render(<Compose />);
-    expect(useStore.getState().composeMode).toBe("named");
-    await user.keyboard(`${MOD_OPEN}/${MOD_CLOSE}`);
-    expect(useStore.getState().composeMode).toBe("message");
-    cleanup();
-
-    // Now with a target: ⌘/ flips message↔comment.
-    resetStore({
-      commentTarget: { file: "x.prose.md", lines: [1, 1] },
-      composeMode: "message",
-    });
-    render(<Compose />);
-    // Note: store.setCommentTarget itself flips mode to 'comment' — we set
-    // mode='message' AFTER, so we begin in message here.
-    expect(useStore.getState().composeMode).toBe("message");
-    await user.keyboard(`${MOD_OPEN}/${MOD_CLOSE}`);
-    expect(useStore.getState().composeMode).toBe("comment");
-    await user.keyboard(`${MOD_OPEN}/${MOD_CLOSE}`);
-    expect(useStore.getState().composeMode).toBe("message");
+    expect(container.querySelector(".name-chip-expanded")).toBeNull();
   });
 
   test("⌘↵ submits the active mode (calls postProse with right body)", async () => {
@@ -317,7 +286,7 @@ describe("Compose — hotkeys", () => {
     expect(body.content).toBe("named body");
   });
 
-  test("⌘↵ in comment mode posts new-shape comment and clears commentTarget", async () => {
+  test("legacy comment compose mode is coerced back to message mode", async () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(() =>
@@ -325,16 +294,18 @@ describe("Compose — hotkeys", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
-    const target = { file: "evt.prose.md", lines: [3, 3] as [number, number] };
     resetStore({
-      commentTarget: target,
+      commentTarget: { file: "evt.prose.md", lines: [3, 3] },
       composeMode: "comment",
     });
     render(<Compose />);
+    await waitFor(() => {
+      expect(useStore.getState().composeMode).toBe("message");
+    });
 
     const ta = screen.getByLabelText(/Compose message/i);
     await user.click(ta);
-    await user.type(ta, "a comment");
+    await user.type(ta, "plain message");
 
     await user.keyboard(`${MOD_OPEN}{Enter}${MOD_CLOSE}`);
     await act(async () => {
@@ -345,38 +316,26 @@ describe("Compose — hotkeys", () => {
     const body = JSON.parse(
       (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
     );
-    /* Composable-prose Phase 2: comments POST the new shape. */
-    expect(body.target).toBeUndefined();
-    expect(body.append_to).toBe("evt.prose.md");
-    expect(body.mode).toBe("comment");
-    expect(body.lines).toEqual([3, 3]);
-    expect(useStore.getState().commentTarget).toBeNull();
-  });
-
-  test("Escape clears commentTarget when set", async () => {
-    const user = userEvent.setup();
-    resetStore({
-      commentTarget: { file: "x.prose.md", lines: [1, 1] },
-      composeMode: "comment",
+    expect(body).toEqual({
+      participant_id: "us-a7f3",
+      content: "plain message",
     });
-    render(<Compose />);
     expect(useStore.getState().commentTarget).not.toBeNull();
-    await user.keyboard("{Escape}");
-    expect(useStore.getState().commentTarget).toBeNull();
   });
 
-  test("Escape clears commentTarget while the compose textarea is focused", async () => {
+  test("Escape blurs the compose textarea without clearing focused comments", async () => {
     const user = userEvent.setup();
     resetStore({
       commentTarget: { file: "x.prose.md", lines: [1, 1] },
-      composeMode: "comment",
+      composeMode: "message",
     });
     render(<Compose />);
     const ta = screen.getByLabelText(/Compose message/i);
     await user.click(ta);
     expect(document.activeElement).toBe(ta);
     await user.keyboard("{Escape}");
-    expect(useStore.getState().commentTarget).toBeNull();
+    expect(document.activeElement).not.toBe(ta);
+    expect(useStore.getState().commentTarget).not.toBeNull();
   });
 });
 
@@ -388,31 +347,23 @@ describe("Compose — send button label per mode", () => {
     cleanup();
   });
 
-  test("message mode: empty content → only End turn (cluster collapsed); typed content → Send + End turn", async () => {
+  test("message mode: empty content → End turn; typed content → Send", async () => {
     const user = userEvent.setup();
     resetStore({ composeMode: "message" });
     const { container } = render(<Compose />);
-    /* No content → cluster shows only End turn; Send is hidden. */
-    const cluster = container.querySelector(".send-cluster") as HTMLElement;
-    expect(cluster).toBeTruthy();
-    expect(cluster.classList.contains("empty")).toBe(true);
-    expect(container.querySelector(".send-cluster-send")).toBeNull();
-    const endOnly = container.querySelector(".end-turn-btn") as HTMLElement;
+    const endOnly = container.querySelector(".primary-action") as HTMLElement;
     expect(endOnly).toBeTruthy();
-    expect(endOnly).toHaveTextContent(/End turn/i);
+    expect(endOnly).toHaveAttribute("data-state", "end-turn");
+    expect(endOnly).toHaveAccessibleName(/End turn/i);
 
     const ta = screen.getByLabelText(/Compose message/i);
     await user.click(ta);
     await user.type(ta, "hi");
 
-    /* Content present → cluster gains has-send, Send button renders. */
-    const clusterAfter = container.querySelector(".send-cluster") as HTMLElement;
-    expect(clusterAfter.classList.contains("has-send")).toBe(true);
-    const send = container.querySelector(".send-cluster-send") as HTMLElement;
+    const send = container.querySelector(".primary-action") as HTMLElement;
     expect(send).toBeTruthy();
-    expect(send).toHaveTextContent(/Send/i);
-    const endTurn = container.querySelector(".end-turn-btn") as HTMLElement;
-    expect(endTurn).toHaveTextContent(/End turn/i);
+    expect(send).toHaveAttribute("data-state", "send");
+    expect(send).toHaveAccessibleName(/Send message/i);
   });
 
   test("settings popover is accessible from compose actions", async () => {
@@ -426,23 +377,28 @@ describe("Compose — send button label per mode", () => {
   test("named mode shows 'End turn' as primary action", () => {
     resetStore({ composeMode: "named" });
     const { container } = render(<Compose />);
-    const send = container.querySelector(".send-btn") as HTMLButtonElement;
+    const send = container.querySelector(".primary-action") as HTMLButtonElement;
+    expect(send).toHaveAttribute("data-state", "end-turn");
+    expect(send).toHaveAccessibleName(/End turn with named contribution/i);
     expect(send).toHaveTextContent(/End turn/i);
-    expect(send.classList.contains("outline")).toBe(false);
   });
 
-  test("comment mode shows 'Post comment'", () => {
+  test("comment mode falls back to the message action", async () => {
     resetStore({
       commentTarget: { file: "x.prose.md", lines: [1, 1] },
       composeMode: "comment",
     });
     const { container } = render(<Compose />);
-    const send = container.querySelector(".send-btn") as HTMLButtonElement;
-    expect(send).toHaveTextContent(/Post comment/i);
+    await waitFor(() => {
+      expect(useStore.getState().composeMode).toBe("message");
+    });
+    const send = container.querySelector(".primary-action") as HTMLButtonElement;
+    expect(send).toHaveAttribute("data-state", "end-turn");
+    expect(send).toHaveAccessibleName(/End turn/i);
   });
 });
 
-describe("Compose — TargetPill behavior", () => {
+describe("Compose — focused comment target", () => {
   beforeEach(() => {
     resetStore();
   });
@@ -450,24 +406,14 @@ describe("Compose — TargetPill behavior", () => {
     cleanup();
   });
 
-  test("renders TargetPill when commentTarget is set; close button clears it", async () => {
-    const user = userEvent.setup();
+  test("does not render a compose TargetPill when commentTarget is set", () => {
     resetStore({
       commentTarget: { file: "evt.prose.md", lines: [3, 5] },
-      composeMode: "comment",
+      composeMode: "message",
     });
     const { container } = render(<Compose />);
-    const pill = container.querySelector(".compose-target");
-    expect(pill).not.toBeNull();
-    expect(within(pill as HTMLElement).getByText(/Commenting on/i)).toBeInTheDocument();
-    // line label
-    expect(pill!.textContent).toMatch(/lines 3.{1,3}5/);
-    await user.click(
-      within(pill as HTMLElement).getByRole("button", {
-        name: /cancel comment target/i,
-      }),
-    );
-    expect(useStore.getState().commentTarget).toBeNull();
+    expect(container.querySelector(".compose-target")).toBeNull();
+    expect(useStore.getState().commentTarget).not.toBeNull();
   });
 });
 

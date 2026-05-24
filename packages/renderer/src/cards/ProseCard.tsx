@@ -16,7 +16,6 @@ import { type MarkdownMode } from "../render/MarkdownRenderer.js";
 import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
-import { LineCommentRail } from "./LineCommentRail.js";
 import { ProseInlineBlock } from "./ProseInlineBlock.js";
 import { ProseEmptyState } from "./ProseEmptyState.js";
 import { BlockAccordion } from "../render/BlockAccordion.js";
@@ -182,15 +181,6 @@ export function ProseCard({
           </>
         )}
         {isTrulyEmpty && <ProseEmptyState />}
-        <LineCommentRail
-          event={event}
-          content={payload.content}
-          comments={comments}
-          participants={participants}
-          mode={mode}
-          className="prose-content"
-          lineHeight={25}
-        />
       </div>
     </article>
   );

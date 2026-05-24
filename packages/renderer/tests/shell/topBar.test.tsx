@@ -33,10 +33,24 @@ const SESSION: SessionMeta = {
   created_at: "2026-05-23T10:00:00Z",
 };
 
+/* Agent participants are bound to SESSION via active_session — the TopBar
+   chip strip is scoped to the current session, so test agents that share
+   SESSION.id show up in chips. Agents bound to a different session (or
+   to no session) are filtered out — see the cross-session test below. */
 const PARTICIPANTS: Record<string, Participant> = {
   "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-  "ag-c92e": { kind: "agent", name: "Claude", color: "#b86a1f" },
-  "ag-codex-9b": { kind: "agent", name: "Codex", color: "#1f7ab8" },
+  "ag-c92e": {
+    kind: "agent",
+    name: "Claude",
+    color: "#b86a1f",
+    active_session: SESSION.id,
+  },
+  "ag-codex-9b": {
+    kind: "agent",
+    name: "Codex",
+    color: "#1f7ab8",
+    active_session: SESSION.id,
+  },
 };
 
 const AGENTS: ManagedAgent[] = [
@@ -239,6 +253,7 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
             participant_id: "ag-new",
             tmux_session: "fmark-ag-new",
             runtime_id: "claude",
+            active_session: SESSION.id,
             hooks_status: "installed",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -313,14 +328,20 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
        settle. */
     await new Promise<void>((r) => setTimeout(r, 0));
     /* Seed the matching participant — the kernel normally delivers this via
-       WS, but the unit test doesn't have that. The TopBar contract is now
-       "render every agent participant"; we verify the chip appears once
-       the participant is known. */
+       WS, but the unit test doesn't have that. The TopBar contract is
+       "render every agent participant bound to the current session"; we
+       verify the chip appears once the participant is known and its
+       active_session matches. */
     act(() => {
       useStore.setState({
         participants: {
           "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-          "ag-new": { kind: "agent", name: "Claude", color: "#b86a1f" },
+          "ag-new": {
+            kind: "agent",
+            name: "Claude",
+            color: "#b86a1f",
+            active_session: SESSION.id,
+          },
         },
       });
     });
@@ -330,6 +351,41 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
     /* Store reflects the added agent. */
     const agents = useStore.getState().managedAgents;
     expect(agents.find((a) => a.participant_id === "ag-new")).toBeDefined();
+  });
+
+  test("spawn responses with hooks_status=not_required do not mark the chip as hook-not-installed", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          participant_id: "ag-gemini-new",
+          tmux_session: "fmark-ag-gemini-new",
+          runtime_id: "gemini",
+          active_session: SESSION.id,
+          hooks_status: "not_required",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const user = userEvent.setup();
+    resetStore({
+      envProbe: HEALTHY_PROBE,
+      participants: {
+        "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      },
+    });
+    const { container } = render(<TopBar />);
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: /gemini/i }));
+    await new Promise<void>((r) => setTimeout(r, 0));
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-gemini-new"]',
+    );
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute("data-state")).toBe("stale");
+    expect(chip?.querySelector('[data-testid="agent-chip-wrench"]')).toBeNull();
   });
 });
 
@@ -458,11 +514,18 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
   });
 
   test("agent participant that is NOT in managedAgents still renders as a full AgentChip with name", () => {
-    /* Simulate a pre-existing agent from a prior session that's not currently
-       managed: it appears in participants but not in managedAgents. */
+    /* Simulate an un-managed agent bound to the current session (e.g.
+       registered manually via POST /participants/register + POST
+       /agents/:id/link, no spawn). The chip strip is scoped to the
+       current session, so active_session must match SESSION.id. */
     const participants: Record<string, Participant> = {
       "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+      "ag-old-1": {
+        kind: "agent",
+        name: "Old Agent",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
     };
     resetStore({
       participants,
@@ -483,7 +546,12 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
   test("agent participant does NOT appear as a bare avatar in the right-side participants stack", () => {
     const participants: Record<string, Participant> = {
       "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+      "ag-old-1": {
+        kind: "agent",
+        name: "Old Agent",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
     };
     resetStore({ participants, managedAgents: [] });
     const { container } = render(<TopBar />);
@@ -502,7 +570,12 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     const user = userEvent.setup();
     const participants: Record<string, Participant> = {
       "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+      "ag-old-1": {
+        kind: "agent",
+        name: "Old Agent",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
     };
     resetStore({ participants, managedAgents: [] });
     const { container } = render(<TopBar />);
@@ -522,7 +595,12 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     const user = userEvent.setup();
     const participants: Record<string, Participant> = {
       "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-      "ag-old-1": { kind: "agent", name: "Old Agent", color: "#b86a1f" },
+      "ag-old-1": {
+        kind: "agent",
+        name: "Old Agent",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
     };
     resetStore({
       participants,
@@ -549,8 +627,18 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
   test("agent chip strip is sorted by presence state (online first, then offline)", () => {
     const participants: Record<string, Participant> = {
       "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-      "ag-offline": { kind: "agent", name: "AAA Offline", color: "#b86a1f" },
-      "ag-online": { kind: "agent", name: "ZZZ Online", color: "#1f7ab8" },
+      "ag-offline": {
+        kind: "agent",
+        name: "AAA Offline",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
+      "ag-online": {
+        kind: "agent",
+        name: "ZZZ Online",
+        color: "#1f7ab8",
+        active_session: SESSION.id,
+      },
     };
     resetStore({
       participants,
@@ -565,5 +653,79 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     /* Online agent appears before offline agent regardless of name. */
     expect(ids[0]).toBe("ag-online");
     expect(ids[1]).toBe("ag-offline");
+  });
+
+  test("agents bound to a different session do NOT appear in the chip strip", () => {
+    /* This is the regression test for the bug: a brand-new session (or
+       any session) must not display agents from other sessions, even if
+       they exist in the global participants registry. */
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-this": {
+        kind: "agent",
+        name: "Belongs Here",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
+      "ag-other": {
+        kind: "agent",
+        name: "Other Session",
+        color: "#1f7ab8",
+        active_session: "2026-05-22-some-other-session",
+      },
+      "ag-unbound": {
+        kind: "agent",
+        name: "Never Linked",
+        color: "#10b981",
+        active_session: null,
+      },
+    };
+    resetStore({ participants, managedAgents: [] });
+    const { container } = render(<TopBar />);
+    const ids = Array.from(container.querySelectorAll(".agent-chip")).map(
+      (c) => c.getAttribute("data-participant-id"),
+    );
+    expect(ids).toEqual(["ag-this"]);
+  });
+
+  test("brand-new session shows zero agent chips even when the participants registry is non-empty", () => {
+    /* The user-reported bug: creating a new session and seeing all
+       historical agents in the top panel. After the fix, switching to
+       a fresh session whose id no agent has been bound to → empty chip
+       strip. */
+    const NEW_SESSION_ID = "2026-05-24-fresh";
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-historical-1": {
+        kind: "agent",
+        name: "Old A",
+        color: "#b86a1f",
+        active_session: "2026-05-20-old",
+      },
+      "ag-historical-2": {
+        kind: "agent",
+        name: "Old B",
+        color: "#1f7ab8",
+        active_session: "2026-05-21-older",
+      },
+    };
+    resetStore({ participants, managedAgents: [] });
+    /* Switch to a session no agent is bound to — emulates "new session
+       just created, currentSessionId is its id". */
+    act(() => {
+      useStore.setState({
+        sessions: [
+          ...useStore.getState().sessions,
+          {
+            id: NEW_SESSION_ID,
+            slug: "fresh",
+            created_at: "2026-05-24T00:00:00Z",
+          },
+        ],
+        currentSessionId: NEW_SESSION_ID,
+      });
+    });
+    const { container } = render(<TopBar />);
+    expect(container.querySelectorAll(".agent-chip").length).toBe(0);
   });
 });

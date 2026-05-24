@@ -18,7 +18,7 @@ describe("MessageCard", () => {
       { content: "Hello **world**" },
     );
     const { container } = render(
-      <MessageCard event={ev} participants={PARTICIPANTS} />,
+      <MessageCard event={ev} participants={PARTICIPANTS} comments={[]} />,
     );
     const card = container.querySelector(".card.msg-card");
     expect(card).not.toBeNull();
@@ -38,7 +38,7 @@ describe("MessageCard", () => {
       { content: "agent here" },
     );
     const { container } = render(
-      <MessageCard event={ev} participants={PARTICIPANTS} />,
+      <MessageCard event={ev} participants={PARTICIPANTS} comments={[]} />,
     );
     const card = container.querySelector(".card.msg-card");
     expect(card!.classList.contains("agent")).toBe(true);

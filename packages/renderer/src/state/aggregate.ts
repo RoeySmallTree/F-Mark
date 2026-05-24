@@ -42,6 +42,15 @@ function isProseComment(e: AnyEventRecord): boolean {
   return getProseRole(e.payload as ProsePayload).kind === "comment";
 }
 
+function isRemovedCommentMarker(e: AnyEventRecord): boolean {
+  if (e.kind !== "prose") return false;
+  const payload = e.payload as ProsePayload;
+  return (
+    payload.content.trim() === "_removed_" &&
+    typeof payload.supersedes === "string"
+  );
+}
+
 function nextTurnPrefix(participantId: string): "us" | "ag" {
   return participantId.startsWith("ag-") ? "us" : "ag";
 }
@@ -238,6 +247,7 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
     if (e.kind !== "prose") continue;
     const ct = getCommentTarget(e.payload as ProsePayload);
     if (ct === undefined) continue;
+    if (isRemovedCommentMarker(e)) continue;
     /* Comments that target a superseded parent re-bind to the live
        parent — same chain walk as block re-binding. */
     let liveTarget = liveAnchorOf.get(ct.anchor);

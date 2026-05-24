@@ -90,10 +90,12 @@ All frontmatter fields are optional.
 }
 ```
 
-`status` is `open`, `wip`, `done`, or `removed`. `body`,
-`assigned_to`, `parent_id`, and `supersedes` are optional. Use the same
-`id` plus `supersedes` to update, complete, reassign, reparent, or remove a
-todo. Removing a parent todo also removes its visible subtasks.
+`status` is `open`, `wip`, `done`, or `removed`. Use `wip` for the one task
+you are actively working on now: when you start real work on an assigned task,
+update it to `wip`; when you finish, update it to `done`. `body`,
+`assigned_to`, `parent_id`, and `supersedes` are optional. Use the same `id`
+plus `supersedes` to update, complete, reassign, reparent, or remove a todo.
+Removing a parent todo also removes its visible subtasks.
 
 `POST /sessions/<id>/events/turn-end`
 
@@ -123,6 +125,44 @@ todo. Removing a parent todo also removes its visible subtasks.
 
 Use for diagrams, flowcharts, dependency graphs, decision trees, pipelines. The renderer auto-lays-out the graph when `position` is omitted on any node. `popover.html` is rendered inside a sandboxed iframe; `css` and `js` are optional companions.
 
+## Attachments
+
+Uploaded files are represented as `file` events. New uploads use this payload shape:
+
+```json
+{
+  "schema": "fmark.file.v1",
+  "id": "att_abc123",
+  "display_name": "report.pdf",
+  "path": "attachments/att_abc123/report.pdf",
+  "mime_type": "application/pdf",
+  "size_bytes": 12345,
+  "preview_kind": "pdf"
+}
+```
+
+`path` is relative to `.f-mark/sessions/<session-id>/`; the list endpoint also returns `disk_path` for local filesystem tools.
+
+`POST /sessions/<id>/attachments` accepts `multipart/form-data` with fields `participant_id`, `file`, optional `display_name`, and optional `description`.
+
+`GET /sessions/<id>/attachments` → `{ attachments: [...] }`.
+
+`GET /sessions/<id>/attachments/<file_id>` → `{ attachment }`.
+
+`GET /sessions/<id>/attachments/<file_id>/content` streams the bytes.
+
+`PATCH /sessions/<id>/attachments/<file_id>`
+
+```json
+{ "participant_id": "ag-codex", "display_name": "new-name.pdf" }
+```
+
+`POST /sessions/<id>/attachments/<file_id>/comments`
+
+```json
+{ "participant_id": "ag-codex", "content": "This chart needs a clearer axis label." }
+```
+
 ## Reading events
 
 `GET /sessions/<id>/events?since=<ts>&kinds=<csv>&participant=<id>`
@@ -142,9 +182,17 @@ Use for diagrams, flowcharts, dependency graphs, decision trees, pipelines. The 
 Prefer this endpoint over rebuilding task state from raw events. `tree`
 contains the aligned task hierarchy, with each parent followed by subtasks,
 and each item includes title, optional `body`, status, assignee, and parent id.
+Siblings are grouped by status first (`wip`, `open`, `done`) and then by
+assignee.
+
+For a model-facing task check, call
+`GET /sessions/<id>/todos?viewer=<your-participant-id>`. This keeps all visible
+todos in the response and annotates every bucket/tree item with
+`owned_by_viewer` and `ownership: "owned"` or `"NOT owned"`.
 
 `GET /sessions/<id>/todos?assigned_to=<participant_id>` filters both the
-buckets and the tree to one assignee.
+buckets and the tree to one assignee. Use this only when you intentionally want
+to hide other assignees' todos.
 
 ## WebSocket
 

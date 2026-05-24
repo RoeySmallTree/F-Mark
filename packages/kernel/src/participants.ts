@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readConfig, writeConfig, type Participant } from "./project.js";
 import type { Paths } from "./paths.js";
 import { loadRuntimes } from "./runtimes/registry.js";
+import { readActiveSession } from "./agents/activeSession.js";
 
 /** Hard cap on display-name length. Mirrors the JSON-schema constraint
  *  on /participants/register so direct kernel callers see the same
@@ -64,11 +65,28 @@ export interface UpdatedParticipant {
   color: string;
 }
 
+/* Wire shape: the persisted Participant from project.ts plus active_session
+   read from `.f-mark/agents/{id}/active-session`. Users always get
+   active_session: null. Agents that have never been linked (no spawn,
+   no /agents/:id/link) also get null. */
+export type ParticipantWithSession = Participant & {
+  active_session: string | null;
+};
+
 export async function listParticipants(
   p: Paths,
-): Promise<Record<string, Participant>> {
+): Promise<Record<string, ParticipantWithSession>> {
   const cfg = await readConfig(p);
-  return cfg.participants;
+  const out: Record<string, ParticipantWithSession> = {};
+  for (const [id, part] of Object.entries(cfg.participants)) {
+    if (part.kind === "agent") {
+      const active_session = await readActiveSession(p.fmarkDir(), id);
+      out[id] = { ...part, active_session };
+    } else {
+      out[id] = { ...part, active_session: null };
+    }
+  }
+  return out;
 }
 
 function nextColor(existing: Record<string, Participant>): string {

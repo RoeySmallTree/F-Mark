@@ -9,7 +9,7 @@
    embedded blocks (see plan.md ProseInlineBlock section, review_2
    finding C). */
 
-import { type FC, type JSX } from "react";
+import { type FC, type JSX, lazy, Suspense } from "react";
 import type {
   AnyEventRecord,
   EventKind,
@@ -19,7 +19,11 @@ import type {
 } from "@f-mark/shared";
 import { type MarkdownMode } from "../render/MarkdownRenderer.js";
 import { LineCommentRail } from "./LineCommentRail.js";
-import { FlowCard } from "./FlowCard.js";
+/* Lazy — see EventCard.tsx for rationale (keeps @xyflow + dagre out of
+   the main chunk). */
+const FlowCard = lazy(() =>
+  import("./FlowCard.js").then((m) => ({ default: m.FlowCard })),
+);
 import { EmbedCard } from "./EmbedCard.js";
 import { FileCard } from "./FileCard.js";
 import { ChoicesCard } from "./ChoicesCard.js";
@@ -69,7 +73,9 @@ const InlineProseBlock: FC<InlineProps> = ({
   );
 };
 const InlineFlowBlock: FC<InlineProps> = ({ event, participants }) => (
-  <FlowCard event={event} participants={participants} variant="embedded" />
+  <Suspense fallback={<div className="flow-card flow-card-embedded" data-event-kind="flow" />}>
+    <FlowCard event={event} participants={participants} variant="embedded" />
+  </Suspense>
 );
 const InlineFileBlock: FC<InlineProps> = ({ event, participants, comments }) => (
   <FileCard event={event} participants={participants} comments={comments} />

@@ -1,4 +1,4 @@
-import { useMemo, type JSX } from "react";
+import { useEffect, useMemo, useRef, type JSX } from "react";
 import { useStore } from "../state/store.js";
 import { aggregate } from "../state/aggregate.js";
 import { EventCard } from "../cards/EventCard.js";
@@ -49,6 +49,36 @@ export function Feed(): JSX.Element {
     [slice, viewMode],
   );
 
+  /* Fresh-item tracking — animate only newly-added cards. On first render,
+     every item is fresh (cascade in). On subsequent renders, only items
+     not in the seen-set get the entrance animation; existing cards stay
+     put. After commit, sync the seen-set to the current item keys. */
+  const seenKeysRef = useRef<Set<string> | null>(null);
+  const freshKeys = useMemo(() => {
+    const seen = seenKeysRef.current;
+    const fresh = new Set<string>();
+    for (const item of items) {
+      const key =
+        item.type === "group"
+          ? `grp-${item.items[0]!.filename}`
+          : item.event.filename;
+      if (seen === null || !seen.has(key)) fresh.add(key);
+    }
+    return fresh;
+  }, [items]);
+
+  useEffect(() => {
+    const next = new Set<string>();
+    for (const item of items) {
+      next.add(
+        item.type === "group"
+          ? `grp-${item.items[0]!.filename}`
+          : item.event.filename,
+      );
+    }
+    seenKeysRef.current = next;
+  }, [items]);
+
   return (
     <section className="feed-col" aria-label="Feed">
       <div
@@ -59,28 +89,45 @@ export function Feed(): JSX.Element {
           {items.length === 0 ? (
             <EmptyState viewMode={viewMode} />
           ) : (
-            items.map((item) =>
-              item.type === "group" ? (
-                <ArbitraryGroupCard
-                  key={`grp-${item.items[0]!.filename}`}
-                  group={item}
-                  participants={participants}
-                  allEvents={agg.events}
-                />
-              ) : (
+            items.map((item, idx) => {
+              const key =
+                item.type === "group"
+                  ? `grp-${item.items[0]!.filename}`
+                  : item.event.filename;
+              const isFresh = freshKeys.has(key);
+              const staggerIdx = Math.min(idx, 7);
+              const motionStyle: React.CSSProperties = {
+                ["--i" as string]: staggerIdx,
+              };
+              if (item.type === "group") {
+                return (
+                  <div
+                    key={key}
+                    className={"feed-item" + (isFresh ? " is-fresh" : "")}
+                    style={isFresh ? motionStyle : undefined}
+                  >
+                    <ArbitraryGroupCard
+                      group={item}
+                      participants={participants}
+                      allEvents={agg.events}
+                    />
+                  </div>
+                );
+              }
+              const isOrphan = agg.orphanBlocks.has(item.event.filename);
+              return (
                 <div
-                  key={item.event.filename}
+                  key={key}
                   data-event-filename={item.event.filename}
-                  data-orphan-embed={
-                    agg.orphanBlocks.has(item.event.filename) ? "true" : undefined
-                  }
+                  data-orphan-embed={isOrphan ? "true" : undefined}
                   className={
-                    agg.orphanBlocks.has(item.event.filename)
-                      ? "feed-item-orphan"
-                      : undefined
+                    "feed-item" +
+                    (isOrphan ? " feed-item-orphan" : "") +
+                    (isFresh ? " is-fresh" : "")
                   }
+                  style={isFresh ? motionStyle : undefined}
                 >
-                  {agg.orphanBlocks.has(item.event.filename) && (
+                  {isOrphan && (
                     <div className="orphan-embed-badge" role="note">
                       orphaned embed — append_to points at a missing anchor
                     </div>
@@ -105,8 +152,8 @@ export function Feed(): JSX.Element {
                     }
                   />
                 </div>
-              ),
-            )
+              );
+            })
           )}
         </div>
       </div>

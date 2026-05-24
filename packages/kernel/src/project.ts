@@ -26,11 +26,11 @@ function shortId(prefix: "us" | "ag"): string {
   return `${prefix}-${randomBytes(2).toString("hex")}`;
 }
 
-function defaultConfig(): ProjectConfig {
+function defaultConfig(port: number): ProjectConfig {
   const id = shortId("us");
   return {
     version: DEFAULT_VERSION,
-    port: DEFAULT_PORT,
+    port,
     participants: {
       [id]: { kind: "user", name: "You", color: USER_COLOR },
     },
@@ -51,11 +51,11 @@ function assetsDir(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 }
 
-export async function initProject(p: Paths): Promise<void> {
+export async function initProject(p: Paths, port: number = DEFAULT_PORT): Promise<void> {
   await mkdir(p.fmarkDir(), { recursive: true });
   await mkdir(p.sessionsDir(), { recursive: true });
   if (!(await exists(p.configFile()))) {
-    await writeFile(p.configFile(), JSON.stringify(defaultConfig(), null, 2));
+    await writeFile(p.configFile(), JSON.stringify(defaultConfig(port), null, 2));
   }
   if (!(await exists(p.agentMd()))) {
     const template = await readFile(join(assetsDir(), "AGENT.md"), "utf8");

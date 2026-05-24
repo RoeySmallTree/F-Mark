@@ -34,6 +34,7 @@ export function HookInstallModal({
 }: HookInstallModalProps): JSX.Element {
   const [data, setData] = useState<HookInstallInstructions | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const manualStreamMode = runtimeId === "gemini";
 
   /* Memoize the request shape so we don't re-fire if React re-runs the
      effect for unrelated reasons. The three identifiers are the only
@@ -81,9 +82,11 @@ export function HookInstallModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <div className="modal-eyebrow">HOOK INSTALL</div>
+          <div className="modal-eyebrow">
+            {manualStreamMode ? "MANUAL STREAM" : "HOOK INSTALL"}
+          </div>
           <h2 className="modal-title" id="hook-install-title">
-            Manual hook setup
+            {manualStreamMode ? "Gemini manual stream" : "Manual hook setup"}
           </h2>
           <button
             type="button"

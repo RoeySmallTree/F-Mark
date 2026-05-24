@@ -39,7 +39,7 @@ export function RightNamed(): JSX.Element {
 
   return (
     <div>
-      {namedEvents.map((ev) => {
+      {namedEvents.map((ev, idx) => {
         const payload = ev.payload as ProsePayload;
         const author =
           participants[ev.participant_id]?.name ?? ev.participant_id;
@@ -48,6 +48,7 @@ export function RightNamed(): JSX.Element {
             key={ev.filename}
             role="button"
             tabIndex={0}
+            className="staggered-row"
             style={{
               display: "flex",
               gap: 10,
@@ -55,6 +56,7 @@ export function RightNamed(): JSX.Element {
               borderBottom: "1px solid var(--line-2)",
               alignItems: "flex-start",
               cursor: "pointer",
+              ["--i" as string]: Math.min(idx, 5),
             }}
             onClick={() => jumpTo(ev.filename)}
             onKeyDown={(e) => {

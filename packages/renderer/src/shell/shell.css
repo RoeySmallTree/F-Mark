@@ -560,6 +560,11 @@
   line-height: 1;
 }
 
+@keyframes panel-content-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .left-panel {
   width: 288px;
   background: var(--panel);
@@ -567,6 +572,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  animation: panel-content-enter var(--dur-fast) var(--ease-out-quart) both;
+}
+
+.right-pane-content {
+  animation: panel-content-enter var(--dur-fast) var(--ease-out-quart) both;
 }
 .panel-head {
   display: flex;
@@ -1111,12 +1121,19 @@
 /* Compose bar */
 .compose {
 }
+
+@keyframes compose-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .compose-inner {
   max-width: 780px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--compose-inner-gap);
+  animation: compose-enter var(--dur-slow) var(--ease-out-quart) both;
 }
 .compose-target {
   display: flex;
@@ -1150,6 +1167,11 @@
 /* Name chip — collapsed pill above the textarea ("Name it") that expands
    in-place into an inline title input + × cancel when activated.
    Subsumes the prior .compose-name card. */
+@keyframes name-chip-enter {
+  from { opacity: 0; transform: translateY(-4px); max-width: 0; }
+  to   { opacity: 1; transform: translateY(0); max-width: 400px; }
+}
+
 .name-chip {
   align-self: flex-start;
   display: inline-flex;
@@ -1166,10 +1188,11 @@
   border: 1px solid var(--line);
   cursor: pointer;
   transition:
-    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    background-color 160ms var(--ease-out-quint),
+    color 160ms var(--ease-out-quint),
+    border-color 160ms var(--ease-out-quint);
   margin: 0 var(--compose-pad-x);
+  animation: name-chip-enter var(--dur-base) var(--ease-out-quart) both;
 }
 .name-chip:hover {
   background: var(--bg);
@@ -1633,9 +1656,12 @@
   align-items: center;
   justify-items: center;
   padding: 8px 18px;
+  width: 40%;
   min-width: 144px;
   border: 1px solid var(--ink);
-  border-radius: 9px;
+  border-radius: 30px;
+  perspective: 320px;
+  transform-style: preserve-3d;
   background: var(--ink);
   color: var(--canvas);
   font-family: var(--sans);
@@ -1692,9 +1718,11 @@
   filter: brightness(1.05);
 }
 
-/* The four stacked labels. Each occupies the same grid cell. The active
-   one fades in; the others sit at opacity 0 but still claim space so
-   the cell sizes to the LONGEST label and the button never reflows. */
+/* The four stacked labels. Each occupies the same grid cell so the cell
+   sizes to the LONGEST label and the button never reflows. Inactive
+   labels rest at rotateX(-90deg) (flipped up, hidden above the front
+   face). The active label sits at rotateX(0). State change = one label
+   rolls down into view, the other rolls up out — a split-flap feel. */
 .primary-action__label {
   grid-area: stage;
   display: inline-flex;
@@ -1702,12 +1730,19 @@
   gap: 6px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: rotateX(-90deg);
+  transform-origin: 50% 100%;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  transition:
+    transform 280ms var(--ease-out-quint),
+    opacity 220ms var(--ease-out-quint);
 }
 
 .primary-action__label.is-active {
   opacity: 1;
   pointer-events: auto;
+  transform: rotateX(0deg);
 }
 
 .primary-action__label .kbd {

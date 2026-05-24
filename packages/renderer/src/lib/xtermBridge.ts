@@ -98,6 +98,8 @@ export function createXtermBridge(socket: PaneSocketLike): XtermBridge {
         if (cur === null) return;
         if (!isPaneMessage(msg)) return;
         if (msg.type === "pane.snapshot" && typeof msg.data === "string") {
+          const resettable = cur as unknown as { reset?: () => void };
+          resettable.reset?.();
           cur.write(msg.data);
         } else if (msg.type === "pane.data" && typeof msg.data === "string") {
           cur.write(msg.data);

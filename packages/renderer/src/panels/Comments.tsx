@@ -64,15 +64,15 @@ export function Comments(): JSX.Element {
               <div className="group-label" style={{ padding: "10px 0 6px" }}>
                 ON “{target}”
               </div>
-              {comments.map((ev) => {
+              {comments.map((ev, idx) => {
                 const payload = ev.payload as ProsePayload;
                 const author =
                   participants[ev.participant_id]?.name ?? ev.participant_id;
                 return (
                   <div
                     key={ev.filename}
-                    className="session-item"
-                    style={{ padding: "9px 10px" }}
+                    className="session-item staggered-row"
+                    style={{ padding: "9px 10px", ["--i" as string]: Math.min(idx, 5) }}
                   >
                     <div
                       style={{

@@ -81,5 +81,21 @@ describe.skipIf(!rendererBuilt || sampleAsset === undefined)(
         await app.close();
       });
     });
+
+    it("does not serve the SPA shell for unknown v0.4 API paths", async () => {
+      await withTempProject(async (root) => {
+        const p = paths(root);
+        await initProject(p);
+        const { app } = createServer({ token: null, paths: p });
+        const res = await app.inject({
+          method: "GET",
+          url: "/env-probe/not-a-route",
+        });
+        expect(res.statusCode).toBe(404);
+        expect(res.headers["content-type"]).toMatch(/json/);
+        expect(res.json()).toEqual({ error: "not found" });
+        await app.close();
+      });
+    });
   },
 );

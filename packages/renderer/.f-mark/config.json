@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "port": 7777,
+  "participants": {
+    "us-7e89": {
+      "kind": "user",
+      "name": "You",
+      "color": "#3b82f6"
+    }
+  }
+}
