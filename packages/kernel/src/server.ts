@@ -160,7 +160,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
     clearInterval(presenceTicker);
   });
 
-  registerParticipantRoutes(app, deps.paths);
+  registerParticipantRoutes(app, { fallback: deps.paths, ref: deps.pathContextRef });
   registerAgentsRoutes(app, deps.paths);
   registerSessionRoutes(app, { fallback: deps.paths, ref: deps.pathContextRef });
   registerEventRoutes(app, deps.paths, () => busRef);

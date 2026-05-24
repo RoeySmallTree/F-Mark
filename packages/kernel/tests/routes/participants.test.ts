@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer } from "../../src/server.js";
 import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
+import { activePaths } from "../../src/paths/active.js";
+import { globalPaths } from "../../src/paths/global.js";
+import { PathContextRef } from "../../src/paths/contextRef.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 describe("routes /participants", () => {
@@ -123,6 +129,55 @@ describe("routes /participants", () => {
       });
       expect(res.statusCode).toBe(400);
       await app.close();
+    });
+  });
+
+  describe("multi-path scoping", () => {
+    it("reads participants from the active path, not the fallback", async () => {
+      await withTempProject(async (fallbackRoot) => {
+        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-pt-other-"));
+        const configRoot = mkdtempSync(join(tmpdir(), "fmark-pt-cfg-"));
+        try {
+          const fallback = paths(fallbackRoot);
+          await initProject(fallback);
+          const other = paths(otherRoot);
+          await initProject(other);
+
+          const g = globalPaths(configRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePaths(otherRoot),
+          });
+          const { app } = createServer({
+            token: null,
+            paths: fallback,
+            pathContextRef: ref,
+          });
+
+          // Register an agent in the active path.
+          await app.inject({
+            method: "POST",
+            url: "/participants/register",
+            payload: { kind: "agent", name: "OtherAgent" },
+          });
+
+          // GET should show the active-path roster (1 user + 1 agent).
+          const res = await app.inject({ method: "GET", url: "/participants" });
+          const list = res.json().participants as Record<string, { name: string }>;
+          expect(Object.values(list).some((p) => p.name === "OtherAgent")).toBe(true);
+
+          // Switch ref away — should now see only fallback's default user.
+          ref.setActive(null);
+          const res2 = await app.inject({ method: "GET", url: "/participants" });
+          const list2 = res2.json().participants as Record<string, { name: string }>;
+          expect(Object.values(list2).some((p) => p.name === "OtherAgent")).toBe(false);
+
+          await app.close();
+        } finally {
+          rmSync(otherRoot, { recursive: true, force: true });
+          rmSync(configRoot, { recursive: true, force: true });
+        }
+      });
     });
   });
 });

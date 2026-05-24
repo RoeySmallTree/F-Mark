@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { Paths } from "../paths.js";
+import { paths as makePaths, type Paths } from "../paths.js";
+import type { PathContextRef } from "../paths/contextRef.js";
 import {
   listParticipants,
   registerAgent,
@@ -21,9 +22,33 @@ interface UpdateBody {
   color?: string;
 }
 
-export function registerParticipantRoutes(app: FastifyInstance, p: Paths): void {
+export interface ParticipantRouteDeps {
+  /** Fallback Paths used when no multi-path ref is wired (e.g., existing
+      tests that pass a plain Paths object). */
+  fallback: Paths;
+  /** Optional multi-path ref. When provided and ref.active is set, the
+      route reads/writes participants from the active path's .f-mark/
+      instead of the fallback. */
+  ref?: PathContextRef;
+}
+
+function resolvePaths(deps: ParticipantRouteDeps): Paths {
+  if (deps.ref) {
+    const active = deps.ref.get().active;
+    if (active !== null) return makePaths(active.root());
+  }
+  return deps.fallback;
+}
+
+export function registerParticipantRoutes(
+  app: FastifyInstance,
+  pOrDeps: Paths | ParticipantRouteDeps,
+): void {
+  const deps: ParticipantRouteDeps =
+    "fallback" in pOrDeps ? pOrDeps : { fallback: pOrDeps };
+
   app.get("/participants", async () => {
-    return { participants: await listParticipants(p) };
+    return { participants: await listParticipants(resolvePaths(deps)) };
   });
 
   app.post<{ Body: RegisterBody }>(
@@ -43,7 +68,7 @@ export function registerParticipantRoutes(app: FastifyInstance, p: Paths): void 
     },
     async (req, reply) => {
       try {
-        const created = await registerAgent(p, {
+        const created = await registerAgent(resolvePaths(deps), {
           name: req.body.name!,
           suggested_id: req.body.suggested_id,
         });
@@ -77,7 +102,7 @@ export function registerParticipantRoutes(app: FastifyInstance, p: Paths): void 
     },
     async (req, reply) => {
       try {
-        const updated = await updateParticipant(p, req.params.id, {
+        const updated = await updateParticipant(resolvePaths(deps), req.params.id, {
           name: req.body.name,
           color: req.body.color,
         });
