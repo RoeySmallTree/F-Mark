@@ -66,8 +66,13 @@ export async function createSession(
 }
 
 export async function listSessions(p: Paths): Promise<SessionMeta[]> {
-  await mkdir(p.sessionsDir(), { recursive: true });
-  const entries = await readdir(p.sessionsDir(), { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(p.sessionsDir(), { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
   const sessions: SessionMeta[] = [];
   for (const e of entries) {
     if (!e.isDirectory()) continue;

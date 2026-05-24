@@ -26,6 +26,7 @@ import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
 import { registerHookInstallRoutes } from "./routes/hookInstall.js";
 import { registerPathRoutes } from "./routes/paths.js";
+import { registerFsRoutes } from "./routes/fs.js";
 import type { PathContextRef } from "./paths/contextRef.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
@@ -161,7 +162,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
 
   registerParticipantRoutes(app, deps.paths);
   registerAgentsRoutes(app, deps.paths);
-  registerSessionRoutes(app, deps.paths);
+  registerSessionRoutes(app, { fallback: deps.paths, ref: deps.pathContextRef });
   registerEventRoutes(app, deps.paths, () => busRef);
   registerTodoRoutes(app, deps.paths, () => busRef);
   registerFileRoutes(app, deps.paths, () => busRef);
@@ -178,6 +179,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   if (deps.pathContextRef) {
     registerPathRoutes(app, deps.pathContextRef);
   }
+  registerFsRoutes(app);
 
   // /env-probe is a read-only PATH-detection endpoint; it lives outside the
   // process-API gate so the UI can render the install banner even under
