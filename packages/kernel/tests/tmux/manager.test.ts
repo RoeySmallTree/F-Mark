@@ -28,6 +28,10 @@ describe("TmuxManager", () => {
       "-d",
       "-s",
       result.sessionName,
+      // F_MARK_PATH is injected by spawnAgent so hooks running inside the
+      // pane can identify their bound project across kernel path switches.
+      "-e",
+      `F_MARK_PATH=${root}`,
       "-e",
       "CLAUDE_TEST=1",
       "-c",

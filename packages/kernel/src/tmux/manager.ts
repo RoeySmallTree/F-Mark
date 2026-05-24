@@ -71,8 +71,15 @@ export function createTmuxManager(deps: {
   return {
     async spawnAgent({ participantId, executable, args, env }) {
       const sessionName = fmarkAgentSessionName(projectRoot, participantId);
+      // Inject F_MARK_PATH so hooks running inside the pane can identify
+      // their bound project even after the kernel's active path moves on.
+      // Callers can override by setting their own F_MARK_PATH in env.
+      const effectiveEnv: Record<string, string> = {
+        F_MARK_PATH: projectRoot,
+        ...(env ?? {}),
+      };
       const envArgs: string[] = [];
-      for (const [k, v] of Object.entries(env ?? {})) envArgs.push("-e", `${k}=${v}`);
+      for (const [k, v] of Object.entries(effectiveEnv)) envArgs.push("-e", `${k}=${v}`);
       // `--` separates tmux's own flags from the runtime command argv so that
       // executable/args with leading dashes are never reinterpreted as tmux
       // options.
