@@ -17,7 +17,7 @@ import {
   type JSX,
   type KeyboardEvent,
 } from "react";
-import { ChevronRight, FolderClosed } from "lucide-react";
+import { ChevronRight, FolderClosed, Star, X } from "lucide-react";
 import { createClient, type FsListEntry } from "../../api/client.js";
 import { useStore } from "../../state/store.js";
 
@@ -60,9 +60,15 @@ function joinAt(crumbs: string[], idx: number): string {
 
 export function FolderPicker(props: FolderPickerProps): JSX.Element {
   const token = useStore((s) => s.token);
+  const favorites = useStore((s) => s.favorites) ?? [];
+  const setFavorites = useStore((s) => s.setFavorites);
   const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
   const [state, setState] = useState<ListState>(LOADING);
   const [focusedIdx, setFocusedIdx] = useState<number>(-1);
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [favName, setFavName] = useState("");
+  const [favError, setFavError] = useState<string | null>(null);
+  const [savingFav, setSavingFav] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(
@@ -146,6 +152,47 @@ export function FolderPicker(props: FolderPickerProps): JSX.Element {
     }
   }, [focusedIdx]);
 
+  const saveCurrentAsFavorite = useCallback(
+    async (name: string): Promise<void> => {
+      if (savingFav) return;
+      const trimmed = name.trim();
+      if (trimmed.length === 0) {
+        setFavError("Name required");
+        return;
+      }
+      setSavingFav(true);
+      setFavError(null);
+      try {
+        const res = await client.addFavorite({ name: trimmed, path: state.path });
+        setFavorites(res.favorites);
+        setSavePromptOpen(false);
+        setFavName("");
+      } catch (e) {
+        setFavError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSavingFav(false);
+      }
+    },
+    [client, state.path, setFavorites, savingFav],
+  );
+
+  const removeFavorite = useCallback(
+    async (path: string): Promise<void> => {
+      try {
+        const res = await client.removeFavorite(path);
+        setFavorites(res.favorites);
+      } catch {
+        /* keep silent — user just sees the chip stay */
+      }
+    },
+    [client, setFavorites],
+  );
+
+  const currentIsFavorited = useMemo(
+    () => favorites.some((f) => f.path === state.path),
+    [favorites, state.path],
+  );
+
   return (
     <div
       className="folder-picker"
@@ -154,6 +201,93 @@ export function FolderPicker(props: FolderPickerProps): JSX.Element {
       tabIndex={0}
       onKeyDown={onKeyDown}
     >
+      <div className="folder-picker-favorites" aria-label="Favorites">
+        {favorites.map((f) => (
+          <span key={f.path} className="folder-picker-fav-chip">
+            <button
+              type="button"
+              className="folder-picker-fav-jump"
+              onClick={() => void load(f.path)}
+              title={f.path}
+            >
+              <Star size={10} aria-hidden />
+              {f.name}
+            </button>
+            <button
+              type="button"
+              className="folder-picker-fav-remove"
+              onClick={() => void removeFavorite(f.path)}
+              aria-label={`Remove favorite ${f.name}`}
+              title="Remove from favorites"
+            >
+              <X size={10} aria-hidden />
+            </button>
+          </span>
+        ))}
+        {!currentIsFavorited && state.status === "ready" && (
+          <button
+            type="button"
+            className="folder-picker-fav-add"
+            onClick={() => {
+              setSavePromptOpen(true);
+              setFavError(null);
+            }}
+          >
+            + Save current as favorite
+          </button>
+        )}
+      </div>
+
+      {savePromptOpen && (
+        <div className="folder-picker-fav-prompt" role="dialog" aria-label="Save favorite">
+          <input
+            className="form-input"
+            placeholder="Name this folder (e.g. F-Mark dev)"
+            value={favName}
+            autoFocus
+            aria-label="Favorite name"
+            onChange={(e) => setFavName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                void saveCurrentAsFavorite(favName);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                setSavePromptOpen(false);
+                setFavName("");
+                setFavError(null);
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn-solid"
+            disabled={savingFav || favName.trim().length === 0}
+            onClick={() => void saveCurrentAsFavorite(favName)}
+          >
+            {savingFav ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              setSavePromptOpen(false);
+              setFavName("");
+              setFavError(null);
+            }}
+          >
+            Cancel
+          </button>
+          {favError !== null && (
+            <div className="form-error" role="alert">
+              {favError}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="folder-picker-breadcrumbs" aria-label="Breadcrumbs">
         <button
           type="button"

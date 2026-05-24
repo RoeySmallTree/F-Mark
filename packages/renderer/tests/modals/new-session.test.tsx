@@ -231,6 +231,47 @@ describe("NewSessionModal (v0.5)", () => {
     expect(useStore.getState().activeModal).toBe("new-session");
   });
 
+  test("saves a favorite from the picker and shows it as a chip", async () => {
+    const mock = stubFetch((url, init) => {
+      if (url.endsWith("/paths/favorites") && init?.method === "POST") {
+        return jsonResponse({
+          favorites: [{ name: "Home", path: "/home/me" }],
+        });
+      }
+      return null;
+    });
+    const user = userEvent.setup();
+    render(<ModalRoot />);
+    act(() => { useStore.getState().openModal("new-session"); });
+    await waitFor(() => {
+      expect(screen.getByText("/home/me")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /browse/i }));
+    // Wait for the picker to be ready (list loaded).
+    await screen.findByText("projects");
+    await user.click(screen.getByText(/Save current as favorite/i));
+    await user.type(screen.getByLabelText(/favorite name/i), "Home");
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => {
+      const call = mock.mock.calls.find(([u, init]) => {
+        return (
+          String(u).endsWith("/paths/favorites") &&
+          (init as RequestInit | undefined)?.method === "POST"
+        );
+      });
+      expect(call).toBeDefined();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toEqual({ name: "Home", path: "/home/me" });
+    });
+    // Store updated → chip should render.
+    await waitFor(() => {
+      expect(useStore.getState().favorites).toEqual([
+        { name: "Home", path: "/home/me" },
+      ]);
+    });
+  });
+
   test("opens the modal from Sessions panel '+ NEW' button", async () => {
     const { Sessions } = await import("../../src/panels/Sessions.js");
     stubFetch();
