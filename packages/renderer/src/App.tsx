@@ -252,6 +252,28 @@ export function App(): JSX.Element {
         return;
       }
 
+      /* Envelope filter: when the kernel's wrap injected a pathId+revision,
+         drop messages that don't match the renderer's current view. This
+         closes the "in-flight event from path A delivered after switching
+         to path B" race (session ids can collide across paths). When the
+         envelope is absent (legacy kernel), pass-through. */
+      const store = useStore.getState();
+      if (
+        "pathId" in m &&
+        m.pathId != null &&
+        store.activePathId != null &&
+        m.pathId !== store.activePathId
+      ) {
+        return;
+      }
+      if (
+        "revision" in m &&
+        typeof m.revision === "number" &&
+        m.revision < store.activeRevision
+      ) {
+        return;
+      }
+
       /* Managed-agent / presence / env-probe messages are session-agnostic
          (they describe global runtime state). */
       if (isManagedAgentMessage(m)) {
@@ -259,7 +281,7 @@ export function App(): JSX.Element {
         return;
       }
 
-      const sessionId = useStore.getState().currentSessionId;
+      const sessionId = store.currentSessionId;
       if (sessionId === null) return;
       if (m.session_id !== sessionId) return;
       if (m.type === "event_added") {

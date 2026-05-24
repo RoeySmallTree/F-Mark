@@ -30,6 +30,7 @@ import { registerFsRoutes } from "./routes/fs.js";
 import type { PathContextRef } from "./paths/contextRef.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
+import { wrapBusWithEnvelope } from "./ws/envelope.js";
 import { createPaneHub } from "./ws/paneHub.js";
 import { registerPaneWebSocket } from "./ws/pane.js";
 import { createTmuxManager } from "./tmux/manager.js";
@@ -147,7 +148,14 @@ export function createServer(deps: ServerDeps): CreatedServer {
   let busRef: Bus = { publish(_m: BusMessage) {} };
   app.register(websocketPlugin);
   app.register(async (instance) => {
-    busRef = registerWebSocket(instance);
+    const rawBus = registerWebSocket(instance);
+    // Wrap once at the entry point so every publisher (presence tracker,
+    // event routes, managed-agent routes, env-probe) emits messages with
+    // the current pathId+revision envelope. Path-switched messages bypass
+    // the wrap (they carry their own envelope and announce the switch).
+    busRef = deps.pathContextRef
+      ? wrapBusWithEnvelope(rawBus, deps.pathContextRef)
+      : rawBus;
     void seqLog("websocket plugin ready", { module: "server" });
   });
 

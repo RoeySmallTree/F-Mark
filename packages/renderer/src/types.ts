@@ -5,6 +5,10 @@ export interface EventBusMessage {
   kind?: string;
   participant_id?: string;
   supersedes?: string;
+  /** Path envelope — set by the kernel's WS wrap. Used by the renderer to
+      drop stale events from a path that's no longer active. */
+  pathId?: string | null;
+  revision?: number;
 }
 
 export interface PathSwitchedBusMessage {

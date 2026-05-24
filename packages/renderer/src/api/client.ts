@@ -1,6 +1,7 @@
 import type {
   AnyEventRecord,
   EventKind,
+  FileRefPayload,
   Participant,
   Preset,
   RegisteredAgent,
@@ -98,6 +99,21 @@ export interface PostFileBody {
   append_to?: string;
 }
 
+export interface UploadAttachmentInput {
+  participant_id: string;
+  file: File;
+  display_name?: string;
+  description?: string;
+}
+
+export interface UploadAttachmentResponse {
+  filename: string;
+  timestamp: string;
+  participant_id: string;
+  kind: "file";
+  payload: FileRefPayload;
+}
+
 export interface UpdateParticipantPatch {
   name?: string;
   color?: string;
@@ -133,6 +149,8 @@ export interface PathFavorite {
 
 export interface PathsResponse {
   activePath: string | null;
+  /** sha256(realpath)[0..11] of the active path; null when activePath is null. */
+  activePathId: string | null;
   activeRevision: number;
   knownPaths: string[];
   favorites: PathFavorite[];
@@ -180,6 +198,10 @@ export interface Client {
   postHtml(sessionId: string, body: PostHtmlBody): Promise<{ filename: string }>;
   postFlow(sessionId: string, body: PostFlowBody): Promise<{ filename: string }>;
   postFile(sessionId: string, body: PostFileBody): Promise<{ filename: string }>;
+  uploadAttachment(
+    sessionId: string,
+    input: UploadAttachmentInput,
+  ): Promise<UploadAttachmentResponse>;
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoListResponse>;
   search(query: string, sessionId?: string): Promise<SearchHit[]>;
   listPresets(sessionId?: string): Promise<{ builtin: Preset[]; project: Preset[] }>;
@@ -194,6 +216,11 @@ function buildHeaders(token: string | null): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   if (token !== null) h.Authorization = `Bearer ${token}`;
   return h;
+}
+
+function buildAuthHeaders(token: string | null): Record<string, string> {
+  if (token === null) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function jsonOrThrow(res: Response): Promise<unknown> {
@@ -359,6 +386,23 @@ export function createClient(cfg: ClientConfig): Client {
         `/sessions/${sessionId}/events/file`,
         body,
       )) as { filename: string };
+    },
+    async uploadAttachment(sessionId, input) {
+      const form = new FormData();
+      form.set("participant_id", input.participant_id);
+      if (input.display_name !== undefined) {
+        form.set("display_name", input.display_name);
+      }
+      if (input.description !== undefined) {
+        form.set("description", input.description);
+      }
+      form.set("file", input.file);
+      const res = await fetch(url(`/sessions/${sessionId}/attachments`), {
+        method: "POST",
+        headers: buildAuthHeaders(cfg.token),
+        body: form,
+      });
+      return (await jsonOrThrow(res)) as UploadAttachmentResponse;
     },
     async listTodos(sessionId, assignedTo) {
       const qs = new URLSearchParams();

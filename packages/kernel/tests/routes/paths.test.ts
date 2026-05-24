@@ -47,6 +47,7 @@ describe("/paths routes", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({
         activePath: null,
+        activePathId: null,
         activeRevision: 0,
         knownPaths: [],
         favorites: [],

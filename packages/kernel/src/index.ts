@@ -78,9 +78,10 @@ const pathContextRef = new PathContextRef({
 // Persist the boot-time active path to state.json so the renderer (and any
 // PathSwitcher dropdown) sees it immediately. Also push to knownPaths so it
 // shows up under recents on the next launch.
-await updateState(gPaths, (s) =>
+const bootState = await updateState(gPaths, (s) =>
   bumpRevision(mruPush({ ...s, activePath: projectRoot }, projectRoot)),
 );
+pathContextRef.setRevision(bootState.activeRevision);
 
 let token: string | null = null;
 if (options.noAuth) {

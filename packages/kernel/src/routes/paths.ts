@@ -112,15 +112,30 @@ export function registerPathRoutes(
     });
   }
 
-  app.get("/paths", async () => {
-    const g = ref.global();
-    const state = await updateState(g, (s) => s);
+  function buildResponse(state: KernelState): {
+    activePath: string | null;
+    activePathId: string | null;
+    activeRevision: number;
+    knownPaths: string[];
+    favorites: Favorite[];
+  } {
+    const active = ref.get().active;
     return {
       activePath: state.activePath,
+      activePathId: active ? active.pathId() : null,
       activeRevision: state.activeRevision,
       knownPaths: state.knownPaths,
       favorites: state.favorites,
     };
+  }
+
+  app.get("/paths", async () => {
+    const g = ref.global();
+    const state = await updateState(g, (s) => s);
+    // Mirror revision into the ref so the WS envelope wrap stays in sync
+    // even if state.json was hand-edited between requests.
+    ref.setRevision(state.activeRevision);
+    return buildResponse(state);
   });
 
   app.post<{ Body: { path?: string } }>("/paths/active", async (req, reply) => {
@@ -135,13 +150,9 @@ export function registerPathRoutes(
       return bumpRevision(promoted);
     });
     ref.setActive(activePaths(validation.canonical));
+    ref.setRevision(next.activeRevision);
     broadcastSwitch(next);
-    return {
-      activePath: next.activePath,
-      activeRevision: next.activeRevision,
-      knownPaths: next.knownPaths,
-      favorites: next.favorites,
-    };
+    return buildResponse(next);
   });
 
   app.delete("/paths/active", async () => {
@@ -150,13 +161,9 @@ export function registerPathRoutes(
       bumpRevision({ ...s, activePath: null }),
     );
     ref.setActive(null);
+    ref.setRevision(next.activeRevision);
     broadcastSwitch(next);
-    return {
-      activePath: next.activePath,
-      activeRevision: next.activeRevision,
-      knownPaths: next.knownPaths,
-      favorites: next.favorites,
-    };
+    return buildResponse(next);
   });
 
   app.delete<{ Querystring: { path?: string } }>(

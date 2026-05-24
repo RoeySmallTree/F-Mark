@@ -2,7 +2,18 @@ import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import type { PresenceState } from "../presence/tracker.js";
 
-export interface EventAddedMessage {
+/* Every BusMessage carries an optional `pathId` + `revision` envelope.
+   The kernel's WS wrap (wrapBusWithEnvelope) injects current values on
+   every publish; publishers themselves don't set these fields. The
+   renderer filters incoming messages by (pathId, revision) to drop stale
+   events from a path that's no longer active. Optional so direct fake-bus
+   tests (which don't go through the wrap) keep working. */
+export interface BusEnvelope {
+  pathId?: string | null;
+  revision?: number;
+}
+
+export interface EventAddedMessage extends BusEnvelope {
   type: "event_added";
   session_id: string;
   filename: string;
@@ -10,21 +21,21 @@ export interface EventAddedMessage {
   participant_id: string;
 }
 
-export interface EventSupersededMessage {
+export interface EventSupersededMessage extends BusEnvelope {
   type: "event_superseded";
   session_id: string;
   filename: string;
   supersedes: string;
 }
 
-export interface PresenceMessage {
+export interface PresenceMessage extends BusEnvelope {
   type: "presence";
   participant_id: string;
   state: PresenceState;
   last_hook_at: number | null;
 }
 
-export interface ManagedAgentSpawnedMessage {
+export interface ManagedAgentSpawnedMessage extends BusEnvelope {
   type: "managed-agent.spawned";
   participant_id: string;
   tmux_session: string;
@@ -35,18 +46,18 @@ export interface ManagedAgentSpawnedMessage {
   active_session: string | null;
 }
 
-export interface ManagedAgentKilledMessage {
+export interface ManagedAgentKilledMessage extends BusEnvelope {
   type: "managed-agent.killed";
   participant_id: string;
 }
 
-export interface ManagedAgentTerminalSpawnedMessage {
+export interface ManagedAgentTerminalSpawnedMessage extends BusEnvelope {
   type: "managed-agent.terminal-spawned";
   tmux_session: string;
   label: string;
 }
 
-export interface EnvProbeUpdatedMessage {
+export interface EnvProbeUpdatedMessage extends BusEnvelope {
   type: "env-probe.updated";
   result: unknown;
 }

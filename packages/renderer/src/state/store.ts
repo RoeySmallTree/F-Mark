@@ -91,6 +91,7 @@ interface State extends PresenceSlice {
      counter mirrored from the kernel's state.json — used to discard
      stale WS messages once the WS envelope lands. */
   activePath: string | null;
+  activePathId: string | null;
   activeRevision: number;
   knownPaths: string[];
   favorites: PathFavorite[];
@@ -122,6 +123,7 @@ interface State extends PresenceSlice {
   setSessions(s: SessionMeta[]): void;
   setPathsState(p: {
     activePath: string | null;
+    activePathId: string | null;
     activeRevision: number;
     knownPaths: string[];
     favorites: PathFavorite[];
@@ -176,6 +178,7 @@ export const useStore = create<State>((set, get) => ({
   activePopover: { key: null, anchorRect: null },
   logFilter: DEFAULT_FILTER,
   activePath: null,
+  activePathId: null,
   activeRevision: 0,
   knownPaths: [],
   favorites: [],
@@ -184,6 +187,7 @@ export const useStore = create<State>((set, get) => ({
   setPathsState: (p) =>
     set({
       activePath: p.activePath,
+      activePathId: p.activePathId,
       activeRevision: p.activeRevision,
       knownPaths: p.knownPaths,
       favorites: p.favorites,
