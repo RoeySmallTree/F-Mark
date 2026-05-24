@@ -57,7 +57,7 @@ export function computePathId(absPath: string): string {
 ```
 ~/.config/f-mark/
 ├── .token                      # auth token (one per user)
-├── state.json                  # { activePath, knownPaths[], favorites[] }
+├── state.json                  # { activePath, activeRevision, knownPaths[], favorites[] }
 ├── config.json                 # global defaults: { version, port, host }
 ├── runtimes.json               # default runtime catalog (fallback)
 └── projects/
@@ -242,6 +242,7 @@ The CLI hook entry (`f-mark hook auto-stream`) is updated to:
 Changes:
 1. Replace the raw-path tag with `@fmark-path-id` set to the current `pathId`.
 2. The manager is constructed once at boot with the initial active context, **and is re-bound on every path switch**: a `manager.rebind({ projectRoot, pathId })` method updates the values used for new spawns and the filter used in `list`. Existing tmux sessions are untouched — they keep their original tag and remain bound to their original pathId. After a path switch, `manager.list()` filters to the new pathId by default; managed-agent routes that need cross-path visibility can opt in to "all" mode.
+3. On spawn, the manager sets `F_MARK_PATH=<projectRoot>` in the agent pane's environment so hooks invoked from inside the pane can discover the project path without an upward filesystem walk.
 3. The v0.4 spec's "tmux session naming" stays as-is. The tag value changes from a raw path to a pathId; the naming convention (date + slug + agent kind) is unaffected.
 
 ### Reconcile
@@ -400,15 +401,16 @@ Behavior:
 
 ## Migration
 
-Clean slate. No data migration from existing `<repo>/.f-mark/`. Document as a breaking change in v0.5 release notes: existing dev users either re-pick the same folder and re-create their session (slug + folder identical → identical session id) or copy old session directories into the new project tree manually.
+The user has confirmed clean slate for their own dev `.f-mark/`. The "no migration" stance in Non-Goals applies to **session content** (event logs, todos, prose) — those are not auto-imported.
 
-If the v0.4 tmux work has already shipped (and so users have managed-agent state under `<repo>/.f-mark/agents/` and a `<repo>/.f-mark/runtimes.json`), provide a one-time migration on first v0.5 boot:
-- Detect a pre-existing `<cwd>/.f-mark/agents/`. If found:
-  - Compute pathId for `<cwd>` and copy/move to `~/.config/f-mark/projects/<pathId>/agents/`.
-  - Move `<cwd>/.f-mark/runtimes.json` to `~/.config/f-mark/projects/<pathId>/runtimes.json` (if present).
-  - Add `<cwd>` to knownPaths, set as activePath.
-- If `<cwd>/.f-mark/config.json` exists, split it: keep `participants` in `<cwd>/.f-mark/participants.json`; promote `version`/`port`/`host` into `~/.config/f-mark/config.json` (only if global file is missing).
-- The migration is one-shot, gated by absence of `~/.config/f-mark/state.json`.
+A narrow **v0.4 transition** is in scope, because the v0.4 tmux work has already touched `<repo>/.f-mark/agents/` and `runtimes.json`. Without a shim, users who upgrade through v0.4 → v0.5 would silently abandon their managed-agent state. One-shot migration on first v0.5 boot, gated by absence of `~/.config/f-mark/state.json`:
+
+- If `<cwd>/.f-mark/agents/` exists: compute pathId for `<cwd>`, move agents subtree to `~/.config/f-mark/projects/<pathId>/agents/`, add `<cwd>` to knownPaths, set as activePath.
+- If `<cwd>/.f-mark/runtimes.json` exists: move to `~/.config/f-mark/projects/<pathId>/runtimes.json`.
+- If `<cwd>/.f-mark/config.json` exists: split it. `participants` → `<cwd>/.f-mark/participants.json`. `version`/`port`/`host` → `~/.config/f-mark/config.json` (only if global file is missing).
+- Existing `<cwd>/.f-mark/sessions/` is **left in place untouched**. Users see those sessions because activePath is set to `<cwd>`. No copy, no move, no `pathId` rewrite of session contents.
+
+After migration runs once, subsequent boots only read global state. This is the only path-data import behavior in scope.
 
 ## Error Handling
 
@@ -421,7 +423,7 @@ Codes:
 - `PATH_NOT_CANONICAL` (400): `realpath` failed.
 - `INVALID_SLUG` (400): regex mismatch.
 - `WATCHER_START_FAILED` (500): chokidar refused; switch reverted.
-- `STALE_PATH` (410): the pathId in the request body doesn't match active path.
+- `STALE_PATH` (409): the pathId in the request body doesn't match active path.
 - `FS_DENIED` (403): /fs/list refused this directory (pseudo-fs, symlink escape).
 - `FS_TRUNCATED` (200 with body flag): too many entries; truncated to 1000.
 
@@ -430,7 +432,7 @@ Specific behaviors:
 - **Switching to a non-existent path.** 400 PATH_NOT_FOUND. Renderer offers "Remove from list" → DELETE.
 - **In-flight WS event from old path after switch.** Caught by revision and pathId checks. Discarded silently.
 - **Two browser tabs open during switch.** Both see `path-switched`, both refetch. Same activePath shown.
-- **Hook posts to a session that's no longer in the active path.** 422 STALE_PATH with details of which path the session belongs to. Hooks targeting an idle background project: kernel can optionally accept these without affecting activePath (controlled by a `--quiet-cross-path-hooks` flag, default off).
+- **Hook posts to a session that's no longer in the active path.** 409 STALE_PATH with details of which path the session belongs to. Hooks targeting an idle background project: kernel can optionally accept these without affecting activePath (controlled by a `--quiet-cross-path-hooks` flag, default off).
 
 ## Tests
 
@@ -515,7 +517,7 @@ Specific behaviors:
 
 This is a substantial refactor (~3–5 days of focused work). The implementation plan (created by writing-plans after this spec is approved) will split it into phases that each leave the kernel in a usable state:
 
-1. **P1 — Identity + global tree (no UI change).** Add `pathId`, `GlobalPaths`/`ActivePaths`, state.json, /paths routes. Keep activePath defaulting to cwd so existing UI/hooks keep working.
+1. **P1 — Identity + global tree (no UI change).** Add `pathId`, `GlobalPaths`/`ActivePaths`, state.json, /paths routes. Keep activePath defaulting to cwd **as a transitional behavior only** so existing UI/hooks keep working during the refactor; this default is removed in P4 when the picker UI is in place.
 2. **P2 — Per-path participants + WS envelope.** Move participants out of config.json; add pathId+revision to all WS messages; renderer filters on them; bootstrap handles 409.
 3. **P3 — Managed-agent partitioning.** Move agents/ + runtimes overrides under projects/<pathId>/; rebindable tmux manager; reconcile scoped to pathId. Migration shim for v0.4 cwd.
 4. **P4 — Folder picker + NewSessionModal trim + path switcher.** UI work — folder picker, topbar switcher, modal rewrite.
