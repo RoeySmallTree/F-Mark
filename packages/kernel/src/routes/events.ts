@@ -11,6 +11,7 @@ import {
   validateNonProseAppendTo,
 } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 interface ProseBody extends Omit<ProsePayload, "content"> {
   participant_id: string;
@@ -63,9 +64,11 @@ async function ensureSession(
 
 export function registerEventRoutes(
   app: FastifyInstance,
-  p: Paths,
+  pOrDeps: Paths | PathDeps,
   getBus: () => Bus,
 ): void {
+  const deps = normaliseDeps(pOrDeps);
+
   function publish(
     sessionId: string,
     filename: string,
@@ -147,6 +150,7 @@ export function registerEventRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       const normalised = normaliseProseBody(req.body);
       if (!normalised.ok) {
@@ -239,6 +243,7 @@ export function registerEventRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const apCheck = validateNonProseAppendTo(req.body.append_to);
@@ -317,6 +322,7 @@ export function registerEventRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const apCheck = validateNonProseAppendTo(req.body.append_to);
@@ -372,6 +378,7 @@ export function registerEventRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const { participant_id, ...rest } = req.body;
@@ -411,6 +418,7 @@ export function registerEventRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const filename = await writeEventFile(p, req.params.id, {
@@ -446,6 +454,7 @@ export function registerEventRoutes(
     Params: { id: string };
     Querystring: { since?: string; kinds?: string; participant?: string };
   }>("/sessions/:id/events", async (req, reply) => {
+    const p = resolvePaths(deps);
     if (!(await ensureSession(p, req.params.id, reply))) return;
     const kinds = req.query.kinds
       ?.split(",")

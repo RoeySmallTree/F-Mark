@@ -9,6 +9,7 @@ import type {
 import type { Paths } from "../paths.js";
 import { listSessions, sessionExists } from "../sessions.js";
 import { readEvents } from "../events/reader.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 const SNIPPET_RADIUS = 60; // ~120 char window
 
@@ -87,10 +88,16 @@ function matchEvent(
   return null;
 }
 
-export function registerSearchRoutes(app: FastifyInstance, p: Paths): void {
+export function registerSearchRoutes(
+  app: FastifyInstance,
+  pOrDeps: Paths | PathDeps,
+): void {
+  const deps = normaliseDeps(pOrDeps);
+
   app.get<{ Querystring: { q?: string; session?: string; limit?: string } }>(
     "/search",
     async (req, reply) => {
+      const p = resolvePaths(deps);
       const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
       if (q.length === 0) {
         return { hits: [] };

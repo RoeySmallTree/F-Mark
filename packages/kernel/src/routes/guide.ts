@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { listParticipants } from "../participants.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 interface GuideQuery {
   session_id?: string;
@@ -162,8 +163,14 @@ ${agentMd.trimStart()}
 `;
 }
 
-export function registerGuideRoute(app: FastifyInstance, p: Paths): void {
+export function registerGuideRoute(
+  app: FastifyInstance,
+  pOrDeps: Paths | PathDeps,
+): void {
+  const deps = normaliseDeps(pOrDeps);
+
   app.get<{ Querystring: GuideQuery }>("/guide", async (req, reply) => {
+    const p = resolvePaths(deps);
     const sessionId = req.query.session_id ?? req.query.sessionId;
     const agentId = req.query.agent_id;
     const runtimeId = req.query.runtime_id;

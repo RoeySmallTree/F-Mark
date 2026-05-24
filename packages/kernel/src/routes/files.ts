@@ -5,6 +5,7 @@ import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
 import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 /** Upload size cap for the fastify-multipart plugin (consumed by
  *  server.ts at register time). 64 MiB is a conservative default; the
@@ -35,9 +36,11 @@ async function ensureSession(
 
 export function registerFileRoutes(
   app: FastifyInstance,
-  p: Paths,
+  pOrDeps: Paths | PathDeps,
   getBus: () => Bus,
 ): void {
+  const deps = normaliseDeps(pOrDeps);
+
   function publish(
     sessionId: string,
     filename: string,
@@ -80,6 +83,7 @@ export function registerFileRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const apCheck = validateNonProseAppendTo(req.body.append_to);

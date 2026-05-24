@@ -12,6 +12,7 @@ import { sessionExists } from "../sessions.js";
 import { listParticipants } from "../participants.js";
 import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 interface HtmlBody {
   participant_id: string;
@@ -76,9 +77,11 @@ async function tryMkdir(target: string): Promise<boolean> {
 
 export function registerHtmlRoutes(
   app: FastifyInstance,
-  p: Paths,
+  pOrDeps: Paths | PathDeps,
   getBus: () => Bus,
 ): void {
+  const deps = normaliseDeps(pOrDeps);
+
   function publish(
     sessionId: string,
     filename: string,
@@ -135,6 +138,7 @@ export function registerHtmlRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const apCheck = validateNonProseAppendTo(req.body.append_to);

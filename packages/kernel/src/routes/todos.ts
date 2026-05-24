@@ -11,6 +11,7 @@ import { writeEventFile } from "../events/writer.js";
 import { readEvents } from "../events/reader.js";
 import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 interface TodoBody {
   participant_id: string;
@@ -345,9 +346,11 @@ async function ensureSession(
 
 export function registerTodoRoutes(
   app: FastifyInstance,
-  p: Paths,
+  pOrDeps: Paths | PathDeps,
   getBus: () => Bus,
 ): void {
+  const deps = normaliseDeps(pOrDeps);
+
   function publish(
     sessionId: string,
     filename: string,
@@ -405,6 +408,7 @@ export function registerTodoRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const apCheck = validateNonProseAppendTo(req.body.append_to);
@@ -470,6 +474,7 @@ export function registerTodoRoutes(
   }>(
     "/sessions/:id/todos",
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       const events = await readEvents(p, req.params.id, { kinds: ["todo"] });
       const todoEvents = events.filter(

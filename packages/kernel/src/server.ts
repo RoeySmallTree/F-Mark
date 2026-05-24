@@ -160,19 +160,23 @@ export function createServer(deps: ServerDeps): CreatedServer {
     clearInterval(presenceTicker);
   });
 
-  registerParticipantRoutes(app, { fallback: deps.paths, ref: deps.pathContextRef });
+  // All path-scoped routes get { fallback, ref } so they resolve paths
+  // against the active path when one is wired (multi-path mode), falling
+  // back to deps.paths for the existing single-path test harness.
+  const pathDeps = { fallback: deps.paths, ref: deps.pathContextRef };
+  registerParticipantRoutes(app, pathDeps);
   registerAgentsRoutes(app, deps.paths);
-  registerSessionRoutes(app, { fallback: deps.paths, ref: deps.pathContextRef });
-  registerEventRoutes(app, deps.paths, () => busRef);
-  registerTodoRoutes(app, deps.paths, () => busRef);
-  registerFileRoutes(app, deps.paths, () => busRef);
-  registerHtmlRoutes(app, deps.paths, () => busRef);
-  registerFlowRoutes(app, deps.paths, () => busRef);
-  registerRawRoutes(app, deps.paths);
-  registerPresetRoutes(app, deps.paths);
+  registerSessionRoutes(app, pathDeps);
+  registerEventRoutes(app, pathDeps, () => busRef);
+  registerTodoRoutes(app, pathDeps, () => busRef);
+  registerFileRoutes(app, pathDeps, () => busRef);
+  registerHtmlRoutes(app, pathDeps, () => busRef);
+  registerFlowRoutes(app, pathDeps, () => busRef);
+  registerRawRoutes(app, pathDeps);
+  registerPresetRoutes(app, pathDeps);
   registerSkillRoutes(app);
-  registerSearchRoutes(app, deps.paths);
-  registerGuideRoute(app, deps.paths);
+  registerSearchRoutes(app, pathDeps);
+  registerGuideRoute(app, pathDeps);
   registerBestPracticesRoute(app);
   registerPresenceRoutes(app, () => tracker);
 
@@ -190,7 +194,9 @@ export function createServer(deps: ServerDeps): CreatedServer {
   // still gets tmux/installer detection.
   const probeFn = realProbe(async () => {
     try {
-      const cfg = await loadRuntimes(deps.paths.fmarkDir());
+      // Read from the active path if wired, else the boot-time fallback.
+      const root = deps.pathContextRef?.get().active?.root() ?? deps.paths.root();
+      const cfg = await loadRuntimes(`${root}/.f-mark`);
       return Object.entries(cfg.runtimes).map(([id, entry]) => ({
         id,
         executable: entry.executable,
@@ -230,7 +236,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
       // `busRef` (which is reassigned once the WebSocket plugin is ready).
       bus: { publish: (m) => busRef.publish(m) },
     });
-    registerHookInstallRoutes(app, deps.paths);
+    registerHookInstallRoutes(app, pathDeps);
 
     // Pane WS subsystem (separate channel router from the global broadcast bus).
     // Hub callbacks need access to the pane pipe functions; we wire them after

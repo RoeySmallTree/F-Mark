@@ -5,6 +5,7 @@ import matter from "gray-matter";
 import type { FastifyInstance } from "fastify";
 import type { Preset, PresetGroup } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 function builtinPresetsDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -63,10 +64,16 @@ async function loadPresets(
   return presets;
 }
 
-export function registerPresetRoutes(app: FastifyInstance, p: Paths): void {
+export function registerPresetRoutes(
+  app: FastifyInstance,
+  pOrDeps: Paths | PathDeps,
+): void {
+  const deps = normaliseDeps(pOrDeps);
+
   app.get<{ Querystring: { session?: string } }>(
     "/presets",
     async (req) => {
+      const p = resolvePaths(deps);
       const builtin = await loadPresets(builtinPresetsDir(), "builtin");
       let project: Preset[] = [];
       if (typeof req.query.session === "string" && req.query.session.length > 0) {

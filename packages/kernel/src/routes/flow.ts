@@ -10,6 +10,7 @@ import { sessionExists } from "../sessions.js";
 import { writeEventFile } from "../events/writer.js";
 import { validateNonProseAppendTo } from "../events/proseValidate.js";
 import type { Bus, BusMessage } from "../ws/bus.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 interface FlowBody extends FlowPayload {
   participant_id: string;
@@ -47,9 +48,11 @@ function validateGraph(nodes: FlowNode[], edges: FlowEdge[]): void {
 
 export function registerFlowRoutes(
   app: FastifyInstance,
-  p: Paths,
+  pOrDeps: Paths | PathDeps,
   getBus: () => Bus,
 ): void {
+  const deps = normaliseDeps(pOrDeps);
+
   function publish(
     sessionId: string,
     filename: string,
@@ -159,6 +162,7 @@ export function registerFlowRoutes(
       },
     },
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
         const { participant_id, supersedes, ...rest } = req.body;

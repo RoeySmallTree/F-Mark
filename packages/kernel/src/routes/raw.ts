@@ -4,6 +4,7 @@ import { extname, join, resolve, sep } from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
+import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -91,10 +92,16 @@ async function serveFile(
   return reply.send(createReadStream(filepath));
 }
 
-export function registerRawRoutes(app: FastifyInstance, p: Paths): void {
+export function registerRawRoutes(
+  app: FastifyInstance,
+  pOrDeps: Paths | PathDeps,
+): void {
+  const deps = normaliseDeps(pOrDeps);
+
   app.get<{ Params: { id: string; filename: string } }>(
     "/sessions/:id/raw/:filename",
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return reply;
       const target = resolveSafe(
         p,
@@ -113,6 +120,7 @@ export function registerRawRoutes(app: FastifyInstance, p: Paths): void {
   app.get<{ Params: { id: string; filename: string; "*": string } }>(
     "/sessions/:id/raw/:filename/*",
     async (req, reply) => {
+      const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return reply;
       const rest = req.params["*"];
       const target = resolveSafe(
