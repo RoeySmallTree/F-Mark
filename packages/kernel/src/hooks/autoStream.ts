@@ -1,4 +1,5 @@
 import { readFile } from "fs/promises";
+import { join } from "node:path";
 import { readActiveSession } from "../agents/activeSession.js";
 import { loadHookContext } from "./bootstrap.js";
 import { postPing, postProjectedEvents } from "./post.js";
@@ -44,7 +45,14 @@ export async function runAutoStream(
     return 0;
   }
 
-  const sessionId = await readActiveSession(ctx.fmarkDir, participantId);
+  // Hook reads agent state from the per-path agents dir under the project's
+  // own .f-mark/. v0.5 migration relocates this to the global tree; for now
+  // we maintain the per-path location used by v0.4. (D3 phase 4 will switch
+  // hooks over to the global location once we have F_MARK_PATH env support.)
+  const sessionId = await readActiveSession(
+    join(ctx.fmarkDir, "agents"),
+    participantId,
+  );
   if (!sessionId) {
     process.stderr.write(
       `f-mark auto-stream: no active session for ${participantId}; run POST /agents/${participantId}/link first\n`,

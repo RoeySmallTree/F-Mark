@@ -29,7 +29,8 @@ describe("POST /agents/:id/link", () => {
         participant_id: "ag-claude",
         session_id: sessionId,
       });
-      expect(await readActiveSession(p.fmarkDir(), "ag-claude")).toBe(
+      const { join: joinPath } = await import("node:path");
+      expect(await readActiveSession(joinPath(p.fmarkDir(), "agents"), "ag-claude")).toBe(
         sessionId,
       );
       await app.close();

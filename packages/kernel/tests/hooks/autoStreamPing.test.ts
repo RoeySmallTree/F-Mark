@@ -16,7 +16,7 @@ describe("runAutoStream pings presence", () => {
       await mkdir(fmarkDir, { recursive: true });
       await writeFile(join(fmarkDir, ".token"), "tok");
       await writeFile(join(fmarkDir, "config.json"), JSON.stringify({ port: 7777 }));
-      await writeActiveSession(fmarkDir, "ag-claude", "sess-1");
+      await writeActiveSession(join(fmarkDir, "agents"), "ag-claude", "sess-1");
 
       const calls: string[] = [];
       fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {

@@ -204,7 +204,7 @@ describe("auto-stream end-to-end", () => {
 
       // Link agent → session directly via the active-session pointer (skip the
       // HTTP path; the previous test already exercises /agents/:id/link).
-      await writeActiveSession(p.fmarkDir(), pid, sessionId);
+      await writeActiveSession(join(p.fmarkDir(), "agents"), pid, sessionId);
 
       const transcript = join(root, "t.jsonl");
       await writeFile(
@@ -256,7 +256,7 @@ describe("auto-stream end-to-end", () => {
 
       // Link agent → session directly via the active-session pointer (the HTTP
       // path is already exercised by the Multi-block test).
-      await writeActiveSession(p.fmarkDir(), pid, sessionId);
+      await writeActiveSession(join(p.fmarkDir(), "agents"), pid, sessionId);
 
       const transcript = join(root, "transcript-codex.jsonl");
       const lines = [

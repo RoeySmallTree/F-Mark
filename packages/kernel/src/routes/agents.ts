@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { join } from "node:path";
 import type { Paths } from "../paths.js";
 import { isValidParticipantId } from "../participants.js";
 import { sessionExists } from "../sessions.js";
@@ -34,7 +35,11 @@ export function registerAgentsRoutes(app: FastifyInstance, p: Paths): void {
         reply.code(404);
         return { error: "session not found" };
       }
-      await writeActiveSession(p.fmarkDir(), participantId, req.body.session_id);
+      await writeActiveSession(
+        join(p.fmarkDir(), "agents"),
+        participantId,
+        req.body.session_id,
+      );
       return { participant_id: participantId, session_id: req.body.session_id };
     },
   );

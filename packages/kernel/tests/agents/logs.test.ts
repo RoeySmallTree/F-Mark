@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendAgentLog, readAgentLog, MAX_LOG_BYTES } from "../../src/agents/logs.js";
 
-async function withTmp<T>(fn: (fmarkDir: string) => Promise<T>): Promise<T> {
+async function withTmp<T>(fn: (fmarkDir: string, agentsDir: string) => Promise<T>): Promise<T> {
   const d = await mkdtemp(join(tmpdir(), "fmark-log-"));
   try {
-    return await fn(d);
+    return await fn(d, join(d, "agents"));
   } finally {
     await rm(d, { recursive: true, force: true });
   }
@@ -15,10 +15,10 @@ async function withTmp<T>(fn: (fmarkDir: string) => Promise<T>): Promise<T> {
 
 describe("agent logs", () => {
   it("appends entries as JSON lines", async () => {
-    await withTmp(async (fmarkDir) => {
-      await appendAgentLog(fmarkDir, "ag-x", { event: "spawn", runtime: "claude" });
-      await appendAgentLog(fmarkDir, "ag-x", { event: "kill" });
-      const entries = await readAgentLog(fmarkDir, "ag-x", { limit: 10 });
+    await withTmp(async (fmarkDir, agentsDir) => {
+      await appendAgentLog(agentsDir, "ag-x", { event: "spawn", runtime: "claude" });
+      await appendAgentLog(agentsDir, "ag-x", { event: "kill" });
+      const entries = await readAgentLog(agentsDir, "ag-x", { limit: 10 });
       expect(entries.map((e) => e.event)).toEqual(["spawn", "kill"]);
       // ts is automatically populated
       for (const e of entries) {
@@ -29,23 +29,24 @@ describe("agent logs", () => {
   });
 
   it("readAgentLog returns [] when no log file exists", async () => {
-    await withTmp(async (fmarkDir) => {
-      const entries = await readAgentLog(fmarkDir, "ag-x");
+    await withTmp(async (fmarkDir, agentsDir) => {
+      const entries = await readAgentLog(agentsDir, "ag-x");
       expect(entries).toEqual([]);
+      void fmarkDir;
     });
   });
 
   it("readAgentLog tails to the requested limit (default 50)", async () => {
-    await withTmp(async (fmarkDir) => {
+    await withTmp(async (fmarkDir, agentsDir) => {
       for (let i = 0; i < 60; i++) {
-        await appendAgentLog(fmarkDir, "ag-x", { event: `e-${i}` });
+        await appendAgentLog(agentsDir, "ag-x", { event: `e-${i}` });
       }
-      const def = await readAgentLog(fmarkDir, "ag-x");
+      const def = await readAgentLog(agentsDir, "ag-x");
       expect(def).toHaveLength(50);
       expect(def[0]!.event).toBe("e-10");
       expect(def[49]!.event).toBe("e-59");
 
-      const small = await readAgentLog(fmarkDir, "ag-x", { limit: 5 });
+      const small = await readAgentLog(agentsDir, "ag-x", { limit: 5 });
       expect(small.map((e) => e.event)).toEqual([
         "e-55",
         "e-56",
@@ -57,12 +58,12 @@ describe("agent logs", () => {
   });
 
   it("rotates to .1 once size exceeds MAX_LOG_BYTES", async () => {
-    await withTmp(async (fmarkDir) => {
+    await withTmp(async (fmarkDir, agentsDir) => {
       const big = "x".repeat(MAX_LOG_BYTES + 1);
       const dir = join(fmarkDir, "agents", "ag-x");
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, "log.jsonl"), big);
-      await appendAgentLog(fmarkDir, "ag-x", { event: "rotate-trigger" });
+      await appendAgentLog(agentsDir, "ag-x", { event: "rotate-trigger" });
       const sizeOriginal = (await stat(join(dir, "log.jsonl"))).size;
       const sizeBackup = (await stat(join(dir, "log.jsonl.1"))).size;
       expect(sizeBackup).toBeGreaterThan(0);
@@ -71,7 +72,7 @@ describe("agent logs", () => {
   });
 
   it("rotates when an exactly-MAX_LOG_BYTES file gets an append", async () => {
-    await withTmp(async (fmarkDir) => {
+    await withTmp(async (fmarkDir, agentsDir) => {
       const dir = join(fmarkDir, "agents", "ag-exact");
       await mkdir(dir, { recursive: true });
       // Construct a file with EXACTLY MAX_LOG_BYTES bytes.
@@ -80,7 +81,7 @@ describe("agent logs", () => {
       const preSize = (await stat(join(dir, "log.jsonl"))).size;
       expect(preSize).toBe(MAX_LOG_BYTES);
 
-      await appendAgentLog(fmarkDir, "ag-exact", { event: "trigger-at-boundary" });
+      await appendAgentLog(agentsDir, "ag-exact", { event: "trigger-at-boundary" });
 
       // Original should be rotated: backup carries the prior content,
       // new log only contains the freshly appended line.
@@ -93,7 +94,7 @@ describe("agent logs", () => {
   });
 
   it("rotates exactly at the append that would cross MAX_LOG_BYTES", async () => {
-    await withTmp(async (fmarkDir) => {
+    await withTmp(async (fmarkDir, agentsDir) => {
       const dir = join(fmarkDir, "agents", "ag-cross");
       await mkdir(dir, { recursive: true });
       // Start with a file just shy of the limit so a single small line crosses.
@@ -111,7 +112,7 @@ describe("agent logs", () => {
       await writeFile(join(dir, "log.jsonl"), seed);
 
       // First append: should not rotate (preSize + lineBytes <= MAX).
-      await appendAgentLog(fmarkDir, "ag-cross", { event: "near" });
+      await appendAgentLog(agentsDir, "ag-cross", { event: "near" });
       // Confirm no rotation happened.
       let backupExists = true;
       try {
@@ -138,7 +139,7 @@ describe("agent logs", () => {
       expect(preCrossSize).toBeLessThanOrEqual(MAX_LOG_BYTES);
 
       // Now an append must rotate.
-      await appendAgentLog(fmarkDir, "ag-cross", { event: "cross" });
+      await appendAgentLog(agentsDir, "ag-cross", { event: "cross" });
       const sizeBackup = (await stat(join(dir, "log.jsonl.1"))).size;
       expect(sizeBackup).toBe(preCrossSize);
       const sizeOriginal = (await stat(join(dir, "log.jsonl"))).size;
@@ -148,11 +149,11 @@ describe("agent logs", () => {
   });
 
   it("rejects invalid participant ids", async () => {
-    await withTmp(async (fmarkDir) => {
+    await withTmp(async (fmarkDir, agentsDir) => {
       await expect(
-        appendAgentLog(fmarkDir, "../etc", { event: "spawn" }),
+        appendAgentLog(agentsDir, "../etc", { event: "spawn" }),
       ).rejects.toThrow(/invalid participant_id/);
-      await expect(readAgentLog(fmarkDir, "Bad-Id")).rejects.toThrow(
+      await expect(readAgentLog(agentsDir, "Bad-Id")).rejects.toThrow(
         /invalid participant_id/,
       );
     });

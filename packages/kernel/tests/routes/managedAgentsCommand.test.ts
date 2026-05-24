@@ -50,7 +50,7 @@ async function makeApp() {
   const p = paths(root);
   await initProject(p);
   await writeTmuxSession(
-    p.fmarkDir(),
+    join(p.fmarkDir(), "agents"),
     "ag-claude",
     "fmark-test-12345678-ag-ag-claude",
   );

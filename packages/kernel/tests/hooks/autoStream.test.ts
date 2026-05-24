@@ -15,7 +15,7 @@ async function bootstrapProject() {
     JSON.stringify({ version: "0.1.0", port: 7777, participants: {} }),
     "utf8",
   );
-  await writeActiveSession(fmark, "ag-claude", "sess-1");
+  await writeActiveSession(join(fmark, "agents"), "ag-claude", "sess-1");
   const transcript = join(dir, "transcript.jsonl");
   await writeFile(
     transcript,
@@ -96,7 +96,7 @@ describe("runAutoStream(user)", () => {
       hook_event_name: "UserPromptSubmit",
       prompt: "rerun the suite please",
     };
-    await writeActiveSession(join(dir, ".f-mark"), "us-roey", "sess-1");
+    await writeActiveSession(join(dir, ".f-mark", "agents"), "us-roey", "sess-1");
     const exit = await runAutoStream("us-roey", "user", JSON.stringify(stdin));
     expect(exit).toBe(0);
     const f = (globalThis.fetch as any) as ReturnType<typeof vi.fn>;

@@ -438,12 +438,14 @@ describe("GET /managed-agents", () => {
     const { writeTmuxSession, writeRuntime } = await import(
       "../../src/agents/managed.js"
     );
+    const { join: joinPath2 } = await import("node:path");
+    const agentsDir2 = joinPath2(p.fmarkDir(), "agents");
     await writeTmuxSession(
-      p.fmarkDir(),
+      agentsDir2,
       "ag-claude-stale",
       "fmark-test-12345678-ag-ag-claude-stale",
     );
-    await writeRuntime(p.fmarkDir(), "ag-claude-stale", "claude");
+    await writeRuntime(agentsDir2, "ag-claude-stale", "claude");
 
     // ls returns nothing — sessions list is empty.
     runner.expect(["tmux", "ls"], {

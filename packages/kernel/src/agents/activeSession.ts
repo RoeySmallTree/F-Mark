@@ -9,17 +9,19 @@ function assertValidParticipant(id: string): void {
   }
 }
 
-export function activeSessionPath(fmarkDir: string, participantId: string): string {
+/* `agentsDir` is the directory containing per-agent subdirs. v0.4:
+   `<root>/.f-mark/agents`. v0.5: `~/.config/f-mark/projects/<pathId>/agents`. */
+export function activeSessionPath(agentsDir: string, participantId: string): string {
   assertValidParticipant(participantId);
-  return join(fmarkDir, "agents", participantId, "active-session");
+  return join(agentsDir, participantId, "active-session");
 }
 
 export async function writeActiveSession(
-  fmarkDir: string,
+  agentsDir: string,
   participantId: string,
   sessionId: string,
 ): Promise<void> {
-  const target = activeSessionPath(fmarkDir, participantId);
+  const target = activeSessionPath(agentsDir, participantId);
   await mkdir(dirname(target), { recursive: true });
   const tmp = `${target}.tmp`;
   await writeFile(tmp, sessionId, "utf8");
@@ -27,11 +29,11 @@ export async function writeActiveSession(
 }
 
 export async function readActiveSession(
-  fmarkDir: string,
+  agentsDir: string,
   participantId: string,
 ): Promise<string | null> {
   try {
-    const txt = await readFile(activeSessionPath(fmarkDir, participantId), "utf8");
+    const txt = await readFile(activeSessionPath(agentsDir, participantId), "utf8");
     return txt.trim() || null;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;

@@ -11,8 +11,8 @@ function assertValid(id: string): void {
   }
 }
 
-function logPath(fmarkDir: string, id: string): string {
-  return join(fmarkDir, "agents", id, "log.jsonl");
+function logPath(agentsDir: string, id: string): string {
+  return join(agentsDir, id, "log.jsonl");
 }
 
 async function fileSize(p: string): Promise<number> {
@@ -30,13 +30,13 @@ export interface AgentLogEntry {
 }
 
 export async function appendAgentLog(
-  fmarkDir: string,
+  agentsDir: string,
   id: string,
   entry: Omit<AgentLogEntry, "ts"> & { ts?: string },
 ): Promise<void> {
   assertValid(id);
-  const p = logPath(fmarkDir, id);
-  await mkdir(join(fmarkDir, "agents", id), { recursive: true });
+  const p = logPath(agentsDir, id);
+  await mkdir(join(agentsDir, id), { recursive: true });
   const line = JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n";
   const lineBytes = Buffer.byteLength(line, "utf8");
   const size = await fileSize(p);
@@ -49,12 +49,12 @@ export async function appendAgentLog(
 }
 
 export async function readAgentLog(
-  fmarkDir: string,
+  agentsDir: string,
   id: string,
   opts: { limit?: number } = {},
 ): Promise<AgentLogEntry[]> {
   assertValid(id);
-  const p = logPath(fmarkDir, id);
+  const p = logPath(agentsDir, id);
   let txt = "";
   try {
     txt = await readFile(p, "utf8");

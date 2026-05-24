@@ -41,7 +41,8 @@ describe("participants", () => {
       await initProject(p);
       const bound = await registerAgent(p, { name: "Bound" });
       const unbound = await registerAgent(p, { name: "Unbound" });
-      await writeActiveSession(p.fmarkDir(), bound.id, "2026-05-24-active");
+      const { join } = await import("node:path");
+      await writeActiveSession(join(p.fmarkDir(), "agents"), bound.id, "2026-05-24-active");
 
       const list = await listParticipants(p);
       expect(list[bound.id]?.active_session).toBe("2026-05-24-active");

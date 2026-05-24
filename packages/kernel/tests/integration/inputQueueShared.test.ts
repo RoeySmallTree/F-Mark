@@ -137,7 +137,7 @@ describe("shared input queue across managed-agents and /ws/pane", () => {
       const p = paths(root);
       await initProject(p);
       const sessionName = "fmark-test-12345678-ag-ag-wire";
-      await writeTmuxSession(p.fmarkDir(), "ag-wire", sessionName);
+      await writeTmuxSession(join(p.fmarkDir(), "agents"), "ag-wire", sessionName);
 
       // Build a minimal Fastify app and wire both subsystems against the
       // same instrumented queue.
@@ -223,7 +223,7 @@ describe("shared input queue across managed-agents and /ws/pane", () => {
       const p = paths(root);
       await initProject(p);
       const sessionName = "fmark-test-12345678-ag-ag-claude-1";
-      await writeTmuxSession(p.fmarkDir(), "ag-claude-1", sessionName);
+      await writeTmuxSession(join(p.fmarkDir(), "agents"), "ag-claude-1", sessionName);
 
       // 25ms per send-keys widens any race window in the assembled server.
       const runner = permissiveRunner({ sendKeysDelayMs: 25 });

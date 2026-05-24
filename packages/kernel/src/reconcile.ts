@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { Paths } from "./paths.js";
 import type { TmuxManager } from "./tmux/manager.js";
 import type { PresenceTracker } from "./presence/tracker.js";
@@ -15,6 +16,11 @@ export interface ReconcileDeps {
   paths: Paths;
   tmux: TmuxManager;
   tracker: PresenceTracker;
+  /* Optional explicit agentsDir. When set, reconcile reads from this
+     directory instead of `<paths.fmarkDir()>/agents`. Production passes
+     `globalPaths.projectAgentsDir(pathId)` here for multi-path scoping;
+     tests omit it to keep the legacy per-path behavior. */
+  agentsDir?: string;
 }
 
 // On kernel startup, scan tmux for F-Mark-owned sessions and cross-reference
@@ -33,6 +39,7 @@ export interface ReconcileDeps {
 // reconcile is a no-op so the rest of the kernel can still come up.
 export async function reconcile(deps: ReconcileDeps): Promise<void> {
   const { paths, tmux, tracker } = deps;
+  const agentsDir = deps.agentsDir ?? join(paths.fmarkDir(), "agents");
 
   const ver = await tmux.getVersion();
   if (!ver) return; // tmux unavailable; feature disabled
@@ -43,7 +50,7 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
     if (s.kind === "agent" && s.participantId) liveAgentSessions.add(s.sessionName);
   }
 
-  const agentIds = await listManagedAgentIds(paths.fmarkDir());
+  const agentIds = await listManagedAgentIds(agentsDir);
   const agentIdsSet = new Set(agentIds);
 
   // Find one user participant id for hook-install-status lookups. Best-effort:
@@ -64,14 +71,14 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
 
   // CASE A & B: walk managed agent dirs.
   for (const aid of agentIds) {
-    const expected = await readTmuxSession(paths.fmarkDir(), aid);
+    const expected = await readTmuxSession(agentsDir, aid);
     if (expected && liveAgentSessions.has(expected)) {
       // CASE A: surviving managed agent. We already verified the session is
       // live above, so a constant `true` paneAlive closure is sufficient for
       // the initial seeding; the regular watcher loop will refresh it.
       tracker.setManagedPane(aid, { paneAlive: () => true });
 
-      const runtimeId = await readRuntime(paths.fmarkDir(), aid);
+      const runtimeId = await readRuntime(agentsDir, aid);
       if (runtimeId) {
         try {
           const status = await checkHookInstallStatus({
@@ -94,13 +101,13 @@ export async function reconcile(deps: ReconcileDeps): Promise<void> {
       }
     } else {
       // CASE B: agent dir exists but no live tmux session.
-      await clearManagedSiblings(paths.fmarkDir(), aid);
+      await clearManagedSiblings(agentsDir, aid);
       // Surface the dead pane to the tracker so the dashboard shows it as
       // "pane-dead" (not "launching" or absent). markPaneDead also creates
       // the entry on cold startup when none existed before.
       tracker.markPaneDead(aid);
       try {
-        await appendAgentLog(paths.fmarkDir(), aid, { event: "pane-died" });
+        await appendAgentLog(agentsDir, aid, { event: "pane-died" });
       } catch {
         // best-effort log
       }

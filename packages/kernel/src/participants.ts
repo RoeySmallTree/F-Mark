@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { join } from "node:path";
 import { readConfig, writeConfig, type Participant } from "./project.js";
 import type { Paths } from "./paths.js";
 import { loadRuntimes } from "./runtimes/registry.js";
@@ -80,7 +81,10 @@ export async function listParticipants(
   const out: Record<string, ParticipantWithSession> = {};
   for (const [id, part] of Object.entries(cfg.participants)) {
     if (part.kind === "agent") {
-      const active_session = await readActiveSession(p.fmarkDir(), id);
+      const active_session = await readActiveSession(
+        join(p.fmarkDir(), "agents"),
+        id,
+      );
       out[id] = { ...part, active_session };
     } else {
       out[id] = { ...part, active_session: null };

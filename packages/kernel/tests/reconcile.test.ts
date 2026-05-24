@@ -81,13 +81,13 @@ describe("reconcile", () => {
   it("CASE A: manual-stream runtime with a live tmux session reconciles as stale", async () => {
     const { paths: p } = await makeFixture();
     await writeTmuxSession(
-      p.fmarkDir(),
+      join(p.fmarkDir(), "agents"),
       "ag-claude",
       "fmark-x-12345678-ag-ag-claude",
     );
     // gemini runtime → checkHookInstallStatus reports no expected hook entries,
     // so this is manual-stream mode rather than a missing-hook problem.
-    await writeRuntime(p.fmarkDir(), "ag-claude", "gemini");
+    await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "gemini");
 
     const tmux = fakeTmux({
       sessions: [
@@ -120,11 +120,11 @@ describe("reconcile", () => {
     await writeConfig(p, cfg);
 
     await writeTmuxSession(
-      p.fmarkDir(),
+      join(p.fmarkDir(), "agents"),
       "ag-claude",
       "fmark-x-12345678-ag-ag-claude",
     );
-    await writeRuntime(p.fmarkDir(), "ag-claude", "claude");
+    await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "claude");
 
     // Stand up a fake HOME with a ~/.claude/settings.json that records the
     // f-mark Stop + UserPromptSubmit hooks for ag-claude / us-test so
@@ -183,11 +183,11 @@ describe("reconcile", () => {
   it("CASE B: agent dir without live tmux session → clear siblings + pane-died log + tracker pane cleared", async () => {
     const { paths: p } = await makeFixture();
     await writeTmuxSession(
-      p.fmarkDir(),
+      join(p.fmarkDir(), "agents"),
       "ag-claude",
       "fmark-x-12345678-ag-ag-claude",
     );
-    await writeRuntime(p.fmarkDir(), "ag-claude", "claude");
+    await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "claude");
     // Pre-write a log entry so we can check that it's preserved (not wiped)
     await writeFile(
       join(p.fmarkDir(), "agents", "ag-claude", "log.jsonl"),
@@ -200,8 +200,8 @@ describe("reconcile", () => {
     await reconcile({ paths: p, tmux: tmux as any, tracker });
 
     // tmux-session and runtime should be cleared
-    expect(await readTmuxSession(p.fmarkDir(), "ag-claude")).toBeNull();
-    expect(await readRuntime(p.fmarkDir(), "ag-claude")).toBeNull();
+    expect(await readTmuxSession(join(p.fmarkDir(), "agents"), "ag-claude")).toBeNull();
+    expect(await readRuntime(join(p.fmarkDir(), "agents"), "ag-claude")).toBeNull();
     // log.jsonl should still exist and contain pane-died entry alongside original
     const logTxt = await readFile(
       join(p.fmarkDir(), "agents", "ag-claude", "log.jsonl"),
