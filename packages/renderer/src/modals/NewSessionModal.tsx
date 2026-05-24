@@ -1,88 +1,68 @@
-/* NewSessionModal — Phase 10.
-   Triggered by "+ New" in Sessions panel. On submit:
-     1. validate slug (lowercase letters, digits, hyphens; non-empty);
-     2. POST /sessions { slug };
-     3. if a non-blank template is chosen, post the template's starter as the
-        first named-prose event;
-     4. for each toggled-on agent we just registered through AgentInvite, the
-        registration call already fired — nothing to do here;
-     5. refresh /sessions + setCurrentSession to the new id;
-     6. if "open immediately + copy snippet" is on, write the orientation
-        snippet to navigator.clipboard;
-     7. close the modal.
+/* NewSessionModal — v0.5 multi-path. Two fields (Folder + Slug) plus the
+   keep-open toggle. Template grid and agent-invite sections have been
+   removed; the path display in the slug input and modal footer is also
+   gone. The session is created at the user-chosen folder via
+   POST /sessions { slug, path }. */
 
-   Structure mirrors planning/redesign/modals.jsx NewSessionModal. */
-
-import { useMemo, useRef, useState, type JSX } from "react";
-import { X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { FolderClosed, X } from "lucide-react";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
-import { SlugInput, todayDatePrefix } from "./newsession/SlugInput.js";
-import { TemplateGrid } from "./newsession/TemplateGrid.js";
-import { AgentInvite } from "./newsession/AgentInvite.js";
+import { FolderPicker } from "./newsession/FolderPicker.js";
 import {
   OpenAndCopyToggle,
   orientationSnippet,
 } from "./newsession/OpenAndCopyToggle.js";
-import { templateByKey, type TemplateKey } from "./newsession/templates.js";
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
 export function NewSessionModal(): JSX.Element {
   const token = useStore((s) => s.token);
-  const userId = useStore((s) => s.currentUserId);
-  const participants = useStore((s) => s.participants);
   const setSessions = useStore((s) => s.setSessions);
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const closeModal = useStore((s) => s.closeModal);
 
+  const [folder, setFolder] = useState<string | null>(null);
   const [slug, setSlug] = useState("");
-  const [template, setTemplate] = useState<TemplateKey>("blank");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [openImmediately, setOpenImmediately] = useState(true);
-  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const slugRef = useRef<HTMLInputElement | null>(null);
+  const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
 
-  const datePrefix = useMemo(() => todayDatePrefix(), []);
+  // Default folder = the kernel-reported home dir. Future: prefer the
+  // renderer-known activePath once it lands in the store.
+  useEffect(() => {
+    let cancelled = false;
+    if (folder !== null) return;
+    void (async () => {
+      try {
+        const h = await client.fsHome();
+        if (!cancelled) setFolder(h.home);
+      } catch {
+        /* leave folder null; submit will surface a clearer error */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [folder, client]);
 
   const slugValid = SLUG_RE.test(slug);
-  const canSubmit = slugValid && !submitting;
-
-  function toggleAgent(id: string): void {
-    setSelectedAgents((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const canSubmit =
+    slugValid && folder !== null && folder.length > 0 && !submitting;
 
   async function onCreate(): Promise<void> {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      const client = createClient({ baseUrl: "", token });
-      const session = await client.createSession({ slug });
+      const session = await client.createSession({ slug, path: folder! });
 
-      // Optionally post the starter contribution.
-      const tpl = templateByKey(template);
-      if (tpl.starter !== null && userId !== null) {
-        await client.postProse(session.id, {
-          participant_id: userId,
-          content: tpl.starter.body,
-          name: tpl.starter.name,
-        });
-      }
-
-      // Refresh sessions list + switch into the new session.
       const list = await client.listSessions();
       setSessions(list);
       setCurrentSession(session.id);
 
-      // Optional clipboard copy.
       if (openImmediately) {
         const origin =
           typeof window !== "undefined" && window.location.origin.length > 0
@@ -101,7 +81,7 @@ export function NewSessionModal(): JSX.Element {
             await navigator.clipboard.writeText(snippet);
           }
         } catch {
-          // Non-fatal — clipboard may be unavailable (test env / permissions).
+          /* clipboard may be unavailable (test env / permissions) */
         }
       }
 
@@ -137,79 +117,102 @@ export function NewSessionModal(): JSX.Element {
         </button>
       </div>
 
-      <div className="modal-body">
-        <div className="form-row">
-          <div className="form-label" style={{ marginBottom: 6 }}>
-            SLUG
-          </div>
-          <SlugInput
-            value={slug}
-            onChange={setSlug}
-            datePrefix={datePrefix}
-            autoFocus
-            inputRef={slugRef}
+      {pickerOpen ? (
+        <div className="modal-body">
+          <FolderPicker
+            initialPath={folder}
+            onPick={(p) => {
+              setFolder(p);
+              setPickerOpen(false);
+            }}
+            onCancel={() => setPickerOpen(false)}
           />
-          <div className="form-hint">
-            Used as the folder name and CLI argument. Lowercase letters,
-            digits, hyphens.
-          </div>
-          {slug.length > 0 && !slugValid && (
-            <div className="form-error" role="alert">
-              Slug must match a–z, 0–9, hyphen.
+        </div>
+      ) : (
+        <>
+          <div className="modal-body">
+            <div className="form-row">
+              <div className="form-label" style={{ marginBottom: 6 }}>
+                FOLDER
+              </div>
+              <div className="folder-field">
+                <FolderClosed size={14} aria-hidden className="folder-field-icon" />
+                <span className="folder-field-path" title={folder ?? ""}>
+                  {folder ?? "(detecting home…)"}
+                </span>
+                <button
+                  type="button"
+                  className="btn-ghost folder-field-browse"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  Browse…
+                </button>
+              </div>
+              <div className="form-hint">
+                The session folder is created here as a new subdirectory.
+              </div>
             </div>
-          )}
-        </div>
 
-        <div className="form-row" style={{ marginTop: 18 }}>
-          <div className="form-label" style={{ marginBottom: 8 }}>
-            TEMPLATE
+            <div className="form-row" style={{ marginTop: 18 }}>
+              <div className="form-label" style={{ marginBottom: 6 }}>
+                NAME
+              </div>
+              <input
+                ref={slugRef}
+                className="form-input"
+                placeholder="my-session"
+                value={slug}
+                autoFocus
+                aria-label="Session name"
+                onChange={(e) => {
+                  const raw = e.target.value
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-]/g, "");
+                  setSlug(raw);
+                }}
+              />
+              <div className="form-hint">
+                Lowercase letters, digits, hyphens. Used as the session folder
+                name.
+              </div>
+              {slug.length > 0 && !slugValid && (
+                <div className="form-error" role="alert">
+                  Name must match a–z, 0–9, hyphen.
+                </div>
+              )}
+            </div>
+
+            <div className="form-row" style={{ marginTop: 16 }}>
+              <OpenAndCopyToggle
+                value={openImmediately}
+                onChange={setOpenImmediately}
+              />
+            </div>
+
+            {error !== null && (
+              <div className="form-error" role="alert" style={{ marginTop: 8 }}>
+                {error}
+              </div>
+            )}
           </div>
-          <TemplateGrid value={template} onChange={setTemplate} />
-        </div>
 
-        <div className="form-row" style={{ marginTop: 18 }}>
-          <div className="form-label" style={{ marginBottom: 8 }}>
-            INVITE
+          <div className="modal-foot">
+            <div className="foot-actions">
+              <button type="button" className="btn-ghost" onClick={closeModal}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-solid"
+                disabled={!canSubmit}
+                onClick={() => void onCreate()}
+              >
+                {submitting ? "Creating…" : "Create session"}
+              </button>
+            </div>
           </div>
-          <AgentInvite
-            participants={participants}
-            selected={selectedAgents}
-            onToggle={toggleAgent}
-          />
-        </div>
-
-        <div className="form-row" style={{ marginTop: 16 }}>
-          <OpenAndCopyToggle
-            value={openImmediately}
-            onChange={setOpenImmediately}
-          />
-        </div>
-
-        {error !== null && (
-          <div className="form-error" role="alert" style={{ marginTop: 8 }}>
-            {error}
-          </div>
-        )}
-      </div>
-
-      <div className="modal-foot">
-        <div className="hint">
-          Path: <code>.f-mark/sessions/{datePrefix}-{slug.length > 0 ? slug : "<slug>"}/</code>
-        </div>
-        <div className="foot-actions">
-          <button type="button" className="btn-ghost" onClick={closeModal}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-solid"
-            disabled={!canSubmit}
-            onClick={() => void onCreate()}
-          >
-            {submitting ? "Creating…" : "Create session"}
-          </button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

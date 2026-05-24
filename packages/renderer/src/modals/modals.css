@@ -243,152 +243,163 @@
   font-family: var(--sans);
   cursor: pointer;
 }
-.btn-ghost:hover {
+.btn-ghost:hover:not(:disabled) {
   background: var(--bg);
   color: var(--ink);
 }
-
-/* ============ New session modal ============ */
-.slug-input {
-  display: flex;
-  align-items: stretch;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: 13px;
-}
-.slug-input:focus-within {
-  border-color: var(--ink-4);
-  box-shadow: 0 0 0 3px rgba(40, 30, 15, 0.04);
-}
-.slug-prefix,
-.slug-suffix {
-  padding: 9px 0 9px 12px;
+.btn-ghost:disabled {
   color: var(--ink-4);
-  background: var(--bg);
-  user-select: none;
-  display: flex;
-  align-items: center;
-  white-space: nowrap;
-}
-.slug-suffix {
-  padding: 9px 12px 9px 0;
-}
-.slug-tail {
-  flex: 1;
+  border-color: var(--line-2);
   background: transparent;
-  border: 0;
-  outline: 0;
-  font: inherit;
-  font-size: 13.5px;
-  color: var(--ink);
-  padding: 9px 4px;
-  min-width: 80px;
-}
-.slug-tail::placeholder {
-  color: var(--ink-4);
-  font-style: italic;
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
-.template-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.template-card {
+/* ============ New session modal (v0.5 — folder + slug) ============ */
+.folder-field {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
+  gap: 8px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--sans);
-  width: 100%;
-}
-.template-card.on {
-  background: var(--canvas);
-  border-color: var(--ink-4);
-  box-shadow: var(--shadow);
-}
-.template-card:not(.on):hover {
-  border-color: var(--ink-4);
-}
-.template-icon {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel);
   border-radius: 6px;
+  padding: 8px 10px;
   font-family: var(--mono);
-  font-size: 16px;
-  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.folder-field-icon {
+  color: var(--ink-4);
   flex-shrink: 0;
 }
-.template-card.on .template-icon {
-  background: var(--ink);
-  color: var(--canvas);
-}
-.template-text {
+.folder-field-path {
   flex: 1;
   min-width: 0;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;          /* keep the tail visible when the path is long */
+  text-align: left;
 }
-.template-name {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.template-desc {
-  font-size: 12px;
-  color: var(--ink-3);
-  font-family: var(--serif);
-  margin-top: 2px;
-  line-height: 1.45;
-}
-.template-radio {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1.5px solid var(--ink-4);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.folder-field-browse {
   flex-shrink: 0;
-}
-.template-card.on .template-radio {
-  border-color: var(--ink);
-  background: var(--ink);
-}
-.template-card.on .template-radio span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--canvas);
+  font-size: 12px;
+  padding: 4px 10px;
 }
 
-/* Inline "invite new agent" form */
-.invite-new-form {
+.folder-picker {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 320px;
+  outline: none;
+}
+.folder-picker-breadcrumbs {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
-}
-.invite-new-form input.form-input {
-  flex: 1;
-  min-width: 140px;
-  font-size: 13px;
-}
-.invite-new-form .suggested-id {
+  gap: 2px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line-3);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
+}
+.folder-picker-breadcrumbs .crumb-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.folder-picker-breadcrumbs .crumb {
+  padding: 2px 6px;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  font: inherit;
+}
+.folder-picker-breadcrumbs .crumb:hover {
+  background: var(--panel);
+  color: var(--ink);
+}
+.folder-picker-breadcrumbs .crumb-sep {
   color: var(--ink-4);
+}
+.folder-picker-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 220px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+}
+.folder-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.folder-picker-row:hover {
+  background: var(--panel);
+}
+.folder-picker-row.on {
+  background: var(--canvas);
+  color: var(--ink);
+  outline: 1px solid var(--ink-4);
+}
+.folder-picker-row .folder-icon {
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+.folder-picker-status {
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.folder-picker-error {
+  color: var(--alert);
+}
+.folder-picker-empty {
+  font-style: italic;
+}
+.folder-picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-3);
+}
+.folder-picker-current {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.folder-picker-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* ============ Segmented control (shared across modals) ============ */
@@ -1007,6 +1018,14 @@ kbd {
   border-radius: 6px;
   overflow-x: auto;
   white-space: pre-wrap;
+}
+.install-instructions pre code {
+  display: block;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
 }
 .install-instructions code {
   font-family: var(--mono);

@@ -115,9 +115,24 @@ export interface HealthInfo {
   version: string;
 }
 
+export interface FsListEntry {
+  name: string;
+  isDir: boolean;
+}
+export interface FsListResponse {
+  path: string;
+  parent: string | null;
+  entries: FsListEntry[];
+  truncated: boolean;
+}
+
 export interface Client {
   listSessions(): Promise<SessionMeta[]>;
-  createSession(input: { slug?: string }): Promise<SessionMeta>;
+  createSession(input: { slug?: string; path?: string }): Promise<SessionMeta>;
+  /** Browse a folder on the kernel host. Used by the session-folder picker. */
+  fsList(path: string): Promise<FsListResponse>;
+  /** Default starting points for the folder picker. */
+  fsHome(): Promise<{ home: string; xdgConfigHome: string | null }>;
   listParticipants(): Promise<Record<string, Participant>>;
   registerAgent(input: {
     name: string;
@@ -204,6 +219,14 @@ export function createClient(cfg: ClientConfig): Client {
     },
     async createSession(input) {
       return (await post("/sessions", input)) as SessionMeta;
+    },
+    async fsList(path) {
+      return (await get(
+        `/fs/list?path=${encodeURIComponent(path)}`,
+      )) as FsListResponse;
+    },
+    async fsHome() {
+      return (await get("/fs/home")) as { home: string; xdgConfigHome: string | null };
     },
     async listParticipants() {
       const body = (await get("/participants")) as {
