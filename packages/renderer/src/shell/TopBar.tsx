@@ -21,6 +21,7 @@ import { createManagedAgentsClient } from "../api/managedAgents.js";
 import { copyToClipboard } from "../render/copy.js";
 import { TopBarModalContext } from "../App.js";
 import { KNOWN_RUNTIMES } from "../runtimes.js";
+import { PathSwitcher } from "./PathSwitcher.js";
 import type { PresenceState, SpawnResponse } from "@f-mark/shared";
 
 export const FMARK_GLYPH = `▟▙ ╱╲
@@ -161,9 +162,10 @@ export function TopBar(): JSX.Element {
         runtime_id: resp.runtime_id,
       });
       /* Also reflect the newly-registered participant in the renderer's
-         participants slice. The chip strip iterates `participants` (so
-         pre-existing un-managed agents also appear), so without this
-         the spawned agent has no chip until the next page refresh.
+         participants slice. The chip strip iterates `participants` filtered
+         by `active_session === currentSessionId`, so without this the
+         spawned agent has no chip until the next page refresh. We seed
+         active_session from the response so the chip appears immediately.
          displayName fallback comes from KNOWN_RUNTIMES; agent color is
          server-assigned, so the chip's dot color is fine without one. */
       const displayName =
@@ -172,6 +174,7 @@ export function TopBar(): JSX.Element {
         kind: "agent",
         name: displayName,
         color: "#888888",
+        active_session: resp.active_session,
       });
       /* Seed presence locally so the chip dot is correct even before the
          first WS broadcast lands (the kernel set the same state server-side
@@ -241,19 +244,26 @@ export function TopBar(): JSX.Element {
 
   const tmuxMissing = envProbe !== null && envProbe.tmux === false;
 
-  /* Build a single chip list sourced from participants (every agent who has
-     ever appeared in the session) joined with managedAgents (for tmux info
-     and runtime_id). Un-managed agents — those present in the participants
-     slice but not in managedAgents — still get a full AgentChip with name,
-     presence dot, and click → AgentActionMenu, so a pre-existing agent
-     from a prior session is never an orphaned bare avatar. */
+  /* Build a single chip list sourced from participants joined with
+     managedAgents (for tmux info and runtime_id). Scoped to the current
+     session via `active_session` (the agent's `.f-mark/agents/{id}/
+     active-session` file, enriched on /participants and updated on
+     spawn / WS managed-agent.spawned). A brand-new session shows zero
+     chips until an agent is spawned into it. Un-managed agents bound to
+     this session still render a full AgentChip — chips are not predicated
+     on managedAgents membership. */
   const allAgentChips = useMemo(() => {
     const managedById = new Map<string, (typeof managedAgents)[number]>();
     for (const a of managedAgents) {
       managedById.set(a.participant_id, a);
     }
     const entries = Object.entries(participants)
-      .filter(([, p]) => p.kind === "agent")
+      .filter(
+        ([, p]) =>
+          p.kind === "agent" &&
+          currentSessionId !== null &&
+          p.active_session === currentSessionId,
+      )
       .map(([id, p]) => {
         const managed = managedById.get(id);
         return {
@@ -281,7 +291,7 @@ export function TopBar(): JSX.Element {
       if (oa !== ob) return oa - ob;
       return a.name.localeCompare(b.name);
     });
-  }, [participants, managedAgents, presence]);
+  }, [participants, managedAgents, presence, currentSessionId]);
 
   const sortedTerminals = useMemo(
     () =>
@@ -333,7 +343,7 @@ export function TopBar(): JSX.Element {
           <span className="name">F·Mark</span>
         </div>
         <div className="breadcrumb" role="presentation">
-          <span className="proj">f-mark</span>
+          <PathSwitcher />
           <span className="sep">/</span>
           <span className="sess">{currentSession?.slug ?? "no session"}</span>
         </div>

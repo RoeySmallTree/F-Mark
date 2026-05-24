@@ -5,19 +5,24 @@
 /* App skeleton */
 .app {
   display: grid;
-  grid-template-rows: 52px 1fr auto;
+  grid-template-rows: 52px 1fr;
   height: 100vh;
 }
 .main {
   display: grid;
   grid-template-columns: auto auto 1fr auto;
   min-height: 0;
+  width: 100vw;
+  max-width: 100vw;
+  overflow: hidden;
 }
 .feed-col {
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   background: var(--canvas);
 }
 .feed-scroll {
@@ -47,6 +52,10 @@
   height: 52px;
   position: relative;
   z-index: 30;
+  width: 100vw;
+  max-width: 100vw;
+  min-width: 0;
+  overflow: hidden;
 }
 .brand {
   display: flex;
@@ -97,6 +106,159 @@
 .breadcrumb .caret {
   color: var(--ink-3);
   margin-left: 2px;
+}
+
+/* PathSwitcher — sits in .breadcrumb where the static "f-mark" used to be. */
+.path-switcher {
+  position: relative;
+  display: inline-flex;
+}
+.path-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.path-switcher-trigger:hover {
+  background: var(--panel);
+  color: var(--ink);
+}
+.path-switcher-icon {
+  color: var(--ink-4);
+}
+.path-switcher-name {
+  font-weight: 600;
+  color: var(--ink-2);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.path-switcher-trigger:hover .path-switcher-name {
+  color: var(--ink);
+}
+.path-switcher-caret {
+  color: var(--ink-4);
+}
+.path-switcher-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 320px;
+  max-width: 480px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow:
+    0 10px 32px rgba(40, 30, 15, 0.16),
+    0 2px 8px rgba(40, 30, 15, 0.06);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: var(--sans);
+}
+.path-switcher-current {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-radius: 5px;
+  margin-bottom: 4px;
+}
+.path-switcher-current-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.path-switcher-current-path {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.path-switcher-group {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 6px 10px 2px;
+}
+.path-switcher-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  border-radius: 5px;
+  text-align: left;
+  width: 100%;
+}
+.path-switcher-row:hover:not(:disabled) {
+  background: var(--panel);
+}
+.path-switcher-row.on {
+  background: var(--canvas);
+  outline: 1px solid var(--ink-4);
+}
+.path-switcher-row:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.path-switcher-row-name {
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.path-switcher-row-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.path-switcher-row-star {
+  color: var(--accent, var(--ink-2));
+  flex-shrink: 0;
+}
+.path-switcher-row-folder {
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+.path-switcher-empty {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-4);
+  padding: 8px 10px;
+  font-style: italic;
+}
+.path-switcher-error {
+  font-size: 11.5px;
+  color: var(--alert, #c0392b);
+  padding: 6px 10px;
 }
 
 .topbar-center {
@@ -218,6 +380,8 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 /* Phase 12 — top-bar chip strip. Lives between the turn-pill and the
@@ -231,6 +395,21 @@
   align-items: center;
   gap: 6px;
   margin-right: 8px;
+  min-width: 0;
+  flex: 1 1 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.topbar-chips::-webkit-scrollbar {
+  height: 4px;
+}
+.topbar-chips::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+.topbar-chips > * {
+  flex-shrink: 0;
 }
 .agent-chip-anchor {
   position: relative;
@@ -618,15 +797,322 @@
     calc(var(--panel-scroll-pad-y) + 10px);
 }
 
+.right-comments {
+  position: relative;
+  min-height: 240px;
+}
+.right-comments.tethered {
+  padding-right: 2px;
+}
+.right-comments-empty {
+  margin: 2px 0 0;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.right-comments-thread {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 10px 10px 11px 12px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--line);
+  border-radius: 7px;
+  background: var(--canvas);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition:
+    top 0.18s ease,
+    border-color 0.16s,
+    background 0.16s,
+    opacity 0.16s,
+    transform 0.16s;
+}
+.right-comments-thread:hover {
+  border-left-color: var(--ink-4);
+  background: var(--bg);
+}
+.right-comments-thread.passive {
+  min-height: 74px;
+  opacity: 0.58;
+}
+.right-comments-thread.active {
+  border-color: var(--user-tint-2);
+  border-left-color: var(--user);
+  background: color-mix(in srgb, var(--user-tint) 58%, var(--canvas));
+  opacity: 1;
+  transform: translateX(-2px);
+}
+.right-comments-thread-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-bottom: 8px;
+  color: var(--user);
+}
+.right-comments-thread-head > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.right-comments-thread-head b {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 13.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.right-comments-thread-head span {
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.right-comments-quote {
+  margin: 0 0 10px 21px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-3);
+  background: var(--panel);
+  font-family: var(--serif);
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.45;
+}
+.right-comment-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-left: 21px;
+  min-width: 0;
+}
+.right-comment-preview p {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.right-comment-preview b {
+  color: var(--ink);
+}
+.right-comment-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.right-comment-root {
+  padding: 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--canvas);
+}
+.right-comment-root.resolved {
+  background: color-mix(in srgb, var(--green-tint) 36%, var(--canvas));
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line));
+}
+.right-comment-msg {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.right-comment-msg.reply {
+  margin-left: 19px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+.right-comment-msg .avatar {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.right-comment-msg-body {
+  flex: 1;
+  min-width: 0;
+}
+.right-comment-msg-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.right-comment-msg-meta b {
+  color: var(--ink);
+  font-size: 12px;
+}
+.right-comment-msg-meta span {
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.right-comment-msg p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.right-comment-msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.right-comment-msg:hover .right-comment-msg-actions,
+.right-comment-msg:focus-within .right-comment-msg-actions {
+  opacity: 1;
+}
+.right-comment-msg-actions button,
+.right-comment-icon-btn {
+  width: 27px;
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.right-comment-msg-actions button:hover:not(:disabled),
+.right-comment-icon-btn:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--ink);
+}
+.right-comment-icon-btn.primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+}
+.right-comment-icon-btn:disabled,
+.right-comment-msg-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.right-comment-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.right-comment-edit textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 7px 8px;
+  outline: 0;
+}
+.right-comment-edit textarea:focus {
+  border-color: var(--ink-4);
+}
+.right-comment-edit > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.right-comment-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-2);
+}
+.right-comment-replybox {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.right-comment-replybox input {
+  min-width: 0;
+  height: 29px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12.5px;
+  outline: 0;
+}
+.right-comment-replybox input:focus {
+  border-color: var(--ink-4);
+}
+.right-comment-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.right-comment-emoji-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-4);
+}
+.right-comment-emoji-row button {
+  min-width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+.right-comment-emoji-row button:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--panel);
+}
+.right-comment-emoji-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.right-comment-resolve {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.right-comment-resolve:hover:not(:disabled) {
+  background: var(--canvas);
+  color: var(--ink);
+}
+.right-comment-resolve:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.right-comment-resolve.resolved {
+  color: var(--green);
+  border-color: var(--green);
+  background: var(--green-tint);
+  opacity: 1;
+}
+
 /* Compose bar */
 .compose {
-  border-top: 1px solid var(--line);
-  background: var(--bg);
-  padding: var(--compose-pad-y) var(--compose-pad-x)
-    calc(var(--compose-pad-y) + 2px);
 }
 .compose-inner {
-  max-width: 880px;
+  max-width: 780px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -661,39 +1147,104 @@
   background: var(--panel);
   color: var(--ink);
 }
-.compose-name {
+/* Name chip — collapsed pill above the textarea ("Name it") that expands
+   in-place into an inline title input + × cancel when activated.
+   Subsumes the prior .compose-name card. */
+.name-chip {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  margin: 0 var(--compose-pad-x);
+}
+.name-chip:hover {
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.name-chip svg {
+  opacity: 0.75;
+}
+.name-chip.name-chip-expanded {
+  align-self: stretch;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 0 0 2px;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 10px;
+  background: var(--canvas);
+  border-color: var(--line);
+  cursor: default;
+  box-shadow: var(--shadow);
 }
-.compose-name label {
-  font-family: var(--mono);
-  font-size: 11px;
+.name-chip.name-chip-expanded:hover {
+  background: var(--canvas);
+  color: var(--ink-2);
+  border-color: var(--line);
+}
+.name-chip-icon {
+  flex-shrink: 0;
   color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
 }
-.compose-name input {
+.name-chip-input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: 0;
   outline: 0;
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--ink);
 }
-.compose-name input::placeholder {
+.name-chip-input::placeholder {
   color: var(--ink-4);
   font-weight: 400;
   font-style: italic;
 }
+.name-chip-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.name-chip-close:hover {
+  background: var(--panel);
+  color: var(--ink);
+}
+.name-chip-close:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
 .compose-box {
   background: var(--canvas);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: var(--compose-box-pad-y) var(--compose-box-pad-x);
+  border-radius: 28px 28px 0 0;
+  margin: 0 var(--compose-pad-x);
+  padding: var(--compose-box-pad-y) var(--compose-box-pad-x) 0
+    var(--compose-box-pad-x);
   box-shadow: var(--shadow);
   transition:
     border-color 0.15s,
@@ -721,20 +1272,175 @@
 .compose-box textarea::placeholder {
   color: var(--ink-4);
 }
+.compose-file-input {
+  display: none;
+}
+.attached-files {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+.attached-file {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.attached-file.uploading {
+  border-color: var(--ink-4);
+}
+.attached-file.error {
+  border-color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 10%, var(--canvas));
+}
+.attached-file-thumb {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--ink-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.attached-file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.attached-file-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.attached-file-main input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.3;
+  outline: 0;
+  text-overflow: ellipsis;
+}
+.attached-file-main input:focus {
+  box-shadow: 0 1px 0 var(--ink-4);
+}
+.attached-file-main span {
+  min-width: 0;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attached-file-remove {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.attached-file-remove:hover:not(:disabled) {
+  background: var(--canvas);
+  color: var(--ink);
+}
+.attached-file-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 /* ============ Compose Actions Dock ============
    A meticulously crafted, hardware-like control dock below the textarea.
    Radically redesigned from scratch to provide a tactile, definitive interaction model. */
 .compose-actions {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 16px;
   background: var(--bg);
-  border-radius: 12px;
-  padding: 6px;
+  border-radius: 28px 28px 0 0;
+  padding: 12px 14px 8px;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0,0,0,0.02);
   border: 1px solid var(--line-2);
+}
+
+.compose-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compose-actions-primary {
+  justify-content: center;
+  padding-bottom: 4px;
+}
+
+.compose-actions-secondary {
+  justify-content: space-between;
+  border-top: 1px solid var(--line-2);
+  padding-top: 8px;
+  margin-top: 2px;
+  gap: 6px;
+}
+
+/* The Stage — the centered primary cluster holding mode + send + end-turn.
+   Three semantic regions (modes / send / end-turn) sit side-by-side in a
+   single tactile group, with a hairline divider separating state from
+   action. The cluster as a whole becomes the focal point of compose. */
+.primary-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 4px 14px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.primary-cluster:hover {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.primary-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.primary-send {
+  display: inline-flex;
+  align-items: center;
+}
+
+.primary-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 0;
+  background: var(--line-2);
 }
 
 .compose-zone {
@@ -743,73 +1449,83 @@
   gap: 4px;
 }
 
-.dock-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--line-2);
-  margin: 0 10px;
-  opacity: 0.6;
-}
-
 .dock-spacer {
   flex: 1;
   min-width: 0;
 }
 
-/* ============ Mode Pills & Augment Launchers (Dock specific) ============ */
+/* ============ Mode Pills (Primary Cluster) ============
+   The Mode segment of the stage: a row of toggleable state pills sharing
+   visual language with Send / End turn. Active = filled ink; inactive =
+   ghost; disabled = subtle.
+
+   Interactions: hover gives a soft inset on inactive, brightens active.
+   Press settles into the pill (no layout shifts). Focus rings sit outside
+   so they never displace neighbors. */
 .mode-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
   font-size: 12.5px;
   color: var(--ink-2);
   font-family: var(--sans);
   font-weight: 500;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.compose-zone-augments .mode-btn {
-  padding: 6px 10px;
+  transition:
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 180ms ease;
 }
 
 .mode-btn svg {
   opacity: 0.7;
-  transition: transform 150ms ease, opacity 150ms ease;
+  transition: opacity 180ms ease;
 }
 
 .mode-btn:hover:not(:disabled) {
-  background: var(--canvas);
+  background: var(--bg);
   color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .mode-btn:hover:not(:disabled) svg {
   opacity: 1;
-  transform: scale(1.05);
 }
 
 .mode-btn:active:not(:disabled) {
-  transform: scale(0.96);
   background: var(--line-2);
 }
 
+.mode-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .mode-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
-/* Active Mode Pill */
+/* Active Mode Pill — filled, the state is on. */
 .mode-btn.active {
   background: var(--ink);
   color: var(--canvas);
   border-color: var(--ink);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.mode-btn.active:hover:not(:disabled) {
+  filter: brightness(1.06);
+  background: var(--ink);
+  color: var(--canvas);
 }
 
 .mode-btn.active svg {
@@ -825,189 +1541,197 @@
   padding: 1px 4px;
   background: var(--line-2);
   border-radius: 4px;
-  transition: all 150ms ease;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 .mode-btn.active .kbd {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
   color: var(--canvas);
 }
 
-/* ============ Ends-Turn Chip ============
-   A tactile toggle switch. When active (chained), it locks in with a solid fill
-   and an animated icon to reinforce the "chaining" behavior. */
-.ends-turn-chip {
+/* ============ Utility Buttons (Secondary Row) ============
+   Quiet launchers for presets, skills, task, settings. Smaller and
+   lower-contrast than the primary cluster so attention flows to the
+   stage above. */
+.util-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 14px;
-  font-family: var(--sans);
-  font-weight: 500;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
   font-size: 11.5px;
   color: var(--ink-3);
-  background: var(--panel);
+  font-family: var(--sans);
+  font-weight: 500;
+  white-space: nowrap;
+  background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
-  white-space: nowrap;
-  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.ends-turn-chip svg {
+
+.util-btn svg {
   opacity: 0.7;
-  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 180ms ease;
 }
-.ends-turn-chip:hover {
+
+.util-btn:hover:not(:disabled) {
+  background: var(--canvas);
   color: var(--ink);
-  background: var(--bg);
-  border-color: var(--line-2);
 }
-.ends-turn-chip[aria-pressed="true"] {
-  color: var(--ink);
-  background: var(--bg);
-  border-color: var(--ink-4);
-  box-shadow: inset 0 0 0 1px var(--ink-4);
-}
-.ends-turn-chip[aria-pressed="true"] svg {
+
+.util-btn:hover:not(:disabled) svg {
   opacity: 1;
-  color: var(--ink);
-  transform: rotate(-15deg) scale(1.1);
 }
-.ends-turn-chip:active {
-  transform: scale(0.97);
+
+.util-btn:active:not(:disabled) {
+  background: var(--line-2);
 }
-.ends-turn-chip:focus-visible {
-  outline: 2px solid var(--ink-4);
+
+.util-btn:focus-visible {
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
-/* ============ Send Button (Standalone) ============ */
-.send-btn {
-  display: inline-flex;
+.util-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.util-btn-icon {
+  padding: 4px;
+}
+
+.util-label {
+  letter-spacing: 0.01em;
+}
+
+/* ============ Primary Action — the morphing send / end-turn / stop button ============
+
+   ONE slot, four labels. All four labels live in the same grid cell sized
+   to the longest, so the button never grows or shrinks as state changes.
+   The active label crossfades in via opacity; the inactive ones sit at
+   opacity 0 but still take grid space, preventing layout shifts.
+
+   States (via data-state):
+     - end-turn   : default. Filled ink. Hand-off the turn.
+     - send       : message mode with content. Filled ink.
+     - post-comment: comment mode. Filled ink.
+     - stop       : agent's turn. Amber-tinted via the agent palette;
+                    quiet but unmistakably different so the user
+                    notices the action's meaning has changed.
+
+   Color transitions ease between states so morphing in OR out of stop
+   mode feels continuous, not jarring. */
+.primary-action {
+  display: inline-grid;
+  grid-template-areas: "stage";
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  justify-items: center;
   padding: 8px 18px;
-  border-radius: 8px;
+  min-width: 144px;
+  border: 1px solid var(--ink);
+  border-radius: 9px;
   background: var(--ink);
   color: var(--canvas);
+  font-family: var(--sans);
   font-size: 13.5px;
   font-weight: 600;
-  font-family: var(--sans);
   letter-spacing: 0.01em;
   white-space: nowrap;
-  border: 1px solid transparent;
   cursor: pointer;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255,255,255,0.1);
-  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 180ms ease,
+    box-shadow 180ms ease;
 }
-.send-btn.standalone {
-  margin-left: auto;
+
+.primary-action:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.15);
+
+.primary-action:active:not(:disabled) {
+  filter: brightness(0.96);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.2),
+    inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.primary-action:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.primary-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Stop run — agent palette. Distinct enough that the user reads the
+   change of action immediately, calm enough that it doesn't feel like
+   a panic button. */
+.primary-action.is-stop {
+  background: var(--agent);
+  border-color: var(--agent);
+  color: var(--canvas);
+}
+
+.primary-action.is-stop:hover:not(:disabled) {
   filter: brightness(1.05);
 }
-.send-btn:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: none;
+
+/* The four stacked labels. Each occupies the same grid cell. The active
+   one fades in; the others sit at opacity 0 but still claim space so
+   the cell sizes to the LONGEST label and the button never reflows. */
+.primary-action__label {
+  grid-area: stage;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.send-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-  box-shadow: none;
+
+.primary-action__label.is-active {
+  opacity: 1;
+  pointer-events: auto;
 }
-.send-btn .kbd {
+
+.primary-action__label .kbd {
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 500;
   opacity: 0.6;
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--canvas);
   padding: 2px 5px;
   border-radius: 4px;
+  margin-left: 2px;
 }
 
-/* ============ Send Cluster (Message Mode) ============ */
-.send-cluster {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--canvas);
-  border: 1px solid var(--ink);
-  border-radius: 10px;
-  overflow: hidden;
-  position: relative;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
-  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.send-cluster:hover {
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
-  transform: translateY(-1px);
-}
-
-/* Send half (Primary Action) */
-.send-cluster .send-btn.send-cluster-send {
-  border-radius: 0;
-  padding: 8px 16px 8px 18px;
-  box-shadow: none;
-  border: none;
-  border-right: 1px solid var(--line-3);
-  background: var(--ink);
-}
-.send-cluster .send-btn.send-cluster-send:hover:not(:disabled) {
-  transform: none;
-  filter: brightness(1.1);
-}
-.send-cluster-icon {
+/* The Send arrow slides 3px right on hover — same continuation cue as
+   before, ported into the morphing button. */
+.primary-action .action-arrow {
   opacity: 0.8;
-  transition: transform 150ms ease;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.send-cluster .send-btn.send-cluster-send:hover:not(:disabled) .send-cluster-icon {
+
+.primary-action.is-send:hover:not(:disabled) .action-arrow {
   transform: translateX(3px);
-}
-
-/* End-turn half (Secondary Action) */
-.end-turn-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 18px;
-  background: var(--canvas);
-  color: var(--ink-2);
-  border: 0;
-  font-family: var(--sans);
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 150ms ease;
-}
-.end-turn-btn:hover:not(:disabled) {
-  background: var(--bg);
-  color: var(--ink);
-}
-.end-turn-btn:active:not(:disabled) {
-  background: var(--line-2);
-}
-.end-turn-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Empty cluster — stretches single action */
-.send-cluster.empty {
-  border-color: var(--line-2);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-}
-.send-cluster.empty:hover {
-  border-color: var(--line);
-}
-.send-cluster.empty .end-turn-btn {
-  padding: 8px 24px;
-  color: var(--ink);
-  background: var(--canvas);
-}
-.send-cluster.empty .end-turn-btn:hover:not(:disabled) {
-  background: var(--bg);
+  opacity: 1;
 }
 
 /* keyboard chip */

@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -16,7 +18,9 @@ import { Feed } from "./shell/Feed.js";
 import { RightPanel } from "./shell/RightPanel.js";
 import { Compose } from "./shell/Compose.js";
 import { ModalRoot } from "./modals/ModalRoot.js";
-import { TerminalOverlay } from "./modals/TerminalOverlay.js";
+const TerminalOverlay = lazy(() =>
+  import("./modals/TerminalOverlay.js").then((m) => ({ default: m.TerminalOverlay })),
+);
 import { HookInstallModal } from "./modals/HookInstallModal.js";
 import { ReconnectModal } from "./modals/ReconnectModal.js";
 import { useHotkeys } from "./hooks/useHotkeys.js";
@@ -77,6 +81,7 @@ export function App(): JSX.Element {
   const setManagedAgents = useStore((s) => s.setManagedAgents);
   const setManagedTerminals = useStore((s) => s.setManagedTerminals);
   const setEnvProbe = useStore((s) => s.setEnvProbe);
+  const setPathsState = useStore((s) => s.setPathsState);
   const dispatchManagedAgentWsMessage = useStore(
     (s) => s.dispatchManagedAgentWsMessage,
   );
@@ -118,10 +123,40 @@ export function App(): JSX.Element {
     const client = createClient({ baseUrl: "", token });
     const managedClient = createManagedAgentsClient({ baseUrl: "", token });
     void (async () => {
-      const [list, participants] = await Promise.all([
-        client.listSessions(),
-        client.listParticipants(),
-      ]);
+      /* Read multi-path state first so the rest of the bootstrap knows
+         which path to scope sessions/participants to. Kernels prior to
+         v0.5 don't expose /paths — treat any error here as "no path
+         state", and fall through to the legacy sessions/participants
+         fetch so the renderer keeps working against an old kernel. */
+      let activePath: string | null = null;
+      try {
+        const paths = await client.getPaths();
+        setPathsState(paths);
+        activePath = paths.activePath;
+      } catch {
+        /* legacy kernel; behave as if cwd is active */
+        activePath = "";
+      }
+
+      if (activePath === null) {
+        /* No active path → empty state. Don't try to list sessions or
+           participants — the kernel would 409 on the multi-path-aware
+           routes. */
+        setSessions([]);
+        setParticipants({});
+        return;
+      }
+
+      let list: Awaited<ReturnType<typeof client.listSessions>> = [];
+      let participants: Awaited<ReturnType<typeof client.listParticipants>> = {};
+      try {
+        [list, participants] = await Promise.all([
+          client.listSessions(),
+          client.listParticipants(),
+        ]);
+      } catch {
+        /* swallow — leave list/participants empty */
+      }
       setSessions(list);
       setParticipants(participants);
       const state = useStore.getState();
@@ -167,6 +202,7 @@ export function App(): JSX.Element {
     setManagedAgents,
     setManagedTerminals,
     setEnvProbe,
+    setPathsState,
   ]);
 
   useEffect(() => {
@@ -238,20 +274,24 @@ export function App(): JSX.Element {
         <div className="main">
           <LeftRail />
           <LeftPanel />
-          <Feed />
+          <section className="feed-col" aria-label="Feed">
+            <Feed />
+            <div className="compose">
+              <Compose />
+            </div>
+          </section>
           <RightPanel />
-        </div>
-        <div className="compose">
-          <Compose />
         </div>
         <ModalRoot />
         {terminalOverlayFor !== null ? (
-          <TerminalOverlay
-            tmuxSession={terminalOverlayFor}
-            token={token}
-            baseUrl={baseUrl}
-            onClose={closeTerminalOverlay}
-          />
+          <Suspense fallback={null}>
+            <TerminalOverlay
+              tmuxSession={terminalOverlayFor}
+              token={token}
+              baseUrl={baseUrl}
+              onClose={closeTerminalOverlay}
+            />
+          </Suspense>
         ) : null}
         {hookInstallFor !== null && currentUserId !== null ? (
           <HookInstallModal

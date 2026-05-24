@@ -4,7 +4,7 @@ import type {
   ManagedAgentWsMessage,
   Participant,
 } from "@f-mark/shared";
-import type { SessionMeta } from "../api/client.js";
+import type { PathFavorite, SessionMeta } from "../api/client.js";
 import {
   DEFAULT_FILTER,
   type LogFilter,
@@ -86,6 +86,14 @@ interface State extends PresenceSlice {
   participants: Record<string, Participant>;
   currentUserId: string | null;
   events: AnyEventRecord[];
+  /* Multi-path state. activePath null → renderer shows the empty
+     "pick a folder to begin" affordance. activeRevision is a monotonic
+     counter mirrored from the kernel's state.json — used to discard
+     stale WS messages once the WS envelope lands. */
+  activePath: string | null;
+  activeRevision: number;
+  knownPaths: string[];
+  favorites: PathFavorite[];
   composeMode: "message" | "named" | "comment";
   commentTarget: { file: string; lines?: [number, number] } | null;
   /* composeDraft — text the compose textarea should adopt when next mounted
@@ -112,6 +120,14 @@ interface State extends PresenceSlice {
   logFilter: LogFilter;
   setToken(token: string | null): void;
   setSessions(s: SessionMeta[]): void;
+  setPathsState(p: {
+    activePath: string | null;
+    activeRevision: number;
+    knownPaths: string[];
+    favorites: PathFavorite[];
+  }): void;
+  setKnownPaths(p: string[]): void;
+  setFavorites(f: PathFavorite[]): void;
   setCurrentSession(id: string | null): void;
   setParticipants(p: Record<string, Participant>): void;
   upsertParticipant(id: string, p: Participant): void;
@@ -159,8 +175,21 @@ export const useStore = create<State>((set, get) => ({
   customPresetsVersion: 0,
   activePopover: { key: null, anchorRect: null },
   logFilter: DEFAULT_FILTER,
+  activePath: null,
+  activeRevision: 0,
+  knownPaths: [],
+  favorites: [],
   setToken: (token) => set({ token }),
   setSessions: (sessions) => set({ sessions }),
+  setPathsState: (p) =>
+    set({
+      activePath: p.activePath,
+      activeRevision: p.activeRevision,
+      knownPaths: p.knownPaths,
+      favorites: p.favorites,
+    }),
+  setKnownPaths: (knownPaths) => set({ knownPaths }),
+  setFavorites: (favorites) => set({ favorites }),
   setCurrentSession: (currentSessionId) => {
     /* Preserve P4's behaviour (clear events on session switch) while
        restoring the per-session view mode if one was previously stored. */
@@ -194,11 +223,7 @@ export const useStore = create<State>((set, get) => ({
       return { events: next };
     }),
   setComposeMode: (composeMode) => set({ composeMode }),
-  setCommentTarget: (commentTarget) =>
-    set({
-      commentTarget,
-      composeMode: commentTarget !== null ? "comment" : "message",
-    }),
+  setCommentTarget: (commentTarget) => set({ commentTarget }),
   setComposeDraft: (composeDraft) => set({ composeDraft }),
   setLeftRail: (leftRail) => set({ leftRail }),
   setRightTab: (rightTab) => set({ rightTab }),

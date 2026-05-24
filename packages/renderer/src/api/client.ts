@@ -126,6 +126,18 @@ export interface FsListResponse {
   truncated: boolean;
 }
 
+export interface PathFavorite {
+  name: string;
+  path: string;
+}
+
+export interface PathsResponse {
+  activePath: string | null;
+  activeRevision: number;
+  knownPaths: string[];
+  favorites: PathFavorite[];
+}
+
 export interface Client {
   listSessions(): Promise<SessionMeta[]>;
   createSession(input: { slug?: string; path?: string }): Promise<SessionMeta>;
@@ -133,6 +145,17 @@ export interface Client {
   fsList(path: string): Promise<FsListResponse>;
   /** Default starting points for the folder picker. */
   fsHome(): Promise<{ home: string; xdgConfigHome: string | null }>;
+  /** Read the multi-path state — activePath, knownPaths, favorites. */
+  getPaths(): Promise<PathsResponse>;
+  /** Switch the active path. Kernel validates + persists + bumps revision. */
+  setActivePath(path: string): Promise<PathsResponse>;
+  /** Clear the active path (renderer goes to empty state). */
+  clearActivePath(): Promise<PathsResponse>;
+  /** Remove an entry from knownPaths (e.g., user moved a folder). */
+  removeKnownPath(path: string): Promise<{ knownPaths: string[] }>;
+  addFavorite(input: { name: string; path: string }): Promise<{ favorites: PathFavorite[] }>;
+  removeFavorite(path: string): Promise<{ favorites: PathFavorite[] }>;
+  renameFavorite(input: { path: string; newName: string }): Promise<{ favorites: PathFavorite[] }>;
   listParticipants(): Promise<Record<string, Participant>>;
   registerAgent(input: {
     name: string;
@@ -211,6 +234,13 @@ export function createClient(cfg: ClientConfig): Client {
     });
     return jsonOrThrow(res);
   }
+  async function del(path: string): Promise<unknown> {
+    const res = await fetch(url(path), {
+      method: "DELETE",
+      headers: buildHeaders(cfg.token),
+    });
+    return jsonOrThrow(res);
+  }
 
   return {
     async listSessions() {
@@ -227,6 +257,35 @@ export function createClient(cfg: ClientConfig): Client {
     },
     async fsHome() {
       return (await get("/fs/home")) as { home: string; xdgConfigHome: string | null };
+    },
+    async getPaths() {
+      return (await get("/paths")) as PathsResponse;
+    },
+    async setActivePath(path) {
+      return (await post("/paths/active", { path })) as PathsResponse;
+    },
+    async clearActivePath() {
+      return (await del("/paths/active")) as PathsResponse;
+    },
+    async removeKnownPath(path) {
+      return (await del(
+        `/paths/known?path=${encodeURIComponent(path)}`,
+      )) as { knownPaths: string[] };
+    },
+    async addFavorite(input) {
+      return (await post("/paths/favorites", input)) as {
+        favorites: PathFavorite[];
+      };
+    },
+    async removeFavorite(path) {
+      return (await del(
+        `/paths/favorites?path=${encodeURIComponent(path)}`,
+      )) as { favorites: PathFavorite[] };
+    },
+    async renameFavorite(input) {
+      return (await patch("/paths/favorites", input)) as {
+        favorites: PathFavorite[];
+      };
     },
     async listParticipants() {
       const body = (await get("/participants")) as {
