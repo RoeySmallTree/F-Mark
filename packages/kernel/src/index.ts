@@ -10,8 +10,12 @@ import { renderBanner, type BannerMode } from "./banner.js";
 import { parseArgs, printUsage, runCli, type CliOptions } from "./cli.js";
 import { DEFAULT_PORT, HOST, MAX_PORT_RETRIES } from "./config.js";
 import * as logger from "./logger.js";
+import { mkdir } from "node:fs/promises";
 import { paths } from "./paths.js";
-import { initProject } from "./project.js";
+import { activePaths } from "./paths/active.js";
+import { PathContextRef } from "./paths/contextRef.js";
+import { globalPaths } from "./paths/global.js";
+import { initProject, readConfig, writeConfig } from "./project.js";
 import { reconcile } from "./reconcile.js";
 import { createServer } from "./server.js";
 import { realCommandRunner } from "./tmux/commandRunner.js";
@@ -54,8 +58,19 @@ if (options.help) {
   process.exit(0);
 }
 
-const p = paths(process.env.INIT_CWD ?? process.cwd());
-await initProject(p);
+const projectRoot = process.env.INIT_CWD ?? process.cwd();
+const p = paths(projectRoot);
+const requestedPort = options.port ?? DEFAULT_PORT;
+await initProject(p, requestedPort);
+
+// P1 transitional: cwd is the active path by default so existing UI/hooks
+// keep working. Removed in P4 once the picker UI is in place.
+const gPaths = globalPaths();
+await mkdir(gPaths.configDir(), { recursive: true });
+const pathContextRef = new PathContextRef({
+  global: gPaths,
+  active: activePaths(projectRoot),
+});
 
 let token: string | null = null;
 if (options.noAuth) {
@@ -72,9 +87,9 @@ const { app, getBus, getTracker } = createServer({
   token,
   paths: p,
   allowProcessApiNoAuth: options.allowProcessApiNoAuth,
+  pathContextRef,
 });
 
-const requestedPort = options.port ?? DEFAULT_PORT;
 let port = requestedPort;
 let bound = false;
 for (let attempt = 0; attempt < MAX_PORT_RETRIES; attempt++) {
@@ -97,6 +112,21 @@ if (!bound) {
   );
   if (token !== null) await deleteTokenFile(p);
   process.exit(1);
+}
+
+// Persist the actually-bound port to config.json so hook scripts (which read
+// this file to find the kernel) POST to the right place. Covers both the
+// --port flag case and the EADDRINUSE port-bump case. Stale config from a
+// previous run is overwritten.
+try {
+  const cfg = await readConfig(p);
+  if (cfg.port !== port) {
+    cfg.port = port;
+    await writeConfig(p, cfg);
+  }
+} catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  logger.warn(`Could not sync port to config.json: ${msg}`);
 }
 
 const stopWatcher = await startWatcher(p, {

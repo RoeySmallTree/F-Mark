@@ -25,6 +25,8 @@ import { registerStaticRoutes } from "./routes/static.js";
 import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
 import { registerHookInstallRoutes } from "./routes/hookInstall.js";
+import { registerPathRoutes } from "./routes/paths.js";
+import type { PathContextRef } from "./paths/contextRef.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
 import { createPaneHub } from "./ws/paneHub.js";
@@ -52,6 +54,13 @@ export interface ServerDeps {
    * tmux manager without forking subprocesses.
    */
   commandRunner?: CommandRunner;
+  /**
+   * Optional multi-path context. When provided, registers the /paths routes
+   * (GET /paths, POST /paths/active, etc.) backed by this ref. Tests that
+   * don't need the new endpoints omit this and the routes stay unregistered
+   * so global state.json isn't touched.
+   */
+  pathContextRef?: PathContextRef;
 }
 
 export interface CreatedServer {
@@ -166,6 +175,10 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerBestPracticesRoute(app);
   registerPresenceRoutes(app, () => tracker);
 
+  if (deps.pathContextRef) {
+    registerPathRoutes(app, deps.pathContextRef);
+  }
+
   // /env-probe is a read-only PATH-detection endpoint; it lives outside the
   // process-API gate so the UI can render the install banner even under
   // --no-auth without --allow-process-api-no-auth.
@@ -226,8 +239,8 @@ export function createServer(deps: ServerDeps): CreatedServer {
       stopPipe: async () => {},
     };
     const paneHub = createPaneHub({
-      onStart: (id) => { void pipeControls.startPipe(id); },
-      onStop: (id) => { void pipeControls.stopPipe(id); },
+      onStart: (id) => { void pipeControls.startPipe(id).catch(() => {}); },
+      onStop: (id) => { void pipeControls.stopPipe(id).catch(() => {}); },
     });
     pipeControls = registerPaneWebSocket(app, { tmux, hub: paneHub, inputQueue: paneInputQueue });
   } else {
