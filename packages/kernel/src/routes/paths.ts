@@ -11,6 +11,7 @@ import {
   type Favorite,
   type KernelState,
 } from "../state/store.js";
+import type { Bus } from "../ws/bus.js";
 
 interface PathErrorShape {
   code: string;
@@ -98,7 +99,19 @@ async function validatePath(
 export function registerPathRoutes(
   app: FastifyInstance,
   ref: PathContextRef,
+  busGetter?: () => Bus,
 ): void {
+  function broadcastSwitch(state: KernelState): void {
+    if (!busGetter) return;
+    const active = ref.get().active;
+    busGetter().publish({
+      type: "path-switched",
+      activePath: state.activePath,
+      pathId: active ? active.pathId() : null,
+      revision: state.activeRevision,
+    });
+  }
+
   app.get("/paths", async () => {
     const g = ref.global();
     const state = await updateState(g, (s) => s);
@@ -122,6 +135,7 @@ export function registerPathRoutes(
       return bumpRevision(promoted);
     });
     ref.setActive(activePaths(validation.canonical));
+    broadcastSwitch(next);
     return {
       activePath: next.activePath,
       activeRevision: next.activeRevision,
@@ -136,6 +150,7 @@ export function registerPathRoutes(
       bumpRevision({ ...s, activePath: null }),
     );
     ref.setActive(null);
+    broadcastSwitch(next);
     return {
       activePath: next.activePath,
       activeRevision: next.activeRevision,

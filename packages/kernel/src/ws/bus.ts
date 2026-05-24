@@ -29,6 +29,10 @@ export interface ManagedAgentSpawnedMessage {
   participant_id: string;
   tmux_session: string;
   runtime_id: string;
+  /* Session this agent is bound to (from spawn body.session_id). Null when
+     spawn was called without a session_id. Mirrors the shared wire type
+     in @f-mark/shared so renderer chip-strip filtering can rely on it. */
+  active_session: string | null;
 }
 
 export interface ManagedAgentKilledMessage {
@@ -47,6 +51,18 @@ export interface EnvProbeUpdatedMessage {
   result: unknown;
 }
 
+/* path-switched — broadcast on every successful /paths/active or
+   /paths/active DELETE. Carries the new activePath + pathId + revision
+   so clients can clear their per-session caches and refetch /sessions
+   for the new path. Multi-tab: every connected tab receives this and
+   resyncs. */
+export interface PathSwitchedMessage {
+  type: "path-switched";
+  activePath: string | null;
+  pathId: string | null;
+  revision: number;
+}
+
 export type BusMessage =
   | EventAddedMessage
   | EventSupersededMessage
@@ -54,7 +70,8 @@ export type BusMessage =
   | ManagedAgentSpawnedMessage
   | ManagedAgentKilledMessage
   | ManagedAgentTerminalSpawnedMessage
-  | EnvProbeUpdatedMessage;
+  | EnvProbeUpdatedMessage
+  | PathSwitchedMessage;
 
 export interface Bus {
   publish(message: BusMessage): void;

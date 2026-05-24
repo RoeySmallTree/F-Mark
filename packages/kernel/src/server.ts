@@ -177,7 +177,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerPresenceRoutes(app, () => tracker);
 
   if (deps.pathContextRef) {
-    registerPathRoutes(app, deps.pathContextRef);
+    registerPathRoutes(app, deps.pathContextRef, () => busRef);
   }
   registerFsRoutes(app);
 

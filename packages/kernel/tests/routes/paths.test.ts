@@ -7,24 +7,28 @@ import { globalPaths } from "../../src/paths/global.js";
 import { PathContextRef } from "../../src/paths/contextRef.js";
 import { registerPathRoutes } from "../../src/routes/paths.js";
 import { readState } from "../../src/state/store.js";
+import type { Bus, BusMessage } from "../../src/ws/bus.js";
 
 interface Harness {
   app: FastifyInstance;
   configRoot: string;
   scratch: string;
   ref: PathContextRef;
+  busMessages: BusMessage[];
 }
 
-async function makeHarness(): Promise<Harness> {
+async function makeHarness(opts?: { withBus?: boolean }): Promise<Harness> {
   const scratch = mkdtempSync(join(tmpdir(), "fmark-paths-route-"));
   const configRoot = join(scratch, "config");
   mkdirSync(configRoot, { recursive: true });
   const g = globalPaths(configRoot);
   const ref = new PathContextRef({ global: g, active: null });
   const app = Fastify();
-  registerPathRoutes(app, ref);
+  const busMessages: BusMessage[] = [];
+  const bus: Bus = { publish: (m) => { busMessages.push(m); } };
+  registerPathRoutes(app, ref, opts?.withBus ? () => bus : undefined);
   await app.ready();
-  return { app, configRoot, scratch, ref };
+  return { app, configRoot, scratch, ref, busMessages };
 }
 
 async function tearDown(h: Harness): Promise<void> {
@@ -88,6 +92,42 @@ describe("/paths routes", () => {
       expect(h.ref.get().active?.root()).toBe(project);
     });
 
+    it("broadcasts a path-switched message when a bus is wired", async () => {
+      const h2 = await makeHarness({ withBus: true });
+      try {
+        const project = join(h2.scratch, "broadcasted");
+        mkdirSync(project);
+        const res = await h2.app.inject({
+          method: "POST",
+          url: "/paths/active",
+          payload: { path: project },
+        });
+        expect(res.statusCode).toBe(200);
+        const switched = h2.busMessages.find((m) => m.type === "path-switched");
+        expect(switched).toBeDefined();
+        if (switched && switched.type === "path-switched") {
+          expect(switched.activePath).toBe(project);
+          expect(switched.revision).toBeGreaterThan(0);
+          expect(switched.pathId).toMatch(/^[0-9a-f]{12}$/);
+        }
+      } finally {
+        await h2.app.close();
+      }
+    });
+
+    it("does not broadcast when no bus is wired (back-compat)", async () => {
+      const project = join(h.scratch, "no-bus");
+      mkdirSync(project);
+      const res = await h.app.inject({
+        method: "POST",
+        url: "/paths/active",
+        payload: { path: project },
+      });
+      expect(res.statusCode).toBe(200);
+      // No bus → harness still has empty messages list.
+      expect(h.busMessages).toHaveLength(0);
+    });
+
     it("MRU-promotes a previously-known path", async () => {
       const a = join(h.scratch, "a");
       const b = join(h.scratch, "b");
@@ -111,6 +151,26 @@ describe("/paths routes", () => {
       expect(res.json().activePath).toBe(null);
       expect(res.json().activeRevision).toBe(2);
       expect(h.ref.get().active).toBe(null);
+    });
+
+    it("broadcasts path-switched with activePath=null when bus is wired", async () => {
+      const h2 = await makeHarness({ withBus: true });
+      try {
+        const project = join(h2.scratch, "to-clear");
+        mkdirSync(project);
+        await h2.app.inject({ method: "POST", url: "/paths/active", payload: { path: project } });
+        h2.busMessages.length = 0;
+        const res = await h2.app.inject({ method: "DELETE", url: "/paths/active" });
+        expect(res.statusCode).toBe(200);
+        const switched = h2.busMessages.find((m) => m.type === "path-switched");
+        expect(switched).toBeDefined();
+        if (switched && switched.type === "path-switched") {
+          expect(switched.activePath).toBe(null);
+          expect(switched.pathId).toBe(null);
+        }
+      } finally {
+        await h2.app.close();
+      }
     });
   });
 

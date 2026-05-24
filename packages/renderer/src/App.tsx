@@ -215,29 +215,68 @@ export function App(): JSX.Element {
   }, [currentSessionId, token, setEvents]);
 
   useEffect(() => {
-    if (currentSessionId === null) return;
+    /* Single long-lived WS subscription gated on token only. Inside, we read
+       currentSessionId via useStore.getState() so a session switch doesn't
+       force a reconnect (which used to drop messages mid-switch and miss
+       path-switched broadcasts entirely). */
     const ws = connectWs({ baseUrl: "", token }, async (m) => {
+      if (m.type === "path-switched") {
+        /* Kernel announced an active-path change (could be from another
+           tab, the +New modal in this tab, or a topbar PathSwitcher click).
+           Refetch state + sessions + participants, then drop into the new
+           path's first session. */
+        const client = createClient({ baseUrl: "", token });
+        try {
+          const paths = await client.getPaths();
+          setPathsState(paths);
+        } catch {
+          /* legacy kernel; ignore */
+        }
+        if (m.activePath === null) {
+          setSessions([]);
+          setParticipants({});
+          setCurrentSession(null);
+          return;
+        }
+        try {
+          const [list, parts] = await Promise.all([
+            client.listSessions(),
+            client.listParticipants(),
+          ]);
+          setSessions(list);
+          setParticipants(parts);
+          setCurrentSession(list.length > 0 ? list[0]!.id : null);
+        } catch {
+          /* swallow */
+        }
+        return;
+      }
+
       /* Managed-agent / presence / env-probe messages are session-agnostic
-         (they describe global runtime state). Dispatch them first; only
-         skip session-scoped event_added/superseded messages when the
-         session differs. */
+         (they describe global runtime state). */
       if (isManagedAgentMessage(m)) {
         dispatchManagedAgentWsMessage(m);
         return;
       }
-      if (m.session_id !== currentSessionId) return;
+
+      const sessionId = useStore.getState().currentSessionId;
+      if (sessionId === null) return;
+      if (m.session_id !== sessionId) return;
       if (m.type === "event_added") {
         const client = createClient({ baseUrl: "", token });
-        const fresh = await client.listEvents(currentSessionId, {});
+        const fresh = await client.listEvents(sessionId, {});
         for (const e of fresh) upsertEvent(e);
       }
     });
     return () => ws.close();
   }, [
-    currentSessionId,
     token,
     upsertEvent,
     dispatchManagedAgentWsMessage,
+    setPathsState,
+    setSessions,
+    setParticipants,
+    setCurrentSession,
   ]);
 
   const modalCtx = useMemo<TopBarModalContextValue>(
