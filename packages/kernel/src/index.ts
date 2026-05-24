@@ -15,6 +15,7 @@ import { paths } from "./paths.js";
 import { activePaths } from "./paths/active.js";
 import { PathContextRef } from "./paths/contextRef.js";
 import { globalPaths } from "./paths/global.js";
+import { bumpRevision, mruPush, updateState } from "./state/store.js";
 import { initProject, readConfig, writeConfig } from "./project.js";
 import { reconcile } from "./reconcile.js";
 import { createServer } from "./server.js";
@@ -75,16 +76,11 @@ const pathContextRef = new PathContextRef({
 });
 
 // Persist the boot-time active path to state.json so the renderer (and any
-// PathSwitcher dropdown) sees it immediately. We also push to knownPaths so
-// it shows up under recents on the next launch.
-{
-  const { updateState, mruPush, bumpRevision } = await import(
-    "./state/store.js"
-  );
-  await updateState(gPaths, (s) =>
-    bumpRevision(mruPush({ ...s, activePath: projectRoot }, projectRoot)),
-  );
-}
+// PathSwitcher dropdown) sees it immediately. Also push to knownPaths so it
+// shows up under recents on the next launch.
+await updateState(gPaths, (s) =>
+  bumpRevision(mruPush({ ...s, activePath: projectRoot }, projectRoot)),
+);
 
 let token: string | null = null;
 if (options.noAuth) {
