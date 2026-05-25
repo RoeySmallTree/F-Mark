@@ -25,6 +25,7 @@ interface MenuHandlers {
   onMessage: ReturnType<typeof vi.fn>;
   onOpenTerminal: ReturnType<typeof vi.fn>;
   onReconnect: ReturnType<typeof vi.fn>;
+  onInstallHooks: ReturnType<typeof vi.fn>;
   onShowLogs: ReturnType<typeof vi.fn>;
   onSayGoodbye: ReturnType<typeof vi.fn>;
 }
@@ -38,6 +39,7 @@ function makeHandlers(): MenuHandlers {
     onMessage: vi.fn(),
     onOpenTerminal: vi.fn(),
     onReconnect: vi.fn(),
+    onInstallHooks: vi.fn(),
     onShowLogs: vi.fn(),
     onSayGoodbye: vi.fn(),
   };
@@ -63,6 +65,7 @@ function renderMenu(opts: {
       onMessage={h.onMessage}
       onOpenTerminal={h.onOpenTerminal}
       onReconnect={h.onReconnect}
+      onInstallHooks={h.onInstallHooks}
       onShowLogs={h.onShowLogs}
       onSayGoodbye={h.onSayGoodbye}
     />,
@@ -136,6 +139,16 @@ describe("AgentActionMenu — conditional visibility", () => {
   test("Show last failure hidden when managed === false", () => {
     renderMenu({ managed: false });
     expect(screen.queryByRole("menuitem", { name: /Show last failure/i })).not.toBeInTheDocument();
+  });
+
+  test("Install hooks shown when state === 'hook-not-installed'", () => {
+    renderMenu({ state: "hook-not-installed" });
+    expect(screen.getByRole("menuitem", { name: /Install hooks/i })).toBeInTheDocument();
+  });
+
+  test("Install hooks hidden when state !== 'hook-not-installed'", () => {
+    renderMenu({ state: "online" });
+    expect(screen.queryByRole("menuitem", { name: /Install hooks/i })).not.toBeInTheDocument();
   });
 });
 
@@ -238,6 +251,13 @@ describe("AgentActionMenu — actions", () => {
     const h = renderMenu({ state: "offline" });
     await user.click(screen.getByRole("menuitem", { name: /Reconnect/i }));
     expect(h.onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("clicking Install hooks fires onInstallHooks", async () => {
+    const user = userEvent.setup();
+    const h = renderMenu({ state: "hook-not-installed" });
+    await user.click(screen.getByRole("menuitem", { name: /Install hooks/i }));
+    expect(h.onInstallHooks).toHaveBeenCalledTimes(1);
   });
 
   test("clicking Show last failure fires onShowLogs", async () => {

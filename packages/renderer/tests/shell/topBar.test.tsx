@@ -13,7 +13,14 @@ import {
   vi,
   type MockInstance,
 } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   AnyEventRecord,
@@ -23,8 +30,10 @@ import type {
   Participant,
 } from "@f-mark/shared";
 import { TopBar } from "../../src/shell/TopBar.js";
+import { TopBarModalContext } from "../../src/App.js";
 import { useStore } from "../../src/state/store.js";
 import { DEFAULT_FILTER } from "../../src/popovers/log-filter-types.js";
+import { PROCESS_API_DISABLED_MESSAGE } from "../../src/api/managedAgents.js";
 import type { SessionMeta } from "../../src/api/client.js";
 
 const SESSION: SessionMeta = {
@@ -90,6 +99,7 @@ const TMUX_MISSING_PROBE: EnvProbeResult = {
 interface ResetOverrides {
   managedAgents?: ManagedAgent[];
   managedTerminals?: ManagedTerminal[];
+  managedAgentsDisabledReason?: string | null;
   presence?: Record<string, { state: string; last_hook_at: number | null }>;
   envProbe?: EnvProbeResult | null;
   participants?: Record<string, Participant>;
@@ -112,6 +122,7 @@ function resetStore(overrides: ResetOverrides = {}): void {
     viewMode: "everything",
     viewModeBySession: {},
     activeModal: null,
+    settingsSection: "profile",
     editingPreset: null,
     customPresetsVersion: 0,
     activePopover: { key: null, anchorRect: null },
@@ -119,6 +130,7 @@ function resetStore(overrides: ResetOverrides = {}): void {
     presence: {},
     managedAgents: overrides.managedAgents ?? [],
     managedTerminals: overrides.managedTerminals ?? [],
+    managedAgentsDisabledReason: overrides.managedAgentsDisabledReason ?? null,
     envProbe: overrides.envProbe ?? null,
   });
   if (overrides.presence !== undefined) {
@@ -287,6 +299,55 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
     expect(body).toContain('"runtime_id":"claude"');
   });
 
+  test("spawn responses with missing Claude hooks open the generic hook modal", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          participant_id: "ag-missing-hooks",
+          tmux_session: "fmark-ag-missing-hooks",
+          runtime_id: "claude",
+          active_session: SESSION.id,
+          hooks_status: "missing",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const user = userEvent.setup();
+    const openHookInstall = vi.fn();
+    resetStore({
+      envProbe: HEALTHY_PROBE,
+      participants: {
+        "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      },
+    });
+    const { container } = render(
+      <TopBarModalContext.Provider
+        value={{
+          openTerminalOverlay: vi.fn(),
+          openHookInstall,
+          openReconnect: vi.fn(),
+        }}
+      >
+        <TopBar />
+      </TopBarModalContext.Provider>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: /claude/i }));
+
+    await waitFor(() =>
+      expect(openHookInstall).toHaveBeenCalledWith("claude", undefined),
+    );
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-missing-hooks"]',
+    );
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute("data-state")).toBe("hook-not-installed");
+  });
+
   test("clicking + then Manage runtimes opens the Settings modal", async () => {
     const user = userEvent.setup();
     render(<TopBar />);
@@ -298,6 +359,137 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
       within(menu).getByRole("menuitem", { name: /manage runtimes/i }),
     );
     expect(useStore.getState().activeModal).toBe("settings");
+    expect(useStore.getState().settingsSection).toBe("runtimes");
+  });
+
+  test("runtime entries still render when env probe reports an empty runtime map", async () => {
+    const user = userEvent.setup();
+    resetStore({ envProbe: { ...HEALTHY_PROBE, runtimes: {} } });
+    render(<TopBar />);
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    expect(
+      within(menu).getByRole("menuitem", { name: /claude code/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: /^codex$/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: /^gemini$/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("clicking + then Terminal spawns a terminal and opens its overlay", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tmux_session: "fmark-term-1",
+          label: "terminal 1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const user = userEvent.setup();
+    const openTerminalOverlay = vi.fn();
+    render(
+      <TopBarModalContext.Provider
+        value={{
+          openTerminalOverlay,
+          openHookInstall: vi.fn(),
+          openReconnect: vi.fn(),
+        }}
+      >
+        <TopBar />
+      </TopBarModalContext.Provider>,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: /terminal/i }));
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const call = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/managed-agents/terminal"),
+    );
+    expect(call).toBeDefined();
+    expect(openTerminalOverlay).toHaveBeenCalledWith("fmark-term-1");
+    expect(useStore.getState().managedTerminals).toContainEqual({
+      tmux_session: "fmark-term-1",
+      label: "terminal 1",
+    });
+  });
+
+  test("spawn failures show an inline error instead of failing silently", async () => {
+    fetchSpy.mockResolvedValueOnce(new Response("nope", { status: 500 }));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<TopBar />);
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: /terminal/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/spawn failed/i),
+    );
+    expect(screen.getByRole("alert").getAttribute("title")).toMatch(/500/);
+    consoleSpy.mockRestore();
+  });
+
+  test("process API disabled response becomes a persistent top-bar warning", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error:
+            "process-spawning API disabled. Pass --allow-process-api-no-auth to enable under --no-auth.",
+        }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<TopBar />);
+
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    await user.click(within(menu).getByRole("menuitem", { name: /terminal/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/spawning disabled/i),
+    );
+    expect(screen.getByRole("alert").getAttribute("title")).toBe(
+      PROCESS_API_DISABLED_MESSAGE,
+    );
+    expect(useStore.getState().managedAgentsDisabledReason).toBe(
+      PROCESS_API_DISABLED_MESSAGE,
+    );
+    consoleSpy.mockRestore();
+  });
+
+  test("known disabled process API disables spawn rows without posting", async () => {
+    const user = userEvent.setup();
+    resetStore({
+      envProbe: HEALTHY_PROBE,
+      managedAgentsDisabledReason: PROCESS_API_DISABLED_MESSAGE,
+    });
+    render(<TopBar />);
+
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    const claude = within(menu).getByRole("menuitem", { name: /claude/i });
+    const terminal = within(menu).getByRole("menuitem", { name: /terminal/i });
+
+    expect(claude).toBeDisabled();
+    expect(terminal).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/spawning disabled/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   test("clicking + then Claude adds the new AgentChip to local state immediately after the spawn response", async () => {
@@ -585,7 +777,7 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     expect(chip).not.toBeNull();
     await user.click(chip!);
     /* The menu should now be in the DOM. */
-    const menu = container.querySelector(
+    const menu = document.body.querySelector(
       '.agent-action-menu[data-participant-id="ag-old-1"]',
     );
     expect(menu).not.toBeNull();
@@ -622,6 +814,65 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     expect(
       screen.queryByRole("menuitem", { name: /Say goodbye/i }),
     ).not.toBeInTheDocument();
+  });
+
+  test("hook-not-installed agent chip opens a portal menu with Install hooks", async () => {
+    const user = userEvent.setup();
+    const openHookInstall = vi.fn();
+    const participants: Record<string, Participant> = {
+      "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
+      "ag-needs-hooks": {
+        kind: "agent",
+        name: "Claude",
+        color: "#b86a1f",
+        active_session: SESSION.id,
+      },
+    };
+    resetStore({
+      participants,
+      managedAgents: [
+        {
+          participant_id: "ag-needs-hooks",
+          tmux_session: "fmark-ag-needs-hooks",
+          runtime_id: "claude",
+        },
+      ],
+      presence: {
+        "ag-needs-hooks": {
+          state: "hook-not-installed",
+          last_hook_at: null,
+        },
+      },
+    });
+    const { container } = render(
+      <TopBarModalContext.Provider
+        value={{
+          openTerminalOverlay: vi.fn(),
+          openHookInstall,
+          openReconnect: vi.fn(),
+        }}
+      >
+        <TopBar />
+      </TopBarModalContext.Provider>,
+    );
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-needs-hooks"]',
+    ) as HTMLElement | null;
+    expect(chip).not.toBeNull();
+
+    await user.click(chip!);
+    const portalMenu = document.body.querySelector(
+      '.agent-action-menu-popover .agent-action-menu[data-participant-id="ag-needs-hooks"]',
+    );
+    expect(portalMenu).not.toBeNull();
+
+    await user.click(screen.getByRole("menuitem", { name: /Install hooks/i }));
+    expect(openHookInstall).toHaveBeenCalledWith("claude", undefined);
+    expect(
+      document.body.querySelector(
+        '.agent-action-menu[data-participant-id="ag-needs-hooks"]',
+      ),
+    ).toBeNull();
   });
 
   test("agent chip strip is sorted by presence state (online first, then offline)", () => {

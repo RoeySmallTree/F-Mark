@@ -19,6 +19,7 @@ import { registerSkillRoutes } from "./routes/skills.js";
 import { registerSearchRoutes } from "./routes/search.js";
 import { registerGuideRoute } from "./routes/guide.js";
 import { registerBestPracticesRoute } from "./routes/bestPractices.js";
+import { registerRuntimeRoutes } from "./routes/runtimes.js";
 import { registerEnvProbeRoute, realProbe } from "./routes/envProbe.js";
 import { loadRuntimes } from "./runtimes/registry.js";
 import { registerStaticRoutes } from "./routes/static.js";
@@ -77,6 +78,8 @@ export interface CreatedServer {
 
 export function createServer(deps: ServerDeps): CreatedServer {
   const app = Fastify({ logger: false });
+  const processApiEnabled =
+    deps.token !== null || deps.allowProcessApiNoAuth === true;
 
   void seqLog("server create", {
     module: "server",
@@ -135,12 +138,45 @@ export function createServer(deps: ServerDeps): CreatedServer {
     );
   });
 
+  app.addHook("onRequest", async (req, reply) => {
+    const origin = req.headers.origin;
+    if (typeof origin !== "string") return;
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      return;
+    }
+    const isLocalOrigin =
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      (parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1" ||
+        parsed.hostname === "::1");
+    if (!isLocalOrigin) return;
+
+    reply.header("Access-Control-Allow-Origin", origin);
+    reply.header("Vary", "Origin");
+    reply.header("Access-Control-Allow-Credentials", "true");
+    reply.header(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type",
+    );
+    reply.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    );
+    if (req.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
+  });
+
   registerAuthHook(app, deps.token);
   app.register(multipart, { limits: { fileSize: MAX_ATTACHMENT_BYTES } });
 
   app.get("/health", async () => ({
     status: "ok",
     version: VERSION,
+    processApiEnabled,
   }));
 
   // Hoist @fastify/websocket to the root scope so BOTH /ws (global broadcast)
@@ -194,6 +230,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerSearchRoutes(app, pathDeps);
   registerGuideRoute(app, pathDeps);
   registerBestPracticesRoute(app);
+  registerRuntimeRoutes(app, pathDeps);
   registerPresenceRoutes(app, () => tracker);
 
   if (deps.pathContextRef) {
@@ -239,8 +276,6 @@ export function createServer(deps: ServerDeps): CreatedServer {
   // the process-API is disabled — registerPathRoutes treats that case as
   // "no tmux manager to rebind".
   let tmuxRef: TmuxManager | null = null;
-  const processApiEnabled =
-    deps.token !== null || deps.allowProcessApiNoAuth === true;
   if (processApiEnabled) {
     const tmux = createTmuxManager({
       runner: deps.commandRunner ?? realCommandRunner(),

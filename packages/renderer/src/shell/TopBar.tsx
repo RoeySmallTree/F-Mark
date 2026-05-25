@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Columns,
   FileText,
@@ -10,6 +11,7 @@ import { useStore } from "../state/store.js";
 import { aggregate } from "../state/aggregate.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
 import { AgentChip } from "../components/AgentChip.js";
+import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 import { TerminalChip } from "../components/TerminalChip.js";
 import {
   PlusButton,
@@ -17,7 +19,11 @@ import {
 } from "../components/PlusButton.js";
 import { AgentActionMenu } from "../components/AgentActionMenu.js";
 import { EnvProbeBanner } from "../components/EnvProbeBanner.js";
-import { createManagedAgentsClient } from "../api/managedAgents.js";
+import {
+  createManagedAgentsClient,
+  isProcessApiDisabledError,
+  PROCESS_API_DISABLED_MESSAGE,
+} from "../api/managedAgents.js";
 import { copyToClipboard } from "../render/copy.js";
 import { TopBarModalContext } from "../App.js";
 import { KNOWN_RUNTIMES } from "../runtimes.js";
@@ -29,16 +35,6 @@ export const FMARK_GLYPH = `▟▙ ╱╲
 
 const COMMAND_PALETTE_SHORTCUT = chordToLabel("$mod+K");
 
-function initials(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return "?";
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
-  return (
-    (parts[0]![0] ?? "").toUpperCase() + (parts[1]![0] ?? "").toUpperCase()
-  );
-}
-
 export function TopBar(): JSX.Element {
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
@@ -47,9 +43,16 @@ export function TopBar(): JSX.Element {
   const viewMode = useStore((s) => s.viewMode);
   const setViewMode = useStore((s) => s.setViewMode);
   const openModal = useStore((s) => s.openModal);
+  const openSettings = useStore((s) => s.openSettings);
   const token = useStore((s) => s.token);
   const managedAgents = useStore((s) => s.managedAgents);
   const managedTerminals = useStore((s) => s.managedTerminals);
+  const managedAgentsDisabledReason = useStore(
+    (s) => s.managedAgentsDisabledReason,
+  );
+  const setManagedAgentsDisabledReason = useStore(
+    (s) => s.setManagedAgentsDisabledReason,
+  );
   const presence = useStore((s) => s.presence);
   const envProbe = useStore((s) => s.envProbe);
   const addManagedAgent = useStore((s) => s.addManagedAgent);
@@ -61,6 +64,11 @@ export function TopBar(): JSX.Element {
   /* Local UI: which AgentChip's action menu is open (anchored to that
      chip). null means "no menu open". */
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
+  const [openMenuAnchor, setOpenMenuAnchor] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const [spawnError, setSpawnError] = useState<string | null>(null);
 
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) ?? null,
@@ -106,11 +114,11 @@ export function TopBar(): JSX.Element {
       });
   }, [participants]);
 
-  /* Build the PlusButton runtime list from envProbe.runtimes (authoritative
-     set of registered IDs from the kernel) joined with KNOWN_RUNTIMES for
-     displayNames. If envProbe is null OR malformed (no runtimes field, as
-     happens in dev/tests before the endpoint responds) we fall back to the
-     built-in defaults so the button still works on first load. */
+  /* Build the PlusButton runtime list from built-ins plus any runtime IDs
+     reported by env-probe. If the probe returns an empty runtimes object
+     because the kernel could not read the registry yet, the built-ins still
+     stay visible. A reported `false` disables that runtime; missing probe
+     entries fall back to enabled. */
   const probeRuntimes = useMemo<Record<string, boolean> | null>(() => {
     if (envProbe === null) return null;
     const r = (envProbe as { runtimes?: Record<string, boolean> }).runtimes;
@@ -119,22 +127,22 @@ export function TopBar(): JSX.Element {
   }, [envProbe]);
 
   const runtimes = useMemo<PlusButtonRuntime[]>(() => {
-    const ids =
-      probeRuntimes !== null
-        ? Object.keys(probeRuntimes)
-        : Object.keys(KNOWN_RUNTIMES);
-    return ids.map((id) => ({
+    const ids = new Set([
+      ...Object.keys(KNOWN_RUNTIMES),
+      ...(probeRuntimes !== null ? Object.keys(probeRuntimes) : []),
+    ]);
+    return [...ids].map((id) => ({
       id,
       displayName: KNOWN_RUNTIMES[id]?.displayName ?? id,
-      available: probeRuntimes !== null ? probeRuntimes[id] === true : true,
+      available: probeRuntimes !== null ? probeRuntimes[id] !== false : true,
     }));
   }, [probeRuntimes]);
 
   const registeredRuntimes = useMemo(() => {
-    const ids =
-      probeRuntimes !== null
-        ? Object.keys(probeRuntimes)
-        : Object.keys(KNOWN_RUNTIMES);
+    const ids = new Set([
+      ...Object.keys(KNOWN_RUNTIMES),
+      ...(probeRuntimes !== null ? Object.keys(probeRuntimes) : []),
+    ]);
     const out: Record<string, { displayName: string; executable: string }> = {};
     for (const id of ids) {
       out[id] = KNOWN_RUNTIMES[id] ?? { displayName: id, executable: id };
@@ -197,7 +205,10 @@ export function TopBar(): JSX.Element {
           resp.hooks_status === "not_required") &&
         modalCtx !== null
       ) {
-        modalCtx.openHookInstall(resp.runtime_id, resp.participant_id);
+        modalCtx.openHookInstall(
+          resp.runtime_id,
+          resp.runtime_id === "claude" ? undefined : resp.participant_id,
+        );
       }
     },
     [addManagedAgent, upsertParticipant, setPresence, modalCtx],
@@ -205,6 +216,11 @@ export function TopBar(): JSX.Element {
 
   const onSpawnRuntime = useCallback(
     (runtimeId: string) => {
+      setSpawnError(null);
+      if (managedAgentsDisabledReason !== null) {
+        setSpawnError(managedAgentsDisabledReason);
+        return;
+      }
       void apiClient
         .spawn({
           runtime_id: runtimeId,
@@ -212,16 +228,31 @@ export function TopBar(): JSX.Element {
         })
         .then(onSpawnComplete)
         .catch((e: unknown) => {
-          /* Surface failure via console; visual surfaces (toast, etc.)
-             are a follow-up. */
+          if (isProcessApiDisabledError(e)) {
+            setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
+            setSpawnError(PROCESS_API_DISABLED_MESSAGE);
+          } else {
+            setSpawnError(e instanceof Error ? e.message : String(e));
+          }
           // eslint-disable-next-line no-console
           console.error("spawn failed", e);
         });
     },
-    [apiClient, currentSessionId, onSpawnComplete],
+    [
+      apiClient,
+      currentSessionId,
+      managedAgentsDisabledReason,
+      onSpawnComplete,
+      setManagedAgentsDisabledReason,
+    ],
   );
 
   const onSpawnTerminal = useCallback(() => {
+    setSpawnError(null);
+    if (managedAgentsDisabledReason !== null) {
+      setSpawnError(managedAgentsDisabledReason);
+      return;
+    }
     void apiClient
       .spawnTerminal()
       .then((resp) => {
@@ -231,16 +262,29 @@ export function TopBar(): JSX.Element {
           tmux_session: resp.tmux_session,
           label: resp.label,
         });
+        modalCtx?.openTerminalOverlay(resp.tmux_session);
       })
       .catch((e: unknown) => {
+        if (isProcessApiDisabledError(e)) {
+          setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
+          setSpawnError(PROCESS_API_DISABLED_MESSAGE);
+        } else {
+          setSpawnError(e instanceof Error ? e.message : String(e));
+        }
         // eslint-disable-next-line no-console
         console.error("spawn terminal failed", e);
       });
-  }, [apiClient, addManagedTerminal]);
+  }, [
+    apiClient,
+    addManagedTerminal,
+    managedAgentsDisabledReason,
+    modalCtx,
+    setManagedAgentsDisabledReason,
+  ]);
 
   const onManageRuntimes = useCallback(() => {
-    openModal("settings");
-  }, [openModal]);
+    openSettings("runtimes");
+  }, [openSettings]);
 
   const tmuxMissing = envProbe !== null && envProbe.tmux === false;
 
@@ -269,7 +313,7 @@ export function TopBar(): JSX.Element {
         return {
           participant_id: id,
           name: p.name,
-          runtime_id: managed?.runtime_id ?? null,
+          runtime_id: managed?.runtime_id ?? p.runtime_id ?? null,
           tmux_session: managed?.tmux_session ?? null,
           isManaged: managed !== undefined,
         };
@@ -301,6 +345,15 @@ export function TopBar(): JSX.Element {
     [managedTerminals],
   );
 
+  const openAgent = useMemo(
+    () =>
+      openMenuFor === null
+        ? null
+        : (allAgentChips.find((a) => a.participant_id === openMenuFor) ??
+          null),
+    [allAgentChips, openMenuFor],
+  );
+
   /* Close the agent action menu on outside-click or Escape. The menu
      itself is anchored to the chip; clicking inside the menu shouldn't
      dismiss. */
@@ -311,9 +364,13 @@ export function TopBar(): JSX.Element {
       if (e.target.closest(".agent-action-menu")) return;
       if (e.target.closest(".agent-chip")) return;
       setOpenMenuFor(null);
+      setOpenMenuAnchor(null);
     }
     function onKey(e: KeyboardEvent): void {
-      if (e.key === "Escape") setOpenMenuFor(null);
+      if (e.key === "Escape") {
+        setOpenMenuFor(null);
+        setOpenMenuAnchor(null);
+      }
     }
     const id = window.setTimeout(() => {
       window.addEventListener("mousedown", onDocMouseDown);
@@ -412,115 +469,26 @@ export function TopBar(): JSX.Element {
                     name={agent.name}
                     runtimeId={agent.runtime_id}
                     state={state}
-                    onClick={() =>
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const menuWidth = 240;
+                      setOpenMenuAnchor({
+                        top: rect.bottom + 4,
+                        left: Math.max(
+                          8,
+                          Math.min(
+                            window.innerWidth - menuWidth - 8,
+                            rect.right - menuWidth,
+                          ),
+                        ),
+                      });
                       setOpenMenuFor((cur) =>
                         cur === agent.participant_id
                           ? null
                           : agent.participant_id,
-                      )
-                    }
+                      );
+                    }}
                   />
-                  {openMenuFor === agent.participant_id ? (
-                    <div className="agent-action-menu-popover">
-                      <AgentActionMenu
-                        participantId={agent.participant_id}
-                        name={agent.name}
-                        state={state}
-                        managed={agent.isManaged}
-                        onRename={(newName) => {
-                          /* v0.4 stub: update participant name via PATCH;
-                             intentionally not wired in this task to keep
-                             diff minimal — task scope is integration. */
-                          // eslint-disable-next-line no-console
-                          console.log("rename", agent.participant_id, newName);
-                          setOpenMenuFor(null);
-                        }}
-                        onCompact={() => {
-                          void apiClient
-                            .command(agent.participant_id, {
-                              type: "slash",
-                              command: "compact",
-                            })
-                            .catch(() => {
-                              /* swallow */
-                            });
-                          setOpenMenuFor(null);
-                        }}
-                        onSlash={(command) => {
-                          void apiClient
-                            .command(agent.participant_id, {
-                              type: "slash",
-                              command,
-                            })
-                            .catch(() => {
-                              /* swallow */
-                            });
-                          setOpenMenuFor(null);
-                        }}
-                        onInterrupt={() => {
-                          void apiClient
-                            .command(agent.participant_id, { type: "interrupt" })
-                            .catch(() => {
-                              /* swallow */
-                            });
-                          setOpenMenuFor(null);
-                        }}
-                        onMessage={(text) => {
-                          void apiClient
-                            .command(agent.participant_id, {
-                              type: "message",
-                              text,
-                            })
-                            .catch(() => {
-                              /* swallow */
-                            });
-                          setOpenMenuFor(null);
-                        }}
-                        onOpenTerminal={() => {
-                          if (
-                            agent.tmux_session !== null &&
-                            modalCtx !== null
-                          ) {
-                            modalCtx.openTerminalOverlay(agent.tmux_session);
-                          }
-                          setOpenMenuFor(null);
-                        }}
-                        onReconnect={() => {
-                          if (
-                            currentSessionId !== null &&
-                            modalCtx !== null
-                          ) {
-                            modalCtx.openReconnect(
-                              agent.participant_id,
-                              currentSessionId,
-                              agent.runtime_id ?? "claude",
-                            );
-                          }
-                          setOpenMenuFor(null);
-                        }}
-                        onShowLogs={() => {
-                          /* v0.4 stub: opens a future logs viewer.
-                             For now log to console so the click is visible. */
-                          // eslint-disable-next-line no-console
-                          console.log("show logs", agent.participant_id);
-                          setOpenMenuFor(null);
-                        }}
-                        onSayGoodbye={() => {
-                          void (async () => {
-                            try {
-                              const t = await apiClient.getConfirmToken(
-                                agent.participant_id,
-                              );
-                              await apiClient.goodbye(agent.participant_id, t);
-                            } catch {
-                              /* swallow */
-                            }
-                          })();
-                          setOpenMenuFor(null);
-                        }}
-                      />
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
@@ -544,7 +512,19 @@ export function TopBar(): JSX.Element {
               onSpawnTerminal={onSpawnTerminal}
               onManageRuntimes={onManageRuntimes}
               tmuxMissing={tmuxMissing}
+              spawnDisabledReason={managedAgentsDisabledReason}
             />
+            {managedAgentsDisabledReason !== null || spawnError !== null ? (
+              <span
+                className="topbar-spawn-error"
+                role="alert"
+                title={spawnError ?? managedAgentsDisabledReason ?? undefined}
+              >
+                {managedAgentsDisabledReason !== null
+                  ? "Spawning disabled"
+                  : "Spawn failed"}
+              </span>
+            ) : null}
           </div>
 
           <div
@@ -559,16 +539,13 @@ export function TopBar(): JSX.Element {
             {sortedParticipants
               .filter((p) => p.kind === "user")
               .map((p) => (
-                <span
+                <ParticipantAvatar
                   key={p.id}
-                  className="avatar lg user"
+                  participantId={p.id}
+                  participant={p}
+                  size="lg"
                   title={`${p.name} · ${p.id}`}
-                  style={
-                    p.color !== undefined ? { background: p.color } : undefined
-                  }
-                >
-                  {initials(p.name ?? p.id)}
-                </span>
+                />
               ))}
           </div>
           <button
@@ -586,11 +563,132 @@ export function TopBar(): JSX.Element {
             className="icon-btn"
             title="Settings"
             aria-label="Open settings"
-            onClick={() => openModal("settings")}
+            onClick={() => openSettings("profile")}
           >
             <Settings size={15} aria-hidden="true" />
           </button>
         </div>
+        {openAgent !== null && openMenuAnchor !== null
+          ? createPortal(
+              <div
+                className="agent-action-menu-popover"
+                style={{
+                  top: openMenuAnchor.top,
+                  left: openMenuAnchor.left,
+                }}
+              >
+                <AgentActionMenu
+                  participantId={openAgent.participant_id}
+                  name={openAgent.name}
+                  state={presence[openAgent.participant_id]?.state ?? "offline"}
+                  managed={openAgent.isManaged}
+                  onRename={(newName) => {
+                    // eslint-disable-next-line no-console
+                    console.log("rename", openAgent.participant_id, newName);
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onCompact={() => {
+                    void apiClient
+                      .command(openAgent.participant_id, {
+                        type: "slash",
+                        command: "compact",
+                      })
+                      .catch(() => {
+                        /* swallow */
+                      });
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onSlash={(command) => {
+                    void apiClient
+                      .command(openAgent.participant_id, {
+                        type: "slash",
+                        command,
+                      })
+                      .catch(() => {
+                        /* swallow */
+                      });
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onInterrupt={() => {
+                    void apiClient
+                      .command(openAgent.participant_id, { type: "interrupt" })
+                      .catch(() => {
+                        /* swallow */
+                      });
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onMessage={(text) => {
+                    void apiClient
+                      .command(openAgent.participant_id, {
+                        type: "message",
+                        text,
+                      })
+                      .catch(() => {
+                        /* swallow */
+                      });
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onOpenTerminal={() => {
+                    if (openAgent.tmux_session !== null && modalCtx !== null) {
+                      modalCtx.openTerminalOverlay(openAgent.tmux_session);
+                    }
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onReconnect={() => {
+                    if (currentSessionId !== null && modalCtx !== null) {
+                      modalCtx.openReconnect(
+                        openAgent.participant_id,
+                        currentSessionId,
+                        openAgent.runtime_id ?? "claude",
+                      );
+                    }
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onInstallHooks={() => {
+                    if (modalCtx !== null) {
+                      const runtimeId = openAgent.runtime_id ?? "claude";
+                      modalCtx.openHookInstall(
+                        runtimeId,
+                        runtimeId === "claude"
+                          ? undefined
+                          : openAgent.participant_id,
+                      );
+                    }
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onShowLogs={() => {
+                    // eslint-disable-next-line no-console
+                    console.log("show logs", openAgent.participant_id);
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                  onSayGoodbye={() => {
+                    void (async () => {
+                      try {
+                        const t = await apiClient.getConfirmToken(
+                          openAgent.participant_id,
+                        );
+                        await apiClient.goodbye(openAgent.participant_id, t);
+                      } catch {
+                        /* swallow */
+                      }
+                    })();
+                    setOpenMenuFor(null);
+                    setOpenMenuAnchor(null);
+                  }}
+                />
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   );

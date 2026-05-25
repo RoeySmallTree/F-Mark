@@ -32,6 +32,7 @@ import { getCommentTarget } from "@f-mark/shared";
 import { useStore } from "../state/store.js";
 import { createClient } from "../api/client.js";
 import { formatWhen, whoOf } from "../cards/format.js";
+import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
 interface Props {
   targetFile: string;
@@ -195,12 +196,14 @@ function ThreadMsg({
 }: ThreadMsgProps): JSX.Element {
   return (
     <div className={["thread-msg", reply ? "reply" : ""].join(" ").trim()}>
-      <span
-        className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
-        aria-hidden
-      >
-        {who.initial}
-      </span>
+      <ParticipantAvatar
+        participantId={who.id}
+        kind={who.isUser ? "user" : "agent"}
+        name={who.name}
+        color={who.color}
+        runtimeId={who.runtimeId}
+        size="sm"
+      />
       <div className="body">
         <div className="head">
           <span className="who">{who.name}</span>

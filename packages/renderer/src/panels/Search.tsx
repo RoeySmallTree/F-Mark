@@ -1,21 +1,50 @@
 import { useEffect, useRef, useState } from "react";
-import { Search as SearchIcon } from "lucide-react";
+import { ChevronDown, Search as SearchIcon } from "lucide-react";
 import type { SearchHit } from "@f-mark/shared";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
+import { basename } from "./allSessions.js";
 
 const DEBOUNCE_MS = 220;
 
 export function Search(): JSX.Element {
   const token = useStore((s) => s.token);
-  const currentSessionId = useStore((s) => s.currentSessionId);
   const [query, setQuery] = useState("");
-  const [scoped, setScoped] = useState(true);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSeqRef = useRef(0);
+
+  const sessionHitGroups = hits.reduce<
+    Array<{ key: string; path?: string; session: string; hits: SearchHit[] }>
+  >((groups, hit) => {
+    const key = `${hit.path ?? "current"}:${hit.session_id}`;
+    const existing = groups.find((group) => group.key === key);
+    if (existing !== undefined) {
+      existing.hits.push(hit);
+    } else {
+      groups.push({
+        key,
+        path: hit.path,
+        session: hit.session_slug ?? hit.session_id,
+        hits: [hit],
+      });
+    }
+    return groups;
+  }, []);
+  const pathHitGroups = sessionHitGroups.reduce<
+    Array<{ key: string; path?: string; sessions: typeof sessionHitGroups }>
+  >((groups, sessionGroup) => {
+    const key = sessionGroup.path ?? "current";
+    const existing = groups.find((group) => group.key === key);
+    if (existing !== undefined) {
+      existing.sessions.push(sessionGroup);
+    } else {
+      groups.push({ key, path: sessionGroup.path, sessions: [sessionGroup] });
+    }
+    return groups;
+  }, []);
 
   useEffect(() => {
     if (debounceRef.current !== null) {
@@ -35,11 +64,7 @@ export function Search(): JSX.Element {
       const client = createClient({ baseUrl: "", token });
       void (async () => {
         try {
-          const sessionForQuery =
-            scoped && currentSessionId !== null
-              ? currentSessionId
-              : undefined;
-          const next = await client.search(trimmed, sessionForQuery);
+          const next = await client.search(trimmed, undefined, "all");
           if (seq === requestSeqRef.current) {
             setHits(next);
             setError(null);
@@ -57,7 +82,7 @@ export function Search(): JSX.Element {
     return () => {
       if (debounceRef.current !== null) clearTimeout(debounceRef.current);
     };
-  }, [query, scoped, currentSessionId, token]);
+  }, [query, token]);
 
   return (
     <aside
@@ -75,40 +100,11 @@ export function Search(): JSX.Element {
           style={{ color: "var(--ink-4)" }}
         />
         <input
-          placeholder="Search prose, choices, todos…"
+          placeholder="Search messages, files, todos..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search query"
         />
-      </div>
-      <div
-        style={{
-          padding: "0 14px 8px",
-          fontFamily: "var(--mono)",
-          fontSize: 11,
-          color: "var(--ink-3)",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        <label
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={scoped}
-            onChange={(e) => setScoped(e.target.checked)}
-            disabled={currentSessionId === null}
-            aria-label="Limit search to current session"
-          />
-          Limit to current session
-        </label>
       </div>
       <div className="panel-list">
         {error !== null ? (
@@ -132,7 +128,7 @@ export function Search(): JSX.Element {
               padding: "4px 8px",
             }}
           >
-            Searching…
+            Searching...
           </p>
         ) : null}
         {!busy && error === null && query.trim().length === 0 ? (
@@ -161,29 +157,61 @@ export function Search(): JSX.Element {
             No results.
           </p>
         ) : null}
-        {hits.map((hit, idx) => (
-          <div
-            key={`${hit.session_id}:${hit.event.filename}`}
-            className="session-item staggered-row"
-            style={{ padding: "8px 10px", ["--i" as string]: Math.min(idx, 5) }}
-          >
-            <div className="row1">
-              <span className="slug">{hit.event.kind}</span>
-            </div>
-            <div
-              className="summary"
-              style={{
-                paddingLeft: 0,
-                fontStyle: "italic",
-                fontFamily: "var(--serif)",
-              }}
-            >
-              {hit.snippet}
-            </div>
-            <div className="meta">
-              <span>{hit.session_id}</span>
-            </div>
-          </div>
+        {pathHitGroups.map((pathGroup) => (
+          <details key={pathGroup.key} className="repo-session-group" open>
+            <summary className="repo-session-summary">
+              <ChevronDown
+                size={13}
+                aria-hidden="true"
+                className="repo-session-chevron"
+              />
+              <span className="repo-session-title">
+                {pathGroup.path !== undefined
+                  ? basename(pathGroup.path)
+                  : "current repo"}
+              </span>
+              <span className="repo-session-count">
+                {pathGroup.sessions.reduce(
+                  (n, sessionGroup) => n + sessionGroup.hits.length,
+                  0,
+                )}
+              </span>
+              {pathGroup.path !== undefined ? (
+                <span className="repo-session-path" title={pathGroup.path}>
+                  {pathGroup.path}
+                </span>
+              ) : null}
+            </summary>
+            {pathGroup.sessions.map((group) => (
+              <div key={group.key} className="repo-session-body">
+                <div className="group-label">{group.session.toUpperCase()}</div>
+                {group.hits.map((hit, idx) => (
+                  <div
+                    key={`${hit.session_id}:${hit.event.filename}`}
+                    className="session-item staggered-row"
+                    style={{
+                      padding: "8px 10px",
+                      ["--i" as string]: Math.min(idx, 5),
+                    }}
+                  >
+                    <div className="row1">
+                      <span className="slug">{hit.event.kind}</span>
+                    </div>
+                    <div
+                      className="summary"
+                      style={{
+                        paddingLeft: 0,
+                        fontStyle: "italic",
+                        fontFamily: "var(--serif)",
+                      }}
+                    >
+                      {hit.snippet}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </details>
         ))}
       </div>
     </aside>

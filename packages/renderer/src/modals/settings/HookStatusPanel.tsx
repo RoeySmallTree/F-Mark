@@ -1,13 +1,12 @@
 /* HookStatusPanel — Settings → Hooks.
    For each registered runtime, show whether its Stop hook is wired up to
    ping back into f-mark. The status is fetched via
-   `apiClient.hookInstallStatus({ runtime_id, participant_id, user_participant_id })`
-   when a representative agent participant is mapped to that runtime; if
-   no participant exists yet, the row shows "Status unknown — needs a
-   registered participant".
+   `apiClient.hookInstallStatus(...)`. Claude hooks are generic and can be
+   checked without a representative participant; Codex still needs an
+   agent/user id pair because its hook command is instance-specific.
 
    The "Show install instructions" button fires
-   `onShowInstructions(runtime_id, participant_id)`. The parent owns the
+   `onShowInstructions(runtime_id, participant_id?)`. The parent owns the
    HookInstallModal opening + close logic. */
 
 import { useEffect, useMemo, useState, type JSX } from "react";
@@ -25,7 +24,7 @@ export interface HookStatusPanelProps {
   participantIdForRuntime: Record<string, string>;
   userParticipantId: string | null;
   apiClient: ManagedAgentsClient;
-  onShowInstructions(runtimeId: string, participantId: string): void;
+  onShowInstructions(runtimeId: string, participantId?: string): void;
 }
 
 type RowStatus =
@@ -38,6 +37,13 @@ type RowStatus =
   | { kind: "error"; message: string };
 
 function classify(runtimeId: string, status: HookInstallStatus): RowStatus {
+  if (
+    !Array.isArray(status.expectedEntries) ||
+    !Array.isArray(status.detectedEntries) ||
+    typeof status.configPath !== "string"
+  ) {
+    return { kind: "error", message: "Malformed status response" };
+  }
   if (runtimeId === "gemini" || status.expectedEntries.length === 0) {
     return { kind: "not-required", configPath: status.configPath };
   }
@@ -48,6 +54,10 @@ function classify(runtimeId: string, status: HookInstallStatus): RowStatus {
     return { kind: "partial", configPath: status.configPath };
   }
   return { kind: "missing", configPath: status.configPath };
+}
+
+function requiresParticipant(runtimeId: string): boolean {
+  return runtimeId === "codex";
 }
 
 function StatusPill({ status }: { status: RowStatus }): JSX.Element {
@@ -112,7 +122,10 @@ export function HookStatusPanel({
     const next: Record<string, RowStatus> = {};
     for (const id of ids) {
       const participant = participantIdForRuntime[id];
-      if (participant === undefined || participant.length === 0) {
+      if (
+        requiresParticipant(id) &&
+        (participant === undefined || participant.length === 0)
+      ) {
         next[id] = { kind: "unknown" };
       } else {
         next[id] = { kind: "loading" };
@@ -124,15 +137,24 @@ export function HookStatusPanel({
        await sequentially — they're independent. */
     for (const id of ids) {
       const participant = participantIdForRuntime[id];
-      if (participant === undefined || participant.length === 0) continue;
+      if (
+        requiresParticipant(id) &&
+        (participant === undefined || participant.length === 0)
+      ) {
+        continue;
+      }
       apiClient
-        .hookInstallStatus({
-          runtime_id: id,
-          participant_id: participant,
-          ...(userParticipantId !== null
-            ? { user_participant_id: userParticipantId }
-            : {}),
-        })
+        .hookInstallStatus(
+          requiresParticipant(id)
+            ? {
+                runtime_id: id,
+                participant_id: participant,
+                ...(userParticipantId !== null
+                  ? { user_participant_id: userParticipantId }
+                  : {}),
+              }
+            : { runtime_id: id },
+        )
         .then((r) => {
           if (!alive) return;
           setStatuses((cur) => ({ ...cur, [id]: classify(id, r) }));
@@ -188,6 +210,8 @@ export function HookStatusPanel({
             const status: RowStatus = statuses[id] ?? { kind: "unknown" };
             const hasParticipant =
               participant !== undefined && participant.length > 0;
+            const participantRequired = requiresParticipant(id);
+            const canShowInstructions = !participantRequired || hasParticipant;
             const manualStreamMode = id === "gemini";
             return (
               <div
@@ -217,7 +241,16 @@ export function HookStatusPanel({
                       · {id}
                     </span>
                   </div>
-                  {hasParticipant ? (
+                  {!participantRequired ? (
+                    <div
+                      style={{
+                        color: "var(--ink-4)",
+                        fontSize: 11.5,
+                      }}
+                    >
+                      Generic hook, any Claude session
+                    </div>
+                  ) : hasParticipant ? (
                     <div
                       style={{
                         color: "var(--ink-4)",
@@ -244,16 +277,16 @@ export function HookStatusPanel({
                   type="button"
                   className="btn-ghost"
                   style={{ padding: "4px 10px", fontSize: 12 }}
-                  disabled={!hasParticipant}
+                  disabled={!canShowInstructions}
                   title={
-                    hasParticipant
+                    canShowInstructions
                       ? manualStreamMode
                         ? "Show manual-stream note"
                         : "Show manual install steps"
                       : "Register a participant for this runtime first"
                   }
                   onClick={() => {
-                    if (hasParticipant) {
+                    if (canShowInstructions) {
                       onShowInstructions(id, participant);
                     }
                   }}

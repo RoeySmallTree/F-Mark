@@ -14,6 +14,7 @@ import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
+import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
 interface Props {
   event: AnyEventRecord;
@@ -72,12 +73,14 @@ export function ChoicesCard({
     >
       {!isEmbedded && (
         <div className="choices-head">
-          <span
-            className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
-            aria-hidden
-          >
-            {who.initial}
-          </span>
+          <ParticipantAvatar
+            participantId={who.id}
+            kind={who.isUser ? "user" : "agent"}
+            name={who.name}
+            color={who.color}
+            runtimeId={who.runtimeId}
+            size="sm"
+          />
           <span className="who">{who.name}</span>
           <span className="when">{formatWhen(event.timestamp)}</span>
           <span className="badge">

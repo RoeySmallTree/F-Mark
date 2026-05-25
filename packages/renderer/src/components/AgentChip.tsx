@@ -1,8 +1,7 @@
 /* AgentChip — a compact identity chip for a managed agent. Renders three
    visual layers:
 
-     1. Runtime initial (single uppercase letter keyed off runtimeId).
-        For v0.4 we map claude/codex/custom → "C" and gemini → "G".
+     1. Runtime icon keyed off runtimeId / participant name.
      2. Participant name.
      3. State dot + conditional badges:
           - `exited` pill when state === "pane-dead"
@@ -12,8 +11,9 @@
    `chips.css` for the per-state colors that resolve through the theme
    tokens defined in tokens.css. */
 
-import type { JSX } from "react";
+import type { JSX, MouseEvent } from "react";
 import type { PresenceState } from "@f-mark/shared";
+import { avatarIconSrc, avatarKind } from "./ParticipantAvatar.js";
 import "./chips.css";
 
 export interface AgentChipProps {
@@ -21,14 +21,7 @@ export interface AgentChipProps {
   name: string;
   runtimeId: string | null;
   state: PresenceState;
-  onClick?: () => void;
-}
-
-/* Future: this maps to real icons. For v0.4 we ship single uppercase letters
-   so the chip reads at a glance without dragging in icon assets. */
-function runtimeInitial(runtimeId: string | null): string {
-  if (runtimeId === "gemini") return "G";
-  return "C";
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
 }
 
 export function AgentChip({
@@ -51,7 +44,13 @@ export function AgentChip({
       aria-label={`${name} — ${state}`}
     >
       <span className="agent-chip-runtime" aria-hidden>
-        {runtimeInitial(runtimeId)}
+        <img
+          src={avatarIconSrc(
+            avatarKind({ participantId, kind: "agent", name, runtimeId }),
+          )}
+          alt=""
+          draggable={false}
+        />
       </span>
       <span className="agent-chip-name">{name}</span>
       <span className={`agent-chip-dot ${state}`} aria-hidden />

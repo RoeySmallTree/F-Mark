@@ -1,6 +1,6 @@
 /* RightLog — the Activity-log tab. Lists every event in the current session
    in chronological order (oldest first / newest last), one row per event,
-   aligned in fixed columns: identity (dot + initial) · time · kind tag with
+   aligned in fixed columns: identity avatar · time · kind tag with
    icon · summary. Clicking a row smooth-scrolls the feed to the matching
    card via the [data-event-filename] attribute the Feed already emits.
 
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { AnyEventRecord, EventKind, ProsePayload } from "@f-mark/shared";
 import { useStore } from "../../state/store.js";
+import { ParticipantAvatar } from "../../components/ParticipantAvatar.js";
 import { LogFilterPopover } from "../../popovers/LogFilterPopover.js";
 import {
   DEFAULT_FILTER,
@@ -292,7 +293,6 @@ export function RightLog(): JSX.Element {
           {filtered.map((ev, idx) => {
             const p = participants[ev.participant_id];
             const kind = p?.kind === "user" ? "user" : "agent";
-            const initial = (p?.name[0] ?? "?").toUpperCase();
             const KindIcon = KIND_ICON[ev.kind] ?? Text;
             return (
               <button
@@ -310,10 +310,15 @@ export function RightLog(): JSX.Element {
                   className={["log-who", kind].join(" ")}
                   aria-label={p?.name ?? ev.participant_id}
                 >
-                  <span className="dot" aria-hidden="true" />
-                  <span className="initial" aria-hidden="true">
-                    {initial}
-                  </span>
+                  <ParticipantAvatar
+                    participantId={ev.participant_id}
+                    participant={p}
+                    kind={kind}
+                    name={p?.name ?? ev.participant_id}
+                    color={p?.color}
+                    runtimeId={p?.runtime_id ?? null}
+                    size="sm"
+                  />
                 </span>
                 <span className="ts">{formatTs(ev.timestamp)}</span>
                 <span

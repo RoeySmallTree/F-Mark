@@ -52,6 +52,7 @@ const API_PREFIXES = [
   "/participants",
   "/agents",
   "/managed-agents",
+  "/runtimes",
   "/env-probe",
   "/guide",
   "/presets",

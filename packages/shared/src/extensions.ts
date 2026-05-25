@@ -25,6 +25,9 @@ export interface SkillRef {
 
 export interface SearchHit {
   session_id: string;
+  session_slug?: string;
+  path?: string;
+  path_id?: string;
   event: AnyEventRecord;
   snippet: string;
 }

@@ -7,7 +7,6 @@ import type { PresenceTracker } from "../presence/tracker.js";
 import {
   registerAgent,
   isValidParticipantId,
-  listParticipants,
   setParticipantRuntime,
 } from "../participants.js";
 import { loadRuntimes } from "../runtimes/registry.js";
@@ -223,7 +222,13 @@ export function registerManagedAgentsRoutes(
       participantId,
       executable: runtime.executable,
       args: runtime.args,
-      env: runtime.env,
+      env: {
+        ...(runtime.env ?? {}),
+        F_MARK_RUNTIME_ID: runtime_id,
+        ...(body.session_id !== undefined
+          ? { F_MARK_SESSION_ID: body.session_id }
+          : {}),
+      },
     });
     // After a successful tmux spawn we have external state (the tmux session).
     // If any subsequent write fails the route would otherwise return 500 and
@@ -260,26 +265,9 @@ export function registerManagedAgentsRoutes(
     let hooksStatus: "installed" | "missing" | "not_required" | "unknown" =
       "unknown";
     try {
-      // Find the first registered user participant so the detector matches the
-      // exact `auto-stream <user-id> --kind user` UserPromptSubmit hook the
-      // installer instructions emit. Without this match, real installed hooks
-      // would still be reported "missing".
-      let userParticipantId: string | undefined;
-      try {
-        const parts = await listParticipants(paths);
-        for (const [pid, part] of Object.entries(parts)) {
-          if (part.kind === "user") {
-            userParticipantId = pid;
-            break;
-          }
-        }
-      } catch {
-        // ignore; checkHookInstallStatus has its own default
-      }
       const detect = await hookStatusCheck({
         runtimeId: runtime_id,
         participantId,
-        userParticipantId,
         projectRoot: paths.root(),
       });
       const hooksRequired = detect.expectedEntries.length > 0;

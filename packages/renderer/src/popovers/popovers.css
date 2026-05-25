@@ -426,7 +426,7 @@
 }
 
 /* ============ Activity-log table (P12) ============
-   Five-column fixed-width grid: identity (dot + initial) · time · kind tag
+   Five-column fixed-width grid: identity avatar · time · kind tag
    with icon · summary (flex) · hover-only jump chevron. Mono throughout so
    columns stay aligned even with single-glyph cells. Rows sit on a hairline
    dashed grid; the kind tag carries the subtle per-kind tint that gives the
@@ -462,13 +462,15 @@
   border-radius: 4px;
 }
 
-/* Column 1 — identity. Dot + initial sit together so a single visual cell
-   identifies the author across every row. */
+/* Column 1 — identity. The shared avatar component keeps human/agent marks
+   consistent with the feed and top bar. */
 .log-row .log-who {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   justify-self: start;
+}
+.log-row .log-who .avatar {
+  margin-left: 0;
 }
 .log-row .log-who .dot {
   width: 7px;

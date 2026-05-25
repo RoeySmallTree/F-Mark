@@ -4,9 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../../src/server.js";
 import { initProject } from "../../src/project.js";
+import { listParticipants } from "../../src/participants.js";
+import { createSession } from "../../src/sessions.js";
+import { writeEventFile } from "../../src/events/writer.js";
+import { serializeProse } from "../../src/events/prose.js";
 import { paths } from "../../src/paths.js";
 import { activePaths } from "../../src/paths/active.js";
 import { globalPaths } from "../../src/paths/global.js";
+import { registerProjectPath } from "../../src/paths/registry.js";
 import { PathContextRef } from "../../src/paths/contextRef.js";
 import { readState } from "../../src/state/store.js";
 import { withTempProject } from "../helpers/tempdir.js";
@@ -133,6 +138,11 @@ describe("routes /sessions", () => {
           const state = await readState(g);
           expect(state.activePath).toBe(otherRoot);
           expect(state.knownPaths).toContain(otherRoot);
+          expect(ref.revision()).toBe(state.activeRevision);
+          const participants = await listParticipants(paths(otherRoot));
+          expect(
+            Object.values(participants).some((part) => part.kind === "user"),
+          ).toBe(true);
           await app.close();
         } finally {
           rmSync(otherRoot, { recursive: true, force: true });
@@ -192,6 +202,161 @@ describe("routes /sessions", () => {
           const ids = res.json().sessions.map((s: { id: string }) => s.id);
           expect(ids.some((id: string) => id.endsWith("-other-session"))).toBe(true);
           expect(ids.some((id: string) => id.endsWith("-fallback-session"))).toBe(false);
+          await app.close();
+        } finally {
+          rmSync(otherRoot, { recursive: true, force: true });
+          rmSync(configRoot, { recursive: true, force: true });
+        }
+      });
+    });
+
+    it("GET /sessions?scope=all lists sessions across known paths", async () => {
+      await withTempProject(async (fallbackRoot) => {
+        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-other-"));
+        const configRoot = mkdtempSync(join(tmpdir(), "fmark-cfg-"));
+        try {
+          const p = paths(fallbackRoot);
+          await initProject(p);
+          const g = globalPaths(configRoot);
+          const ref = new PathContextRef({ global: g, active: activePaths(fallbackRoot) });
+          const { app } = createServer({ token: null, paths: p, pathContextRef: ref });
+
+          await app.inject({
+            method: "POST",
+            url: "/sessions",
+            payload: { slug: "fallback-session" },
+          });
+          await app.inject({
+            method: "POST",
+            url: "/sessions",
+            payload: { slug: "other-session", path: otherRoot },
+          });
+
+          const res = await app.inject({ method: "GET", url: "/sessions?scope=all" });
+          expect(res.statusCode).toBe(200);
+          const sessions = res.json().sessions as Array<{
+            id: string;
+            path: string;
+            path_id: string;
+          }>;
+          const fallback = sessions.find((s) => s.id.endsWith("-fallback-session"));
+          const other = sessions.find((s) => s.id.endsWith("-other-session"));
+          expect(fallback?.path).toBe(fallbackRoot);
+          expect(fallback?.path_id).toBe(activePaths(fallbackRoot).pathId());
+          expect(other?.path).toBe(otherRoot);
+          expect(other?.path_id).toBe(activePaths(otherRoot).pathId());
+          await app.close();
+        } finally {
+          rmSync(otherRoot, { recursive: true, force: true });
+          rmSync(configRoot, { recursive: true, force: true });
+        }
+      });
+    });
+
+    it("GET /sessions?scope=all includes registered project paths", async () => {
+      await withTempProject(async (fallbackRoot) => {
+        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-registered-"));
+        const configRoot = mkdtempSync(join(tmpdir(), "fmark-cfg-"));
+        try {
+          const p = paths(fallbackRoot);
+          await initProject(p);
+          await createSession(p, { slug: "fallback-session" });
+          const otherPaths = paths(otherRoot);
+          await initProject(otherPaths);
+          await createSession(otherPaths, { slug: "registered-session" });
+
+          const g = globalPaths(configRoot);
+          await registerProjectPath(g, otherRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePaths(fallbackRoot),
+          });
+          const { app } = createServer({
+            token: null,
+            paths: p,
+            pathContextRef: ref,
+          });
+
+          const res = await app.inject({ method: "GET", url: "/sessions?scope=all" });
+          expect(res.statusCode).toBe(200);
+          const sessions = res.json().sessions as Array<{
+            id: string;
+            path: string;
+          }>;
+          expect(
+            sessions.some(
+              (s) =>
+                s.id.endsWith("-registered-session") && s.path === otherRoot,
+            ),
+          ).toBe(true);
+          await app.close();
+        } finally {
+          rmSync(otherRoot, { recursive: true, force: true });
+          rmSync(configRoot, { recursive: true, force: true });
+        }
+      });
+    });
+
+    it("GET /sessions/events?scope=all returns events grouped with path metadata", async () => {
+      await withTempProject(async (fallbackRoot) => {
+        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-events-"));
+        const configRoot = mkdtempSync(join(tmpdir(), "fmark-cfg-"));
+        try {
+          const p = paths(fallbackRoot);
+          await initProject(p);
+          const fallback = await createSession(p, { slug: "fallback-session" });
+          const otherPaths = paths(otherRoot);
+          await initProject(otherPaths);
+          const other = await createSession(otherPaths, {
+            slug: "other-session",
+          });
+          const [fallbackParticipant] = Object.keys(await listParticipants(p));
+          const [otherParticipant] = Object.keys(
+            await listParticipants(otherPaths),
+          );
+          await writeEventFile(p, fallback.id, {
+            participant_id: fallbackParticipant!,
+            kind: "prose",
+            ext: "md",
+            contents: serializeProse({ content: "fallback body" }),
+          });
+          await writeEventFile(otherPaths, other.id, {
+            participant_id: otherParticipant!,
+            kind: "prose",
+            ext: "md",
+            contents: serializeProse({ content: "other body" }),
+          });
+
+          const g = globalPaths(configRoot);
+          await registerProjectPath(g, otherRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePaths(fallbackRoot),
+          });
+          const { app } = createServer({
+            token: null,
+            paths: p,
+            pathContextRef: ref,
+          });
+
+          const res = await app.inject({
+            method: "GET",
+            url: "/sessions/events?scope=all&kinds=prose",
+          });
+          expect(res.statusCode).toBe(200);
+          const groups = res.json().groups as Array<{
+            path: string;
+            session: { id: string };
+            events: Array<{ payload: { content: string } }>;
+          }>;
+          expect(
+            groups.some(
+              (group) =>
+                group.path === otherRoot &&
+                group.session.id === other.id &&
+                group.events.some((event) => event.payload.content === "other body"),
+            ),
+          ).toBe(true);
           await app.close();
         } finally {
           rmSync(otherRoot, { recursive: true, force: true });

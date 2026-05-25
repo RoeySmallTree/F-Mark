@@ -4,7 +4,15 @@ import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createSession } from "../../src/sessions.js";
 import { listParticipants } from "../../src/participants.js";
+import { writeEventFile } from "../../src/events/writer.js";
+import { activePaths } from "../../src/paths/active.js";
+import { globalPaths } from "../../src/paths/global.js";
+import { PathContextRef } from "../../src/paths/contextRef.js";
+import { registerProjectPath } from "../../src/paths/registry.js";
 import { withTempProject } from "../helpers/tempdir.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 async function setup(root: string) {
   const p = paths(root);
@@ -222,6 +230,55 @@ describe("GET /search", () => {
       });
       expect(res.statusCode).toBe(404);
       await app.close();
+    });
+  });
+
+  it("scope=all searches registered paths and returns path/session tags", async () => {
+    await withTempProject(async (root) => {
+      const otherRoot = mkdtempSync(join(tmpdir(), "fmark-search-"));
+      const configRoot = mkdtempSync(join(tmpdir(), "fmark-cfg-"));
+      try {
+        const p = paths(root);
+        await initProject(p);
+        const otherPaths = paths(otherRoot);
+        await initProject(otherPaths);
+        const other = await createSession(otherPaths, { slug: "other" });
+        const [otherParticipant] = Object.keys(await listParticipants(otherPaths));
+        await writeEventFile(otherPaths, other.id, {
+          participant_id: otherParticipant!,
+          kind: "file",
+          ext: "json",
+          contents: JSON.stringify({
+            id: "file-1",
+            path: "/tmp/launch-brief.pdf",
+            mime_type: "application/pdf",
+            display_name: "Launch Brief",
+          }),
+        });
+
+        const g = globalPaths(configRoot);
+        await registerProjectPath(g, otherRoot);
+        const ref = new PathContextRef({ global: g, active: activePaths(root) });
+        const { app } = createServer({
+          token: null,
+          paths: p,
+          pathContextRef: ref,
+        });
+
+        const res = await app.inject({
+          method: "GET",
+          url: "/search?q=brief&scope=all",
+        });
+        expect(res.statusCode).toBe(200);
+        const hit = res.json().hits[0];
+        expect(hit.path).toBe(otherRoot);
+        expect(hit.session_slug).toBe("other");
+        expect(hit.event.kind).toBe("file");
+        await app.close();
+      } finally {
+        rmSync(otherRoot, { recursive: true, force: true });
+        rmSync(configRoot, { recursive: true, force: true });
+      }
     });
   });
 });

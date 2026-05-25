@@ -24,7 +24,10 @@ import { ModalRoot } from "../../src/modals/ModalRoot.js";
 import { App } from "../../src/App.js";
 import { useStore } from "../../src/state/store.js";
 import { _isMacPlatform } from "../../src/hooks/useHotkeys.js";
-import type { SessionMeta } from "../../src/api/client.js";
+import type {
+  SessionEventGroup,
+  SessionMeta,
+} from "../../src/api/client.js";
 
 // $mod resolves to ⌘ on macOS / Ctrl elsewhere. Match what useHotkeys expects.
 const MOD_OPEN = _isMacPlatform() ? "{Meta>}" : "{Control>}";
@@ -74,6 +77,25 @@ const NAMED_PROSE_EVENT: AnyEventRecord = {
   payload: {
     name: "Launch Plan v1",
     content: "We start shipping the open-source kernel: file-format spec…",
+  },
+};
+
+const REMOTE_SESSION: SessionMeta = {
+  id: "2026-05-21-remote-session",
+  slug: "remote-session",
+  created_at: "2026-05-21T10:00:00Z",
+  path: "/tmp/other-repo",
+  path_id: "path-other",
+};
+
+const REMOTE_NAMED_PROSE_EVENT: AnyEventRecord = {
+  filename: "20260521T_us-a7f3.prose.md",
+  kind: "prose",
+  participant_id: "us-a7f3",
+  timestamp: "20260521T100000Z",
+  payload: {
+    name: "Remote Plan",
+    content: "This named document lives in another project path.",
   },
 };
 
@@ -250,6 +272,42 @@ describe("CmdKModal — filtering", () => {
     const input = screen.getByLabelText(/command palette query/i);
     await user.type(input, "launch plan");
     expect(screen.getByText("Launch Plan v1")).toBeInTheDocument();
+  });
+
+  test("typing matches named contributions from all sessions with path tags", async () => {
+    const groups: SessionEventGroup[] = [
+      {
+        path: REMOTE_SESSION.path!,
+        path_id: REMOTE_SESSION.path_id!,
+        session: REMOTE_SESSION,
+        events: [REMOTE_NAMED_PROSE_EVENT],
+        participants: PARTICIPANTS,
+      },
+    ];
+    const fetchMock = vi.fn().mockImplementation((input: string | URL) => {
+      const u = String(input);
+      if (u.startsWith("/sessions/events")) {
+        return Promise.resolve(jsonResponse({ groups }));
+      }
+      if (u.startsWith("/sessions?scope=all")) {
+        return Promise.resolve(
+          jsonResponse({ sessions: [...SESSIONS, REMOTE_SESSION] }),
+        );
+      }
+      if (u.startsWith("/search")) {
+        return Promise.resolve(jsonResponse({ hits: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<CmdKModal />);
+    const input = screen.getByLabelText(/command palette query/i);
+    await user.type(input, "remote plan");
+
+    expect(await screen.findByText("Remote Plan")).toBeInTheDocument();
+    expect(screen.getByText(/other-repo \/ remote-session/)).toBeInTheDocument();
   });
 
   test("totally-unmatched query shows empty state", async () => {
@@ -452,5 +510,6 @@ describe("CmdKModal — search backend (debounced)", () => {
     expect(searchCalls.length).toBeGreaterThanOrEqual(1);
     const lastUrl = String(searchCalls[searchCalls.length - 1]![0]);
     expect(lastUrl).toContain("q=matched");
+    expect(lastUrl).toContain("scope=all");
   });
 });

@@ -7,10 +7,19 @@
         env probe reports that tmux is missing.
      3. A "Manage runtimes…" entry that opens the runtime registry panel.
 
-   The dropdown is rendered inline (absolutely positioned next to the
-   button). Escape and outside-click close it. */
+   The dropdown is rendered inline with fixed viewport positioning so it is
+   not clipped by the scrollable chip strip. Escape and outside-click close it. */
 
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from "react";
+import { avatarIconSrc, avatarKind } from "./ParticipantAvatar.js";
 import "./chips.css";
 
 export interface PlusButtonRuntime {
@@ -28,11 +37,9 @@ export interface PlusButtonProps {
      non-actionable. This is optional so the renderer doesn't need to
      thread the env probe through if it's known good. */
   tmuxMissing?: boolean;
-}
-
-function runtimeInitial(id: string): string {
-  if (id === "gemini") return "G";
-  return "C";
+  /* When the kernel process-spawning API is disabled, runtime/terminal rows
+     stay visible but become non-actionable with a precise tooltip. */
+  spawnDisabledReason?: string | null;
 }
 
 export function PlusButton({
@@ -41,13 +48,44 @@ export function PlusButton({
   onSpawnTerminal,
   onManageRuntimes,
   tmuxMissing,
+  spawnDisabledReason = null,
 }: PlusButtonProps): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const close = useCallback(() => {
     setOpen(false);
   }, []);
+
+  const positionMenu = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (wrap === null) return;
+    const rect = wrap.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const margin = 8;
+    const estimatedMenuWidth = 220;
+    const maxRight = Math.max(margin, viewportWidth - estimatedMenuWidth - margin);
+    const right = Math.min(
+      Math.max(margin, viewportWidth - rect.right),
+      maxRight,
+    );
+    setMenuPosition({
+      top: rect.bottom + 4,
+      right,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+    positionMenu();
+  }, [open, positionMenu]);
 
   /* Outside-click and Escape close. Mounted only while the menu is open
      so the listeners do not run when idle. */
@@ -65,26 +103,35 @@ export function PlusButton({
         close();
       }
     }
+    function onReposition(): void {
+      positionMenu();
+    }
     /* Use a microtask delay so the same click that opens the menu does
        not also immediately close it via the outside-click listener. */
     const id = window.setTimeout(() => {
       window.addEventListener("mousedown", onDocMouseDown);
     }, 0);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
     return () => {
       window.clearTimeout(id);
       window.removeEventListener("mousedown", onDocMouseDown);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
     };
-  }, [open, close]);
+  }, [open, close, positionMenu]);
 
   function handleSpawnRuntime(id: string, available: boolean): void {
+    if (spawnDisabledReason !== null) return;
     if (!available) return;
     onSpawnRuntime(id);
     close();
   }
 
   function handleSpawnTerminal(): void {
+    if (spawnDisabledReason !== null) return;
     if (tmuxMissing === true) return;
     onSpawnTerminal();
     close();
@@ -94,6 +141,16 @@ export function PlusButton({
     onManageRuntimes();
     close();
   }
+
+  const menuStyle: CSSProperties =
+    menuPosition === null
+      ? { position: "fixed", visibility: "hidden" }
+      : {
+          position: "fixed",
+          top: menuPosition.top,
+          right: menuPosition.right,
+          marginTop: 0,
+        };
 
   return (
     <div className="plus-btn-wrap" ref={wrapRef}>
@@ -112,6 +169,7 @@ export function PlusButton({
           className="plus-menu"
           role="menu"
           aria-label="Spawn options"
+          style={menuStyle}
         >
           {runtimes.map((rt) => (
             <button
@@ -119,15 +177,26 @@ export function PlusButton({
               type="button"
               role="menuitem"
               className="plus-menu-item"
-              disabled={!rt.available}
-              title={!rt.available ? "Not on PATH" : undefined}
+              disabled={spawnDisabledReason !== null || !rt.available}
+              title={
+                spawnDisabledReason ??
+                (!rt.available ? "Not on PATH" : undefined)
+              }
               onClick={() => handleSpawnRuntime(rt.id, rt.available)}
             >
               <span className="plus-menu-icon" aria-hidden>
-                {runtimeInitial(rt.id)}
+                <img
+                  src={avatarIconSrc(
+                    avatarKind({ kind: "agent", runtimeId: rt.id, name: rt.displayName }),
+                  )}
+                  alt=""
+                  draggable={false}
+                />
               </span>
               <span className="plus-menu-label">{rt.displayName}</span>
-              {!rt.available ? (
+              {spawnDisabledReason !== null ? (
+                <span className="plus-menu-hint">disabled</span>
+              ) : !rt.available ? (
                 <span className="plus-menu-hint">Not on PATH</span>
               ) : null}
             </button>
@@ -139,15 +208,20 @@ export function PlusButton({
             type="button"
             role="menuitem"
             className="plus-menu-item"
-            disabled={tmuxMissing === true}
-            title={tmuxMissing === true ? "tmux is not installed" : undefined}
+            disabled={spawnDisabledReason !== null || tmuxMissing === true}
+            title={
+              spawnDisabledReason ??
+              (tmuxMissing === true ? "tmux is not installed" : undefined)
+            }
             onClick={handleSpawnTerminal}
           >
             <span className="plus-menu-icon" aria-hidden>
-              {">_"}
+              <img src={avatarIconSrc("terminal")} alt="" draggable={false} />
             </span>
             <span className="plus-menu-label">Terminal</span>
-            {tmuxMissing === true ? (
+            {spawnDisabledReason !== null ? (
+              <span className="plus-menu-hint">disabled</span>
+            ) : tmuxMissing === true ? (
               <span className="plus-menu-hint">tmux missing</span>
             ) : null}
           </button>

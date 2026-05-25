@@ -67,11 +67,30 @@ export interface HookInstallStatus {
   configPath: string;
   detectedEntries: { event: string; command: string }[];
   expectedEntries: { event: string; command: string }[];
+  locations?: HookInstallLocationStatus[];
 }
 
 export interface HookInstallInstructions {
   markdown: string;
   manualSteps: { configPath: string; snippet: string }[];
+  promptSteps?: { label: string; text: string }[];
+}
+
+export interface HookInstallLocationStatus {
+  scope: "local" | "global";
+  configPath: string;
+  exists: boolean;
+  installed: boolean;
+  detectedEntries: { event: string; command: string }[];
+  expectedEntries: { event: string; command: string }[];
+  error?: string;
+}
+
+export interface HookInstallApplyResponse {
+  applied: boolean;
+  scope: "local" | "global";
+  configPath: string;
+  status: HookInstallStatus;
 }
 
 export interface PresenceMessage {

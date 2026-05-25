@@ -32,7 +32,11 @@ import {
   Zap,
 } from "lucide-react";
 import type { SearchHit } from "@f-mark/shared";
-import { createClient } from "../api/client.js";
+import {
+  createClient,
+  type SessionEventGroup,
+  type SessionMeta,
+} from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { applyTheme, type ThemeName } from "../themes/index.js";
 import {
@@ -88,16 +92,47 @@ export function CmdKModal(): JSX.Element {
   const sessions = useStore((s) => s.sessions);
   const events = useStore((s) => s.events);
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const activePath = useStore((s) => s.activePath);
   const token = useStore((s) => s.token);
   const openModal = useStore((s) => s.openModal);
   const closeModal = useStore((s) => s.closeModal);
   const setCurrentSession = useStore((s) => s.setCurrentSession);
+  const setSessions = useStore((s) => s.setSessions);
+  const setParticipants = useStore((s) => s.setParticipants);
+  const setPathsState = useStore((s) => s.setPathsState);
 
   const [query, setQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
+  const [allSessions, setAllSessions] = useState<SessionMeta[]>(sessions);
+  const [allEventGroups, setAllEventGroups] = useState<SessionEventGroup[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  // Debounce the backend search call by 200ms after each keystroke.
+  useEffect(() => {
+    const client = createClient({ baseUrl: "", token });
+    let cancelled = false;
+    void client
+      .listAllSessions()
+      .then((next) => {
+        if (!cancelled) setAllSessions(Array.isArray(next) ? next : sessions);
+      })
+      .catch(() => {
+        if (!cancelled) setAllSessions(sessions);
+      });
+    void client
+      .listAllSessionEvents()
+      .then((next) => {
+        if (!cancelled) setAllEventGroups(Array.isArray(next) ? next : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAllEventGroups([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, sessions]);
 
   // Debounce the backend search call by 200ms after each keystroke.
   useEffect(() => {
@@ -109,7 +144,7 @@ export function CmdKModal(): JSX.Element {
     const handle = setTimeout(() => {
       const client = createClient({ baseUrl: "", token });
       void client
-        .search(q, currentSessionId ?? undefined)
+        .search(q, undefined, "all")
         .then((hits) => {
           // Only commit if the query hasn't changed under us.
           setSearchHits(hits);
@@ -119,19 +154,81 @@ export function CmdKModal(): JSX.Element {
         });
     }, 200);
     return () => clearTimeout(handle);
-  }, [query, currentSessionId, token]);
+  }, [query, token]);
+
+  const sessionsForPalette = allSessions.length > 0 ? allSessions : sessions;
+  const agentRows = useMemo(() => {
+    const rows: Array<{
+      participantId: string;
+      participant: SessionEventGroup["participants"][string];
+      path?: string;
+      session?: SessionMeta;
+    }> = [];
+    const seen = new Set<string>();
+    for (const group of allEventGroups) {
+      for (const [participantId, participant] of Object.entries(
+        group.participants,
+      )) {
+        if (participant.kind !== "agent") continue;
+        const key = `${group.path}:${participantId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({
+          participantId,
+          participant,
+          path: group.path,
+          session: group.session,
+        });
+      }
+    }
+    return rows;
+  }, [allEventGroups]);
+  const namedRows = useMemo(() => {
+    const rows: Array<{
+      event: SessionEventGroup["events"][number];
+      name: string;
+      path?: string;
+      session: SessionMeta;
+    }> = [];
+    for (const group of allEventGroups) {
+      for (const event of group.events) {
+        if (event.kind !== "prose") continue;
+        const payload = event.payload as { name?: unknown };
+        if (typeof payload.name !== "string" || payload.name.length === 0) {
+          continue;
+        }
+        rows.push({
+          event,
+          name: payload.name,
+          path: group.path,
+          session: group.session,
+        });
+      }
+    }
+    return rows;
+  }, [allEventGroups]);
 
   const groups = useMemo(() => {
     const q = query.trim();
-    if (q.length === 0) return defaultGroups(sessions);
+    if (q.length === 0) return defaultGroups(sessionsForPalette);
     return queryGroups({
       query: q,
-      sessions,
+      sessions: sessionsForPalette,
       events,
       searchHits,
       currentSessionId,
+      named: namedRows.length > 0 ? namedRows : undefined,
+      agents: agentRows,
     });
-  }, [query, sessions, events, searchHits, currentSessionId]);
+  }, [
+    query,
+    sessionsForPalette,
+    events,
+    searchHits,
+    currentSessionId,
+    namedRows,
+    agentRows,
+  ]);
 
   const flatRows = useMemo(() => flattenRows(groups), [groups]);
 
@@ -148,6 +245,41 @@ export function CmdKModal(): JSX.Element {
 
   const activate = useCallback(
     (row: CmdkRow): void => {
+      const switchToSession = async (
+        sessionId: string,
+        path: string | undefined,
+      ): Promise<void> => {
+        const client = createClient({ baseUrl: "", token });
+        if (path !== undefined && path !== activePath) {
+          const nextPaths = await client.setActivePath(path);
+          setPathsState(nextPaths);
+          const [list, participants] = await Promise.all([
+            client.listSessions(),
+            client.listParticipants(),
+          ]);
+          setSessions(list);
+          setParticipants(participants);
+        }
+        setCurrentSession(sessionId);
+      };
+      const scrollToFilename = (filename: string): void => {
+        let attempts = 0;
+        const tryScroll = (): void => {
+          const el = document.querySelector(
+            `[data-event-filename="${filename}"]`,
+          );
+          if (el !== null) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+            return;
+          }
+          attempts += 1;
+          if (attempts < 12) {
+            window.setTimeout(() => requestAnimationFrame(tryScroll), 50);
+          }
+        };
+        requestAnimationFrame(tryScroll);
+      };
+
       if (row.kind === "action") {
         const actionId = row.actionId;
         if (actionId === "new-session") {
@@ -167,44 +299,42 @@ export function CmdKModal(): JSX.Element {
         return;
       }
       if (row.kind === "session") {
-        if (row.sessionId !== currentSessionId) {
-          setCurrentSession(row.sessionId);
+        void switchToSession(row.sessionId, row.path);
+        closeModal();
+        return;
+      }
+      if (row.kind === "agent") {
+        if (row.sessionId !== undefined) {
+          void switchToSession(row.sessionId, row.path);
         }
         closeModal();
         return;
       }
       if (row.kind === "named") {
-        // Same-session: just scroll. (We're inside this session already.)
         closeModal();
-        // Defer the scroll until after the modal has unmounted so the target
-        // element isn't hidden behind the backdrop in some browsers' layout.
-        requestAnimationFrame(() => {
-          const el = document.querySelector(
-            `[data-event-filename="${row.filename}"]`,
-          );
-          if (el !== null) {
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
-        });
+        void switchToSession(row.sessionId, row.path)
+          .then(() => scrollToFilename(row.filename))
+          .catch(() => {});
         return;
       }
       if (row.kind === "search") {
-        if (row.sessionId !== currentSessionId) {
-          setCurrentSession(row.sessionId);
-        }
         closeModal();
-        requestAnimationFrame(() => {
-          const el = document.querySelector(
-            `[data-event-filename="${row.filename}"]`,
-          );
-          if (el !== null) {
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
-        });
+        void switchToSession(row.sessionId, row.path)
+          .then(() => scrollToFilename(row.filename))
+          .catch(() => {});
         return;
       }
     },
-    [openModal, closeModal, setCurrentSession, currentSessionId],
+    [
+      activePath,
+      openModal,
+      closeModal,
+      setCurrentSession,
+      setParticipants,
+      setPathsState,
+      setSessions,
+      token,
+    ],
   );
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>): void {

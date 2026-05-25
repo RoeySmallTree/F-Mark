@@ -4,6 +4,7 @@ import { realpathSync } from "node:fs";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { activePaths } from "../paths/active.js";
 import type { PathContextRef } from "../paths/contextRef.js";
+import { registerProjectPath } from "../paths/registry.js";
 import {
   bumpRevision,
   mruPush,
@@ -155,6 +156,7 @@ export function registerPathRoutes(
       );
       return bumpRevision(promoted);
     });
+    await registerProjectPath(g, validation.canonical);
     ref.setActive(activePaths(validation.canonical));
     ref.setRevision(next.activeRevision);
     // Rebind tmux so subsequent spawns + filtering scope to the new path.

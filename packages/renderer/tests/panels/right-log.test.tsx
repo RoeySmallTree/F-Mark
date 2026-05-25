@@ -69,7 +69,7 @@ describe("RightLog — base rendering", () => {
     expect(rows[2]!.getAttribute("data-event-kind")).toBe("turn-end");
   });
 
-  test("each row renders identity (dot + initial) as the first cell, time second, kind tag third", () => {
+  test("each row renders identity avatar as the first cell, time second, kind tag third", () => {
     setEvents([
       makeProse(
         "20260522T100000Z_us-a7f3.prose.md",
@@ -83,8 +83,9 @@ describe("RightLog — base rendering", () => {
     /* The grid children, in document order: identity, time, kind-tag,
        summary, jump chevron. */
     expect(cells[0]!.classList.contains("log-who")).toBe(true);
-    expect(cells[0]!.querySelector(".dot")).not.toBeNull();
-    expect(cells[0]!.querySelector(".initial")?.textContent).toBe("R");
+    expect(cells[0]!.querySelector(".avatar img")?.getAttribute("src")).toContain(
+      "human-icon.png",
+    );
     expect(cells[1]!.classList.contains("ts")).toBe(true);
     expect(cells[2]!.classList.contains("kind-tag")).toBe(true);
     expect(cells[2]!.getAttribute("data-kind")).toBe("prose");

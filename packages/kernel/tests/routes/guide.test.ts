@@ -176,7 +176,7 @@ describe("GET /guide", () => {
     });
   });
 
-  it("Claude hook snippet uses the real user participant id from config", async () => {
+  it("Claude hook snippet is generic and does not include participant ids", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -192,12 +192,15 @@ describe("GET /guide", () => {
         url: "/guide?runtime_id=claude&agent_id=ag-claude-1",
       });
       expect(res.statusCode).toBe(200);
-      // The agent placeholder for Stop hook
-      expect(res.body).toContain("ag-claude-1");
-      // The user placeholder for UserPromptSubmit hook must be the real id
-      expect(res.body).toContain("us-alice");
-      // The default placeholder must not appear when a real user exists
-      expect(res.body).not.toContain("us-yourname");
+      const hookSection = res.body.slice(
+        res.body.indexOf("### Hooks (Claude Code)"),
+        res.body.indexOf("## No session selected"),
+      );
+      expect(hookSection).toContain("npx -y f-mark hook auto-stream");
+      expect(hookSection).not.toContain("ag-claude-1");
+      expect(hookSection).not.toContain("us-alice");
+      expect(hookSection).not.toContain("UserPromptSubmit");
+      expect(hookSection).not.toContain("us-yourname");
       await app.close();
     });
   });
@@ -240,7 +243,12 @@ describe("GET /guide", () => {
         url: "/guide?runtime_id=claude&agent_id=ag-claude-9",
       });
       expect(res.statusCode).toBe(200);
-      expect(res.body).toContain("us-yourname");
+      const hookSection = res.body.slice(
+        res.body.indexOf("### Hooks (Claude Code)"),
+        res.body.indexOf("## No session selected"),
+      );
+      expect(hookSection).not.toContain("us-yourname");
+      expect(hookSection).not.toContain("ag-claude-9");
       await app.close();
     });
   });

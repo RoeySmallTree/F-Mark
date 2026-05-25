@@ -23,7 +23,7 @@ function renderChip(overrides: {
     <AgentChip
       participantId={overrides.participantId ?? "ag-claude"}
       name={overrides.name ?? "Claude"}
-      runtimeId={overrides.runtimeId ?? "claude"}
+      runtimeId={"runtimeId" in overrides ? overrides.runtimeId! : "claude"}
       state={overrides.state ?? "online"}
       onClick={overrides.onClick}
     />,
@@ -36,32 +36,32 @@ describe("AgentChip — basic rendering", () => {
     expect(screen.getByText("Worker A")).toBeInTheDocument();
   });
 
-  test("renders 'C' for claude runtime", () => {
+  test("renders the Claude icon for claude runtime", () => {
     const { container } = renderChip({ runtimeId: "claude" });
     expect(
-      container.querySelector(".agent-chip-runtime")?.textContent,
-    ).toBe("C");
+      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
+    ).toContain("claude-icon.png");
   });
 
-  test("renders 'C' for codex runtime", () => {
+  test("renders the GPT icon for codex runtime", () => {
     const { container } = renderChip({ runtimeId: "codex" });
     expect(
-      container.querySelector(".agent-chip-runtime")?.textContent,
-    ).toBe("C");
+      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
+    ).toContain("gpt-icon.png");
   });
 
-  test("renders 'G' for gemini runtime", () => {
+  test("renders the Gemini icon for gemini runtime", () => {
     const { container } = renderChip({ runtimeId: "gemini" });
     expect(
-      container.querySelector(".agent-chip-runtime")?.textContent,
-    ).toBe("G");
+      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
+    ).toContain("gemini-icon.png");
   });
 
-  test("renders 'C' for custom (null) runtime", () => {
-    const { container } = renderChip({ runtimeId: null });
+  test("renders the terminal icon for custom (null) runtime", () => {
+    const { container } = renderChip({ runtimeId: null, name: "Worker" });
     expect(
-      container.querySelector(".agent-chip-runtime")?.textContent,
-    ).toBe("C");
+      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
+    ).toContain("terminal-icon.png");
   });
 });
 

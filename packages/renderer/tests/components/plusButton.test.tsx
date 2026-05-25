@@ -87,6 +87,28 @@ describe("PlusButton — open menu", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
+  test("menu is fixed-positioned so the top-bar chip scroller cannot clip it", async () => {
+    const user = userEvent.setup();
+    const h = makeHandlers();
+    render(
+      <div style={{ overflowX: "auto", overflowY: "hidden" }}>
+        <PlusButton
+          runtimes={RUNTIMES}
+          onSpawnRuntime={h.onSpawnRuntime}
+          onSpawnTerminal={h.onSpawnTerminal}
+          onManageRuntimes={h.onManageRuntimes}
+        />
+      </div>,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveStyle({ position: "fixed" });
+    expect(menu.style.top).not.toBe("");
+    expect(menu.style.right).not.toBe("");
+  });
+
   test("menu renders one item per runtime", async () => {
     const user = userEvent.setup();
     const h = makeHandlers();

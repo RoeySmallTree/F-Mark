@@ -31,7 +31,7 @@ describe("MessageCard", () => {
     expect(strong!.textContent).toBe("world");
   });
 
-  test("agent participant produces .card.agent and the right initial", () => {
+  test("agent participant produces .card.agent and an image avatar", () => {
     const ev = makeProse(
       "20260522T101100Z_ag-c92e.prose.md",
       "ag-c92e",
@@ -42,6 +42,8 @@ describe("MessageCard", () => {
     );
     const card = container.querySelector(".card.msg-card");
     expect(card!.classList.contains("agent")).toBe(true);
-    expect(card!.querySelector(".avatar")?.textContent).toBe("C");
+    expect(card!.querySelector(".avatar img")?.getAttribute("src")).toContain(
+      "claude-icon.png",
+    );
   });
 });

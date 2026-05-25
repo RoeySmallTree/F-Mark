@@ -1,7 +1,6 @@
-/* Built-in runtime catalog. Kernel ships claude / codex / gemini by default
-   and has no /runtimes endpoint to enumerate user-edited entries, so the
-   renderer uses this table for display names. env-probe.runtimes is the
-   authoritative set of IDs; this map provides the human label. */
+/* Built-in runtime catalog. The full editable registry is available through
+   /runtimes; this table gives built-ins stable labels for surfaces that only
+   have an env-probe snapshot. */
 export const KNOWN_RUNTIMES: Record<
   string,
   { displayName: string; executable: string }

@@ -15,6 +15,7 @@ import { paths } from "./paths.js";
 import { activePaths } from "./paths/active.js";
 import { PathContextRef } from "./paths/contextRef.js";
 import { globalPaths } from "./paths/global.js";
+import { registerProjectPath } from "./paths/registry.js";
 import { bumpRevision, mruPush, updateState } from "./state/store.js";
 import { runV04Migration } from "./boot/migration.js";
 import { initProject, readConfig, writeConfig } from "./project.js";
@@ -94,6 +95,7 @@ const pathContextRef = new PathContextRef({
 const bootState = await updateState(gPaths, (s) =>
   bumpRevision(mruPush({ ...s, activePath: projectRoot }, projectRoot)),
 );
+await registerProjectPath(gPaths, projectRoot);
 pathContextRef.setRevision(bootState.activeRevision);
 
 let token: string | null = null;

@@ -15,6 +15,7 @@ import type {
 } from "@f-mark/shared";
 import { copyToClipboard } from "../render/copy.js";
 import { formatWhen, whoOf } from "./format.js";
+import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 import { FlowNode } from "./flow/FlowNode.js";
 import { FlowEdge } from "./flow/FlowEdge.js";
 import { layoutFlow } from "./flow/layoutFlow.js";
@@ -120,12 +121,14 @@ export function FlowCard({
   return (
     <div className="flow-card" data-event-kind="flow">
       <div className="flow-head">
-        <span
-          className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
-          aria-hidden
-        >
-          {who.initial}
-        </span>
+        <ParticipantAvatar
+          participantId={who.id}
+          kind={who.isUser ? "user" : "agent"}
+          name={who.name}
+          color={who.color}
+          runtimeId={who.runtimeId}
+          size="sm"
+        />
         <span className="who">{who.name}</span>
         <span className="when">{formatWhen(event.timestamp)}</span>
         <span className="badge">

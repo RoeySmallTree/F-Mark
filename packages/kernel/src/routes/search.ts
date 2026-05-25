@@ -2,11 +2,18 @@ import type { FastifyInstance } from "fastify";
 import type {
   AnyEventRecord,
   ChoicesPayload,
+  FileRefPayload,
+  FlowPayload,
+  HtmlManifest,
   ProsePayload,
   SearchHit,
   TodoPayload,
+  ToolUsePayload,
 } from "@f-mark/shared";
-import type { Paths } from "../paths.js";
+import { paths as makePaths, type Paths } from "../paths.js";
+import { computePathId } from "../paths/identity.js";
+import { listRegisteredProjectPaths } from "../paths/registry.js";
+import { readState } from "../state/store.js";
 import { listSessions, sessionExists } from "../sessions.js";
 import { readEvents } from "../events/reader.js";
 import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
@@ -85,7 +92,83 @@ function matchEvent(
     }
     return null;
   }
+  if (event.kind === "file") {
+    const payload = event.payload as FileRefPayload;
+    const text = [
+      payload.display_name,
+      payload.path,
+      payload.mime_type,
+      payload.description,
+    ]
+      .filter((v): v is string => typeof v === "string" && v.length > 0)
+      .join(" ");
+    return text.toLowerCase().includes(queryLower)
+      ? buildSnippet(text, queryLower)
+      : null;
+  }
+  if (event.kind === "html") {
+    const payload = event.payload as HtmlManifest;
+    const text = [payload.title, payload.id, ...(payload.dependencies ?? [])]
+      .filter((v): v is string => typeof v === "string" && v.length > 0)
+      .join(" ");
+    return text.toLowerCase().includes(queryLower)
+      ? buildSnippet(text, queryLower)
+      : null;
+  }
+  if (event.kind === "flow") {
+    const payload = event.payload as FlowPayload;
+    const nodeText = payload.nodes
+      .map((node) => [node.label, node.title, node.content].join(" "))
+      .join(" ");
+    const edgeText = payload.edges.map((edge) => edge.label ?? "").join(" ");
+    const text = [payload.title, payload.id, nodeText, edgeText].join(" ");
+    return text.toLowerCase().includes(queryLower)
+      ? buildSnippet(text, queryLower)
+      : null;
+  }
+  if (event.kind === "tool-use") {
+    const payload = event.payload as ToolUsePayload;
+    const text = [
+      payload.tool_name,
+      payload.tool_use_id,
+      JSON.stringify(payload.input),
+      JSON.stringify(payload.result),
+    ].join(" ");
+    return text.toLowerCase().includes(queryLower)
+      ? buildSnippet(text, queryLower)
+      : null;
+  }
+  const fallback = JSON.stringify(event.payload);
+  if (fallback.toLowerCase().includes(queryLower)) {
+    return buildSnippet(fallback, queryLower);
+  }
   return null;
+}
+
+function pushUnique(out: string[], seen: Set<string>, path: string | null): void {
+  if (path === null || seen.has(path)) return;
+  seen.add(path);
+  out.push(path);
+}
+
+async function listSearchRoots(deps: PathDeps): Promise<string[]> {
+  const roots: string[] = [];
+  const seen = new Set<string>();
+  if (deps.ref) {
+    const ctx = deps.ref.get();
+    const state = await readState(deps.ref.global());
+    pushUnique(roots, seen, ctx.active?.root() ?? null);
+    pushUnique(roots, seen, state.activePath);
+    for (const path of state.knownPaths) pushUnique(roots, seen, path);
+    for (const favorite of state.favorites) {
+      pushUnique(roots, seen, favorite.path);
+    }
+    for (const path of await listRegisteredProjectPaths(deps.ref.global())) {
+      pushUnique(roots, seen, path);
+    }
+  }
+  pushUnique(roots, seen, deps.fallback.root());
+  return roots;
 }
 
 export function registerSearchRoutes(
@@ -94,7 +177,14 @@ export function registerSearchRoutes(
 ): void {
   const deps = normaliseDeps(pOrDeps);
 
-  app.get<{ Querystring: { q?: string; session?: string; limit?: string } }>(
+  app.get<{
+    Querystring: {
+      q?: string;
+      session?: string;
+      limit?: string;
+      scope?: string;
+    };
+  }>(
     "/search",
     async (req, reply) => {
       const p = resolvePaths(deps);
@@ -112,27 +202,68 @@ export function registerSearchRoutes(
       }
 
       const sessionFilter = req.query.session;
-      let sessionIds: string[];
+      let searchTargets: Array<{
+        p: Paths;
+        sessionId: string;
+        sessionSlug?: string;
+        path?: string;
+        pathId?: string;
+      }>;
       if (typeof sessionFilter === "string" && sessionFilter.length > 0) {
         if (!(await sessionExists(p, sessionFilter))) {
           reply.code(404);
           return { error: `session not found: ${sessionFilter}` };
         }
-        sessionIds = [sessionFilter];
+        searchTargets = [{ p, sessionId: sessionFilter }];
+      } else if (req.query.scope === "all") {
+        searchTargets = [];
+        for (const root of await listSearchRoots(deps)) {
+          const rootPaths = makePaths(root);
+          let sessions;
+          try {
+            sessions = await listSessions(rootPaths);
+          } catch {
+            continue;
+          }
+          let pathId: string;
+          try {
+            pathId = computePathId(root);
+          } catch {
+            continue;
+          }
+          for (const session of sessions) {
+            searchTargets.push({
+              p: rootPaths,
+              sessionId: session.id,
+              sessionSlug: session.slug,
+              path: root,
+              pathId,
+            });
+          }
+        }
       } else {
         const all = await listSessions(p);
-        sessionIds = all.map((s) => s.id);
+        searchTargets = all.map((s) => ({
+          p,
+          sessionId: s.id,
+          sessionSlug: s.slug,
+        }));
       }
 
       const hits: SearchHit[] = [];
-      for (const sid of sessionIds) {
-        const events = await readEvents(p, sid, {
-          kinds: ["prose", "choices", "todo"],
-        });
+      for (const target of searchTargets) {
+        const events = await readEvents(target.p, target.sessionId, {});
         for (const event of events) {
           const snippet = matchEvent(event, queryLower);
           if (snippet === null) continue;
-          hits.push({ session_id: sid, event, snippet });
+          hits.push({
+            session_id: target.sessionId,
+            session_slug: target.sessionSlug,
+            path: target.path,
+            path_id: target.pathId,
+            event,
+            snippet,
+          });
         }
       }
 

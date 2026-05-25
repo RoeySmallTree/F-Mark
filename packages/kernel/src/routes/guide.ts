@@ -24,16 +24,11 @@ function renderHooksSection(
     return [
       "### Hooks (Claude Code)",
       "",
-      "Add the auto-stream hook to `~/.claude/settings.json`:",
+      "Add the generic auto-stream hook to `.claude/settings.json` or `~/.claude/settings.json`:",
       "",
       "```json",
       '"hooks": {',
-      '  "Stop": [{ "hooks": [{ "type": "command", "command": "npx -y f-mark hook auto-stream ' +
-        agentPlaceholder +
-        '" }] }],',
-      '  "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "npx -y f-mark hook auto-stream ' +
-        userPlaceholder +
-        ' --kind user" }] }]',
+      '  "Stop": [{ "hooks": [{ "type": "command", "command": "npx -y f-mark hook auto-stream" }] }]',
       "}",
       "```",
     ].join("\n");

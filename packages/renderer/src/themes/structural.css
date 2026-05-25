@@ -10,8 +10,10 @@ body.theme-brutalist .modal, body.theme-brutalist .popover{ border-width:2px; bo
 body.theme-brutalist .turn-pill, body.theme-brutalist .badge, body.theme-brutalist .pop-chip,
 body.theme-brutalist .assign-badge, body.theme-brutalist .kbd-chip, body.theme-brutalist .prose-pin,
 body.theme-brutalist .status-pill, body.theme-brutalist .cmdk-kind{ border-radius:0 !important; border-width:1.5px }
-body.theme-brutalist .avatar{ border-radius:0; border:1.5px solid var(--ink); background:#000; color:#fff }
+body.theme-brutalist .avatar{ border-radius:0; border:0; background:#000; color:#fff }
+body.theme-brutalist .avatar::before{ border-radius:0 }
 body.theme-brutalist .avatar.user, body.theme-brutalist .avatar.agent{ background:#000 }
+body.theme-brutalist .avatar.with-image img{ border-radius:0 }
 body.theme-brutalist .card .stripe{ width:5px; background:var(--ink) }
 body.theme-brutalist .feed-inner h1, body.theme-brutalist .feed-inner h2, body.theme-brutalist .feed-inner h3{ text-transform:uppercase; letter-spacing:.02em }
 body.theme-brutalist .prose-pin{ background:var(--ink); color:var(--canvas); border-color:var(--ink) }

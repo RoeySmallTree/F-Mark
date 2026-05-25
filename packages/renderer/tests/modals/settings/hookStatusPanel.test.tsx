@@ -1,12 +1,10 @@
 /* Phase 13 — HookStatusPanel tests.
    Renders one row per registered runtime with a status pill. The status
-   is fetched via `apiClient.hookInstallStatus` when a representative
-   participant for that runtime is available. Otherwise the row shows
-   "Status unknown — needs a registered participant".
+   is fetched via `apiClient.hookInstallStatus`; Claude is generic, while
+   participant-bound runtimes need a representative agent before checking.
 
-   The "Show install instructions" button calls `onShowInstructions(id)`
-   with the runtime id (the parent owns the HookInstallModal opening
-   logic and the user_participant_id). */
+   The "Show install instructions" button calls `onShowInstructions(id, participant?)`;
+   the parent owns the HookInstallModal opening logic. */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
@@ -77,7 +75,7 @@ async function flush(): Promise<void> {
 }
 
 describe("HookStatusPanel", () => {
-  it("renders one row per runtime", () => {
+  it("renders one row per runtime", async () => {
     const client = makeClient({
       installed: true,
       configPath: "/home/me/.claude/settings.json",
@@ -95,9 +93,45 @@ describe("HookStatusPanel", () => {
     );
     expect(screen.getByTestId("hook-row-claude")).toBeInTheDocument();
     expect(screen.getByTestId("hook-row-codex")).toBeInTheDocument();
+    await flush();
   });
 
-  it("shows 'needs a registered participant' when no agent is mapped", () => {
+  it("checks Claude hook status without a representative participant", async () => {
+    const client = makeClient({
+      installed: true,
+      configPath: "/home/me/.claude/settings.json",
+      detectedEntries: [
+        {
+          event: "Stop",
+          command: "npx -y f-mark hook auto-stream",
+        },
+      ],
+      expectedEntries: [
+        {
+          event: "Stop",
+          command: "npx -y f-mark hook auto-stream",
+        },
+      ],
+    });
+    render(
+      <HookStatusPanel
+        runtimes={{ claude: RUNTIMES.claude! }}
+        participantIdForRuntime={{}}
+        userParticipantId={null}
+        apiClient={client as never}
+        onShowInstructions={() => {}}
+      />,
+    );
+    await flush();
+    const claudeRow = screen.getByTestId("hook-row-claude");
+    expect(claudeRow.textContent).toMatch(/generic hook/i);
+    expect(client.hookInstallStatus).toHaveBeenCalledWith({
+      runtime_id: "claude",
+    });
+    expect(within(claudeRow).getByText(/installed/i)).toBeInTheDocument();
+  });
+
+  it("shows 'needs a registered participant' for participant-bound runtimes", () => {
     const client = makeClient({
       installed: true,
       configPath: "/x",
@@ -106,15 +140,15 @@ describe("HookStatusPanel", () => {
     });
     render(
       <HookStatusPanel
-        runtimes={RUNTIMES}
+        runtimes={{ codex: RUNTIMES.codex! }}
         participantIdForRuntime={{}}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={() => {}}
       />,
     );
-    const claudeRow = screen.getByTestId("hook-row-claude");
-    expect(claudeRow.textContent).toMatch(/needs a registered participant/i);
+    const codexRow = screen.getByTestId("hook-row-codex");
+    expect(codexRow.textContent).toMatch(/needs a registered participant/i);
     expect(client.hookInstallStatus).not.toHaveBeenCalled();
   });
 
@@ -138,7 +172,7 @@ describe("HookStatusPanel", () => {
     render(
       <HookStatusPanel
         runtimes={RUNTIMES}
-        participantIdForRuntime={{ claude: "ag-c92e" }}
+        participantIdForRuntime={{}}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={() => {}}
@@ -147,8 +181,6 @@ describe("HookStatusPanel", () => {
     await flush();
     expect(client.hookInstallStatus).toHaveBeenCalledWith({
       runtime_id: "claude",
-      participant_id: "ag-c92e",
-      user_participant_id: "us-a7f3",
     });
     const claudeRow = screen.getByTestId("hook-row-claude");
     expect(within(claudeRow).getByText(/installed/i)).toBeInTheDocument();
@@ -167,7 +199,7 @@ describe("HookStatusPanel", () => {
     render(
       <HookStatusPanel
         runtimes={{ claude: RUNTIMES.claude! }}
-        participantIdForRuntime={{ claude: "ag-c92e" }}
+        participantIdForRuntime={{}}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={() => {}}
@@ -188,7 +220,7 @@ describe("HookStatusPanel", () => {
     render(
       <HookStatusPanel
         runtimes={{ claude: RUNTIMES.claude! }}
-        participantIdForRuntime={{ claude: "ag-c92e" }}
+        participantIdForRuntime={{}}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={() => {}}
@@ -228,7 +260,7 @@ describe("HookStatusPanel", () => {
     render(
       <HookStatusPanel
         runtimes={{ claude: RUNTIMES.claude! }}
-        participantIdForRuntime={{ claude: "ag-c92e" }}
+        participantIdForRuntime={{}}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={() => {}}
@@ -237,6 +269,24 @@ describe("HookStatusPanel", () => {
     await flush();
     const row = screen.getByTestId("hook-row-claude");
     expect(within(row).getByText(/error/i)).toBeInTheDocument();
+  });
+
+  it("shows 'error' instead of crashing when status payload is malformed", async () => {
+    const client = makeClient({ status: "ok" } as unknown as HookInstallStatus);
+    render(
+      <HookStatusPanel
+        runtimes={{ claude: RUNTIMES.claude! }}
+        participantIdForRuntime={{}}
+        userParticipantId={null}
+        apiClient={client as never}
+        onShowInstructions={() => {}}
+      />,
+    );
+    await flush();
+    const row = screen.getByTestId("hook-row-claude");
+    expect(
+      within(row).getByText(/malformed status response/i),
+    ).toBeInTheDocument();
   });
 
   it("Show install instructions button fires the callback with runtime id", async () => {
@@ -251,7 +301,7 @@ describe("HookStatusPanel", () => {
     render(
       <HookStatusPanel
         runtimes={{ claude: RUNTIMES.claude! }}
-        participantIdForRuntime={{ claude: "ag-c92e" }}
+        participantIdForRuntime={{}}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={onShow}
@@ -262,6 +312,6 @@ describe("HookStatusPanel", () => {
     await user.click(
       within(row).getByRole("button", { name: /show install instructions/i }),
     );
-    expect(onShow).toHaveBeenCalledWith("claude", "ag-c92e");
+    expect(onShow).toHaveBeenCalledWith("claude", undefined);
   });
 });

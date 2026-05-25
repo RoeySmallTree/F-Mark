@@ -1,31 +1,29 @@
 /* RuntimesPanel — Settings → Runtimes.
-   Renders the runtime catalog (claude/codex/gemini + custom entries) as
-   a table. Each row has Edit + Remove buttons; builtin rows can be edited
-   but not removed. The "Add runtime" button expands an inline form whose
-   `executable` field is validated against the same regex the kernel uses
+   Shows the system probe summary first (OS, installer, tmux), then renders
+   the runtime catalog (claude/codex/gemini + custom entries) as a table.
+   Each row has Edit + Remove buttons; builtin rows can be edited but not
+   removed. The "Add runtime" button expands an inline form whose `executable`
+   field is validated against the same regex the kernel uses
    (`^[a-zA-Z0-9_./-]+$`) and whose `id` field is validated against
-   `^[a-z][a-z0-9-]{0,31}$`.
+   `^[a-z][a-z0-9_-]{0,31}$`. */
 
-   The CRUD callbacks are provided by the parent (SettingsModal). In v0.4
-   the kernel does not yet expose `/runtimes` HTTP routes — the panel still
-   renders the form, but the parent wires the callbacks to no-ops with a
-   note pointing users at `.f-mark/runtimes.json` for manual edits. */
-
-import { useMemo, useState, type JSX } from "react";
-import type { RuntimeEntry } from "@f-mark/shared";
+import { useMemo, useState, type JSX, type ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
+import type { EnvProbeResult, RuntimeEntry } from "@f-mark/shared";
+import { avatarIconSrc, avatarKind } from "../../components/ParticipantAvatar.js";
 
 export interface RuntimesPanelProps {
   runtimes: Record<string, RuntimeEntry>;
   onAdd(id: string, entry: RuntimeEntry): Promise<void>;
   onUpdate(id: string, entry: RuntimeEntry): Promise<void>;
   onRemove(id: string): Promise<void>;
-  /* When set, surfaces a read-only banner explaining that CRUD is wired
-     to a placeholder. The form still lets the user explore the validation,
-     but Save will simply close the form (the parent's handler is a no-op). */
+  envProbe?: EnvProbeResult | null;
+  onReprobe?(): Promise<void>;
+  /* When set, surfaces a read-only banner and suppresses mutation controls. */
   readOnlyNote?: string;
 }
 
-const ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+const ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const EXEC_RE = /^[a-zA-Z0-9_./-]+$/;
 
 /* The kernel ships these three IDs as builtins (see
@@ -34,6 +32,16 @@ const BUILTIN_IDS = new Set(["claude", "codex", "gemini"]);
 
 const ICON_CHOICES = ["bot", "claude", "codex", "gemini"] as const;
 type IconName = (typeof ICON_CHOICES)[number];
+
+function runtimeIconSrc(icon: string | undefined, id: string, entry: RuntimeEntry): string {
+  return avatarIconSrc(
+    avatarKind({
+      kind: "agent",
+      runtimeId: icon === "bot" ? id : (icon ?? id),
+      name: entry.displayName,
+    }),
+  );
+}
 
 interface FormState {
   /* `null` when the form is closed; a string id (possibly empty) when adding,
@@ -44,6 +52,7 @@ interface FormState {
   displayName: string;
   executable: string;
   argsText: string;
+  envText: string;
   icon: IconName;
   readyDelayMs: string;
 }
@@ -56,6 +65,7 @@ function closedForm(): FormState {
     displayName: "",
     executable: "",
     argsText: "",
+    envText: "",
     icon: "bot",
     readyDelayMs: "1500",
   };
@@ -73,24 +83,93 @@ function asIcon(v: string): IconName {
     : "bot";
 }
 
+const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function formatEnv(env: RuntimeEntry["env"]): string {
+  if (env === undefined) return "";
+  return Object.entries(env)
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+}
+
+function parseEnvText(text: string): Record<string, string> | undefined {
+  const env: Record<string, string> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0) continue;
+    const separator = line.indexOf("=");
+    if (separator <= 0) {
+      throw new Error("Env entries must use KEY=value lines.");
+    }
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1);
+    if (!ENV_KEY_RE.test(key)) {
+      throw new Error(
+        "Env keys must start with a letter or underscore and contain only letters, digits, and underscores.",
+      );
+    }
+    env[key] = value;
+  }
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
+function RuntimePathStatus({
+  available,
+  okLabel = "on PATH",
+  missingLabel = "missing",
+  unknownLabel = "not probed",
+}: {
+  available: boolean | null;
+  okLabel?: string;
+  missingLabel?: string;
+  unknownLabel?: string;
+}): JSX.Element {
+  const label =
+    available === null ? unknownLabel : available ? okLabel : missingLabel;
+  return (
+    <span
+      className={`runtime-path-pill ${available === null ? "unknown" : available ? "ok" : "missing"}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SystemHeader({
+  label,
+  children,
+  testId,
+}: {
+  label: string;
+  children: ReactNode;
+  testId: string;
+}): JSX.Element {
+  return (
+    <div className="runtime-system-header" data-testid={testId}>
+      <div className="runtime-system-label">{label}</div>
+      <div className="runtime-system-value">{children}</div>
+    </div>
+  );
+}
+
 export function RuntimesPanel({
   runtimes,
   onAdd,
   onUpdate,
   onRemove,
+  envProbe = null,
+  onReprobe,
   readOnlyNote,
 }: RuntimesPanelProps): JSX.Element {
   const [form, setForm] = useState<FormState>(() => closedForm());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [probeBusy, setProbeBusy] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
 
-  /* When the panel is in read-only mode (v0.4 — kernel exposes no /runtimes
-     CRUD endpoints), every mutation surface is suppressed: Edit and Remove
-     buttons go disabled, the Add Runtime button is hidden, and the inline
-     form does not render. The user sees the catalog as a transparent
-     listing plus the `readOnlyNote` explaining how to mutate via the
-     filesystem. Avoids the prior "Save does nothing" UX. */
+  /* Optional read-only mode for callers that deliberately want to expose the
+     catalog without mutation controls. */
   const readOnly = readOnlyNote !== undefined;
 
   const rows = useMemo(() => {
@@ -116,6 +195,7 @@ export function RuntimesPanel({
       displayName: entry.displayName,
       executable: entry.executable,
       argsText: entry.args.join(" "),
+      envText: formatEnv(entry.env),
       icon: asIcon(entry.icon ?? "bot"),
       readyDelayMs: String(entry.readyDelayMs ?? 1500),
     });
@@ -131,7 +211,7 @@ export function RuntimesPanel({
     if (form.mode === "closed") return;
     if (form.mode === "add" && !ID_RE.test(form.id)) {
       setError(
-        "Invalid id: must match ^[a-z][a-z0-9-]{0,31}$ (lowercase, starts with a letter).",
+        "Invalid id: must match ^[a-z][a-z0-9_-]{0,31}$ (lowercase, starts with a letter).",
       );
       return;
     }
@@ -150,12 +230,20 @@ export function RuntimesPanel({
       setError("readyDelayMs must be a non-negative number.");
       return;
     }
+    let env: Record<string, string> | undefined;
+    try {
+      env = parseEnvText(form.envText);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
     const entry: RuntimeEntry = {
       displayName: form.displayName.trim(),
       executable: form.executable,
       args: parseArgs(form.argsText),
       icon: form.icon,
       readyDelayMs,
+      ...(env !== undefined ? { env } : {}),
     };
     setBusy(true);
     setError(null);
@@ -182,13 +270,86 @@ export function RuntimesPanel({
     }
   }
 
+  async function handleReprobe(): Promise<void> {
+    if (onReprobe === undefined) return;
+    setProbeBusy(true);
+    setProbeError(null);
+    try {
+      await onReprobe();
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProbeBusy(false);
+    }
+  }
+
   return (
     <>
       <h3 className="settings-h">Runtimes</h3>
       <div className="settings-sub">
-        Runtimes registered in this project. Each one becomes a "+" menu entry
-        for spawning a managed agent. Built-ins ship with F-Mark; custom
-        entries live in <code className="codish">.f-mark/runtimes.json</code>.
+        System detection, then the runtime catalog used by the "+" menu.
+      </div>
+
+      <section className="runtime-system" aria-label="System details">
+        <div className="runtime-system-top">
+          <div>
+            <div className="runtime-system-kicker">System details</div>
+            <div className="runtime-system-note">
+              Last probe for this project environment.
+            </div>
+          </div>
+          {onReprobe !== undefined ? (
+            <button
+              type="button"
+              className="btn-ghost runtime-reprobe"
+              disabled={probeBusy}
+              onClick={() => {
+                void handleReprobe();
+              }}
+            >
+              <RefreshCw size={13} aria-hidden="true" />
+              {probeBusy ? "Probing..." : "Re-probe"}
+            </button>
+          ) : null}
+        </div>
+
+        {envProbe === null ? (
+          <div className="runtime-system-empty">
+            No probe has run yet for this project.
+          </div>
+        ) : (
+          <div className="runtime-system-stack">
+            <SystemHeader label="OS" testId="runtime-probe-os">
+              <code className="codish">{envProbe.os}</code>
+            </SystemHeader>
+            <SystemHeader label="Installer" testId="runtime-probe-installer">
+              {envProbe.installer !== null ? (
+                <code className="codish">{envProbe.installer}</code>
+              ) : (
+                <span className="runtime-system-muted">none detected</span>
+              )}
+            </SystemHeader>
+            <SystemHeader label="tmux" testId="runtime-probe-tmux">
+              <RuntimePathStatus
+                available={envProbe.tmux}
+                okLabel="available"
+              />
+              {envProbe.tmux ? (
+                <code className="codish">v{envProbe.tmuxVersion ?? "?"}</code>
+              ) : null}
+            </SystemHeader>
+          </div>
+        )}
+
+        {probeError !== null ? (
+          <div role="alert" className="form-error runtime-probe-error">
+            {probeError}
+          </div>
+        ) : null}
+      </section>
+
+      <div className="runtime-list-head">
+        <h4 className="runtime-list-title">Runtimes list</h4>
       </div>
 
       {readOnlyNote !== undefined ? (
@@ -258,6 +419,18 @@ export function RuntimesPanel({
                 color: "var(--ink-3)",
                 fontWeight: 500,
                 borderBottom: "1px solid var(--line-2)",
+                width: 96,
+              }}
+            >
+              PATH
+            </th>
+            <th
+              style={{
+                textAlign: "left",
+                padding: "6px 8px",
+                color: "var(--ink-3)",
+                fontWeight: 500,
+                borderBottom: "1px solid var(--line-2)",
               }}
             >
               Args
@@ -298,11 +471,14 @@ export function RuntimesPanel({
               <td style={{ padding: "8px", verticalAlign: "middle" }}>
                 <span
                   aria-hidden
-                  className="codish"
-                  style={{ fontSize: 11 }}
+                  className="runtime-icon"
                   title={entry.icon ?? "bot"}
                 >
-                  {(entry.icon ?? "bot").slice(0, 1).toUpperCase()}
+                  <img
+                    src={runtimeIconSrc(entry.icon, id, entry)}
+                    alt=""
+                    draggable={false}
+                  />
                 </span>
               </td>
               <td style={{ padding: "8px", verticalAlign: "middle" }}>
@@ -319,6 +495,11 @@ export function RuntimesPanel({
               </td>
               <td style={{ padding: "8px", verticalAlign: "middle" }}>
                 <code className="codish">{entry.executable}</code>
+              </td>
+              <td style={{ padding: "8px", verticalAlign: "middle" }}>
+                <RuntimePathStatus
+                  available={envProbe?.runtimes[id] ?? null}
+                />
               </td>
               <td style={{ padding: "8px", verticalAlign: "middle" }}>
                 {entry.args.length === 0 ? (
@@ -349,7 +530,7 @@ export function RuntimesPanel({
                   disabled={readOnly}
                   title={
                     readOnly
-                      ? "Read-only: edit .f-mark/runtimes.json directly"
+                      ? "Read-only runtime"
                       : undefined
                   }
                   onClick={() => openEdit(id, entry)}
@@ -363,7 +544,7 @@ export function RuntimesPanel({
                   disabled={readOnly || builtin}
                   title={
                     readOnly
-                      ? "Read-only: edit .f-mark/runtimes.json directly"
+                      ? "Read-only runtime"
                       : builtin
                         ? "Built-in runtimes cannot be removed"
                         : undefined
@@ -380,7 +561,7 @@ export function RuntimesPanel({
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 style={{
                   padding: 14,
                   color: "var(--ink-4)",
@@ -473,6 +654,26 @@ export function RuntimesPanel({
                 aria-label="Args"
               />
             </label>
+            <label
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                gridColumn: "1 / -1",
+              }}
+            >
+              <span className="form-label">Env</span>
+              <textarea
+                className="form-textarea"
+                value={form.envText}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, envText: e.target.value }))
+                }
+                placeholder="OPENAI_API_KEY=..."
+                aria-label="Env"
+                rows={3}
+              />
+            </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="form-label">Icon</span>
               <select
@@ -502,12 +703,6 @@ export function RuntimesPanel({
                 inputMode="numeric"
               />
             </label>
-          </div>
-
-          <div className="form-hint">
-            Env variables can only be set by editing
-            {" "}
-            <code className="codish">.f-mark/runtimes.json</code> directly.
           </div>
 
           {error !== null ? (

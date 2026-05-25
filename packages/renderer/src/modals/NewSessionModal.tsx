@@ -20,6 +20,8 @@ export function NewSessionModal(): JSX.Element {
   const token = useStore((s) => s.token);
   const setSessions = useStore((s) => s.setSessions);
   const setCurrentSession = useStore((s) => s.setCurrentSession);
+  const setParticipants = useStore((s) => s.setParticipants);
+  const setPathsState = useStore((s) => s.setPathsState);
   const closeModal = useStore((s) => s.closeModal);
 
   const [folder, setFolder] = useState<string | null>(null);
@@ -59,8 +61,22 @@ export function NewSessionModal(): JSX.Element {
     try {
       const session = await client.createSession({ slug, path: folder! });
 
+      try {
+        const paths = await client.getPaths();
+        if (Array.isArray(paths.knownPaths) && Array.isArray(paths.favorites)) {
+          setPathsState(paths);
+        }
+      } catch {
+        /* legacy kernel without /paths */
+      }
+
       const list = await client.listSessions();
       setSessions(list);
+      try {
+        setParticipants(await client.listParticipants());
+      } catch {
+        /* legacy or temporarily unavailable participant route */
+      }
       setCurrentSession(session.id);
 
       if (openImmediately) {

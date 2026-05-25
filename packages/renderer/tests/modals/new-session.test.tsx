@@ -85,6 +85,20 @@ function stubFetch(
     if (u.endsWith("/sessions")) {
       return Promise.resolve(jsonResponse({ sessions: [] }));
     }
+    if (u.endsWith("/paths")) {
+      return Promise.resolve(
+        jsonResponse({
+          activePath: "/home/me",
+          activePathId: "abc123abc123",
+          activeRevision: 1,
+          knownPaths: ["/home/me"],
+          favorites: [],
+        }),
+      );
+    }
+    if (u.endsWith("/participants")) {
+      return Promise.resolve(jsonResponse({ participants: PARTICIPANTS }));
+    }
     return Promise.resolve(jsonResponse({}));
   });
   vi.stubGlobal("fetch", mock);
@@ -201,6 +215,9 @@ describe("NewSessionModal (v0.5)", () => {
     await waitFor(() => {
       expect(useStore.getState().activeModal).toBeNull();
     });
+    expect(useStore.getState().activePath).toBe("/home/me");
+    expect(useStore.getState().knownPaths).toContain("/home/me");
+    expect(useStore.getState().currentUserId).toBe("us-a7f3");
   });
 
   test("close interactions: X, backdrop, Escape", async () => {

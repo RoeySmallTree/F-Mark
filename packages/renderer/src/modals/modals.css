@@ -613,6 +613,134 @@
   border: 1px solid var(--line);
 }
 
+.runtime-system {
+  margin: 16px 0 18px;
+  border-top: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-2);
+}
+.runtime-system-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+.runtime-system-kicker,
+.runtime-system-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+.runtime-system-note {
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.runtime-reprobe {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+.runtime-system-stack {
+  border-top: 1px solid var(--line-3);
+}
+.runtime-system-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 38px;
+  padding: 9px 0;
+}
+.runtime-system-header + .runtime-system-header {
+  border-top: 1px solid var(--line-3);
+}
+.runtime-system-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.runtime-system-muted,
+.runtime-system-empty {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+.runtime-system-empty {
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--line-3);
+}
+.runtime-probe-error {
+  margin-top: 0;
+  padding-bottom: 10px;
+}
+.runtime-list-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 8px;
+}
+.runtime-list-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.runtime-list-note {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  color: var(--ink-4);
+  text-align: right;
+}
+.runtime-path-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.runtime-path-pill.ok {
+  border-color: var(--green-tint);
+  background: var(--green-tint);
+  color: var(--green);
+}
+.runtime-path-pill.missing {
+  border-color: color-mix(in srgb, var(--rose) 20%, var(--line));
+  background: color-mix(in srgb, var(--rose) 9%, var(--bg));
+  color: var(--rose);
+}
+.runtime-path-pill.unknown {
+  color: var(--ink-4);
+}
+
+@media (max-width: 760px) {
+  .runtime-system-top,
+  .runtime-list-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .runtime-list-note {
+    text-align: left;
+  }
+}
+
 /* Color swatches in profile */
 .color-row {
   display: flex;
@@ -647,6 +775,38 @@
   border-color: var(--ink-4);
 }
 
+.runtime-icon {
+  --icon-ring-color: var(--agent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  padding: 2px;
+  background: var(--canvas);
+  border: 0;
+  overflow: visible;
+  position: relative;
+}
+.runtime-icon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--icon-ring-color);
+  border-radius: inherit;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.runtime-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
 /* Agent cards in Connected Agents section */
 .agent-list {
   margin: 14px 0;
@@ -666,15 +826,8 @@
 .agent-card .agent-dot {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
   flex-shrink: 0;
+  margin-left: 0;
 }
 .agent-card .agent-info {
   flex: 1;
@@ -1097,6 +1250,106 @@ kbd {
 .modal.reconnect-modal .modal-body {
   padding: 18px 22px;
 }
+.hook-status-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-2);
+  margin-bottom: 16px;
+}
+.hook-status-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.hook-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.hook-status-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.hook-status-scope {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.hook-status-path {
+  min-width: 0;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hook-status-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-4);
+}
+.hook-status-badge.on {
+  border-color: var(--green);
+  background: var(--green-tint);
+  color: var(--green);
+}
+.hook-status-badge.error {
+  border-color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 9%, transparent);
+  color: var(--rose);
+}
+.hook-status-empty {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+.hook-auto-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.hook-apply-message {
+  margin: -4px 0 12px;
+}
+.hook-install-mode {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 1px;
+  margin-bottom: 2px;
+}
+.hook-install-mode button {
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.hook-install-mode button.on {
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
 .install-instructions {
   font-family: var(--serif);
   font-size: 14px;
@@ -1150,6 +1403,9 @@ kbd {
 .install-step-snippet {
   position: relative;
 }
+.install-step-snippet .snippet-head {
+  padding-right: 76px;
+}
 .install-step-snippet .copy-btn {
   top: 8px;
   right: 8px;
@@ -1159,6 +1415,18 @@ kbd {
   font-size: 11.5px;
   color: var(--ink-4);
   margin-bottom: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+@media (max-width: 680px) {
+  .hook-status-panel {
+    grid-template-columns: 1fr;
+  }
+  .hook-auto-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 /* ============ Inline emoji picker ============

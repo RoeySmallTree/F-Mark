@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readConfig, writeConfig, type Participant } from "./project.js";
 import type { Paths } from "./paths.js";
@@ -40,6 +41,8 @@ const AGENT_COLORS = [
   "#ec4899",
 ];
 
+const USER_COLOR = "#3b82f6";
+
 const ID_PATTERN = /^(us|ag|sys|grp)-[a-z0-9-]{2,12}$/;
 
 export interface RegisterAgentInput {
@@ -74,12 +77,108 @@ export type ParticipantWithSession = Participant & {
   active_session: string | null;
 };
 
+interface ParticipantsFile {
+  participants: Record<string, Participant>;
+}
+
+function isEnoent(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    "code" in err &&
+    (err as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+function participantsFile(p: Paths): string {
+  return join(p.fmarkDir(), "participants.json");
+}
+
+function freshUserId(): string {
+  return `us-${randomBytes(2).toString("hex")}`;
+}
+
+function defaultParticipants(): Record<string, Participant> {
+  return {
+    [freshUserId()]: { kind: "user", name: "You", color: USER_COLOR },
+  };
+}
+
+async function readParticipantsFile(
+  p: Paths,
+): Promise<Record<string, Participant>> {
+  const parsed = JSON.parse(
+    await readFile(participantsFile(p), "utf8"),
+  ) as Partial<ParticipantsFile>;
+  if (
+    parsed.participants === undefined ||
+    parsed.participants === null ||
+    typeof parsed.participants !== "object"
+  ) {
+    throw new Error("participants.json is missing a participants object");
+  }
+  return parsed.participants as Record<string, Participant>;
+}
+
+async function writeParticipantsFile(
+  p: Paths,
+  participants: Record<string, Participant>,
+): Promise<void> {
+  await mkdir(p.fmarkDir(), { recursive: true });
+  await writeFile(
+    participantsFile(p),
+    JSON.stringify({ participants }, null, 2),
+    "utf8",
+  );
+}
+
+export async function readParticipants(
+  p: Paths,
+): Promise<Record<string, Participant>> {
+  try {
+    return await readParticipantsFile(p);
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+  }
+  const cfg = await readConfig(p);
+  return cfg.participants;
+}
+
+async function writeParticipants(
+  p: Paths,
+  participants: Record<string, Participant>,
+): Promise<void> {
+  await writeParticipantsFile(p, participants);
+
+  // Keep legacy config.json readers/tests coherent while the multi-path
+  // split rolls forward. Fresh v0.5 folders may not have config.json at all.
+  try {
+    const cfg = await readConfig(p);
+    cfg.participants = participants;
+    await writeConfig(p, cfg);
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+  }
+}
+
+export async function ensureDefaultUserParticipant(
+  p: Paths,
+): Promise<Record<string, Participant>> {
+  try {
+    return await readParticipants(p);
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+  }
+  const participants = defaultParticipants();
+  await writeParticipantsFile(p, participants);
+  return participants;
+}
+
 export async function listParticipants(
   p: Paths,
 ): Promise<Record<string, ParticipantWithSession>> {
-  const cfg = await readConfig(p);
+  const participants = await readParticipants(p);
   const out: Record<string, ParticipantWithSession> = {};
-  for (const [id, part] of Object.entries(cfg.participants)) {
+  for (const [id, part] of Object.entries(participants)) {
     if (part.kind === "agent") {
       const active_session = await readActiveSession(
         join(p.fmarkDir(), "agents"),
@@ -117,20 +216,20 @@ export async function registerAgent(
   if (input.runtime_id !== undefined) {
     await assertKnownRuntime(p, input.runtime_id);
   }
-  const cfg = await readConfig(p);
+  const participants = await ensureDefaultUserParticipant(p);
   let id: string;
   if (input.suggested_id !== undefined) {
     if (!ID_PATTERN.test(input.suggested_id)) {
       throw new Error(`invalid participant id format: ${input.suggested_id}`);
     }
-    if (input.suggested_id in cfg.participants) {
+    if (input.suggested_id in participants) {
       throw new Error(`participant ${input.suggested_id} already registered`);
     }
     id = input.suggested_id;
   } else {
-    id = freshAgentId(cfg.participants);
+    id = freshAgentId(participants);
   }
-  const color = nextColor(cfg.participants);
+  const color = nextColor(participants);
   const participant: Participant = {
     kind: "agent",
     name,
@@ -139,8 +238,8 @@ export async function registerAgent(
   if (input.runtime_id !== undefined) {
     participant.runtime_id = input.runtime_id;
   }
-  cfg.participants[id] = participant;
-  await writeConfig(p, cfg);
+  participants[id] = participant;
+  await writeParticipants(p, participants);
   return { id, name, color };
 }
 
@@ -154,13 +253,13 @@ export async function setParticipantRuntime(
   runtimeId: string,
 ): Promise<void> {
   await assertKnownRuntime(p, runtimeId);
-  const cfg = await readConfig(p);
-  const current = cfg.participants[id];
+  const participants = await readParticipants(p);
+  const current = participants[id];
   if (current === undefined) return;
   if (current.runtime_id === runtimeId) return;
   current.runtime_id = runtimeId;
-  cfg.participants[id] = current;
-  await writeConfig(p, cfg);
+  participants[id] = current;
+  await writeParticipants(p, participants);
 }
 
 export function isValidParticipantId(id: string): boolean {
@@ -181,8 +280,8 @@ export async function updateParticipant(
   if (!ID_PATTERN.test(id)) {
     throw new Error(`invalid participant id format: ${id}`);
   }
-  const cfg = await readConfig(p);
-  const current = cfg.participants[id];
+  const participants = await readParticipants(p);
+  const current = participants[id];
   if (current === undefined) {
     throw new Error(`participant not found: ${id}`);
   }
@@ -195,8 +294,8 @@ export async function updateParticipant(
     }
     current.color = input.color;
   }
-  cfg.participants[id] = current;
-  await writeConfig(p, cfg);
+  participants[id] = current;
+  await writeParticipants(p, participants);
   return {
     id,
     kind: current.kind,

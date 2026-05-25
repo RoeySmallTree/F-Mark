@@ -93,5 +93,55 @@ describe("ProseCard", () => {
     expect(target).not.toBeNull();
     expect(target!.file).toBe(ev.filename);
     expect(target!.lines?.[0]).toBe(3);
+    expect(useStore.getState().rightTab).toBe("comments");
+  });
+
+  test("line comment markers are sorted and visually separated without mutating comments", () => {
+    const ev = makeProse(
+      "20260522T120400Z_ag-c92e.prose.md",
+      "ag-c92e",
+      {
+        name: "Close Pins",
+        content: ["One", "Two", "Three", "Four", "Five"].join("\n"),
+      },
+    );
+    const comments = [
+      makeProse("20260522T120503Z_us-a7f3.prose.md", "us-a7f3", {
+        content: "Fourth",
+        target: { file: ev.filename, lines: [4, 4] },
+      }),
+      makeProse("20260522T120501Z_us-a7f3.prose.md", "us-a7f3", {
+        content: "Second",
+        target: { file: ev.filename, lines: [2, 2] },
+      }),
+      makeProse("20260522T120502Z_us-a7f3.prose.md", "us-a7f3", {
+        content: "Third",
+        target: { file: ev.filename, lines: [3, 3] },
+      }),
+    ];
+    const originalOrder = comments.map((comment) => comment.filename);
+
+    const { container } = render(
+      <ProseCard event={ev} participants={PARTICIPANTS} comments={comments} />,
+    );
+
+    expect(comments.map((comment) => comment.filename)).toEqual(originalOrder);
+    const anchors = Array.from(
+      container.querySelectorAll<HTMLElement>(".line-comment-anchor.existing"),
+    );
+    expect(anchors.map((anchor) => anchor.dataset.targetLines)).toEqual([
+      "2:2",
+      "3:3",
+      "4:4",
+    ]);
+    const centers = anchors.map((anchor) => {
+      const top = Number.parseFloat(anchor.style.top);
+      const iconTop = Number.parseFloat(
+        anchor.style.getPropertyValue("--icon-top"),
+      );
+      return top + iconTop;
+    });
+    expect(centers[1]! - centers[0]!).toBeGreaterThanOrEqual(34);
+    expect(centers[2]! - centers[1]!).toBeGreaterThanOrEqual(34);
   });
 });

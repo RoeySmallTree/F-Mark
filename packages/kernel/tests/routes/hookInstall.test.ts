@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { registerHookInstallRoutes } from "../../src/routes/hookInstall.js";
 import { paths } from "../../src/paths.js";
@@ -46,19 +46,26 @@ describe("hook-install routes", () => {
     const app = await makeApp();
     const res = await app.inject({
       method: "POST",
-      url: "/managed-agents/hook-install-instructions?runtime_id=claude&participant_id=ag-claude-1&user_participant_id=us-1",
+      url: "/managed-agents/hook-install-instructions?runtime_id=claude",
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().markdown).toContain("ag-claude-1");
-    expect(res.json().manualSteps[0].configPath).toBe("~/.claude/settings.json");
+    expect(res.json().markdown).toContain("npx -y f-mark hook auto-stream");
+    expect(res.json().markdown).not.toContain("ag-claude-1");
+    expect(res.json().markdown).not.toContain("UserPromptSubmit");
+    expect(res.json().manualSteps[0].configPath).toBe(
+      ".claude/settings.json or ~/.claude/settings.json",
+    );
+    expect(res.json().promptSteps[0].text).toContain(
+      "npx -y f-mark hook auto-stream",
+    );
     await app.close();
   });
 
-  it("POST hook-install-instructions 400 on missing params", async () => {
+  it("POST hook-install-instructions 400 on missing runtime", async () => {
     const app = await makeApp();
     const res = await app.inject({
       method: "POST",
-      url: "/managed-agents/hook-install-instructions?runtime_id=claude",
+      url: "/managed-agents/hook-install-instructions",
     });
     expect(res.statusCode).toBe(400);
     await app.close();
@@ -97,6 +104,41 @@ describe("hook-install routes", () => {
           (e: { event: string }) => e.event === "UserPromptSubmit",
         ),
       ).toBe(true);
+      await app.close();
+    });
+  });
+
+  it("POST hook-install-apply merges Claude hooks into project-local settings", async () => {
+    await withTempProject(async (root) => {
+      await mkdir(join(root, ".claude"), { recursive: true });
+      await writeFile(
+        join(root, ".claude", "settings.json"),
+        JSON.stringify({ theme: "dark", hooks: { Stop: [{ hooks: [] }] } }),
+        "utf8",
+      );
+
+      const app = await makeApp(root);
+      const res = await app.inject({
+        method: "POST",
+        url: "/managed-agents/hook-install-apply?runtime_id=claude",
+        payload: { scope: "local" },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.applied).toBe(true);
+      expect(body.scope).toBe("local");
+      expect(body.status.installed).toBe(true);
+      expect(body.status.locations[0].installed).toBe(true);
+
+      const saved = JSON.parse(
+        await readFile(join(root, ".claude", "settings.json"), "utf8"),
+      );
+      expect(saved.theme).toBe("dark");
+      expect(JSON.stringify(saved.hooks)).toContain(
+        "npx -y f-mark hook auto-stream",
+      );
+      expect(JSON.stringify(saved.hooks)).not.toContain("ag-claude-1");
+      expect(JSON.stringify(saved.hooks)).not.toContain("us-1");
       await app.close();
     });
   });

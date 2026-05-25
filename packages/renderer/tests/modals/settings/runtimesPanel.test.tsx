@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { RuntimeEntry } from "@f-mark/shared";
+import type { EnvProbeResult, RuntimeEntry } from "@f-mark/shared";
 import { RuntimesPanel } from "../../../src/modals/settings/RuntimesPanel.js";
 
 afterEach(() => {
@@ -40,6 +40,14 @@ const BASE_RUNTIMES: Record<string, RuntimeEntry> = {
   },
 };
 
+const HEALTHY_PROBE: EnvProbeResult = {
+  tmux: true,
+  tmuxVersion: "3.4",
+  runtimes: { claude: true, codex: false, gemini: true },
+  installer: "apt",
+  os: "linux",
+};
+
 function noopAsync(): Promise<void> {
   return Promise.resolve();
 }
@@ -63,6 +71,64 @@ describe("RuntimesPanel", () => {
     expect(within(table).getByText("Gemini")).toBeInTheDocument();
     // The args column for codex should show "--hello"
     expect(within(table).getByText(/--hello/)).toBeInTheDocument();
+  });
+
+  it("renders probe details as system headers before the runtime list", () => {
+    render(
+      <RuntimesPanel
+        runtimes={BASE_RUNTIMES}
+        envProbe={HEALTHY_PROBE}
+        onAdd={() => noopAsync()}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+      />,
+    );
+
+    expect(screen.getByTestId("runtime-probe-os")).toHaveTextContent(/linux/i);
+    expect(screen.getByTestId("runtime-probe-installer")).toHaveTextContent(
+      /apt/i,
+    );
+    expect(screen.getByTestId("runtime-probe-tmux")).toHaveTextContent(/3\.4/);
+    expect(
+      screen.getByRole("heading", { name: /runtimes list/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows each runtime PATH status from the env probe", () => {
+    render(
+      <RuntimesPanel
+        runtimes={BASE_RUNTIMES}
+        envProbe={HEALTHY_PROBE}
+        onAdd={() => noopAsync()}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+      />,
+    );
+
+    expect(screen.getByTestId("runtime-row-claude")).toHaveTextContent(
+      /on PATH/i,
+    );
+    expect(screen.getByTestId("runtime-row-codex")).toHaveTextContent(
+      /missing/i,
+    );
+  });
+
+  it("clicking Re-probe calls onReprobe", async () => {
+    const user = userEvent.setup();
+    const onReprobe = vi.fn().mockResolvedValue(undefined);
+    render(
+      <RuntimesPanel
+        runtimes={BASE_RUNTIMES}
+        envProbe={HEALTHY_PROBE}
+        onReprobe={onReprobe}
+        onAdd={() => noopAsync()}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /re-?probe/i }));
+    expect(onReprobe).toHaveBeenCalledTimes(1);
   });
 
   it("marks each row as builtin", () => {
@@ -158,6 +224,7 @@ describe("RuntimesPanel", () => {
     expect(screen.getByLabelText(/display name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/executable/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/args/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^env$/i)).toBeInTheDocument();
   });
 
   it("calls onAdd with a parsed entry when Save is clicked", async () => {
@@ -176,15 +243,39 @@ describe("RuntimesPanel", () => {
     await user.type(screen.getByLabelText(/display name/i), "My Bot");
     await user.type(screen.getByLabelText(/executable/i), "mybot");
     await user.type(screen.getByLabelText(/args/i), "--foo bar");
+    await user.type(screen.getByLabelText(/^env$/i), "FOO=bar\nTOKEN=a=b");
     await user.click(screen.getByRole("button", { name: /save runtime/i }));
 
     expect(onAdd).toHaveBeenCalledWith("mybot", {
       displayName: "My Bot",
       executable: "mybot",
       args: ["--foo", "bar"],
+      env: { FOO: "bar", TOKEN: "a=b" },
       icon: "bot",
       readyDelayMs: 1500,
     });
+  });
+
+  it("rejects invalid env lines", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(
+      <RuntimesPanel
+        runtimes={BASE_RUNTIMES}
+        onAdd={onAdd}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /add runtime/i }));
+    await user.type(screen.getByLabelText(/runtime id/i), "mybot");
+    await user.type(screen.getByLabelText(/display name/i), "My Bot");
+    await user.type(screen.getByLabelText(/executable/i), "mybot");
+    await user.type(screen.getByLabelText(/^env$/i), "BAD LINE");
+    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toMatch(/env/i);
   });
 
   it("rejects the form with an invalid executable", async () => {
@@ -261,7 +352,7 @@ describe("RuntimesPanel", () => {
   });
 
   it("renders the readOnlyNote when provided", () => {
-    const NOTE = "v0.4: edit .f-mark/runtimes.json directly to change runtimes.";
+    const NOTE = "Runtime editing is unavailable in this environment.";
     render(
       <RuntimesPanel
         runtimes={BASE_RUNTIMES}
@@ -290,7 +381,7 @@ describe("RuntimesPanel", () => {
         onAdd={() => noopAsync()}
         onUpdate={() => noopAsync()}
         onRemove={() => noopAsync()}
-        readOnlyNote="v0.4: edit .f-mark/runtimes.json directly."
+        readOnlyNote="Runtime editing is unavailable in this environment."
       />,
     );
     /* All Edit buttons are disabled — both builtin and custom rows. */

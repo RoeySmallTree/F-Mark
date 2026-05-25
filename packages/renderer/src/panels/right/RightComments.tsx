@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +26,7 @@ import type {
 import { getCommentTarget } from "@f-mark/shared";
 import { createClient, type PostProseBody } from "../../api/client.js";
 import { formatWhen, whoOf } from "../../cards/format.js";
+import { ParticipantAvatar } from "../../components/ParticipantAvatar.js";
 import { useStore } from "../../state/store.js";
 
 type LineRange = [number, number];
@@ -321,6 +324,7 @@ export function RightComments(): JSX.Element {
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const focusedScrollRafRef = useRef<number | null>(null);
 
   const groups = useMemo(() => buildCommentGroups(events), [events]);
   const activeKey =
@@ -331,9 +335,9 @@ export function RightComments(): JSX.Element {
   const currentWho =
     currentUserId !== null
       ? whoOf(currentUserId, participants)
-      : { name: "You", initial: "Y", isUser: true };
+      : { id: "us-local", name: "You", initial: "Y", isUser: true };
 
-  function scrollFocusedGroup(group: CommentGroup): void {
+  const scrollFocusedGroup = useCallback((group: CommentGroup): void => {
     const panel = panelRef.current?.closest<HTMLElement>(".panel-scroll");
     const card = panelRef.current?.querySelector<HTMLElement>(
       `[data-thread-key="${cssEscape(group.key)}"]`,
@@ -346,9 +350,29 @@ export function RightComments(): JSX.Element {
       Math.max(0, (panel.clientHeight - card.offsetHeight) / 2);
     scrollToTop(panel, Math.max(0, targetTop));
     window.requestAnimationFrame(() => alignFeedAnchorToCard(group, card));
-  }
+  }, []);
 
-  function computeLayout(): void {
+  const cancelFocusedScroll = useCallback((): void => {
+    if (focusedScrollRafRef.current !== null) {
+      window.cancelAnimationFrame(focusedScrollRafRef.current);
+      focusedScrollRafRef.current = null;
+    }
+  }, []);
+
+  const scheduleFocusedGroupScroll = useCallback(
+    (group: CommentGroup): void => {
+      cancelFocusedScroll();
+      focusedScrollRafRef.current = window.requestAnimationFrame(() => {
+        focusedScrollRafRef.current = window.requestAnimationFrame(() => {
+          focusedScrollRafRef.current = null;
+          scrollFocusedGroup(group);
+        });
+      });
+    },
+    [cancelFocusedScroll, scrollFocusedGroup],
+  );
+
+  const computeLayout = useCallback((): void => {
     const panel = panelRef.current;
     if (panel === null) return;
     const panelRect = panel.getBoundingClientRect();
@@ -390,30 +414,36 @@ export function RightComments(): JSX.Element {
       return Math.max(max, top + item.height + CARD_GAP);
     }, 240);
     setLayout({ positions, height });
-  }
+  }, [activeKey, groups]);
+
+  useLayoutEffect(() => {
+    computeLayout();
+  }, [computeLayout]);
 
   useEffect(() => {
-    let raf = window.requestAnimationFrame(computeLayout);
+    let raf: number | null = null;
     const schedule = (): void => {
-      window.cancelAnimationFrame(raf);
+      if (raf !== null) window.cancelAnimationFrame(raf);
       raf = window.requestAnimationFrame(computeLayout);
     };
     const feed = document.querySelector<HTMLElement>(".feed-scroll");
     feed?.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
     return () => {
-      window.cancelAnimationFrame(raf);
+      if (raf !== null) window.cancelAnimationFrame(raf);
       feed?.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, [groups, activeKey]);
+  }, [computeLayout]);
+
+  useEffect(() => cancelFocusedScroll, [cancelFocusedScroll]);
 
   useEffect(() => {
     if (activeKey === null) return;
     const group = groups.find((item) => item.key === activeKey);
     if (group === undefined) return;
-    scrollFocusedGroup(group);
-  }, [activeKey, groups]);
+    scheduleFocusedGroupScroll(group);
+  }, [activeKey, groups, scheduleFocusedGroupScroll]);
 
   async function refreshEvents(): Promise<void> {
     if (currentSessionId === null) return;
@@ -451,7 +481,7 @@ export function RightComments(): JSX.Element {
         : { file: group.targetFile, lines: group.lines },
     );
     setRightTab("comments");
-    window.requestAnimationFrame(() => scrollFocusedGroup(group));
+    scheduleFocusedGroupScroll(group);
   }
 
   async function submitReply(group: CommentGroup, root: AnyEventRecord): Promise<void> {
@@ -652,12 +682,14 @@ function ThreadCard({
       {group.quote !== null && <blockquote className="right-comments-quote">{group.quote}</blockquote>}
       {!active && first !== undefined && firstWho !== null && (
         <div className="right-comment-preview">
-          <span
-            className={["avatar", firstWho.isUser ? "user" : "agent", "sm"].join(" ")}
-            aria-hidden
-          >
-            {firstWho.initial}
-          </span>
+          <ParticipantAvatar
+            participantId={firstWho.id}
+            kind={firstWho.isUser ? "user" : "agent"}
+            name={firstWho.name}
+            color={firstWho.color}
+            runtimeId={firstWho.runtimeId}
+            size="sm"
+          />
           <p>
             <b>{firstWho.name}</b> {shortPreview(contentOf(first), 96)}
           </p>
@@ -770,12 +802,14 @@ function CommentRoot({
       ))}
       <div className="right-comment-tools" onClick={(e) => e.stopPropagation()}>
         <div className="right-comment-replybox">
-          <span
-            className={["avatar", currentWho.isUser ? "user" : "agent", "sm"].join(" ")}
-            aria-hidden
-          >
-            {currentWho.initial}
-          </span>
+          <ParticipantAvatar
+            participantId={currentWho.id}
+            kind={currentWho.isUser ? "user" : "agent"}
+            name={currentWho.name}
+            color={currentWho.color}
+            runtimeId={currentWho.runtimeId}
+            size="sm"
+          />
           <input
             type="text"
             value={replyDraft}
@@ -859,12 +893,14 @@ function CommentMessage({
 
   return (
     <div className={["right-comment-msg", reply ? "reply" : ""].join(" ").trim()}>
-      <span
-        className={["avatar", who.isUser ? "user" : "agent", "sm"].join(" ")}
-        aria-hidden
-      >
-        {who.initial}
-      </span>
+      <ParticipantAvatar
+        participantId={who.id}
+        kind={who.isUser ? "user" : "agent"}
+        name={who.name}
+        color={who.color}
+        runtimeId={who.runtimeId}
+        size="sm"
+      />
       <div className="right-comment-msg-body" onClick={(e) => e.stopPropagation()}>
         <div className="right-comment-msg-meta">
           <b>{who.name}</b>

@@ -11,6 +11,7 @@ import type { Participant, TodoPayload, TodoTreeNode } from "@f-mark/shared";
 import { Check, CircleDot, CornerDownRight, Plus, X } from "lucide-react";
 import { fieldValue, countDescendants } from "../panels/todoPanelUtils.js";
 import { whoOf } from "./format.js";
+import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
 export interface TodoItemNode {
   id: string;
@@ -365,16 +366,14 @@ export function TodoItem({
                 onClick={() => setAssigneeOpen((value) => !value)}
               >
                 {assignee !== null ? (
-                  <span
-                    className={[
-                      "avatar",
-                      assignee.isUser ? "user" : "agent",
-                      "sm",
-                    ].join(" ")}
-                    aria-hidden
-                  >
-                    {assignee.initial}
-                  </span>
+                  <ParticipantAvatar
+                    participantId={assignee.id}
+                    kind={assignee.isUser ? "user" : "agent"}
+                    name={assignee.name}
+                    color={assignee.color}
+                    runtimeId={assignee.runtimeId}
+                    size="sm"
+                  />
                 ) : null}
                 {assignee === null ? "unassigned" : `assigned to ${assignee.name}`}
               </button>
@@ -401,16 +400,15 @@ export function TodoItem({
                         className="todo-assignee-option"
                         onClick={() => void selectAssignee(participantId)}
                       >
-                        <span
-                          className={[
-                            "avatar",
-                            participant.kind === "user" ? "user" : "agent",
-                            "sm",
-                          ].join(" ")}
-                          aria-hidden
-                        >
-                          {who.initial}
-                        </span>
+                        <ParticipantAvatar
+                          participantId={participantId}
+                          participant={participant}
+                          kind={participant.kind}
+                          name={who.name}
+                          color={participant.color}
+                          runtimeId={participant.runtime_id ?? null}
+                          size="sm"
+                        />
                         {who.name}
                       </button>
                     );

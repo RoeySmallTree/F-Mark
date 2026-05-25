@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mkdtemp, mkdir, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runAutoStream } from "../../src/hooks/autoStream.js";
@@ -81,10 +81,44 @@ describe("runAutoStream(assistant)", () => {
       stop_hook_active: false,
     }));
     expect(exit).toBe(0);
-    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("no active session"));
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("no F-Mark session"));
     // No active session → no ping (no participant to ping for).
     expect((globalThis.fetch as any)).not.toHaveBeenCalled();
     stderr.mockRestore();
+  });
+
+  it("allocates and registers an agent for a generic hook", async () => {
+    const { dir, fmark, transcript } = await bootstrapProject();
+    await mkdir(join(fmark, "sessions", "2026-01-01-dynamic"), {
+      recursive: true,
+    });
+    const stdin = {
+      session_id: "claude-dynamic-1",
+      transcript_path: transcript,
+      cwd: dir,
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+    };
+    const exit = await runAutoStream(null, "assistant", JSON.stringify(stdin));
+    expect(exit).toBe(0);
+
+    const map = JSON.parse(
+      await readFile(join(fmark, "hooks", "auto-stream-agents.json"), "utf8"),
+    );
+    const participantId =
+      map.sessions["claude:claude-dynamic-1"].participant_id;
+    expect(participantId).toMatch(/^ag-/);
+    const participants = JSON.parse(
+      await readFile(join(fmark, "participants.json"), "utf8"),
+    ).participants;
+    expect(participants[participantId].kind).toBe("agent");
+    expect(participants[participantId].name).toBe("Claude");
+
+    const f = (globalThis.fetch as any) as ReturnType<typeof vi.fn>;
+    expect(f.mock.calls[0][0]).toContain(`/agents/${participantId}/ping`);
+    expect(f.mock.calls[1][0]).toContain(
+      "/sessions/2026-01-01-dynamic/events/prose",
+    );
   });
 });
 

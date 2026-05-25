@@ -1,25 +1,31 @@
-/* SettingsModal — the 8-section settings dialog.
+/* SettingsModal — the 7-section settings dialog.
    Layout: 880px modal, 220px side-nav on the left, content pane on the right
    (min height 520px). Sections: Profile, Connected agents, Runtimes, Hooks,
-   Env probe, Appearance, Keyboard shortcuts, About. The active section
-   lives in local state; switching between them is instant and never
-   reaches the network (except for `Hooks`, which fetches install status
-   per runtime, and `Env probe` when Re-probe is clicked). */
+   Appearance, Keyboard shortcuts, About. The active section lives in local
+   state; switching between them is instant and never reaches the network
+   except for `Hooks`, which fetches install status per runtime, and
+   `Runtimes` when Re-probe is clicked. */
 
-import { useCallback, useContext, useMemo, useState, type JSX } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type JSX,
+} from "react";
 import {
   AtSign,
   Boxes,
   Eye,
   FileText,
   Keyboard,
-  Radar,
   ShieldCheck,
   X,
   Zap,
 } from "lucide-react";
 import type { RuntimeEntry } from "@f-mark/shared";
-import { useStore } from "../../state/store.js";
+import { useStore, type SettingsSectionKey } from "../../state/store.js";
 import { Profile } from "./Profile.js";
 import { Agents } from "./Agents.js";
 import { Appearance } from "./Appearance.js";
@@ -27,19 +33,8 @@ import { Shortcuts } from "./Shortcuts.js";
 import { About } from "./About.js";
 import { RuntimesPanel } from "./RuntimesPanel.js";
 import { HookStatusPanel } from "./HookStatusPanel.js";
-import { EnvProbePanel } from "./EnvProbePanel.js";
 import { createManagedAgentsClient } from "../../api/managedAgents.js";
 import { TopBarModalContext } from "../../App.js";
-
-export type SettingsSectionKey =
-  | "profile"
-  | "agents"
-  | "runtimes"
-  | "hooks"
-  | "env-probe"
-  | "appearance"
-  | "shortcuts"
-  | "about";
 
 interface SectionDef {
   id: SettingsSectionKey;
@@ -52,17 +47,15 @@ const SECTIONS: SectionDef[] = [
   { id: "agents", label: "Connected agents", icon: <Zap size={14} /> },
   { id: "runtimes", label: "Runtimes", icon: <Boxes size={14} /> },
   { id: "hooks", label: "Hooks", icon: <ShieldCheck size={14} /> },
-  { id: "env-probe", label: "Env probe", icon: <Radar size={14} /> },
   { id: "appearance", label: "Appearance", icon: <Eye size={14} /> },
   { id: "shortcuts", label: "Keyboard shortcuts", icon: <Keyboard size={14} /> },
   { id: "about", label: "About", icon: <FileText size={14} /> },
 ];
 
 /* The kernel ships these three runtimes as builtins (see
-   packages/kernel/src/runtimes/defaults.ts). For v0.4 we use the same map
-   the TopBar uses (KNOWN_RUNTIMES) to surface display names + executables
-   for the panels — until the kernel exposes `/runtimes` HTTP routes the
-   renderer can't enumerate user-edited entries from `.f-mark/runtimes.json`. */
+   packages/kernel/src/runtimes/defaults.ts). The kernel `/runtimes` routes
+   persist custom entries to `.f-mark/runtimes.json`; env-probe supplies the
+   current PATH availability for the same ids. */
 const BUILTIN_RUNTIME_ENTRIES: Record<string, RuntimeEntry> = {
   claude: {
     displayName: "Claude Code",
@@ -87,9 +80,6 @@ const BUILTIN_RUNTIME_ENTRIES: Record<string, RuntimeEntry> = {
   },
 };
 
-const READ_ONLY_NOTE =
-  "v0.4: the kernel does not yet expose /runtimes CRUD endpoints. Edit .f-mark/runtimes.json directly to add or change custom runtimes; restart the kernel to pick up the change.";
-
 export function SettingsModal(): JSX.Element {
   const closeModal = useStore((s) => s.closeModal);
   const token = useStore((s) => s.token);
@@ -97,7 +87,8 @@ export function SettingsModal(): JSX.Element {
   const setEnvProbe = useStore((s) => s.setEnvProbe);
   const managedAgents = useStore((s) => s.managedAgents);
   const currentUserId = useStore((s) => s.currentUserId);
-  const [section, setSection] = useState<SettingsSectionKey>("profile");
+  const section = useStore((s) => s.settingsSection);
+  const setSection = useStore((s) => s.setSettingsSection);
 
   const modalCtx = useContext(TopBarModalContext);
 
@@ -105,18 +96,47 @@ export function SettingsModal(): JSX.Element {
     () => createManagedAgentsClient({ baseUrl: "", token }),
     [token],
   );
+  const [runtimeRegistry, setRuntimeRegistry] = useState<Record<
+    string,
+    RuntimeEntry
+  > | null>(null);
 
-  /* Build the runtimes map. envProbe.runtimes is the authoritative set of
-     registered runtime ids; we hydrate each from BUILTIN_RUNTIME_ENTRIES and
-     fall back to a minimal stub for unknown ids. */
+  useEffect(() => {
+    let alive = true;
+    void apiClient
+      .listRuntimes()
+      .then((cfg) => {
+        if (!alive) return;
+        if (
+          cfg.runtimes === undefined ||
+          cfg.runtimes === null ||
+          typeof cfg.runtimes !== "object"
+        ) {
+          throw new Error("GET /runtimes returned no runtimes object");
+        }
+        setRuntimeRegistry(cfg.runtimes);
+      })
+      .catch(() => {
+        if (alive) setRuntimeRegistry(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [apiClient]);
+
+  /* Build the runtimes map from the registry plus built-ins and any IDs
+     reported by env-probe. The registry is authoritative for editable fields;
+     built-ins stay visible while the registry request is still loading. */
   const runtimes = useMemo<Record<string, RuntimeEntry>>(() => {
-    const ids =
-      envProbe !== null
-        ? Object.keys(envProbe.runtimes)
-        : Object.keys(BUILTIN_RUNTIME_ENTRIES);
+    const ids = new Set([
+      ...Object.keys(BUILTIN_RUNTIME_ENTRIES),
+      ...(runtimeRegistry !== null ? Object.keys(runtimeRegistry) : []),
+      ...(envProbe !== null ? Object.keys(envProbe.runtimes) : []),
+    ]);
     const out: Record<string, RuntimeEntry> = {};
     for (const id of ids) {
       out[id] =
+        runtimeRegistry?.[id] ??
         BUILTIN_RUNTIME_ENTRIES[id] ??
         ({
           displayName: id,
@@ -125,7 +145,7 @@ export function SettingsModal(): JSX.Element {
         } satisfies RuntimeEntry);
     }
     return out;
-  }, [envProbe]);
+  }, [envProbe, runtimeRegistry]);
 
   /* For Hooks: pick a representative managed-agent participant per runtime so
      we can call /hook-install-status without making the user choose one. */
@@ -144,14 +164,52 @@ export function SettingsModal(): JSX.Element {
     setEnvProbe(r);
   }, [apiClient, setEnvProbe]);
 
-  const noopRuntimeMutation = useCallback(async () => {
-    /* v0.4: no /runtimes HTTP routes — see READ_ONLY_NOTE. */
-  }, []);
+  const handleAddRuntime = useCallback(
+    async (id: string, entry: RuntimeEntry) => {
+      const cfg = await apiClient.upsertRuntime(id, entry);
+      setRuntimeRegistry(cfg.runtimes);
+      try {
+        await handleReprobe();
+      } catch {
+        // Saving the runtime succeeded; the user can re-probe manually.
+      }
+    },
+    [apiClient, handleReprobe],
+  );
+
+  const handleUpdateRuntime = useCallback(
+    async (id: string, entry: RuntimeEntry) => {
+      const cfg = await apiClient.upsertRuntime(id, entry);
+      setRuntimeRegistry(cfg.runtimes);
+      try {
+        await handleReprobe();
+      } catch {
+        // Saving the runtime succeeded; the user can re-probe manually.
+      }
+    },
+    [apiClient, handleReprobe],
+  );
+
+  const handleRemoveRuntime = useCallback(
+    async (id: string) => {
+      const cfg = await apiClient.removeRuntime(id);
+      setRuntimeRegistry(cfg.runtimes);
+      try {
+        await handleReprobe();
+      } catch {
+        // Removing the runtime succeeded; the user can re-probe manually.
+      }
+    },
+    [apiClient, handleReprobe],
+  );
 
   const handleShowInstructions = useCallback(
-    (runtimeId: string, participantId: string) => {
+    (runtimeId: string, participantId?: string) => {
       if (modalCtx !== null) {
-        modalCtx.openHookInstall(runtimeId, participantId);
+        modalCtx.openHookInstall(
+          runtimeId,
+          runtimeId === "claude" ? undefined : participantId,
+        );
       }
     },
     [modalCtx],
@@ -202,10 +260,11 @@ export function SettingsModal(): JSX.Element {
           {section === "runtimes" ? (
             <RuntimesPanel
               runtimes={runtimes}
-              onAdd={noopRuntimeMutation}
-              onUpdate={noopRuntimeMutation}
-              onRemove={noopRuntimeMutation}
-              readOnlyNote={READ_ONLY_NOTE}
+              envProbe={envProbe}
+              onReprobe={handleReprobe}
+              onAdd={handleAddRuntime}
+              onUpdate={handleUpdateRuntime}
+              onRemove={handleRemoveRuntime}
             />
           ) : null}
           {section === "hooks" ? (
@@ -216,9 +275,6 @@ export function SettingsModal(): JSX.Element {
               apiClient={apiClient}
               onShowInstructions={handleShowInstructions}
             />
-          ) : null}
-          {section === "env-probe" ? (
-            <EnvProbePanel envProbe={envProbe} onReprobe={handleReprobe} />
           ) : null}
           {section === "appearance" ? <Appearance /> : null}
           {section === "shortcuts" ? <Shortcuts /> : null}

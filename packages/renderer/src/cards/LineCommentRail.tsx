@@ -18,6 +18,7 @@ import { createClient } from "../api/client.js";
 import { MarkdownRenderer, type MarkdownMode } from "../render/MarkdownRenderer.js";
 import { useStore } from "../state/store.js";
 import { whoOf } from "./format.js";
+import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
 type LineRange = [number, number];
 
@@ -161,7 +162,7 @@ export function LineCommentRail({
   const currentWho =
     currentUserId !== null
       ? whoOf(currentUserId, participants)
-      : { name: "You", initial: "Y", isUser: true };
+      : { id: "us-local", name: "You", initial: "Y", isUser: true, runtimeId: null };
 
   const anchors = useMemo<AnchorGroup[]>(() => {
     const byLine = new Map<string, AnchorGroup>();
@@ -450,16 +451,14 @@ export function LineCommentRail({
           style={{ top: popoverTop }}
         >
           <div className="line-comment-popover-head">
-            <span
-              className={[
-                "avatar",
-                currentWho.isUser ? "user" : "agent",
-                "sm",
-              ].join(" ")}
-              aria-hidden
-            >
-              {currentWho.initial}
-            </span>
+            <ParticipantAvatar
+              participantId={currentWho.id}
+              kind={currentWho.isUser ? "user" : "agent"}
+              name={currentWho.name}
+              color={currentWho.color}
+              runtimeId={currentWho.runtimeId}
+              size="sm"
+            />
             <div className="line-comment-author">
               <b>{currentWho.name}</b>
               <span>{lineLabel(popoverTarget)}</span>

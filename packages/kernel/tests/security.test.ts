@@ -46,8 +46,50 @@ describe("security", () => {
       const { app } = createServer({ token: "secret", paths: p });
       const health = await app.inject({ method: "GET", url: "/health" });
       expect(health.statusCode).toBe(200);
+      expect(health.json().processApiEnabled).toBe(true);
       const sessions = await app.inject({ method: "GET", url: "/sessions" });
       expect(sessions.statusCode).toBe(401);
+      await app.close();
+    });
+  });
+
+  it("/health reports when process-spawning routes are disabled under --no-auth", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({
+        token: null,
+        paths: p,
+        allowProcessApiNoAuth: false,
+      });
+      const health = await app.inject({ method: "GET", url: "/health" });
+      expect(health.statusCode).toBe(200);
+      expect(health.json().processApiEnabled).toBe(false);
+      await app.close();
+    });
+  });
+
+  it("allows localhost dev CORS preflight before auth", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: "secret", paths: p });
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/runtimes/claude",
+        headers: {
+          origin: "http://localhost:5173",
+          "access-control-request-method": "PUT",
+          "access-control-request-headers": "content-type, authorization",
+        },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe(
+        "http://localhost:5173",
+      );
+      expect(String(res.headers["access-control-allow-methods"])).toContain(
+        "PUT",
+      );
       await app.close();
     });
   });

@@ -10,6 +10,15 @@ describe("CLI: f-mark hook auto-stream", () => {
     spy.mockRestore();
   });
 
+  it("supports a generic hook with no participant_id", async () => {
+    const mod = await import("../../src/hooks/autoStream.js");
+    const spy = vi.spyOn(mod, "runAutoStream").mockResolvedValue(0);
+    const { runCli } = await import("../../src/cli.js");
+    await runCli(["hook", "auto-stream"], { stdin: '{"cwd":"/tmp"}' });
+    expect(spy).toHaveBeenCalledWith(null, "assistant", '{"cwd":"/tmp"}');
+    spy.mockRestore();
+  });
+
   it("supports --kind user", async () => {
     const mod = await import("../../src/hooks/autoStream.js");
     const spy = vi.spyOn(mod, "runAutoStream").mockResolvedValue(0);
@@ -19,12 +28,16 @@ describe("CLI: f-mark hook auto-stream", () => {
     spy.mockRestore();
   });
 
-  it("exits with code 2 when participant_id is missing", async () => {
+  it("supports --kind without a participant_id", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const mod = await import("../../src/hooks/autoStream.js");
+    const spy = vi.spyOn(mod, "runAutoStream").mockResolvedValue(0);
     const { runCli } = await import("../../src/cli.js");
-    const exit = await runCli(["hook", "auto-stream"], { stdin: "{}" });
-    expect(exit).toBe(2);
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("usage"));
+    const exit = await runCli(["hook", "auto-stream", "--kind", "assistant"], { stdin: "{}" });
+    expect(exit).toBe(0);
+    expect(spy).toHaveBeenCalledWith(null, "assistant", "{}");
+    expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringContaining("usage"));
+    spy.mockRestore();
     stderrSpy.mockRestore();
   });
 });

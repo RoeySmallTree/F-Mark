@@ -1,6 +1,6 @@
 /* Settings modal — Phase 11 test suite.
    Covers:
-     - side-nav renders all 5 items;
+     - side-nav renders all settings items;
      - clicking each item swaps the main content (asserted via the section's
        <h3 className="settings-h"> heading);
      - Appearance: clicking a theme card calls applyTheme(name);
@@ -67,13 +67,14 @@ function resetStore(): void {
     rightTab: "log",
     viewMode: "everything",
     activeModal: "settings",
+    settingsSection: "profile",
   });
 }
 
 describe("SettingsModal — side nav", () => {
   beforeEach(() => {
     resetStore();
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ status: "ok", version: "0.1.0" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -86,19 +87,18 @@ describe("SettingsModal — side nav", () => {
     cleanup();
   });
 
-  test("renders all eight side-nav items", () => {
+  test("renders all seven side-nav items", () => {
     render(<SettingsModal />);
     const nav = screen.getByRole("tablist", { name: /settings sections/i });
     const tabs = within(nav).getAllByRole("tab");
-    expect(tabs).toHaveLength(8);
+    expect(tabs).toHaveLength(7);
     expect(tabs[0]).toHaveTextContent(/profile/i);
     expect(tabs[1]).toHaveTextContent(/connected agents/i);
     expect(tabs[2]).toHaveTextContent(/runtimes/i);
     expect(tabs[3]).toHaveTextContent(/hooks/i);
-    expect(tabs[4]).toHaveTextContent(/env probe/i);
-    expect(tabs[5]).toHaveTextContent(/appearance/i);
-    expect(tabs[6]).toHaveTextContent(/keyboard shortcuts/i);
-    expect(tabs[7]).toHaveTextContent(/about/i);
+    expect(tabs[4]).toHaveTextContent(/appearance/i);
+    expect(tabs[5]).toHaveTextContent(/keyboard shortcuts/i);
+    expect(tabs[6]).toHaveTextContent(/about/i);
   });
 
   test("clicking each item switches the main content", async () => {
@@ -125,11 +125,6 @@ describe("SettingsModal — side nav", () => {
       screen.getByRole("heading", { level: 3, name: /hook status/i }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /env probe/i }));
-    expect(
-      screen.getByRole("heading", { level: 3, name: /env probe/i }),
-    ).toBeInTheDocument();
-
     await user.click(screen.getByRole("tab", { name: /appearance/i }));
     expect(
       screen.getByRole("heading", { level: 3, name: /appearance/i }),
@@ -144,6 +139,85 @@ describe("SettingsModal — side nav", () => {
     expect(
       screen.getByRole("heading", { level: 3, name: /about f-mark/i }),
     ).toBeInTheDocument();
+  });
+
+  test("can open directly on the Runtimes section", () => {
+    useStore.setState({ settingsSection: "runtimes" });
+    render(<SettingsModal />);
+    expect(
+      screen.getByRole("heading", { level: 3, name: /^runtimes$/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("Runtimes section shows built-ins and Add runtime when env probe has no runtimes", () => {
+    useStore.setState({
+      settingsSection: "runtimes",
+      envProbe: {
+        tmux: true,
+        tmuxVersion: "3.4",
+        runtimes: {},
+        installer: "apt",
+        os: "linux",
+      },
+    });
+    render(<SettingsModal />);
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Claude Code")).toBeInTheDocument();
+    expect(within(table).getByText("Codex")).toBeInTheDocument();
+    expect(within(table).getByText("Gemini")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /add runtime/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("runtime-probe-os")).toHaveTextContent(/linux/i);
+    expect(screen.getByTestId("runtime-probe-installer")).toHaveTextContent(
+      /apt/i,
+    );
+    expect(screen.getByTestId("runtime-probe-tmux")).toHaveTextContent(/3\.4/);
+    expect(screen.queryByText(/kernel does not yet expose/i)).toBeNull();
+  });
+
+  test("Runtimes section hydrates editable fields from /runtimes", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/runtimes") {
+        return new Response(
+          JSON.stringify({
+            version: "1.0",
+            runtimes: {
+              mybot: {
+                displayName: "My Bot",
+                executable: "mybot-bin",
+                args: ["--quiet"],
+                env: { FOO: "bar" },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useStore.setState({
+      settingsSection: "runtimes",
+      envProbe: {
+        tmux: true,
+        tmuxVersion: "3.4",
+        runtimes: { mybot: true },
+        installer: "apt",
+        os: "linux",
+      },
+    });
+
+    render(<SettingsModal />);
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("runtime-row-mybot")).toHaveTextContent(
+        /mybot-bin/i,
+      );
+    });
   });
 
   test("close button calls store.closeModal", async () => {
@@ -276,7 +350,7 @@ describe("SettingsModal — Profile save", () => {
 describe("SettingsModal — About", () => {
   beforeEach(() => {
     resetStore();
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ status: "ok", version: "0.4.2" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },

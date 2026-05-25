@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       "/sessions": "http://localhost:7777",
       "/participants": "http://localhost:7777",
+      "/managed-agents": "http://localhost:7777",
+      "/runtimes": "http://localhost:7777",
+      "/env-probe": "http://localhost:7777",
       "/health": "http://localhost:7777",
       "/ws": { target: "ws://localhost:7777", ws: true },
     },

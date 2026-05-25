@@ -35,6 +35,7 @@ export function resetStore(overrides: Partial<ReturnType<typeof useStore.getStat
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",
+    settingsSection: "profile",
     logFilter: DEFAULT_FILTER,
     activeModal: null,
     activePopover: { key: null, anchorRect: null },

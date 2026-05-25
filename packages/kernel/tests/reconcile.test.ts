@@ -127,8 +127,7 @@ describe("reconcile", () => {
     await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "claude");
 
     // Stand up a fake HOME with a ~/.claude/settings.json that records the
-    // f-mark Stop + UserPromptSubmit hooks for ag-claude / us-test so
-    // detectClaudeHooks reports installed=true.
+    // generic f-mark Stop hook so detectClaudeHooks reports installed=true.
     const fakeHome = await mkdtemp(join(tmpdir(), "fmark-home-"));
     await mkdir(join(fakeHome, ".claude"), { recursive: true });
     await writeFile(
@@ -140,18 +139,7 @@ describe("reconcile", () => {
               hooks: [
                 {
                   type: "command",
-                  command: "npx -y f-mark hook auto-stream ag-claude",
-                },
-              ],
-            },
-          ],
-          UserPromptSubmit: [
-            {
-              hooks: [
-                {
-                  type: "command",
-                  command:
-                    "npx -y f-mark hook auto-stream us-test --kind user",
+                  command: "npx -y f-mark hook auto-stream",
                 },
               ],
             },

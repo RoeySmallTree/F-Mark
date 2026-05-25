@@ -103,6 +103,7 @@ describe("PathSwitcher", () => {
         return Promise.resolve(
           jsonResponse({
             activePath: "/new",
+            activePathId: "newpath123abc",
             activeRevision: 2,
             knownPaths: ["/new", "/old"],
             favorites: [],

@@ -3,9 +3,12 @@
 import type { Participant } from "@f-mark/shared";
 
 export interface WhoInfo {
+  id: string;
   name: string;
   initial: string;
   isUser: boolean;
+  color?: string;
+  runtimeId?: string | null;
 }
 
 /** Resolve a participant id to display info. Falls back to the id itself. */
@@ -16,15 +19,20 @@ export function whoOf(
   const p = participants[participantId];
   if (p === undefined) {
     return {
+      id: participantId,
       name: participantId,
       initial: (participantId[0] ?? "?").toUpperCase(),
       isUser: participantId.startsWith("us-"),
+      runtimeId: null,
     };
   }
   return {
+    id: participantId,
     name: p.name,
     initial: (p.name[0] ?? "?").toUpperCase(),
     isUser: p.kind === "user",
+    color: p.color,
+    runtimeId: p.runtime_id ?? null,
   };
 }
 

@@ -25,6 +25,7 @@ export interface AgentActionMenuProps {
   onMessage(text: string): void;
   onOpenTerminal(): void;
   onReconnect(): void;
+  onInstallHooks?(): void;
   onShowLogs(): void;
   onSayGoodbye(): void;
 }
@@ -43,6 +44,7 @@ export function AgentActionMenu({
   onMessage,
   onOpenTerminal,
   onReconnect,
+  onInstallHooks,
   onShowLogs,
   onSayGoodbye,
 }: AgentActionMenuProps): JSX.Element {
@@ -68,6 +70,7 @@ export function AgentActionMenu({
         : undefined;
 
   const showReconnect = state === "offline" || state === "pane-dead";
+  const showInstallHooks = state === "hook-not-installed";
 
   const submitRename = useCallback((): void => {
     const trimmed = renameValue.trim();
@@ -273,6 +276,17 @@ export function AgentActionMenu({
           onClick={onReconnect}
         >
           Reconnect
+        </button>
+      ) : null}
+
+      {showInstallHooks && onInstallHooks !== undefined ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="agent-action-menu-item"
+          onClick={onInstallHooks}
+        >
+          Install hooks
         </button>
       ) : null}
 

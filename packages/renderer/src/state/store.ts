@@ -20,6 +20,14 @@ export type LeftRailKey =
   | "search";
 export type RightTabKey = "todos" | "comments" | "named" | "log";
 export type ViewMode = "everything" | "document" | "conversation";
+export type SettingsSectionKey =
+  | "profile"
+  | "agents"
+  | "runtimes"
+  | "hooks"
+  | "appearance"
+  | "shortcuts"
+  | "about";
 
 export type ModalKey =
   | null
@@ -106,6 +114,7 @@ interface State extends PresenceSlice {
   viewMode: ViewMode;
   viewModeBySession: Record<string, ViewMode>;
   activeModal: ModalKey;
+  settingsSection: SettingsSectionKey;
   /* When `activeModal === 'preset-editor'`, this holds the preset being
      edited. `null` means "create new". The popover sets this before
      opening the editor. */
@@ -119,6 +128,7 @@ interface State extends PresenceSlice {
      unmounts when the user switches to Todos/Comments/Named, and local state
      would otherwise reset to DEFAULT_FILTER on remount. */
   logFilter: LogFilter;
+  managedAgentsDisabledReason: string | null;
   setToken(token: string | null): void;
   setSessions(s: SessionMeta[]): void;
   setPathsState(p: {
@@ -145,12 +155,15 @@ interface State extends PresenceSlice {
   setRightTab(v: RightTabKey): void;
   setViewMode(v: ViewMode): void;
   openModal(key: ModalKey): void;
+  openSettings(section?: SettingsSectionKey): void;
+  setSettingsSection(section: SettingsSectionKey): void;
   closeModal(): void;
   openPresetEditor(preset: CustomPreset | null): void;
   bumpCustomPresets(): void;
   openPopover(key: PopoverKey, anchorRect: DOMRect | null): void;
   closePopover(): void;
   setLogFilter(filter: LogFilter): void;
+  setManagedAgentsDisabledReason(reason: string | null): void;
   /* Routes a typed managed-agent / presence / env-probe WS message into the
      presence slice. Other message types (e.g. event_added) are handled by
      the existing flow in App.tsx and must be dispatched separately. */
@@ -173,10 +186,12 @@ export const useStore = create<State>((set, get) => ({
   viewMode: "everything",
   viewModeBySession: loadViewModeBySession(),
   activeModal: null,
+  settingsSection: "profile",
   editingPreset: null,
   customPresetsVersion: 0,
   activePopover: { key: null, anchorRect: null },
   logFilter: DEFAULT_FILTER,
+  managedAgentsDisabledReason: null,
   activePath: null,
   activePathId: null,
   activeRevision: 0,
@@ -246,7 +261,15 @@ export const useStore = create<State>((set, get) => ({
       set({ viewMode });
     }
   },
-  openModal: (activeModal) => set({ activeModal }),
+  openModal: (activeModal) =>
+    set(
+      activeModal === "settings"
+        ? { activeModal, settingsSection: "profile" }
+        : { activeModal },
+    ),
+  openSettings: (settingsSection = "profile") =>
+    set({ activeModal: "settings", settingsSection }),
+  setSettingsSection: (settingsSection) => set({ settingsSection }),
   closeModal: () => set({ activeModal: null, editingPreset: null }),
   openPresetEditor: (editingPreset) =>
     set({ activeModal: "preset-editor", editingPreset }),
@@ -257,6 +280,8 @@ export const useStore = create<State>((set, get) => ({
   closePopover: () =>
     set({ activePopover: { key: null, anchorRect: null } }),
   setLogFilter: (logFilter) => set({ logFilter }),
+  setManagedAgentsDisabledReason: (managedAgentsDisabledReason) =>
+    set({ managedAgentsDisabledReason }),
   dispatchManagedAgentWsMessage: (msg) => {
     const s = get();
     if (msg.type === "presence") {

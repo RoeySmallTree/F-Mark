@@ -20,6 +20,16 @@ export interface SessionMeta {
   id: string;
   slug: string;
   created_at: string;
+  path?: string;
+  path_id?: string;
+}
+
+export interface SessionEventGroup {
+  path: string;
+  path_id: string;
+  session: SessionMeta;
+  events: AnyEventRecord[];
+  participants: Record<string, Participant>;
 }
 
 export interface EventListParams {
@@ -129,6 +139,7 @@ export interface UpdatedParticipant {
 export interface HealthInfo {
   status: string;
   version: string;
+  processApiEnabled?: boolean;
 }
 
 export interface FsListEntry {
@@ -158,7 +169,9 @@ export interface PathsResponse {
 
 export interface Client {
   listSessions(): Promise<SessionMeta[]>;
+  listAllSessions(): Promise<SessionMeta[]>;
   createSession(input: { slug?: string; path?: string }): Promise<SessionMeta>;
+  listAllSessionEvents(kinds?: EventKind[]): Promise<SessionEventGroup[]>;
   /** Browse a folder on the kernel host. Used by the session-folder picker. */
   fsList(path: string): Promise<FsListResponse>;
   /** Default starting points for the folder picker. */
@@ -203,7 +216,11 @@ export interface Client {
     input: UploadAttachmentInput,
   ): Promise<UploadAttachmentResponse>;
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoListResponse>;
-  search(query: string, sessionId?: string): Promise<SearchHit[]>;
+  search(
+    query: string,
+    sessionId?: string,
+    scope?: "all",
+  ): Promise<SearchHit[]>;
   listPresets(sessionId?: string): Promise<{ builtin: Preset[]; project: Preset[] }>;
   /* Returns the union of skills scanned from `.claude/skills`,
      `.codex/skills`, `.gemini/skills`, and `.skills/` walking upward from the
@@ -272,10 +289,26 @@ export function createClient(cfg: ClientConfig): Client {
   return {
     async listSessions() {
       const body = (await get("/sessions")) as { sessions: SessionMeta[] };
-      return body.sessions;
+      return Array.isArray(body.sessions) ? body.sessions : [];
+    },
+    async listAllSessions() {
+      const body = (await get("/sessions?scope=all")) as {
+        sessions: SessionMeta[];
+      };
+      return Array.isArray(body.sessions) ? body.sessions : [];
     },
     async createSession(input) {
       return (await post("/sessions", input)) as SessionMeta;
+    },
+    async listAllSessionEvents(kinds) {
+      const qs = new URLSearchParams({ scope: "all" });
+      if (kinds !== undefined && kinds.length > 0) {
+        qs.set("kinds", kinds.join(","));
+      }
+      const body = (await get(`/sessions/events?${qs.toString()}`)) as {
+        groups: SessionEventGroup[];
+      };
+      return Array.isArray(body.groups) ? body.groups : [];
     },
     async fsList(path) {
       return (await get(
@@ -413,15 +446,16 @@ export function createClient(cfg: ClientConfig): Client {
       const path = `/sessions/${sessionId}/todos${suffix ? `?${suffix}` : ""}`;
       return (await get(path)) as TodoListResponse;
     },
-    async search(query, sessionId) {
+    async search(query, sessionId, scope) {
       const qs = new URLSearchParams({ q: query });
       if (sessionId !== undefined && sessionId.length > 0) {
         qs.set("session", sessionId);
       }
+      if (scope !== undefined) qs.set("scope", scope);
       const body = (await get(`/search?${qs.toString()}`)) as {
         hits: SearchHit[];
       };
-      return body.hits;
+      return Array.isArray(body.hits) ? body.hits : [];
     },
     async listPresets(sessionId) {
       const qs = new URLSearchParams();

@@ -109,7 +109,7 @@ export function parseArgs(argv: string[]): CliOptions {
 
 export function printUsage(): void {
   console.log(`Usage: f-mark [options]
-       f-mark hook auto-stream <participant_id> [--kind assistant|user]
+       f-mark hook auto-stream [participant_id] [--kind assistant|user]
 
 Options:
   --remote            Print SSH port forwarding instructions
@@ -148,13 +148,11 @@ export async function runCli(
   opts: { stdin?: string } = {},
 ): Promise<number> {
   if (argv[0] === "hook" && argv[1] === "auto-stream") {
-    const participantId = argv[2];
-    if (!participantId || participantId.startsWith("--")) {
-      process.stderr.write(
-        "usage: f-mark hook auto-stream <participant_id> [--kind assistant|user]\n",
-      );
-      return 2;
-    }
+    const maybeParticipantId = argv[2];
+    const participantId =
+      maybeParticipantId !== undefined && !maybeParticipantId.startsWith("--")
+        ? maybeParticipantId
+        : null;
     const kindFlag = argv.indexOf("--kind");
     const kind = kindFlag >= 0 ? argv[kindFlag + 1] : "assistant";
     if (kind !== "assistant" && kind !== "user") {

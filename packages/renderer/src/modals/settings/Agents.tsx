@@ -6,27 +6,19 @@
 
 import { useMemo, useState, type JSX } from "react";
 import { createClient } from "../../api/client.js";
+import { ParticipantAvatar } from "../../components/ParticipantAvatar.js";
 import { useStore } from "../../state/store.js";
 
 interface AgentRow {
   id: string;
   name: string;
   color: string;
+  runtimeId: string | null;
   recentEventCount: number;
   active: boolean; // ≥1 event in the last 7d
 }
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-function initials(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return "?";
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
-  return (
-    (parts[0]![0] ?? "").toUpperCase() + (parts[1]![0] ?? "").toUpperCase()
-  );
-}
 
 function buildOrientationSnippet(origin: string, token: string | null): string {
   const tokenPart =
@@ -66,6 +58,7 @@ export function Agents(): JSX.Element {
         id,
         name: p.name,
         color: p.color,
+        runtimeId: p.runtime_id ?? null,
         recentEventCount: c,
         active: c > 0,
       });
@@ -154,13 +147,14 @@ export function Agents(): JSX.Element {
         ) : (
           agents.map((a) => (
             <div key={a.id} className="agent-card" data-agent-id={a.id}>
-              <span
+              <ParticipantAvatar
+                participantId={a.id}
+                kind="agent"
+                name={a.name}
+                color={a.color}
+                runtimeId={a.runtimeId}
                 className="agent-dot"
-                style={{ background: a.color }}
-                aria-hidden="true"
-              >
-                {initials(a.name)}
-              </span>
+              />
               <div className="agent-info">
                 <div className="agent-name">
                   {a.name}

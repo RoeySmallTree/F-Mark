@@ -89,8 +89,8 @@ export function Profile(): JSX.Element {
       <>
         <h3 className="settings-h">Profile</h3>
         <div className="settings-sub">
-          No user participant found in this project — `config.json` may not be
-          initialized.
+          No user participant found for the active path. Create a session in
+          this folder to initialize <code className="codish">.f-mark/participants.json</code>.
         </div>
       </>
     );
@@ -100,7 +100,7 @@ export function Profile(): JSX.Element {
     <>
       <h3 className="settings-h">Profile</h3>
       <div className="settings-sub">
-        Your identity in this project. Stored in <code className="codish">.f-mark/config.json</code>.
+        Your identity in this project. Stored in <code className="codish">.f-mark/participants.json</code>.
       </div>
       <div className="settings-row">
         <div className="settings-l">Display name</div>

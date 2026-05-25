@@ -9,7 +9,11 @@ import {
 } from "react";
 import { createClient } from "./api/client.js";
 import { connectWs } from "./api/ws.js";
-import { createManagedAgentsClient } from "./api/managedAgents.js";
+import {
+  createManagedAgentsClient,
+  isProcessApiDisabledError,
+  PROCESS_API_DISABLED_MESSAGE,
+} from "./api/managedAgents.js";
 import { useStore } from "./state/store.js";
 import { TopBar } from "./shell/TopBar.js";
 import { LeftRail } from "./shell/LeftRail.js";
@@ -40,7 +44,7 @@ function readTokenFromQuery(): string | null {
    activeModal slot only carries an enum key. */
 export interface TopBarModalContextValue {
   openTerminalOverlay(tmuxSession: string): void;
-  openHookInstall(runtimeId: string, participantId: string): void;
+  openHookInstall(runtimeId: string, participantId?: string): void;
   openReconnect(
     participantId: string,
     sessionId: string,
@@ -80,6 +84,9 @@ export function App(): JSX.Element {
   const openModal = useStore((s) => s.openModal);
   const setManagedAgents = useStore((s) => s.setManagedAgents);
   const setManagedTerminals = useStore((s) => s.setManagedTerminals);
+  const setManagedAgentsDisabledReason = useStore(
+    (s) => s.setManagedAgentsDisabledReason,
+  );
   const setEnvProbe = useStore((s) => s.setEnvProbe);
   const setPathsState = useStore((s) => s.setPathsState);
   const dispatchManagedAgentWsMessage = useStore(
@@ -95,7 +102,7 @@ export function App(): JSX.Element {
   );
   const [hookInstallFor, setHookInstallFor] = useState<{
     runtimeId: string;
-    participantId: string;
+    participantId?: string;
   } | null>(null);
   const [reconnectFor, setReconnectFor] = useState<{
     participantId: string;
@@ -171,12 +178,26 @@ export function App(): JSX.Element {
        chip/banner data. We tolerate partial / malformed responses so a
        mock kernel returning `{}` doesn't crash the chip strip. */
     void (async () => {
+      let processApiEnabled: boolean | null = null;
+      try {
+        const health = await client.health();
+        processApiEnabled = health.processApiEnabled ?? null;
+      } catch {
+        /* Older kernels still support the managed-agent probe below. */
+      }
+      if (processApiEnabled === false) {
+        setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
+        return;
+      }
       try {
         const r = await managedClient.list();
         if (Array.isArray(r?.agents)) setManagedAgents(r.agents);
         if (Array.isArray(r?.terminals)) setManagedTerminals(r.terminals);
-      } catch {
-        /* swallow */
+        setManagedAgentsDisabledReason(null);
+      } catch (err) {
+        if (isProcessApiDisabledError(err)) {
+          setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
+        }
       }
     })();
     void (async () => {
@@ -201,6 +222,7 @@ export function App(): JSX.Element {
     setCurrentSession,
     setManagedAgents,
     setManagedTerminals,
+    setManagedAgentsDisabledReason,
     setEnvProbe,
     setPathsState,
   ]);
@@ -245,7 +267,12 @@ export function App(): JSX.Element {
           ]);
           setSessions(list);
           setParticipants(parts);
-          setCurrentSession(list.length > 0 ? list[0]!.id : null);
+          const current = useStore.getState().currentSessionId;
+          const nextSession =
+            current !== null && list.some((session) => session.id === current)
+              ? current
+              : (list[0]?.id ?? null);
+          setCurrentSession(nextSession);
         } catch {
           /* swallow */
         }
@@ -354,11 +381,11 @@ export function App(): JSX.Element {
             />
           </Suspense>
         ) : null}
-        {hookInstallFor !== null && currentUserId !== null ? (
+        {hookInstallFor !== null ? (
           <HookInstallModal
             runtimeId={hookInstallFor.runtimeId}
             participantId={hookInstallFor.participantId}
-            userParticipantId={currentUserId}
+            userParticipantId={currentUserId ?? undefined}
             apiClient={apiClient}
             onClose={closeHookInstall}
           />

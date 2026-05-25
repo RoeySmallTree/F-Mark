@@ -1,11 +1,25 @@
 import type {
   EnvProbeResult,
+  HookInstallApplyResponse,
   HookInstallInstructions,
   HookInstallStatus,
   ManagedAgentsListResponse,
+  RuntimesFile,
   SpawnRequest,
   SpawnResponse,
+  RuntimeEntry,
 } from "@f-mark/shared";
+
+export const PROCESS_API_DISABLED_MESSAGE =
+  "Managed-agent spawning is disabled. Restart F-Mark with --allow-process-api-no-auth when running --no-auth, or run with auth enabled.";
+
+export function isProcessApiDisabledError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("process-spawning API disabled") ||
+    message.includes("--allow-process-api-no-auth")
+  );
+}
 
 export interface ManagedAgentsClient {
   list(): Promise<ManagedAgentsListResponse>;
@@ -24,20 +38,29 @@ export interface ManagedAgentsClient {
   refreshEnvProbe(): Promise<EnvProbeResult>;
   hookInstallStatus(opts: {
     runtime_id: string;
-    participant_id: string;
+    participant_id?: string;
     user_participant_id?: string;
   }): Promise<HookInstallStatus>;
   hookInstallInstructions(opts: {
     runtime_id: string;
-    participant_id: string;
-    user_participant_id: string;
+    participant_id?: string;
+    user_participant_id?: string;
   }): Promise<HookInstallInstructions>;
+  hookInstallApply(opts: {
+    runtime_id: string;
+    participant_id?: string;
+    user_participant_id?: string;
+    scope: "local" | "global";
+  }): Promise<HookInstallApplyResponse>;
   logs(
     participantId: string,
     limit?: number,
   ): Promise<{
     entries: { ts: string; event: string; [k: string]: unknown }[];
   }>;
+  listRuntimes(): Promise<RuntimesFile>;
+  upsertRuntime(id: string, entry: RuntimeEntry): Promise<RuntimesFile>;
+  removeRuntime(id: string): Promise<RuntimesFile>;
 }
 
 export interface ManagedAgentsClientConfig {
@@ -55,30 +78,80 @@ export function createManagedAgentsClient(
   const authHeader: Record<string, string> =
     token !== null ? { Authorization: `Bearer ${token}` } : {};
 
-  async function req<T>(
+  function localKernelFallbackBase(): string | null {
+    if (baseUrl !== "" || typeof window === "undefined") return null;
+    const { protocol, hostname, port } = window.location;
+    if (protocol !== "http:" && protocol !== "https:") return null;
+    if (
+      hostname !== "localhost" &&
+      hostname !== "127.0.0.1" &&
+      hostname !== "::1"
+    ) {
+      return null;
+    }
+    if (port === "" || port === "7777") return null;
+    const host = hostname === "::1" ? "[::1]" : hostname;
+    return `${protocol}//${host}:7777`;
+  }
+
+  function isHtmlResponse(res: Response, text: string): boolean {
+    const contentType = res.headers.get("Content-Type") ?? "";
+    return (
+      contentType.includes("text/html") ||
+      /^<!doctype html/i.test(text.trim())
+    );
+  }
+
+  async function fetchText(
     method: string,
     path: string,
-    body?: unknown,
-  ): Promise<T> {
+    body: unknown,
+    requestBaseUrl: string,
+  ): Promise<{ res: Response; text: string }> {
     const init: RequestInit = { method, headers: { ...authHeader } };
     if (body !== undefined) {
       (init.headers as Record<string, string>)["Content-Type"] =
         "application/json";
       init.body = JSON.stringify(body);
     }
-    const res = await fetch(`${baseUrl}${path}`, init);
+    const res = await fetch(`${requestBaseUrl}${path}`, init);
+    const text = res.status === 204 ? "" : await res.text();
+    return { res, text };
+  }
+
+  async function req<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    let { res, text } = await fetchText(method, path, body, baseUrl);
+    if (isHtmlResponse(res, text)) {
+      const fallbackBase = localKernelFallbackBase();
+      if (fallbackBase !== null) {
+        try {
+          const fallback = await fetchText(method, path, body, fallbackBase);
+          res = fallback.res;
+          text = fallback.text;
+        } catch {
+          // Keep the clearer HTML/proxy error below.
+        }
+      }
+    }
     if (!res.ok) {
-      const text = await res.text();
       throw new Error(`${method} ${path} → ${res.status}: ${text}`);
     }
     if (res.status === 204) return undefined as unknown as T;
-    const responseText = await res.text();
-    if (responseText.length === 0) return undefined as unknown as T;
+    if (text.length === 0) return undefined as unknown as T;
+    if (isHtmlResponse(res, text)) {
+      throw new Error(
+        `${method} ${path} returned HTML instead of JSON. The request may be hitting the renderer instead of the kernel API.`,
+      );
+    }
     try {
-      return JSON.parse(responseText) as T;
+      return JSON.parse(text) as T;
     } catch (err) {
       throw new Error(
-        `${method} ${path} → ${res.status} returned non-JSON: ${responseText.slice(0, 200)}`,
+        `${method} ${path} → ${res.status} returned non-JSON: ${text.slice(0, 200)}`,
       );
     }
   }
@@ -115,7 +188,9 @@ export function createManagedAgentsClient(
     hookInstallStatus: (opts) => {
       const q = new URLSearchParams();
       q.set("runtime_id", opts.runtime_id);
-      q.set("participant_id", opts.participant_id);
+      if (opts.participant_id !== undefined) {
+        q.set("participant_id", opts.participant_id);
+      }
       if (opts.user_participant_id !== undefined) {
         q.set("user_participant_id", opts.user_participant_id);
       }
@@ -127,11 +202,30 @@ export function createManagedAgentsClient(
     hookInstallInstructions: (opts) => {
       const q = new URLSearchParams();
       q.set("runtime_id", opts.runtime_id);
-      q.set("participant_id", opts.participant_id);
-      q.set("user_participant_id", opts.user_participant_id);
+      if (opts.participant_id !== undefined) {
+        q.set("participant_id", opts.participant_id);
+      }
+      if (opts.user_participant_id !== undefined) {
+        q.set("user_participant_id", opts.user_participant_id);
+      }
       return req<HookInstallInstructions>(
         "POST",
         `/managed-agents/hook-install-instructions?${q.toString()}`,
+      );
+    },
+    hookInstallApply: (opts) => {
+      const q = new URLSearchParams();
+      q.set("runtime_id", opts.runtime_id);
+      if (opts.participant_id !== undefined) {
+        q.set("participant_id", opts.participant_id);
+      }
+      if (opts.user_participant_id !== undefined) {
+        q.set("user_participant_id", opts.user_participant_id);
+      }
+      return req<HookInstallApplyResponse>(
+        "POST",
+        `/managed-agents/hook-install-apply?${q.toString()}`,
+        { scope: opts.scope },
       );
     },
     logs: (id, limit) => {
@@ -140,5 +234,10 @@ export function createManagedAgentsClient(
         entries: { ts: string; event: string; [k: string]: unknown }[];
       }>("GET", `/managed-agents/${encodeURIComponent(id)}/logs${q}`);
     },
+    listRuntimes: () => req<RuntimesFile>("GET", "/runtimes"),
+    upsertRuntime: (id, entry) =>
+      req<RuntimesFile>("PUT", `/runtimes/${encodeURIComponent(id)}`, entry),
+    removeRuntime: (id) =>
+      req<RuntimesFile>("DELETE", `/runtimes/${encodeURIComponent(id)}`),
   };
 }
