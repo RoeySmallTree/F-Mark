@@ -551,16 +551,19 @@ git commit -m "docs(opencode): hot-test assumptions for opencode integration"
 **Files:**
 - Create: `packages/kernel/assets/opencode-plugin/fmark.ts`
 
-- [ ] **Step 1.1: Write the plugin template (refined per Phase 0 results)**
+- [ ] **Step 1.1: Write the plugin template (refined per Phase 0 results — see `hot-tests/VERDICT.md`)**
 
-This template assumes Phase 0 has confirmed: A0 (assistant text via `event` with type `message.part.updated` or similar), A6 (deny blocks), A15 (sync block tolerated up to 60s+), A8 (env propagation), A17 (MCP tool prefix). Replace the 🔥 placeholders below with the exact event-type names + payload paths recorded in `hot-tests/VERDICT.md`.
+**Phase 0 architectural confirmations** (all incorporated below):
+- **A0**: Assistant text comes from `event.message.part.updated` where `part.type === "text"` and `part.time?.end` is set (finalized). User vs assistant disambiguated via a `Map<messageID, role>` populated from `event.message.updated` (`properties.info.id` + `properties.info.role`). See `hot-tests/03-assistant-output.md`.
+- **A6 (dual path)**: In headless `opencode run`, the plugin `permission.ask` hook does NOT fire; opencode auto-rejects. The bus event `permission.asked` DOES fire and the SDK exposes `client.postSessionIdPermissionsPermissionId(...)` to actively respond. Plugin uses BOTH paths: subscribe to bus `permission.asked` for universal observability + post access-request, and implement `permission.ask` hook for active gating (TUI mode). See `hot-tests/07-permission-gating.md`.
+- **A11.1**: MCP env vars must use the `environment` key (SDK type `McpLocalConfig.environment`). `env` is not a valid field.
+- **HTTP routes (verified)**: `GET /sessions → {sessions: [{id, ...}]}`, `GET /sessions/:id/events?kinds=X,Y → {events: [...]}`. There is NO `GET /sessions/:id`. Session existence validated by listing once and intersecting candidates.
 
 The plugin:
-- Mirrors `autoStream.ts:78-115` session-resolution: F_MARK_SESSION_ID env → payload sessionID → active-session file → latest valid session (with `sessionExists` validation, fetched via kernel HTTP).
-- Mirrors `autoStream.ts:911-964` access-request handler: posts request, polls `/sessions/<sid>/events?kind=access-response` until matching `request_id` lands or timeout (default 300s, configurable via `F_MARK_ACCESS_REQUEST_TIMEOUT_MS`).
-- Posts a single tool-use event per `tool.execute.after`, skipping the MCP-fmark prefix from A17.
-- Posts an assistant `prose` event per terminal message-part update (only when assistant has finished a part — not on every delta).
-- Tracks "posted-content-since-last-turn-end" per opencode session ID; only emits turn-end on `session.idle` if true.
+- Resolves F-Mark session: active-session file → F_MARK_SESSION_ID env → latest from `/sessions`, validated by intersection.
+- Posts `prose` events for finalized assistant text parts; tracks per-opencode-session `turnHasContent`; emits `turn-end` on `session.idle` only when content was posted.
+- Posts `tool-use` events on `tool.execute.after`, skipping `mcp__fmark__*` (A17 configurable via env var).
+- **Permission flow**: on bus `permission.asked`, posts F-Mark `access-request` and polls `/sessions/<sid>/events?kinds=access-response` (correct pluralization). When response arrives, calls `client.postSessionIdPermissionsPermissionId({path:{id:sid,permissionID:pid}, body:{response:"always"|"once"|"reject"}})` to deliver the decision to opencode. The synchronous `permission.ask` hook is ALSO implemented as a belt-and-suspenders for TUI mode where it may fire and block.
 
 ```typescript
 // packages/kernel/assets/opencode-plugin/fmark.ts
