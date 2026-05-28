@@ -21,6 +21,13 @@
       "args": [],
       "icon": "gemini",
       "readyDelayMs": 1500
+    },
+    "opencode": {
+      "displayName": "Opencode",
+      "executable": "opencode",
+      "args": [],
+      "icon": "opencode",
+      "readyDelayMs": 1500
     }
   }
 }
