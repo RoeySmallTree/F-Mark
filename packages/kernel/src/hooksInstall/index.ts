@@ -5,8 +5,24 @@ import {
   renderClaudeInstallSnippet,
   type ClaudeHookScope,
 } from "./claude.js";
-import { detectCodexHooks, loadCodexConfig, renderCodexInstallSnippet } from "./codex.js";
-import { detectGeminiHooks, renderGeminiInstallSnippet } from "./gemini.js";
+import {
+  applyCodexHooks,
+  detectCodexHooks,
+  loadCodexConfig,
+  renderCodexInstallSnippet,
+} from "./codex.js";
+import {
+  applyGeminiHooks,
+  detectGeminiHooks,
+  loadGeminiSettings,
+  renderGeminiInstallSnippet,
+} from "./gemini.js";
+import {
+  applyOpencodeHooks,
+  detectOpencodeHooks,
+  renderOpencodeInstallSnippet,
+  type OpencodeHookScope,
+} from "./opencode.js";
 import type { DetectResult } from "./types.js";
 
 export async function checkHookInstallStatus(opts: {
@@ -26,7 +42,13 @@ export async function checkHookInstallStatus(opts: {
     const toml = await loadCodexConfig(opts.projectRoot);
     return detectCodexHooks(toml, opts.participantId, userId);
   }
-  if (opts.runtimeId === "gemini") return detectGeminiHooks();
+  if (opts.runtimeId === "gemini") {
+    const { settings, configPath } = await loadGeminiSettings(opts.projectRoot);
+    return detectGeminiHooks(settings, configPath);
+  }
+  if (opts.runtimeId === "opencode") {
+    return detectOpencodeHooks({ projectRoot: opts.projectRoot });
+  }
   throw new Error(`unknown runtime_id: ${opts.runtimeId}`);
 }
 
@@ -63,7 +85,22 @@ export function renderInstallInstructions(opts: {
   }
   if (opts.runtimeId === "gemini") {
     const snippet = renderGeminiInstallSnippet();
-    return { markdown: snippet, manualSteps: [] };
+    return {
+      markdown: snippet,
+      manualSteps: [{ configPath: ".gemini/settings.json", snippet }],
+    };
+  }
+  if (opts.runtimeId === "opencode") {
+    const snippet = renderOpencodeInstallSnippet();
+    return {
+      markdown: snippet,
+      manualSteps: [
+        {
+          configPath: ".opencode/plugin/fmark.ts or ~/.config/opencode/plugin/fmark.ts",
+          snippet,
+        },
+      ],
+    };
   }
   throw new Error(`unknown runtime_id: ${opts.runtimeId}`);
 }
@@ -98,4 +135,63 @@ export async function applyHookInstall(opts: {
       projectRoot: opts.projectRoot,
     }),
   };
+}
+
+export async function applyAutomaticHookInstall(opts: {
+  runtimeId: string;
+  participantId?: string;
+  userParticipantId?: string;
+  projectRoot?: string;
+  scope?: ClaudeHookScope;
+}): Promise<{
+  changed: boolean;
+  status: DetectResult;
+  configPath: string;
+}> {
+  if (opts.runtimeId === "claude") {
+    const applied = await applyClaudeHooks({
+      scope: opts.scope ?? "local",
+      projectRoot: opts.projectRoot,
+    });
+    return {
+      changed: applied.changed,
+      configPath: applied.configPath,
+      status: await checkHookInstallStatus(opts),
+    };
+  }
+  if (opts.runtimeId === "codex") {
+    if (!opts.participantId || !opts.userParticipantId) {
+      throw new Error("participantId and userParticipantId required for codex hooks");
+    }
+    const applied = await applyCodexHooks(
+      opts.participantId,
+      opts.userParticipantId,
+    );
+    return {
+      changed: applied.changed,
+      configPath: applied.hooksPath,
+      status: await checkHookInstallStatus(opts),
+    };
+  }
+  if (opts.runtimeId === "gemini") {
+    const applied = await applyGeminiHooks(opts.projectRoot);
+    return {
+      changed: applied.changed,
+      configPath: applied.configPath,
+      status: await checkHookInstallStatus(opts),
+    };
+  }
+  if (opts.runtimeId === "opencode") {
+    const opencodeScope: OpencodeHookScope = opts.scope === "global" ? "user" : "project";
+    const applied = await applyOpencodeHooks({
+      scope: opencodeScope,
+      projectRoot: opencodeScope === "project" ? opts.projectRoot : undefined,
+    });
+    return {
+      changed: applied.changed,
+      configPath: applied.configPath,
+      status: await checkHookInstallStatus(opts),
+    };
+  }
+  throw new Error(`auto-apply is not supported for runtime_id: ${opts.runtimeId}`);
 }
