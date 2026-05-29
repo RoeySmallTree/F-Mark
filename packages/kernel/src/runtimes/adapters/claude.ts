@@ -22,6 +22,25 @@ const CLAUDE_EFFORTS: EffortDescriptor[] = [
   { id: "max", displayName: "Max" },
 ];
 
+/* Phase 0 observed in live transcripts: undated canonical slugs
+   ("claude-opus-4-7"), bare aliases ("opus"), and date-suffixed slugs
+   ("claude-haiku-4-5-20251001"). Canonicalize all three to the
+   stable family slug so badges, validation, and override pinning all
+   speak the same language. */
+const ALIAS_TO_CANONICAL: Record<string, string> = {
+  opus: "claude-opus-4-7",
+  sonnet: "claude-sonnet-4-6",
+  haiku: "claude-haiku-4-5",
+};
+
+export function canonicalizeClaudeModelId(raw: string): string {
+  const lower = raw.trim().toLowerCase();
+  if (lower in ALIAS_TO_CANONICAL) return ALIAS_TO_CANONICAL[lower]!;
+  // Strip trailing date suffix: "claude-haiku-4-5-20251001" → "claude-haiku-4-5"
+  const stripped = lower.replace(/^(claude-(?:opus|sonnet|haiku)-\d+-\d+)-\d{6,}$/, "$1");
+  return stripped;
+}
+
 export function createClaudeAdapter(): RuntimeAdapter {
   async function listModels(): Promise<ModelDescriptor[]> {
     return CLAUDE_MODELS;
@@ -57,7 +76,7 @@ export function createClaudeAdapter(): RuntimeAdapter {
       if (obj.type !== "assistant") continue;
       const m = obj.message?.model;
       if (typeof m === "string" && m !== "<synthetic>") {
-        lastModel = m;
+        lastModel = canonicalizeClaudeModelId(m);
       }
     }
     if (!lastModel) return null;

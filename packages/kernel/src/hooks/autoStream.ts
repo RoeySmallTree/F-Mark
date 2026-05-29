@@ -1050,12 +1050,23 @@ export async function runAutoStream(
   await postPing(ctx, participantId);
   const runtimeId = runtimeIdFromEnv(env);
 
-  await maybePostRuntimeState({
-    ctx,
-    participantId,
-    runtimeId,
-    payload,
-  });
+  /* Gate runtime-state probes to turn boundaries — Stop, PostToolUse, and
+     codex/opencode AfterTool. Per review_2.md §1: model/effort only changes
+     on respawn, so probing every hook event wastes I/O AND can delay
+     permission prompts that share this code path. */
+  const hookEventName = stringField(payload, "hook_event_name");
+  if (
+    hookEventName === "Stop" ||
+    hookEventName === "PostToolUse" ||
+    hookEventName === "AfterTool"
+  ) {
+    await maybePostRuntimeState({
+      ctx,
+      participantId,
+      runtimeId,
+      payload,
+    });
+  }
 
   const accessRequest = extractAccessRequest({
     payload,

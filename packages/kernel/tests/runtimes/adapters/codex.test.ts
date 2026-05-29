@@ -49,6 +49,17 @@ describe("codex adapter", () => {
       const state = await adapter.readCurrent({});
       expect(state).toBeNull();
     });
+
+    it("falls back to cwd-scan of sessions root when transcriptPath is absent", async () => {
+      const adapter = createCodexAdapter({
+        cachePath: join(FIXTURES, "models_cache.json"),
+        sessionsRoot: join(FIXTURES, "sessions"),
+      });
+      const state = await adapter.readCurrent({ cwd: "/match-this-cwd" });
+      expect(state).not.toBeNull();
+      expect(state?.model).toBe("gpt-5.5");
+      expect(state?.effort).toBe("high");
+    });
   });
 
   describe("buildSpawnArgs", () => {

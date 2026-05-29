@@ -1,4 +1,4 @@
-import { readFile } from "fs/promises";
+import { readFile, readdir, stat } from "fs/promises";
 import { homedir } from "os";
 import { join } from "path";
 import type {
@@ -29,6 +29,10 @@ interface CodexCacheFile {
 export interface CodexAdapterOptions {
   /* Path to ~/.codex/models_cache.json. Override for tests. */
   cachePath?: string;
+  /* Path to ~/.codex/sessions/ root for the cwd-scan fallback. */
+  sessionsRoot?: string;
+  /* Max rollout files to scan during cwd fallback (newest first). */
+  scanLimit?: number;
 }
 
 export function createCodexAdapter(
@@ -36,6 +40,9 @@ export function createCodexAdapter(
 ): RuntimeAdapter {
   const cachePath =
     options.cachePath ?? join(homedir(), ".codex", "models_cache.json");
+  const sessionsRoot =
+    options.sessionsRoot ?? join(homedir(), ".codex", "sessions");
+  const scanLimit = options.scanLimit ?? 20;
 
   let cached: CodexCacheFile | null = null;
 
@@ -102,7 +109,69 @@ export function createCodexAdapter(
       const state = await readFromRollout(ctx.transcriptPath);
       if (state) return state;
     }
+    if (ctx.cwd) {
+      const found = await findLatestRolloutForCwd(ctx.cwd);
+      if (found) {
+        const state = await readFromRollout(found);
+        if (state) return state;
+      }
+    }
     return null;
+  }
+
+  async function findLatestRolloutForCwd(targetCwd: string): Promise<string | null> {
+    let files: string[];
+    try {
+      files = await listRecentRollouts(sessionsRoot, scanLimit);
+    } catch {
+      return null;
+    }
+    for (const file of files) {
+      try {
+        const raw = await readFile(file, "utf8");
+        const firstLine = raw.split("\n").find((l) => l.trim().length > 0);
+        if (!firstLine) continue;
+        const entry = JSON.parse(firstLine) as {
+          type?: string;
+          payload?: { cwd?: string };
+        };
+        if (entry.type === "session_meta" && entry.payload?.cwd === targetCwd) {
+          return file;
+        }
+      } catch {
+        // skip malformed
+      }
+    }
+    return null;
+  }
+
+  async function listRecentRollouts(root: string, limit: number): Promise<string[]> {
+    const out: { path: string; mtime: number }[] = [];
+    async function walk(dir: string, depth = 0): Promise<void> {
+      if (depth > 4) return; // year/month/day/...
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) {
+          await walk(full, depth + 1);
+        } else if (e.isFile() && e.name.endsWith(".jsonl") && e.name.startsWith("rollout-")) {
+          try {
+            const s = await stat(full);
+            out.push({ path: full, mtime: s.mtimeMs });
+          } catch {
+            // skip
+          }
+        }
+      }
+    }
+    await walk(root);
+    out.sort((a, b) => b.mtime - a.mtime);
+    return out.slice(0, limit).map((x) => x.path);
   }
 
   async function readFromRollout(

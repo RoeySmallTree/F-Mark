@@ -28,6 +28,7 @@ import type {
   WakeSessionResponse,
 } from "@f-mark/shared";
 import { getAdapter } from "../runtimes/adapters/index.js";
+import { canonicalizeClaudeModelId } from "../runtimes/adapters/claude.js";
 import { getRuntimeState, setRuntimeState } from "../services/runtimeState.js";
 import { paths as makePaths, type Paths } from "../paths.js";
 import type { TmuxManager } from "../tmux/manager.js";
@@ -1656,15 +1657,18 @@ export function registerManagedAgentsRoutes(
 
   app.get("/managed-agents", async () => {
     const state = agentState();
+    const p = routePaths();
     const sessions = await tmux.listFmarkSessions();
     const liveSessionNames = new Set(sessions.map((s) => s.sessionName));
     const agentIds = await state.listManagedAgentIds();
+    const persistedParticipants = await listParticipants(p, { agentState: state });
     const agents: Array<{
       participant_id: string;
       tmux_session: string | null;
       runtime_id: string | null;
       runtime_session: RuntimeSessionInfo | null;
       alive: boolean;
+      runtime_state?: import("@f-mark/shared").CurrentRuntimeState;
     }> = [];
     for (const aid of agentIds) {
       const tmuxSession = await state.readTmuxSession(aid);
@@ -1674,12 +1678,30 @@ export function registerManagedAgentsRoutes(
       // Stale agent directories (session died, files left behind) are still
       // surfaced — the UI can use alive=false to offer "Reconnect" or cleanup.
       const alive = tmuxSession !== null && liveSessionNames.has(tmuxSession);
+      const live = getRuntimeState(aid);
+      const persisted = persistedParticipants[aid];
+      // Synthesize a configured-override state for cold load (no hook
+      // yet, but the user pinned a model/effort previously). Renderer
+      // distinguishes via source="override" in the badge tooltip.
+      const synthesized: import("@f-mark/shared").CurrentRuntimeState | undefined =
+        live ??
+        (persisted?.model_override || persisted?.effort_override
+          ? {
+              model: persisted.model_override,
+              effort: persisted.effort_override,
+              source: "override",
+              observedAt: Date.now(),
+              configuredModel: persisted.model_override,
+              configuredEffort: persisted.effort_override,
+            }
+          : undefined);
       agents.push({
         participant_id: aid,
         tmux_session: tmuxSession,
         runtime_id: runtimeId,
         runtime_session: runtimeSession,
         alive,
+        runtime_state: synthesized,
       });
     }
     const terminals = sessions
@@ -1722,6 +1744,12 @@ export function registerManagedAgentsRoutes(
         reply.code(400);
         return { error: "missing body" };
       }
+      // Merge configured overrides from the persisted participant so the
+      // badge can show "configured X · live Y" even when the live
+      // probe (e.g. Claude effort) can't observe what was configured.
+      const p = routePaths();
+      const participants = await listParticipants(p, { agentState: agentState() });
+      const persisted = participants[id];
       const state = {
         model: typeof body.model === "string" ? body.model : undefined,
         effort: typeof body.effort === "string" ? body.effort : undefined,
@@ -1732,6 +1760,8 @@ export function registerManagedAgentsRoutes(
           typeof body.observedAt === "number"
             ? body.observedAt
             : Date.now(),
+        configuredModel: persisted?.model_override,
+        configuredEffort: persisted?.effort_override,
       } as import("@f-mark/shared").CurrentRuntimeState;
       setRuntimeState(id, state);
       await publishAgentUpdated(id);
@@ -1838,9 +1868,27 @@ export function registerManagedAgentsRoutes(
       reply.code(400);
       return { error: `runtime has no adapter: ${participant.runtime_id}` };
     }
+
+    // Canonicalize Claude aliases so the user can PUT "opus" or
+    // "claude-haiku-4-5-20251001" and the override resolves to the
+    // family slug actually understood by the spawn args.
+    if (
+      participant.runtime_id === "claude" &&
+      typeof body.model === "string" &&
+      body.model.length > 0
+    ) {
+      body.model = canonicalizeClaudeModelId(body.model);
+    }
+
+    // Validate model — refresh cache on miss before rejecting.
     if (typeof body.model === "string" && body.model.length > 0) {
-      const models = await adapter.listModels();
-      if (!models.some((m) => m.id === body.model)) {
+      let models = await adapter.listModels();
+      let hit = models.some((m) => m.id === body.model);
+      if (!hit) {
+        models = await adapter.listModels({ refresh: true });
+        hit = models.some((m) => m.id === body.model);
+      }
+      if (!hit) {
         reply.code(400);
         return { error: `unknown model for ${participant.runtime_id}: ${body.model}` };
       }
@@ -1861,14 +1909,19 @@ export function registerManagedAgentsRoutes(
       effort: body.effort,
     });
     // Mark the runtime state as "override" so the UI badge updates immediately;
-    // the next hook fire will overwrite with the observed live value.
+    // the next hook fire will overwrite with the observed live value but
+    // configuredModel/configuredEffort persist via mergeConfiguredOverrides.
     setRuntimeState(id, {
       source: "override",
       observedAt: Date.now(),
+      model: persisted.model_override,
+      effort: persisted.effort_override,
       configuredModel: persisted.model_override,
       configuredEffort: persisted.effort_override,
     });
+
     let restarted = false;
+    let restartError: string | undefined;
     if (body.restart !== false) {
       const tmuxSession = await state.readTmuxSession(id);
       if (tmuxSession) {
@@ -1881,9 +1934,12 @@ export function registerManagedAgentsRoutes(
             model: persisted.model_override ?? null,
             effort: persisted.effort_override ?? null,
           });
-          restarted = true;
-        } catch {
-          // tolerate already-dead session
+          // Auto-respawn so PUT honours its restart=true contract.
+          const respawn = await respawnAgent(id, persisted);
+          restarted = respawn.ok;
+          restartError = respawn.error;
+        } catch (e) {
+          restartError = e instanceof Error ? e.message : String(e);
         }
       }
     }
@@ -1892,8 +1948,82 @@ export function registerManagedAgentsRoutes(
       ok: true,
       participant: persisted,
       restarted,
+      restart_error: restartError,
     };
   });
+
+  /* Respawn an agent that was just killed for a runtime override. Mirrors
+     the reconnect path's argv building but skips the "already connected"
+     short-circuit. Best-effort: caller still gets a clear failure mode
+     (restarted:false + restart_error) instead of a hidden "kill only"
+     success per review_2.md §5. */
+  async function respawnAgent(
+    participantId: string,
+    override: { model_override?: string; effort_override?: string },
+  ): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const p = routePaths();
+      const state = agentState();
+      const runtimeId = await state.readRuntime(participantId);
+      if (!runtimeId) return { ok: false, error: "no runtime_id" };
+      const runtimes = await loadRuntimeRegistry({
+        fallback: paths,
+        ref: deps.pathContextRef,
+      });
+      const runtime = runtimes.runtimes[runtimeId];
+      if (!runtime) return { ok: false, error: `unknown runtime: ${runtimeId}` };
+      const activeSession = await state.readActiveSession(participantId);
+      const prompt = buildWakePrompt(
+        buildCompassPacket({
+          sessionId: activeSession ?? "unlinked",
+          participantId,
+          cursorBefore: null,
+          events: [],
+        }),
+      );
+      const overridePatch: RuntimeOverridePatch | undefined =
+        override.model_override || override.effort_override
+          ? {
+              model: override.model_override,
+              effort: override.effort_override,
+            }
+          : undefined;
+      const spawnArgs = spawnArgsForRuntime({
+        runtimeId,
+        args: runtime.args,
+        desiredName: activeSession,
+        launchPrompt: prompt,
+        override: overridePatch,
+      });
+      const { sessionName } = await tmux.spawnAgent({
+        participantId,
+        executable: runtime.executable,
+        args: spawnArgs.args,
+        env: {
+          ...(runtime.env ?? {}),
+          F_MARK_RUNTIME_ID: runtimeId,
+          F_MARK_PATH: p.root(),
+          ...(activeSession !== null
+            ? { F_MARK_SESSION_ID: activeSession }
+            : {}),
+        },
+      });
+      await state.writeTmuxSession(participantId, sessionName);
+      await state.writeRuntime(participantId, runtimeId);
+      tracker.setManagedPane(participantId, {
+        paneAlive: () => liveSessionStillAlive(sessionName),
+      });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  function liveSessionStillAlive(sessionName: string): boolean {
+    // Cheap heuristic until tmux pane-watch reports back. The presence
+    // tracker will replace this with its own probe on the next tick.
+    return sessionName.length > 0;
+  }
 
   app.post<{
     Params: { id: string };

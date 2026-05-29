@@ -1,0 +1,2 @@
+{"timestamp":"2026-05-27T09:00:00Z","type":"session_meta","payload":{"id":"id-other","cwd":"/some-other-cwd","model_provider":"openai"}}
+{"timestamp":"2026-05-27T09:00:30Z","type":"turn_context","payload":{"turn_id":"t-1","cwd":"/some-other-cwd","model":"gpt-5.4","effort":"low"}}

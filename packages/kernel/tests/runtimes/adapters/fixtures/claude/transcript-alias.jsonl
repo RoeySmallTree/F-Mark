@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"hi"},"uuid":"u-1","timestamp":"2026-05-27T09:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","model":"opus","content":[{"type":"text","text":"hi"}]},"uuid":"a-1","timestamp":"2026-05-27T09:00:01Z"}
+{"type":"assistant","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"system"}]},"uuid":"a-2","timestamp":"2026-05-27T09:00:02Z"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-haiku-4-5-20251001","content":[{"type":"text","text":"end"}]},"uuid":"a-3","timestamp":"2026-05-27T09:00:03Z"}

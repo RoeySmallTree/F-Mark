@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { join } from "path";
-import { createClaudeAdapter } from "../../../src/runtimes/adapters/claude.js";
+import {
+  canonicalizeClaudeModelId,
+  createClaudeAdapter,
+} from "../../../src/runtimes/adapters/claude.js";
 
 const FIXTURES = join(__dirname, "fixtures", "claude");
 
@@ -46,6 +49,16 @@ describe("claude adapter", () => {
       const adapter = createClaudeAdapter();
       expect(await adapter.readCurrent({})).toBeNull();
     });
+
+    it("canonicalizes aliases + date suffixes + skips synthetic", async () => {
+      // Fixture order: alias 'opus', then '<synthetic>' (skipped),
+      // then date-suffixed haiku slug. Latest non-synthetic wins.
+      const adapter = createClaudeAdapter();
+      const state = await adapter.readCurrent({
+        transcriptPath: join(FIXTURES, "transcript-alias.jsonl"),
+      });
+      expect(state?.model).toBe("claude-haiku-4-5");
+    });
   });
 
   describe("buildSpawnArgs", () => {
@@ -59,6 +72,31 @@ describe("claude adapter", () => {
     it("returns [] for empty patch", () => {
       const adapter = createClaudeAdapter();
       expect(adapter.buildSpawnArgs({})).toEqual([]);
+    });
+  });
+
+  describe("canonicalizeClaudeModelId", () => {
+    it("returns canonical slugs unchanged", () => {
+      expect(canonicalizeClaudeModelId("claude-opus-4-7")).toBe("claude-opus-4-7");
+    });
+
+    it("maps bare aliases to canonical family slugs", () => {
+      expect(canonicalizeClaudeModelId("opus")).toBe("claude-opus-4-7");
+      expect(canonicalizeClaudeModelId("sonnet")).toBe("claude-sonnet-4-6");
+      expect(canonicalizeClaudeModelId("haiku")).toBe("claude-haiku-4-5");
+    });
+
+    it("strips trailing date suffixes from family slugs", () => {
+      expect(canonicalizeClaudeModelId("claude-haiku-4-5-20251001")).toBe(
+        "claude-haiku-4-5",
+      );
+      expect(canonicalizeClaudeModelId("claude-sonnet-4-6-20260301")).toBe(
+        "claude-sonnet-4-6",
+      );
+    });
+
+    it("lowercases input", () => {
+      expect(canonicalizeClaudeModelId("OPUS")).toBe("claude-opus-4-7");
     });
   });
 
