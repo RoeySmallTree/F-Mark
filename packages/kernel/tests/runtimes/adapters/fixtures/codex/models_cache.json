@@ -1,0 +1,41 @@
+{
+  "fetched_at": "2026-05-27T10:13:16Z",
+  "etag": "W/\"abc123\"",
+  "client_version": "0.133.0",
+  "models": [
+    {
+      "slug": "gpt-5.5",
+      "display_name": "GPT-5.5",
+      "description": "Frontier model for complex coding.",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {"effort": "low",    "description": "Fast responses"},
+        {"effort": "medium", "description": "Balances speed and reasoning"},
+        {"effort": "high",   "description": "Greater reasoning depth"},
+        {"effort": "xhigh",  "description": "Extra high reasoning depth"}
+      ],
+      "supported_in_api": true,
+      "visibility": "list"
+    },
+    {
+      "slug": "gpt-5.4",
+      "display_name": "GPT-5.4",
+      "description": "Previous frontier model.",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {"effort": "low",    "description": "Fast"},
+        {"effort": "medium", "description": "Default"},
+        {"effort": "high",   "description": "Deeper"}
+      ],
+      "supported_in_api": true,
+      "visibility": "list"
+    },
+    {
+      "slug": "internal-hidden",
+      "display_name": "Internal Hidden",
+      "supported_reasoning_levels": [],
+      "supported_in_api": false,
+      "visibility": "hidden"
+    }
+  ]
+}

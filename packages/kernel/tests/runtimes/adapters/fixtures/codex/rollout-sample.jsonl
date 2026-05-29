@@ -1,0 +1,5 @@
+{"timestamp":"2026-05-27T09:01:07Z","type":"session_meta","payload":{"id":"019e68aa-88cd-77f3-9c77-318ed7fbf580","timestamp":"2026-05-27T09:01:07Z","cwd":"/home/roey/workspace/F-Mark","originator":"codex_exec","cli_version":"0.133.0","source":"exec","model_provider":"openai"}}
+{"timestamp":"2026-05-27T09:01:08Z","type":"turn_context","payload":{"turn_id":"t-1","cwd":"/home/roey/workspace/F-Mark","model":"gpt-5.4","effort":"medium"}}
+{"timestamp":"2026-05-27T09:01:09Z","type":"event_msg","payload":{"kind":"user","content":"hello"}}
+{"timestamp":"2026-05-27T09:01:30Z","type":"turn_context","payload":{"turn_id":"t-2","cwd":"/home/roey/workspace/F-Mark","model":"gpt-5.5","effort":"xhigh"}}
+{"timestamp":"2026-05-27T09:01:31Z","type":"event_msg","payload":{"kind":"assistant","content":"hi"}}
