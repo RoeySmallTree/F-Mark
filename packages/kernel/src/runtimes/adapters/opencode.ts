@@ -185,9 +185,13 @@ export function createOpencodeAdapter(
     ctx: AdapterReadContext,
   ): Promise<CurrentRuntimeState | null> {
     if (!ctx.sessionId && !ctx.cwd) return null;
+    // Filter `model IS NOT NULL` because the session row is created at
+    // session-start with model=NULL and only populated after the first
+    // turn. Selecting by cwd alone without this filter routinely
+    // picks up an unstarted session and returns null state.
     const query = ctx.sessionId
-      ? `SELECT id, model, agent, time_updated FROM session WHERE id = '${escapeSqlString(ctx.sessionId)}' LIMIT 1`
-      : `SELECT id, model, agent, time_updated FROM session WHERE directory = '${escapeSqlString(ctx.cwd!)}' ORDER BY time_updated DESC LIMIT 1`;
+      ? `SELECT id, model, agent, time_updated FROM session WHERE id = '${escapeSqlString(ctx.sessionId)}' AND model IS NOT NULL LIMIT 1`
+      : `SELECT id, model, agent, time_updated FROM session WHERE directory = '${escapeSqlString(ctx.cwd!)}' AND model IS NOT NULL ORDER BY time_updated DESC LIMIT 1`;
     const result = await runCli(["db", "--format", "json", query]);
     if (result.code !== 0) return null;
     let rows: unknown;
