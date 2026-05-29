@@ -53,9 +53,11 @@
 }
 
 /* Runtime image — sits in a small color-rimmed dot so the brand mark
-   pops without dominating the row. */
+   pops without dominating the row. The ring takes the per-agent
+   --agent-color when one is set (falls back to the theme amber so
+   chrome elements without an assigned color keep their familiar look). */
 .agent-chip-runtime {
-  --icon-ring-color: var(--agent);
+  --icon-ring-color: var(--agent-color, var(--agent));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -70,6 +72,15 @@
   overflow: visible;
   position: relative;
 }
+.agent-chip.active {
+  border-color: var(--agent-color, var(--agent));
+  background: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 10%,
+    var(--panel)
+  );
+  color: var(--ink);
+}
 .agent-chip-runtime::before,
 .terminal-chip-icon::before,
 .plus-menu-icon::before {
@@ -81,14 +92,30 @@
   opacity: 0.6;
   pointer-events: none;
 }
-.agent-chip-runtime img,
-.terminal-chip-icon img {
+/* Icon-as-mask: the source PNGs are white-on-transparent, so rendering
+   them as <img> made the brand mark invisible on the default light
+   theme. Treating the icon as a CSS mask lets us paint it with whatever
+   color the parent sets via `--icon-color` (falling back to currentColor),
+   so the same asset stays legible across every theme. */
+.icon-mask {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  border-radius: 50%;
+  background: var(--icon-color, currentColor);
+  -webkit-mask: var(--icon-url) center / contain no-repeat;
+  mask: var(--icon-url) center / contain no-repeat;
   pointer-events: none;
+  border-radius: 0;
+}
+.agent-chip-runtime .icon-mask,
+.terminal-chip-icon .icon-mask {
+  border-radius: 50%;
+}
+.agent-chip-runtime {
+  color: var(--icon-ring-color);
+}
+.terminal-chip-icon {
+  color: var(--icon-ring-color);
 }
 
 .agent-chip-name {
@@ -124,6 +151,42 @@
   background: var(--ink-4);
   opacity: 0.7;
 }
+.agent-chip-dot.access-pending {
+  background: var(--agent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent) 22%, transparent);
+}
+
+/* Model + effort badge — sits to the right of the state dot. Compact,
+   typography-driven, no background fill so it stays quiet next to the
+   livelier state colors. */
+.agent-chip-model {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-low, var(--ink, currentColor));
+  opacity: 0.75;
+}
+.agent-chip-model.interactive {
+  cursor: pointer;
+}
+.agent-chip-model.interactive:hover {
+  opacity: 1;
+}
+.agent-chip-model-name {
+  letter-spacing: 0.01em;
+}
+.agent-chip-model-effort {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
 
 /* "exited" pill — sits to the right of the chip for pane-dead state. */
 .agent-chip-pill {
@@ -146,6 +209,21 @@
   font-size: 11px;
   margin-left: 2px;
   opacity: 0.85;
+}
+.agent-chip-access {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--agent);
+  color: var(--canvas);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  margin-left: 1px;
+  padding: 0 4px;
 }
 
 /* ============ TerminalChip ============ */
@@ -270,11 +348,10 @@
   padding: 2px;
   position: relative;
 }
-.plus-menu-icon img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.plus-menu-icon {
+  color: var(--icon-ring-color);
+}
+.plus-menu-icon .icon-mask {
   border-radius: 50%;
 }
 .plus-menu-label {

@@ -1,5 +1,13 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
+import { useFlipReorder } from "../hooks/useFlipReorder.js";
 import {
   Columns,
   FileText,
@@ -18,6 +26,7 @@ import {
   type PlusButtonRuntime,
 } from "../components/PlusButton.js";
 import { AgentActionMenu } from "../components/AgentActionMenu.js";
+import { pendingAccessCountForParticipant } from "../cards/AccessRequestCard.js";
 import { EnvProbeBanner } from "../components/EnvProbeBanner.js";
 import {
   createManagedAgentsClient,
@@ -27,13 +36,30 @@ import {
 import { copyToClipboard } from "../render/copy.js";
 import { TopBarModalContext } from "../App.js";
 import { KNOWN_RUNTIMES } from "../runtimes.js";
+import { useAgentSpawnContext } from "../hooks/useAgentSpawn.js";
 import { PathSwitcher } from "./PathSwitcher.js";
-import type { PresenceState, SpawnResponse } from "@f-mark/shared";
+import type { PresenceState } from "@f-mark/shared";
 
 export const FMARK_GLYPH = `▟▙ ╱╲
 ▟▙ ▟▘▘`;
 
 const COMMAND_PALETTE_SHORTCUT = chordToLabel("$mod+K");
+
+function randomHex(bytes: number): string {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const data = new Uint8Array(bytes);
+    crypto.getRandomValues(data);
+    return [...data].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return Math.floor(Math.random() * 16 ** (bytes * 2))
+    .toString(16)
+    .padStart(bytes * 2, "0");
+}
+
+function suggestedParticipantId(runtimeId: string): string {
+  const safeRuntime = runtimeId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+  return `ag-${safeRuntime.length > 0 ? safeRuntime : "agent"}-${randomHex(2)}`;
+}
 
 export function TopBar(): JSX.Element {
   const sessions = useStore((s) => s.sessions);
@@ -59,6 +85,8 @@ export function TopBar(): JSX.Element {
   const addManagedTerminal = useStore((s) => s.addManagedTerminal);
   const upsertParticipant = useStore((s) => s.upsertParticipant);
   const setPresence = useStore((s) => s.setPresence);
+  const removeManagedAgent = useStore((s) => s.removeManagedAgent);
+  const removePresence = useStore((s) => s.removePresence);
   const modalCtx = useContext(TopBarModalContext);
 
   /* Local UI: which AgentChip's action menu is open (anchored to that
@@ -68,7 +96,22 @@ export function TopBar(): JSX.Element {
     top: number;
     left: number;
   } | null>(null);
-  const [spawnError, setSpawnError] = useState<string | null>(null);
+  const [spawnTerminalError, setSpawnTerminalError] = useState<string | null>(
+    null,
+  );
+
+  /* Runtime-spawn state is owned by App via useAgentSpawn so that the
+     topbar's `+` menu and the empty-session AgentLauncher share the same
+     preflight + IntegrationSetupModal. Terminal spawning stays local
+     because TopBar is the only surface that triggers it. */
+  const {
+    runtimes,
+    tmuxMissing,
+    spawnDisabledReason,
+    spawnError: runtimeSpawnError,
+    onSpawnRuntime,
+    onManageRuntimes,
+  } = useAgentSpawnContext();
 
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) ?? null,
@@ -92,19 +135,6 @@ export function TopBar(): JSX.Element {
   const effectiveTurn: "us" | "ag" | "idle" =
     turn === "ag" && !anyAgentActive ? "idle" : turn;
 
-  const turnPillClass =
-    effectiveTurn === "us"
-      ? "turn-pill"
-      : effectiveTurn === "ag"
-        ? "turn-pill thinking"
-        : "turn-pill idle";
-  const turnLabel =
-    effectiveTurn === "us"
-      ? "Your turn"
-      : effectiveTurn === "ag"
-        ? "Agent thinking…"
-        : "Idle";
-
   const sortedParticipants = useMemo(() => {
     return Object.entries(participants)
       .map(([id, p]) => ({ id, ...p }))
@@ -114,29 +144,17 @@ export function TopBar(): JSX.Element {
       });
   }, [participants]);
 
-  /* Build the PlusButton runtime list from built-ins plus any runtime IDs
-     reported by env-probe. If the probe returns an empty runtimes object
-     because the kernel could not read the registry yet, the built-ins still
-     stay visible. A reported `false` disables that runtime; missing probe
-     entries fall back to enabled. */
+
+  /* The PathSwitcher + AgentChip menus still need a synthesized "what
+     runtimes do we know about" table independent of the spawn flow (display
+     names, executables). Compute it once from KNOWN_RUNTIMES + the env-probe
+     snapshot. */
   const probeRuntimes = useMemo<Record<string, boolean> | null>(() => {
     if (envProbe === null) return null;
     const r = (envProbe as { runtimes?: Record<string, boolean> }).runtimes;
     if (r === undefined || r === null) return null;
     return r;
   }, [envProbe]);
-
-  const runtimes = useMemo<PlusButtonRuntime[]>(() => {
-    const ids = new Set([
-      ...Object.keys(KNOWN_RUNTIMES),
-      ...(probeRuntimes !== null ? Object.keys(probeRuntimes) : []),
-    ]);
-    return [...ids].map((id) => ({
-      id,
-      displayName: KNOWN_RUNTIMES[id]?.displayName ?? id,
-      available: probeRuntimes !== null ? probeRuntimes[id] !== false : true,
-    }));
-  }, [probeRuntimes]);
 
   const registeredRuntimes = useMemo(() => {
     const ids = new Set([
@@ -150,114 +168,22 @@ export function TopBar(): JSX.Element {
     return out;
   }, [probeRuntimes]);
 
+  /* Terminal spawn is local to TopBar — the empty-session launcher does
+     not offer terminal spawning. We still tie the disabled gating to the
+     same managedAgentsDisabledReason used elsewhere. */
   const apiClient = useMemo(
     () => createManagedAgentsClient({ baseUrl: "", token }),
     [token],
   );
-
-  /* After a successful spawn we may need to open the hook-install modal.
-     `not_required` is used by Gemini's manual-stream mode: the modal is
-     informational, but the chip should not look broken. */
-  const onSpawnComplete = useCallback(
-    (resp: SpawnResponse) => {
-      /* Add the spawned agent to local chip state immediately so the user
-         sees the chip without waiting for the WS managed-agent.spawned
-         round-trip. The WS handler dedupes on participant_id, so even if
-         both fire, only one entry persists. */
-      addManagedAgent({
-        participant_id: resp.participant_id,
-        tmux_session: resp.tmux_session,
-        runtime_id: resp.runtime_id,
-      });
-      /* Also reflect the newly-registered participant in the renderer's
-         participants slice. The chip strip iterates `participants` filtered
-         by `active_session === currentSessionId`, so without this the
-         spawned agent has no chip until the next page refresh. We seed
-         active_session from the response so the chip appears immediately.
-         displayName fallback comes from KNOWN_RUNTIMES; agent color is
-         server-assigned, so the chip's dot color is fine without one. */
-      const displayName =
-        KNOWN_RUNTIMES[resp.runtime_id]?.displayName ?? resp.runtime_id;
-      upsertParticipant(resp.participant_id, {
-        kind: "agent",
-        name: displayName,
-        color: "#888888",
-        active_session: resp.active_session,
-      });
-      /* Seed presence locally so the chip dot is correct even before the
-         first WS broadcast lands (the kernel set the same state server-side
-         in tracker.setManagedHookStatus; the WS message will overwrite this
-         consistently shortly after). */
-      const presenceState =
-        resp.hooks_status === "installed"
-          ? "stale"
-          : resp.hooks_status === "not_required"
-            ? "stale"
-            : resp.hooks_status === "missing"
-              ? "hook-not-installed"
-              : "launching";
-      setPresence(resp.participant_id, {
-        state: presenceState,
-        last_hook_at: null,
-      });
-      if (
-        (resp.hooks_status === "missing" ||
-          resp.hooks_status === "not_required") &&
-        modalCtx !== null
-      ) {
-        modalCtx.openHookInstall(
-          resp.runtime_id,
-          resp.runtime_id === "claude" ? undefined : resp.participant_id,
-        );
-      }
-    },
-    [addManagedAgent, upsertParticipant, setPresence, modalCtx],
-  );
-
-  const onSpawnRuntime = useCallback(
-    (runtimeId: string) => {
-      setSpawnError(null);
-      if (managedAgentsDisabledReason !== null) {
-        setSpawnError(managedAgentsDisabledReason);
-        return;
-      }
-      void apiClient
-        .spawn({
-          runtime_id: runtimeId,
-          session_id: currentSessionId ?? undefined,
-        })
-        .then(onSpawnComplete)
-        .catch((e: unknown) => {
-          if (isProcessApiDisabledError(e)) {
-            setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
-            setSpawnError(PROCESS_API_DISABLED_MESSAGE);
-          } else {
-            setSpawnError(e instanceof Error ? e.message : String(e));
-          }
-          // eslint-disable-next-line no-console
-          console.error("spawn failed", e);
-        });
-    },
-    [
-      apiClient,
-      currentSessionId,
-      managedAgentsDisabledReason,
-      onSpawnComplete,
-      setManagedAgentsDisabledReason,
-    ],
-  );
-
   const onSpawnTerminal = useCallback(() => {
-    setSpawnError(null);
+    setSpawnTerminalError(null);
     if (managedAgentsDisabledReason !== null) {
-      setSpawnError(managedAgentsDisabledReason);
+      setSpawnTerminalError(managedAgentsDisabledReason);
       return;
     }
     void apiClient
       .spawnTerminal()
       .then((resp) => {
-        /* Symmetric to onSpawnComplete: add the spawned terminal to local
-           chip state immediately. */
         addManagedTerminal({
           tmux_session: resp.tmux_session,
           label: resp.label,
@@ -267,9 +193,9 @@ export function TopBar(): JSX.Element {
       .catch((e: unknown) => {
         if (isProcessApiDisabledError(e)) {
           setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
-          setSpawnError(PROCESS_API_DISABLED_MESSAGE);
+          setSpawnTerminalError(PROCESS_API_DISABLED_MESSAGE);
         } else {
-          setSpawnError(e instanceof Error ? e.message : String(e));
+          setSpawnTerminalError(e instanceof Error ? e.message : String(e));
         }
         // eslint-disable-next-line no-console
         console.error("spawn terminal failed", e);
@@ -281,12 +207,6 @@ export function TopBar(): JSX.Element {
     modalCtx,
     setManagedAgentsDisabledReason,
   ]);
-
-  const onManageRuntimes = useCallback(() => {
-    openSettings("runtimes");
-  }, [openSettings]);
-
-  const tmuxMissing = envProbe !== null && envProbe.tmux === false;
 
   /* Build a single chip list sourced from participants joined with
      managedAgents (for tmux info and runtime_id). Scoped to the current
@@ -316,6 +236,8 @@ export function TopBar(): JSX.Element {
           runtime_id: managed?.runtime_id ?? p.runtime_id ?? null,
           tmux_session: managed?.tmux_session ?? null,
           isManaged: managed !== undefined,
+          pendingAccessCount: pendingAccessCountForParticipant(id, events),
+          runtime_state: managed?.runtime_state,
         };
       });
     /* Sort by presence state — online first, then stale/launching, then
@@ -335,7 +257,7 @@ export function TopBar(): JSX.Element {
       if (oa !== ob) return oa - ob;
       return a.name.localeCompare(b.name);
     });
-  }, [participants, managedAgents, presence, currentSessionId]);
+  }, [participants, managedAgents, presence, currentSessionId, events]);
 
   const sortedTerminals = useMemo(
     () =>
@@ -344,6 +266,81 @@ export function TopBar(): JSX.Element {
       ),
     [managedTerminals],
   );
+
+  /* Whose turn it is, resolved to a concrete participant ID. The
+     aggregate only carries the binary us/ag prefix, so for "us" we hand
+     the highlight to the first user and for "ag" we hand it to the head
+     of the presence-sorted chip list — that's the agent most likely to
+     be the one actually mid-turn. Idle = no highlight. */
+  const activeParticipantId = useMemo<string | null>(() => {
+    if (effectiveTurn === "us") {
+      const user = sortedParticipants.find((p) => p.kind === "user");
+      return user?.id ?? null;
+    }
+    if (effectiveTurn === "ag") {
+      return allAgentChips[0]?.participant_id ?? null;
+    }
+    return null;
+  }, [effectiveTurn, sortedParticipants, allAgentChips]);
+
+  /* Build the unified participant strip — user avatars and agent chips
+     in one row, sorted so whoever currently holds the turn lands at the
+     leftmost position. We render an explicit `type` so the FLIP reorder
+     hook can map the same DOM element back to its previous position when
+     the sort flips. Terminals and the +button trail after the
+     participants so adding/removing them does not shuffle the
+     participants' relative order. */
+  type StripItem =
+    | {
+        kind: "agent";
+        id: string;
+        agent: (typeof allAgentChips)[number];
+        active: boolean;
+      }
+    | {
+        kind: "user";
+        id: string;
+        participant: (typeof sortedParticipants)[number];
+        active: boolean;
+      };
+
+  const participantStrip = useMemo<StripItem[]>(() => {
+    /* Two-pass: first compose the "resting" order (agents in their
+       presence-sorted order from allAgentChips, then users), then hoist
+       whoever currently has the turn to the leftmost position without
+       shuffling anyone else. This preserves the existing chip
+       sort-by-presence guarantee while still surfacing the active
+       participant. */
+    const items: StripItem[] = [];
+    for (const agent of allAgentChips) {
+      items.push({
+        kind: "agent",
+        id: agent.participant_id,
+        agent,
+        active: agent.participant_id === activeParticipantId,
+      });
+    }
+    for (const p of sortedParticipants) {
+      if (p.kind !== "user") continue;
+      items.push({
+        kind: "user",
+        id: p.id,
+        participant: p,
+        active: p.id === activeParticipantId,
+      });
+    }
+    const activeIdx = items.findIndex((it) => it.active);
+    if (activeIdx > 0) {
+      const [active] = items.splice(activeIdx, 1);
+      items.unshift(active!);
+    }
+    return items;
+  }, [allAgentChips, sortedParticipants, activeParticipantId]);
+
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  useFlipReorder(stripRef, [
+    participantStrip.map((i) => `${i.id}:${i.active ? 1 : 0}`).join("|"),
+  ]);
 
   const openAgent = useMemo(
     () =>
@@ -445,49 +442,75 @@ export function TopBar(): JSX.Element {
         </div>
 
         <div className="topbar-right">
+          {/* Unified participant strip — user avatars and agent chips share
+              one row. Whoever currently holds the turn is sorted to the
+              leftmost position and rendered with a pulsing container; the
+              FLIP hook smooths the position swap. Terminals and the
+              spawn-+ trail after the participants. */}
           <div
-            className={turnPillClass}
-            role="status"
-            aria-live="polite"
-            title={turnLabel}
+            className="topbar-chips"
+            ref={stripRef}
+            title="Participants"
+            data-active-turn={effectiveTurn}
           >
-            <span className="dot" aria-hidden="true" />
-            {turnLabel}
-          </div>
-
-          {/* Chip strip — managed agents, managed terminals, and the + button.
-              Wrapped so the action menu can position itself relative to its
-              chip via CSS. */}
-          <div className="topbar-chips">
-            {allAgentChips.map((agent) => {
-              const state: PresenceState =
-                presence[agent.participant_id]?.state ?? "offline";
-              return (
-                <div key={agent.participant_id} className="agent-chip-anchor">
-                  <AgentChip
-                    participantId={agent.participant_id}
-                    name={agent.name}
-                    runtimeId={agent.runtime_id}
-                    state={state}
-                    onClick={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      const menuWidth = 240;
-                      setOpenMenuAnchor({
-                        top: rect.bottom + 4,
-                        left: Math.max(
-                          8,
-                          Math.min(
-                            window.innerWidth - menuWidth - 8,
-                            rect.right - menuWidth,
+            {participantStrip.map((item) => {
+              if (item.kind === "agent") {
+                const agent = item.agent;
+                const state: PresenceState =
+                  presence[agent.participant_id]?.state ?? "offline";
+                const color = participants[agent.participant_id]?.color ?? null;
+                return (
+                  <div
+                    key={`agent:${agent.participant_id}`}
+                    data-flip-id={`agent:${agent.participant_id}`}
+                    className={`agent-chip-anchor${item.active ? " active-turn" : ""}`}
+                  >
+                    <AgentChip
+                      participantId={agent.participant_id}
+                      name={agent.name}
+                      runtimeId={agent.runtime_id}
+                      state={state}
+                      color={color}
+                      active={item.active}
+                      accessPending={agent.pendingAccessCount > 0}
+                      pendingAccessCount={agent.pendingAccessCount}
+                      runtimeState={agent.runtime_state}
+                      onClick={(event) => {
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const menuWidth = 240;
+                        setOpenMenuAnchor({
+                          top: rect.bottom + 4,
+                          left: Math.max(
+                            8,
+                            Math.min(
+                              window.innerWidth - menuWidth - 8,
+                              rect.right - menuWidth,
+                            ),
                           ),
-                        ),
-                      });
-                      setOpenMenuFor((cur) =>
-                        cur === agent.participant_id
-                          ? null
-                          : agent.participant_id,
-                      );
-                    }}
+                        });
+                        setOpenMenuFor((cur) =>
+                          cur === agent.participant_id
+                            ? null
+                            : agent.participant_id,
+                        );
+                      }}
+                    />
+                  </div>
+                );
+              }
+              const p = item.participant;
+              return (
+                <div
+                  key={`user:${p.id}`}
+                  data-flip-id={`user:${p.id}`}
+                  className={`topbar-user-anchor${item.active ? " active-turn" : ""}`}
+                >
+                  <ParticipantAvatar
+                    participantId={p.id}
+                    participant={p}
+                    size="lg"
+                    title={`${p.name} · ${p.id}`}
                   />
                 </div>
               );
@@ -512,41 +535,26 @@ export function TopBar(): JSX.Element {
               onSpawnTerminal={onSpawnTerminal}
               onManageRuntimes={onManageRuntimes}
               tmuxMissing={tmuxMissing}
-              spawnDisabledReason={managedAgentsDisabledReason}
+              spawnDisabledReason={spawnDisabledReason}
             />
-            {managedAgentsDisabledReason !== null || spawnError !== null ? (
+            {spawnDisabledReason !== null ||
+            runtimeSpawnError !== null ||
+            spawnTerminalError !== null ? (
               <span
                 className="topbar-spawn-error"
                 role="alert"
-                title={spawnError ?? managedAgentsDisabledReason ?? undefined}
+                title={
+                  runtimeSpawnError ??
+                  spawnTerminalError ??
+                  spawnDisabledReason ??
+                  undefined
+                }
               >
                 {managedAgentsDisabledReason !== null
                   ? "Spawning disabled"
                   : "Spawn failed"}
               </span>
             ) : null}
-          </div>
-
-          <div
-            className="participants"
-            title="Participants"
-            style={{ marginRight: 6 }}
-          >
-            {/* Only user avatars render here. Agent participants render as
-                AgentChips in the chip strip above, so rendering them here too
-                would duplicate identity and produce orphan bare avatars for
-                un-managed agents (no name, no click, no presence dot). */}
-            {sortedParticipants
-              .filter((p) => p.kind === "user")
-              .map((p) => (
-                <ParticipantAvatar
-                  key={p.id}
-                  participantId={p.id}
-                  participant={p}
-                  size="lg"
-                  title={`${p.name} · ${p.id}`}
-                />
-              ))}
           </div>
           <button
             type="button"
@@ -583,8 +591,20 @@ export function TopBar(): JSX.Element {
                   state={presence[openAgent.participant_id]?.state ?? "offline"}
                   managed={openAgent.isManaged}
                   onRename={(newName) => {
-                    // eslint-disable-next-line no-console
-                    console.log("rename", openAgent.participant_id, newName);
+                    const id = openAgent.participant_id;
+                    const existing = participants[id];
+                    if (existing !== undefined) {
+                      /* Reflect the rename locally before the round-trip so the
+                         chip updates immediately; the WS managed-agent.updated
+                         message will reconcile shortly after. */
+                      upsertParticipant(id, { ...existing, name: newName });
+                    }
+                    void apiClient
+                      .rename(id, { display_name: newName })
+                      .catch((err) => {
+                        // eslint-disable-next-line no-console
+                        console.error("rename failed", err);
+                      });
                     setOpenMenuFor(null);
                     setOpenMenuAnchor(null);
                   }}
@@ -671,14 +691,27 @@ export function TopBar(): JSX.Element {
                     setOpenMenuAnchor(null);
                   }}
                   onSayGoodbye={() => {
+                    /* Capture the id BEFORE the menu closes — `openAgent`
+                       is null after setOpenMenuFor(null) on the next
+                       render, but the closure still has the value here. */
+                    const id = openAgent.participant_id;
                     void (async () => {
                       try {
-                        const t = await apiClient.getConfirmToken(
-                          openAgent.participant_id,
-                        );
-                        await apiClient.goodbye(openAgent.participant_id, t);
-                      } catch {
-                        /* swallow */
+                        const t = await apiClient.getConfirmToken(id);
+                        await apiClient.goodbye(id, t);
+                        /* Optimistically clear local state in case the
+                           WS `managed-agent.killed` event is missed
+                           (disconnect, dropped frame, etc.). The store
+                           reducer is idempotent, so a later WS event
+                           just no-ops. */
+                        removeManagedAgent(id);
+                        removePresence(id);
+                      } catch (err) {
+                        /* Surface failures — silent swallow was hiding
+                           confirm-token races, Origin-gate denials, and
+                           "session not found" on already-dead panes. */
+                        // eslint-disable-next-line no-console
+                        console.error("goodbye failed", id, err);
                       }
                     })();
                     setOpenMenuFor(null);
