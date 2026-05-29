@@ -28,6 +28,7 @@ import type {
   WakeSessionResponse,
 } from "@f-mark/shared";
 import { getAdapter } from "../runtimes/adapters/index.js";
+import { getRuntimeState, setRuntimeState } from "../services/runtimeState.js";
 import { paths as makePaths, type Paths } from "../paths.js";
 import type { TmuxManager } from "../tmux/manager.js";
 import type { PresenceTracker } from "../presence/tracker.js";
@@ -35,6 +36,7 @@ import {
   registerAgent,
   isValidParticipantId,
   listParticipants,
+  setParticipantOverrides,
   setParticipantRuntime,
   updateParticipant,
 } from "../participants.js";
@@ -624,6 +626,7 @@ export function registerManagedAgentsRoutes(
           mode: control.access_mode,
         }),
         pending_access_count: pendingAccessCount,
+        runtime_state: getRuntimeState(participantId),
       });
     }
 
@@ -1111,11 +1114,21 @@ export function registerManagedAgentsRoutes(
           events: [],
         }),
       );
+      const allParticipants = await listParticipants(p, { agentState: state });
+      const persisted = allParticipants[id];
+      const overridePatch: RuntimeOverridePatch | undefined =
+        persisted?.model_override || persisted?.effort_override
+          ? {
+              model: persisted.model_override,
+              effort: persisted.effort_override,
+            }
+          : undefined;
       const spawnArgs = spawnArgsForRuntime({
         runtimeId,
         args: runtime.args,
         desiredName: current.active_session,
         launchPrompt: prompt,
+        override: overridePatch,
       });
       const { sessionName } = await tmux.spawnAgent({
         participantId: id,
@@ -1444,11 +1457,23 @@ export function registerManagedAgentsRoutes(
       mcpStatus,
       hooksStatus,
     });
+    const spawnParticipants = await listParticipants(p, {
+      agentState: agentState(),
+    });
+    const spawnPersisted = spawnParticipants[participantId];
+    const spawnOverride: RuntimeOverridePatch | undefined =
+      spawnPersisted?.model_override || spawnPersisted?.effort_override
+        ? {
+            model: spawnPersisted.model_override,
+            effort: spawnPersisted.effort_override,
+          }
+        : undefined;
     const spawnArgs = spawnArgsForRuntime({
       runtimeId: runtime_id,
       args: runtime.args,
       desiredName,
       launchPrompt,
+      override: spawnOverride,
     });
     runtimeSession.native_name_applied = spawnArgs.nativeNameApplied;
     const { sessionName } = await tmux.spawnAgent({
@@ -1681,6 +1706,194 @@ export function registerManagedAgentsRoutes(
       return { entries };
     },
   );
+
+  /* === Runtime control (model/effort) === */
+
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    "/managed-agents/:id/runtime-state",
+    async (req, reply) => {
+      const id = decodeURIComponent(req.params.id);
+      if (!isValidParticipantId(id)) {
+        reply.code(400);
+        return { error: "invalid id" };
+      }
+      const body = req.body as Record<string, unknown> | null;
+      if (!body || typeof body !== "object") {
+        reply.code(400);
+        return { error: "missing body" };
+      }
+      const state = {
+        model: typeof body.model === "string" ? body.model : undefined,
+        effort: typeof body.effort === "string" ? body.effort : undefined,
+        provider: typeof body.provider === "string" ? body.provider : undefined,
+        source:
+          typeof body.source === "string" ? (body.source as string) : "unknown",
+        observedAt:
+          typeof body.observedAt === "number"
+            ? body.observedAt
+            : Date.now(),
+      } as import("@f-mark/shared").CurrentRuntimeState;
+      setRuntimeState(id, state);
+      await publishAgentUpdated(id);
+      return { ok: true };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/managed-agents/:id/runtime/state",
+    async (req, reply) => {
+      const id = decodeURIComponent(req.params.id);
+      if (!isValidParticipantId(id)) {
+        reply.code(400);
+        return { error: "invalid id" };
+      }
+      const s = getRuntimeState(id);
+      return { state: s ?? null };
+    },
+  );
+
+  app.get<{ Params: { id: string }; Querystring: { refresh?: string } }>(
+    "/managed-agents/:id/runtime/models",
+    async (req, reply) => {
+      const id = decodeURIComponent(req.params.id);
+      if (!isValidParticipantId(id)) {
+        reply.code(400);
+        return { error: "invalid id" };
+      }
+      const p = routePaths();
+      const participants = await listParticipants(p, { agentState: agentState() });
+      const participant = participants[id];
+      if (!participant) {
+        reply.code(404);
+        return { error: `agent not found: ${id}` };
+      }
+      const runtimeId = participant.runtime_id ?? null;
+      const adapter = getAdapter(runtimeId);
+      if (!adapter) {
+        reply.code(400);
+        return { error: `runtime has no adapter: ${runtimeId}` };
+      }
+      try {
+        const models = await adapter.listModels({
+          refresh: req.query.refresh === "true",
+        });
+        return { models };
+      } catch (e) {
+        reply.code(502);
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  );
+
+  app.get<{
+    Params: { id: string };
+    Querystring: { model?: string };
+  }>("/managed-agents/:id/runtime/efforts", async (req, reply) => {
+    const id = decodeURIComponent(req.params.id);
+    if (!isValidParticipantId(id)) {
+      reply.code(400);
+      return { error: "invalid id" };
+    }
+    const p = routePaths();
+    const participants = await listParticipants(p, { agentState: agentState() });
+    const participant = participants[id];
+    if (!participant) {
+      reply.code(404);
+      return { error: `agent not found: ${id}` };
+    }
+    const adapter = getAdapter(participant.runtime_id ?? null);
+    if (!adapter) {
+      reply.code(400);
+      return { error: `runtime has no adapter: ${participant.runtime_id}` };
+    }
+    try {
+      const efforts = await adapter.listEfforts(req.query.model);
+      return { efforts };
+    } catch (e) {
+      reply.code(502);
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  app.put<{
+    Params: { id: string };
+    Body: { model?: string | null; effort?: string | null; restart?: boolean };
+  }>("/managed-agents/:id/runtime", async (req, reply) => {
+    const id = decodeURIComponent(req.params.id);
+    if (!isValidParticipantId(id)) {
+      reply.code(400);
+      return { error: "invalid id" };
+    }
+    const body = req.body ?? {};
+    const p = routePaths();
+    const state = agentState();
+    const participants = await listParticipants(p, { agentState: state });
+    const participant = participants[id];
+    if (!participant) {
+      reply.code(404);
+      return { error: `agent not found: ${id}` };
+    }
+    const adapter = getAdapter(participant.runtime_id ?? null);
+    if (!adapter) {
+      reply.code(400);
+      return { error: `runtime has no adapter: ${participant.runtime_id}` };
+    }
+    if (typeof body.model === "string" && body.model.length > 0) {
+      const models = await adapter.listModels();
+      if (!models.some((m) => m.id === body.model)) {
+        reply.code(400);
+        return { error: `unknown model for ${participant.runtime_id}: ${body.model}` };
+      }
+    }
+    if (typeof body.effort === "string" && body.effort.length > 0) {
+      const efforts = await adapter.listEfforts(
+        typeof body.model === "string" ? body.model : participant.model_override,
+      );
+      if (efforts.length > 0 && !efforts.some((e) => e.id === body.effort)) {
+        reply.code(400);
+        return {
+          error: `unknown effort for ${participant.runtime_id}: ${body.effort}`,
+        };
+      }
+    }
+    const persisted = await setParticipantOverrides(p, id, {
+      model: body.model,
+      effort: body.effort,
+    });
+    // Mark the runtime state as "override" so the UI badge updates immediately;
+    // the next hook fire will overwrite with the observed live value.
+    setRuntimeState(id, {
+      source: "override",
+      observedAt: Date.now(),
+      configuredModel: persisted.model_override,
+      configuredEffort: persisted.effort_override,
+    });
+    let restarted = false;
+    if (body.restart !== false) {
+      const tmuxSession = await state.readTmuxSession(id);
+      if (tmuxSession) {
+        try {
+          await tmux.killSession(tmuxSession);
+          await state.clearManagedSiblings(id);
+          tracker.clearManagedPane(id);
+          await state.appendLog(id, {
+            event: "runtime-override-applied",
+            model: persisted.model_override ?? null,
+            effort: persisted.effort_override ?? null,
+          });
+          restarted = true;
+        } catch {
+          // tolerate already-dead session
+        }
+      }
+    }
+    await publishAgentUpdated(id);
+    return {
+      ok: true,
+      participant: persisted,
+      restarted,
+    };
+  });
 
   app.post<{
     Params: { id: string };

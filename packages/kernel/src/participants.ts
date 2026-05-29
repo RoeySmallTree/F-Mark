@@ -5,6 +5,7 @@ import { readConfig, writeConfig, type Participant } from "./project.js";
 import type { Paths } from "./paths.js";
 import { loadRuntimes } from "./runtimes/registry.js";
 import { readActiveSession } from "./agents/activeSession.js";
+import type { AgentStateStore } from "./services/agentState.js";
 
 /** Hard cap on display-name length. Mirrors the JSON-schema constraint
  *  on /participants/register so direct kernel callers see the same
@@ -25,7 +26,12 @@ function validateName(raw: string): string {
   return trimmed;
 }
 
-async function assertKnownRuntime(p: Paths, runtimeId: string): Promise<void> {
+async function assertKnownRuntimeWithKnownSet(
+  p: Paths,
+  runtimeId: string,
+  knownRuntimeIds?: ReadonlySet<string>,
+): Promise<void> {
+  if (knownRuntimeIds?.has(runtimeId) === true) return;
   const file = await loadRuntimes(p.fmarkDir());
   if (!(runtimeId in file.runtimes)) {
     throw new Error(`unknown runtime_id: ${runtimeId}`);
@@ -49,6 +55,7 @@ export interface RegisterAgentInput {
   name: string;
   suggested_id?: string;
   runtime_id?: string;
+  knownRuntimeIds?: ReadonlySet<string>;
 }
 
 export interface RegisteredAgent {
@@ -175,15 +182,16 @@ export async function ensureDefaultUserParticipant(
 
 export async function listParticipants(
   p: Paths,
+  opts: { agentState?: AgentStateStore } = {},
 ): Promise<Record<string, ParticipantWithSession>> {
   const participants = await readParticipants(p);
   const out: Record<string, ParticipantWithSession> = {};
   for (const [id, part] of Object.entries(participants)) {
     if (part.kind === "agent") {
-      const active_session = await readActiveSession(
-        join(p.fmarkDir(), "agents"),
-        id,
-      );
+      const active_session =
+        opts.agentState !== undefined
+          ? await opts.agentState.readActiveSession(id)
+          : await readActiveSession(join(p.fmarkDir(), "agents"), id);
       out[id] = { ...part, active_session };
     } else {
       out[id] = { ...part, active_session: null };
@@ -214,7 +222,11 @@ export async function registerAgent(
 ): Promise<RegisteredAgent> {
   const name = validateName(input.name);
   if (input.runtime_id !== undefined) {
-    await assertKnownRuntime(p, input.runtime_id);
+    await assertKnownRuntimeWithKnownSet(
+      p,
+      input.runtime_id,
+      input.knownRuntimeIds,
+    );
   }
   const participants = await ensureDefaultUserParticipant(p);
   let id: string;
@@ -251,8 +263,9 @@ export async function setParticipantRuntime(
   p: Paths,
   id: string,
   runtimeId: string,
+  knownRuntimeIds?: ReadonlySet<string>,
 ): Promise<void> {
-  await assertKnownRuntime(p, runtimeId);
+  await assertKnownRuntimeWithKnownSet(p, runtimeId, knownRuntimeIds);
   const participants = await readParticipants(p);
   const current = participants[id];
   if (current === undefined) return;
@@ -301,5 +314,36 @@ export async function updateParticipant(
     kind: current.kind,
     name: current.name,
     color: current.color,
+  };
+}
+
+export async function setParticipantOverrides(
+  p: Paths,
+  id: string,
+  patch: { model?: string | null; effort?: string | null },
+): Promise<{ model_override?: string; effort_override?: string }> {
+  if (!ID_PATTERN.test(id)) {
+    throw new Error(`invalid participant id format: ${id}`);
+  }
+  const participants = await readParticipants(p);
+  const current = participants[id];
+  if (current === undefined) {
+    throw new Error(`participant not found: ${id}`);
+  }
+  if (patch.model === null) {
+    delete current.model_override;
+  } else if (typeof patch.model === "string" && patch.model.length > 0) {
+    current.model_override = patch.model;
+  }
+  if (patch.effort === null) {
+    delete current.effort_override;
+  } else if (typeof patch.effort === "string" && patch.effort.length > 0) {
+    current.effort_override = patch.effort;
+  }
+  participants[id] = current;
+  await writeParticipants(p, participants);
+  return {
+    model_override: current.model_override,
+    effort_override: current.effort_override,
   };
 }

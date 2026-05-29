@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { Paths } from "./paths.js";
 import { initRuntimesFile } from "./runtimes/registry.js";
+import { ensureFmarkGitignored } from "./gitignore.js";
 
 export interface ProjectConfig {
   version: string;
@@ -16,6 +17,8 @@ export interface Participant {
   name: string;
   color: string;
   runtime_id?: string;
+  model_override?: string;
+  effort_override?: string;
 }
 
 const DEFAULT_VERSION = "0.1.0";
@@ -62,6 +65,13 @@ export async function initProject(p: Paths, port: number = DEFAULT_PORT): Promis
     await writeFile(p.agentMd(), template);
   }
   await initRuntimesFile(p.fmarkDir());
+  /* Best-effort: surface .f-mark/ in the project's .gitignore if one
+     exists. Don't fail initProject when the FS won't let us write. */
+  try {
+    await ensureFmarkGitignored(p.root());
+  } catch {
+    /* swallow */
+  }
 }
 
 export async function readConfig(p: Paths): Promise<ProjectConfig> {
