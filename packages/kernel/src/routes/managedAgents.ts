@@ -20,12 +20,14 @@ import type {
   ManagedAgentControlResponse,
   ManagedAgentRenameRequest,
   ManagedAgentsStatusResponse,
+  RuntimeOverridePatch,
   RuntimeSessionInfo,
   SpawnRequest,
   SpawnTerminalRequest,
   WakeSessionRequest,
   WakeSessionResponse,
 } from "@f-mark/shared";
+import { getAdapter } from "../runtimes/adapters/index.js";
 import { paths as makePaths, type Paths } from "../paths.js";
 import type { TmuxManager } from "../tmux/manager.js";
 import type { PresenceTracker } from "../presence/tracker.js";
@@ -118,17 +120,30 @@ function hasClaudeNameArg(args: string[]): boolean {
   return args.includes("--name") || args.includes("-n");
 }
 
+export function applyRuntimeOverride(
+  runtimeId: string,
+  args: string[],
+  override: RuntimeOverridePatch | undefined,
+): string[] {
+  if (!override || (!override.model && !override.effort)) return args;
+  const adapter = getAdapter(runtimeId);
+  if (!adapter) return args;
+  const sanitized = adapter.sanitizeArgs(args, override);
+  return [...sanitized, ...adapter.buildSpawnArgs(override)];
+}
+
 function spawnArgsForRuntime(input: {
   runtimeId: string;
   args: string[];
   desiredName: string | null;
   launchPrompt: string;
+  override?: RuntimeOverridePatch;
 }): {
   args: string[];
   nativeNameApplied: boolean;
   launchPromptDelivery: "native" | "tmux";
 } {
-  let args = input.args;
+  let args = applyRuntimeOverride(input.runtimeId, input.args, input.override);
   let nativeNameApplied = false;
   if (
     input.desiredName !== null &&
