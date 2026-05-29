@@ -297,6 +297,14 @@ export const FmarkPlugin: Plugin = async (input) => {
           source: "hook",
           path: ctx.projectPath,
         });
+        // Trigger kernel-side runtime-state probe via the OpenCode adapter
+        // (queries `opencode db --format json` for this sessionID). Best-effort.
+        await httpJson(
+          ctx,
+          "POST",
+          `/managed-agents/${ctx.agentId}/runtime-state`,
+          { runtime_session_id: opencodeSid, source: "opencode-db" },
+        );
         turnHasContent.set(opencodeSid, false);
         return;
       }

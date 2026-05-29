@@ -1750,22 +1750,54 @@ export function registerManagedAgentsRoutes(
       const p = routePaths();
       const participants = await listParticipants(p, { agentState: agentState() });
       const persisted = participants[id];
+
+      // OpenCode plugin path: posts `{runtime_session_id}` as a "please
+      // probe" trigger. Kernel-side adapter then queries opencode db.
+      // Callers that already have observed model/effort can POST them
+      // directly (autoStream does this) and skip the trigger.
+      let observed: Partial<import("@f-mark/shared").CurrentRuntimeState> = {};
+      const triggerSessionId = typeof body.runtime_session_id === "string"
+        ? body.runtime_session_id
+        : undefined;
+      if (
+        triggerSessionId &&
+        typeof body.model !== "string"
+      ) {
+        const adapter = getAdapter(persisted?.runtime_id ?? null);
+        if (adapter) {
+          try {
+            const probed = await adapter.readCurrent({
+              sessionId: triggerSessionId,
+            });
+            if (probed) observed = probed;
+          } catch {
+            // best-effort
+          }
+        }
+      } else {
+        observed = {
+          model: typeof body.model === "string" ? body.model : undefined,
+          effort: typeof body.effort === "string" ? body.effort : undefined,
+          provider: typeof body.provider === "string" ? body.provider : undefined,
+          source:
+            typeof body.source === "string"
+              ? (body.source as import("@f-mark/shared").RuntimeStateSource)
+              : "unknown",
+          observedAt:
+            typeof body.observedAt === "number" ? body.observedAt : Date.now(),
+        };
+      }
+
       const state = {
-        model: typeof body.model === "string" ? body.model : undefined,
-        effort: typeof body.effort === "string" ? body.effort : undefined,
-        provider: typeof body.provider === "string" ? body.provider : undefined,
-        source:
-          typeof body.source === "string" ? (body.source as string) : "unknown",
-        observedAt:
-          typeof body.observedAt === "number"
-            ? body.observedAt
-            : Date.now(),
+        ...observed,
+        source: observed.source ?? "unknown",
+        observedAt: observed.observedAt ?? Date.now(),
         configuredModel: persisted?.model_override,
         configuredEffort: persisted?.effort_override,
       } as import("@f-mark/shared").CurrentRuntimeState;
       setRuntimeState(id, state);
       await publishAgentUpdated(id);
-      return { ok: true };
+      return { ok: true, state };
     },
   );
 
