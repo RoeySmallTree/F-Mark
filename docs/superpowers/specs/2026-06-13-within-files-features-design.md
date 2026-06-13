@@ -1,9 +1,15 @@
 # Design — "Within Files" feature set
 
 **Date:** 2026-06-13
-**Status:** Draft for review (merged with Codex consultation + spec review)
+**Status:** APPROVED for full-scope build. Owner directive: "NEVER defer ANYTHING and NEVER leave
+legacy / back-comp." The **binding implementation contract is
+`planning/within-files/expansion-decisions.md`** (X1–X7) — it overrides every "v1 cut / deferred /
+non-goal" framing below. Sections §2, §10, §11, §12 here are superseded by that contract; the rest of this
+document remains the readable design overview.
 **Scope:** Four user-facing features that turn the F-Mark file viewer into an interactive,
-diff-aware, commentable surface, plus a configurable app layout.
+diff-aware, commentable surface, plus a fully configurable app layout. Everything is in scope — no phased
+cuts. Only genuinely *rejected implementation alternatives* stay out: git snapshot/stash at session
+creation, tool-use "replay" diffs, and Monaco-computed hunks as the action source of truth.
 
 > This is one cohesive design covering four features. Each **phase** below is independently
 > buildable and will get its own implementation plan (via `writing-plans`). The phase order is
