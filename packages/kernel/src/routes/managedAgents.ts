@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type {
   AccessRequestPayload,
@@ -26,6 +26,10 @@ import type {
   SpawnTerminalRequest,
   WakeSessionRequest,
   WakeSessionResponse,
+} from "@f-mark/shared";
+import {
+  defaultRuntimeAccessMode,
+  isRuntimeAccessMode,
 } from "@f-mark/shared";
 import { getAdapter } from "../runtimes/adapters/index.js";
 import { canonicalizeClaudeModelId } from "../runtimes/adapters/claude.js";
@@ -60,10 +64,15 @@ import {
   runtimeControlCommand,
   type RuntimeControlAction,
 } from "../agents/capabilities.js";
-import { writeAccessResponseEvent } from "../services/events.js";
+import {
+  writeAccessResponseEvent,
+  writeAccessRequestEvent,
+  writeTurnEndEvent,
+} from "../services/events.js";
 import { publishEventWrites } from "../services/eventPublisher.js";
 import { ensureProjectAuth } from "../auth.js";
 import { markFmarkLaunchPrompt } from "../launchPrompt.js";
+import { extractTerminalAccessPrompt } from "../terminalAccess.js";
 
 export interface ManagedAgentsDeps {
   paths: Paths;
@@ -115,6 +124,67 @@ function randomizedDisplayName(displayName: string): string {
   return `${displayName} ${randomBytes(2).toString("hex")}`;
 }
 
+function blockedIntegrationCheck(
+  projectRoot: string,
+  reason: string,
+): {
+  status: "blocked";
+  locations: Array<{
+    scope: "project";
+    path: string;
+    status: "blocked";
+    reason: string;
+    safe_auto_apply: false;
+  }>;
+} {
+  return {
+    status: "blocked",
+    locations: [
+      {
+        scope: "project",
+        path: projectRoot,
+        status: "blocked",
+        reason,
+        safe_auto_apply: false,
+      },
+    ],
+  };
+}
+
+async function preflightRegisteredIntegration(input: {
+  runtimeId: string;
+  participantId?: string;
+  userParticipantId?: string;
+  projectRoot: string;
+  registryDeps: { fallback: Paths; ref?: PathContextRef };
+}) {
+  const runtimes = await loadRuntimeRegistry(input.registryDeps);
+  const runtime = runtimes.runtimes[input.runtimeId];
+  if (runtime === undefined) {
+    const reason = `runtime_id is not registered for launch: ${input.runtimeId}`;
+    const blocked = blockedIntegrationCheck(input.projectRoot, reason);
+    return {
+      runtime: {
+        runtime_id: input.runtimeId,
+        executable: input.runtimeId,
+        available: false,
+        reason,
+      },
+      mcp: blocked,
+      hooks: blocked,
+      can_apply: false,
+    };
+  }
+  return preflightIntegration({
+    runtimeId: input.runtimeId,
+    executable: runtime.executable,
+    participantId: input.participantId,
+    userParticipantId: input.userParticipantId,
+    projectRoot: input.projectRoot,
+    env: process.env,
+  });
+}
+
 function supportsNativeSessionName(runtimeId: string): boolean {
   return runtimeId === "claude";
 }
@@ -135,18 +205,63 @@ export function applyRuntimeOverride(
   return [...sanitized, ...adapter.buildSpawnArgs(override)];
 }
 
+function stripRuntimeAccessArgs(runtimeId: string, args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (runtimeId === "claude") {
+      if (arg === "--permission-mode") {
+        i++;
+        continue;
+      }
+      if (arg.startsWith("--permission-mode=")) continue;
+      if (
+        arg === "--dangerously-skip-permissions" ||
+        arg === "--allow-dangerously-skip-permissions"
+      ) {
+        continue;
+      }
+    }
+    if (runtimeId === "codex") {
+      if (arg === "-a" || arg === "--ask-for-approval") {
+        i++;
+        continue;
+      }
+      if (arg.startsWith("-a=") || arg.startsWith("--ask-for-approval=")) {
+        continue;
+      }
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
+function applyRuntimeAccessMode(
+  runtimeId: string,
+  args: string[],
+  accessMode: string,
+): string[] {
+  const base = stripRuntimeAccessArgs(runtimeId, args);
+  if (accessMode === "default") return base;
+  if (runtimeId === "claude") return [...base, "--permission-mode", accessMode];
+  if (runtimeId === "codex") return [...base, "-a", accessMode];
+  return base;
+}
+
 function spawnArgsForRuntime(input: {
   runtimeId: string;
   args: string[];
   desiredName: string | null;
   launchPrompt: string;
   override?: RuntimeOverridePatch;
+  accessMode: string;
 }): {
   args: string[];
   nativeNameApplied: boolean;
   launchPromptDelivery: "native" | "tmux";
 } {
   let args = applyRuntimeOverride(input.runtimeId, input.args, input.override);
+  args = applyRuntimeAccessMode(input.runtimeId, args, input.accessMode);
   let nativeNameApplied = false;
   if (
     input.desiredName !== null &&
@@ -163,26 +278,6 @@ function spawnArgsForRuntime(input: {
       nativeNameApplied,
       launchPromptDelivery: "native",
     };
-  }
-
-  if (input.runtimeId === "gemini") {
-    const hasPromptArg = args.some(
-      (arg) =>
-        arg === "--prompt-interactive" ||
-        arg === "-i" ||
-        arg === "--prompt" ||
-        arg === "-p",
-    );
-    if (!hasPromptArg) {
-      const trustArgs = args.includes("--skip-trust")
-        ? args
-        : ["--skip-trust", ...args];
-      return {
-        args: [...trustArgs, "--prompt-interactive", input.launchPrompt],
-        nativeNameApplied,
-        launchPromptDelivery: "native",
-      };
-    }
   }
 
   if (input.runtimeId === "opencode") {
@@ -207,6 +302,7 @@ function buildLaunchPrompt(input: {
   projectRoot: string;
   mcpStatus: SpawnSetupStatus;
   hooksStatus: SpawnSetupStatus;
+  recentEvents?: Awaited<ReturnType<typeof readEvents>>;
 }): string {
   const guide = buildMcpGuide({
     sessionId: input.sessionId,
@@ -223,8 +319,33 @@ function buildLaunchPrompt(input: {
     mcp_status: input.mcpStatus,
     hooks_status: input.hooksStatus,
   };
+  const recentEvents = input.recentEvents ?? [];
+  const existingSessionBrief =
+    input.sessionId !== undefined && recentEvents.length > 0
+      ? [
+          "## Existing Session Brief",
+          "You are joining an existing F-Mark session, not starting a new chat.",
+          "Read the current context before making assumptions. Use `fmark_get_inbox` or `fmark_read_events` if the compact packet is not enough.",
+          "If the latest user message is an active request, answer or continue that request instead of posting a generic connected greeting.",
+          "",
+          "```json",
+          JSON.stringify(
+            buildCompassPacket({
+              sessionId: input.sessionId,
+              participantId: input.participantId,
+              cursorBefore: null,
+              events: recentEvents,
+            }),
+            null,
+            2,
+          ),
+          "```",
+          "",
+        ]
+      : [];
   return markFmarkLaunchPrompt([
     guide,
+    ...existingSessionBrief,
     "## Launch Packet",
     "Use this packet as the current bounded context for your first turn:",
     "",
@@ -255,9 +376,6 @@ function runtimeReady(snapshot: string, runtimeId: string): boolean {
   }
   if (runtimeId === "codex") {
     return snapshot.includes("Codex") || snapshot.includes("Ask Codex");
-  }
-  if (runtimeId === "gemini") {
-    return snapshot.includes("Gemini") || snapshot.includes("shell mode");
   }
   return true;
 }
@@ -295,13 +413,29 @@ function connectionState(input: {
   return "offline";
 }
 
-function unknownContext(): AgentContextStatus {
+function contextStatus(runtimeId: string | null): AgentContextStatus {
+  const caps = runtimeCapabilities(runtimeId);
+  if (caps.context_source === "unsupported") {
+    return {
+      status: "unsupported",
+      used_tokens: null,
+      max_tokens: null,
+      source: caps.context_source,
+      reason: caps.context_reason ?? "Context usage is unsupported for this runtime.",
+    };
+  }
   return {
-    status: "unknown",
+    status: "not-reported",
     used_tokens: null,
     max_tokens: null,
-    source: "unknown",
+    source: caps.context_source,
+    reason: caps.context_reason ?? "Context usage is not reported by this runtime.",
   };
+}
+
+function normalizeAccessMode(runtimeId: string | null, mode: string): string {
+  if (isRuntimeAccessMode(runtimeId, mode)) return mode;
+  return defaultRuntimeAccessMode(runtimeId);
 }
 
 function accessStatus(input: {
@@ -309,13 +443,18 @@ function accessStatus(input: {
   mode: string;
 }): AgentAccessStatus {
   const caps = runtimeCapabilities(input.runtimeId);
+  const mode = normalizeAccessMode(input.runtimeId, input.mode);
   return {
-    mode: input.mode,
+    mode,
     supported_modes: caps.access_modes,
     change_supported: caps.access_change_supported,
     ...(caps.access_change_supported
       ? {}
-      : { reason: "live access changes are not verified for this runtime" }),
+      : {
+          reason:
+            caps.access_change_reason ??
+            "Live permission mode changes are not verified for this runtime.",
+        }),
   };
 }
 
@@ -335,6 +474,53 @@ function responseStatus(
 
 function statusFromExpired(): AccessResponsePayload["status"] {
   return "expired";
+}
+
+function terminalPromptFingerprint(input: {
+  participantId: string;
+  tmuxSession: string;
+  message: string;
+  command?: string;
+  suggestions: unknown[];
+}): string {
+  return createHash("sha1")
+    .update(input.participantId)
+    .update("\0")
+    .update(input.tmuxSession)
+    .update("\0")
+    .update(input.message)
+    .update("\0")
+    .update(input.command ?? "")
+    .update("\0")
+    .update(JSON.stringify(input.suggestions))
+    .digest("hex")
+    .slice(0, 20);
+}
+
+function responseOption(
+  request: AccessRequestPayload,
+  body: ManagedAccessResponseRequest,
+): {
+  decision: Extract<AccessResponsePayload["decision"], "approve" | "deny">;
+  optionId?: string;
+  terminalInput?: string;
+} {
+  const suggestions = Array.isArray(request.suggestions)
+    ? request.suggestions
+    : [];
+  const selected =
+    body.option_id !== undefined
+      ? suggestions.find((suggestion) => suggestion.id === body.option_id)
+      : suggestions.find((suggestion) => suggestion.decision === body.decision);
+
+  if (selected === undefined) {
+    return { decision: body.decision };
+  }
+  return {
+    decision: selected.decision,
+    optionId: selected.id,
+    terminalInput: selected.terminal_input,
+  };
 }
 
 function isOpenAccessRequest(event: unknown): event is {
@@ -512,12 +698,12 @@ export function registerManagedAgentsRoutes(
     },
     async (req) => {
       const p = routePaths();
-      return preflightIntegration({
+      return preflightRegisteredIntegration({
         runtimeId: req.body.runtime_id,
         participantId: req.body.participant_id,
         userParticipantId: await firstUserParticipantId(p),
         projectRoot: p.root(),
-        env: process.env,
+        registryDeps: { fallback: paths, ref: deps.pathContextRef },
       });
     },
   );
@@ -544,9 +730,20 @@ export function registerManagedAgentsRoutes(
     async (req, reply) => {
       const p = routePaths();
       await ensureProjectAuth(p, deps.authToken ?? null);
+      const runtimes = await loadRuntimeRegistry({
+        fallback: paths,
+        ref: deps.pathContextRef,
+      });
+      if (runtimes.runtimes[req.body.runtime_id] === undefined) {
+        reply.code(409);
+        return {
+          error: `runtime_id is not registered for launch: ${req.body.runtime_id}`,
+        };
+      }
       try {
         return await applyIntegration({
           runtimeId: req.body.runtime_id,
+          executable: runtimes.runtimes[req.body.runtime_id]?.executable,
           participantId: req.body.participant_id,
           userParticipantId: await firstUserParticipantId(p),
           scope: req.body.scope,
@@ -621,7 +818,7 @@ export function registerManagedAgentsRoutes(
         tmux_session: tmuxSession,
         mcp_status: "unknown",
         hook_status: "unknown",
-        context: unknownContext(),
+        context: contextStatus(runtimeId),
         access: accessStatus({
           runtimeId,
           mode: control.access_mode,
@@ -691,33 +888,6 @@ export function registerManagedAgentsRoutes(
     return request?.payload ?? null;
   }
 
-  async function deliverTerminalAccessDecision(input: {
-    agent: AgentStatusRow;
-    decision: ManagedAccessResponseRequest["decision"];
-  }): Promise<{ delivered: true } | { delivered: false; error: string }> {
-    if (input.agent.tmux_session === null) {
-      return { delivered: false, error: "agent pane is not connected" };
-    }
-    if (input.agent.connection_state !== "connected") {
-      return { delivered: false, error: "agent pane is not connected" };
-    }
-    if (input.agent.runtime_id !== "gemini") {
-      return {
-        delivered: false,
-        error: "terminal access responses are only verified for Gemini",
-      };
-    }
-    await inputQueue.enqueue(input.agent.tmux_session, async () => {
-      if (input.decision === "approve") {
-        await tmux.sendKey(input.agent.tmux_session!, "C-m");
-      } else {
-        await tmux.sendLiteralText(input.agent.tmux_session!, "3");
-        await tmux.sendKey(input.agent.tmux_session!, "C-m");
-      }
-    });
-    return { delivered: true };
-  }
-
   async function writeManagedAccessResponse(input: {
     p: Paths;
     sessionId: string;
@@ -728,6 +898,8 @@ export function registerManagedAgentsRoutes(
     delivery: AccessResponsePayload["delivery"];
     status: AccessResponsePayload["status"];
     decision: AccessResponsePayload["decision"];
+    optionId?: string;
+    terminalInput?: string;
     error?: string;
   }): Promise<ManagedAccessResponseResponse> {
     const written = await writeAccessResponseEvent(input.p, input.sessionId, {
@@ -738,6 +910,10 @@ export function registerManagedAgentsRoutes(
       status: input.status,
       delivered: input.delivered,
       delivery: input.delivery,
+      ...(input.optionId !== undefined ? { option_id: input.optionId } : {}),
+      ...(input.terminalInput !== undefined
+        ? { terminal_input: input.terminalInput }
+        : {}),
       ...(input.body.message !== undefined ? { message: input.body.message } : {}),
       ...(input.error !== undefined ? { error: input.error } : {}),
       responded_at: new Date().toISOString(),
@@ -756,6 +932,151 @@ export function registerManagedAgentsRoutes(
       delivery: input.delivery,
       ...(input.error !== undefined ? { error: input.error } : {}),
     };
+  }
+
+  const terminalPromptSeen = new Map<string, number>();
+  const terminalPromptPollers = new Map<string, NodeJS.Timeout>();
+  const TERMINAL_PROMPT_SEEN_TTL_MS = 10 * 60 * 1000;
+  const TERMINAL_PROMPT_POLL_MS = 1000;
+  const TERMINAL_PROMPT_POLL_TTL_MS = 5 * 60 * 1000;
+
+  function markTerminalPromptSeen(fingerprint: string): void {
+    const now = Date.now();
+    for (const [key, seenAt] of terminalPromptSeen.entries()) {
+      if (now - seenAt > TERMINAL_PROMPT_SEEN_TTL_MS) {
+        terminalPromptSeen.delete(key);
+      }
+    }
+    terminalPromptSeen.set(fingerprint, now);
+  }
+
+  async function terminalAccessRequestAlreadyOpen(input: {
+    p: Paths;
+    sessionId: string;
+    participantId: string;
+    fingerprint: string;
+  }): Promise<boolean> {
+    const events = await readEvents(input.p, input.sessionId, {
+      kinds: ["access-request", "access-response"],
+    });
+    const responses = new Set<string>();
+    for (const event of events) {
+      if (isAccessResponse(event)) responses.add(event.payload.request_id);
+    }
+    return events.some((event) => {
+      if (!isOpenAccessRequest(event)) return false;
+      if (event.participant_id !== input.participantId) return false;
+      if (responses.has(event.payload.request_id)) return false;
+      const raw = event.payload.raw;
+      return (
+        raw !== null &&
+        typeof raw === "object" &&
+        (raw as { terminal_fingerprint?: unknown }).terminal_fingerprint ===
+          input.fingerprint
+      );
+    });
+  }
+
+  async function publishTerminalAccessRequest(input: {
+    participantId: string;
+    runtimeId: string | null;
+    tmuxSession: string;
+  }): Promise<boolean> {
+    const p = routePaths();
+    const state = agentState();
+    const sessionId = await state.readActiveSession(input.participantId);
+    if (sessionId === null || sessionId.length === 0) return false;
+    if (!(await sessionExists(p, sessionId))) return false;
+
+    const snapshot = await tmux.captureSnapshot(input.tmuxSession);
+    const prompt = extractTerminalAccessPrompt(snapshot);
+    if (prompt === null) return false;
+    const fingerprint = terminalPromptFingerprint({
+      participantId: input.participantId,
+      tmuxSession: input.tmuxSession,
+      message: prompt.message,
+      command: prompt.command,
+      suggestions: prompt.suggestions,
+    });
+    if (terminalPromptSeen.has(fingerprint)) return false;
+    if (
+      await terminalAccessRequestAlreadyOpen({
+        p,
+        sessionId,
+        participantId: input.participantId,
+        fingerprint,
+      })
+    ) {
+      markTerminalPromptSeen(fingerprint);
+      return true;
+    }
+
+    const request: AccessRequestPayload = {
+      schema: "fmark.access-request.v1",
+      request_id: `ar-terminal-${fingerprint}`,
+      status: "open",
+      request_type: prompt.request_type,
+      runtime_id: input.runtimeId,
+      runtime_session_id: input.tmuxSession,
+      hook_event_name: "TerminalPermissionPrompt",
+      title: prompt.title,
+      message: prompt.message,
+      ...(prompt.command !== undefined ? { command: prompt.command } : {}),
+      suggestions: prompt.suggestions,
+      response_channel: "terminal",
+      raw: {
+        ...prompt.raw,
+        terminal_fingerprint: fingerprint,
+        tmux_session: input.tmuxSession,
+      },
+      created_at: new Date().toISOString(),
+    };
+    const written = await writeAccessRequestEvent(p, sessionId, {
+      participant_id: input.participantId,
+      ...request,
+    });
+    publishEventWrites(bus, sessionId, written.publish);
+    markTerminalPromptSeen(fingerprint);
+    await state.updateControlState(input.participantId, {
+      activity_state: "access-pending",
+    });
+    await publishAgentUpdated(input.participantId);
+    return true;
+  }
+
+  function scheduleTerminalAccessPolling(input: {
+    participantId: string;
+    runtimeId: string | null;
+  }): void {
+    if (terminalPromptPollers.has(input.participantId)) return;
+    const startedAt = Date.now();
+    const tick = async (): Promise<void> => {
+      try {
+        const state = agentState();
+        const tmuxSession = await state.readTmuxSession(input.participantId);
+        if (tmuxSession === null || !(await tmux.paneAlive(tmuxSession))) {
+          terminalPromptPollers.delete(input.participantId);
+          return;
+        }
+        await publishTerminalAccessRequest({
+          participantId: input.participantId,
+          runtimeId: input.runtimeId,
+          tmuxSession,
+        });
+      } catch {
+        /* Terminal prompt detection is best-effort; hooks remain canonical. */
+      }
+      if (Date.now() - startedAt >= TERMINAL_PROMPT_POLL_TTL_MS) {
+        terminalPromptPollers.delete(input.participantId);
+        return;
+      }
+      const timer = setTimeout(tick, TERMINAL_PROMPT_POLL_MS);
+      timer.unref?.();
+      terminalPromptPollers.set(input.participantId, timer);
+    };
+    const timer = setTimeout(tick, TERMINAL_PROMPT_POLL_MS);
+    timer.unref?.();
+    terminalPromptPollers.set(input.participantId, timer);
   }
 
   app.get<{ Querystring: { session_id?: string } }>(
@@ -881,6 +1202,10 @@ export function registerManagedAgentsRoutes(
           "live access changes are not verified for this runtime",
       };
     }
+    if (!agent.access.supported_modes.includes(mode)) {
+      reply.code(400);
+      return { error: `unsupported access mode for this runtime: ${mode}` };
+    }
     await agentState().updateControlState(id, { access_mode: mode });
     await publishAgentUpdated(id);
     return controlResponse(id, reply);
@@ -909,6 +1234,7 @@ export function registerManagedAgentsRoutes(
             session_id: { type: "string", minLength: 1 },
             participant_id: { type: "string", minLength: 1 },
             decision: { enum: ["approve", "deny"] },
+            option_id: { type: "string" },
             message: { type: "string" },
           },
         },
@@ -950,6 +1276,11 @@ export function registerManagedAgentsRoutes(
       }
 
       if (request.response_channel === "hook") {
+        const option = responseOption(request, req.body);
+        if (option.decision !== req.body.decision) {
+          reply.code(400);
+          return { error: "selected option decision does not match request decision" };
+        }
         return writeManagedAccessResponse({
           p,
           sessionId: req.body.session_id,
@@ -959,16 +1290,31 @@ export function registerManagedAgentsRoutes(
           delivered: true,
           delivery: "hook",
           status: responseStatus(req.body.decision),
-          decision: req.body.decision,
+          decision: option.decision,
+          optionId: option.optionId,
         });
       }
 
       if (request.response_channel === "terminal") {
-        const delivery = await deliverTerminalAccessDecision({
-          agent,
-          decision: req.body.decision,
-        });
-        if (!delivery.delivered) {
+        if (agent.tmux_session === null) {
+          reply.code(409);
+          return { error: "agent terminal is not connected" };
+        }
+        const option = responseOption(request, req.body);
+        if (option.decision !== req.body.decision) {
+          reply.code(400);
+          return { error: "selected option decision does not match request decision" };
+        }
+        if (option.terminalInput === undefined) {
+          reply.code(400);
+          return { error: "selected option has no terminal input" };
+        }
+        try {
+          await inputQueue.enqueue(agent.tmux_session, async () => {
+            await tmux.sendLiteralText(agent.tmux_session!, option.terminalInput!);
+            await tmux.sendKey(agent.tmux_session!, "C-m");
+          });
+        } catch (err) {
           return writeManagedAccessResponse({
             p,
             sessionId: req.body.session_id,
@@ -976,10 +1322,12 @@ export function registerManagedAgentsRoutes(
             body: req.body,
             request,
             delivered: false,
-            delivery: "none",
-            status: statusFromExpired(),
+            delivery: "terminal",
+            status: "expired",
             decision: "expired",
-            error: delivery.error,
+            optionId: option.optionId,
+            terminalInput: option.terminalInput,
+            error: err instanceof Error ? err.message : String(err),
           });
         }
         return writeManagedAccessResponse({
@@ -990,8 +1338,10 @@ export function registerManagedAgentsRoutes(
           request,
           delivered: true,
           delivery: "terminal",
-          status: responseStatus(req.body.decision),
-          decision: req.body.decision,
+          status: responseStatus(option.decision),
+          decision: option.decision,
+          optionId: option.optionId,
+          terminalInput: option.terminalInput,
         });
       }
 
@@ -1130,6 +1480,7 @@ export function registerManagedAgentsRoutes(
         desiredName: current.active_session,
         launchPrompt: prompt,
         override: overridePatch,
+        accessMode: current.access.mode,
       });
       const { sessionName } = await tmux.spawnAgent({
         participantId: id,
@@ -1152,6 +1503,7 @@ export function registerManagedAgentsRoutes(
       });
       tracker.setManagedPane(id, { paneAlive: () => true });
       await state.appendLog(id, { event: "reconnect", tmux_session: sessionName });
+      scheduleTerminalAccessPolling({ participantId: id, runtimeId });
       const readyDelayMs = runtime.readyDelayMs ?? 0;
       const fireReconnectPrompt = async (): Promise<void> => {
         await waitForRuntimeReady({
@@ -1338,6 +1690,10 @@ export function registerManagedAgentsRoutes(
       await state.updateControlState(participantId, {
         activity_state: "notified",
       });
+      scheduleTerminalAccessPolling({
+        participantId,
+        runtimeId: await state.readRuntime(participantId),
+      });
       await publishAgentUpdated(participantId);
     }
 
@@ -1375,6 +1731,23 @@ export function registerManagedAgentsRoutes(
       reply.code(400);
       return { error: `unknown runtime_id: ${runtime_id}` };
     }
+    const requestedAccessMode = body.access_mode;
+    if (
+      requestedAccessMode !== undefined &&
+      (typeof requestedAccessMode !== "string" ||
+        requestedAccessMode.length === 0)
+    ) {
+      reply.code(400);
+      return { error: "access_mode must be a non-empty string" };
+    }
+    const accessMode =
+      requestedAccessMode !== undefined
+        ? requestedAccessMode
+        : defaultRuntimeAccessMode(runtime_id);
+    if (accessMode !== "default" && !isRuntimeAccessMode(runtime_id, accessMode)) {
+      reply.code(400);
+      return { error: `unsupported access_mode for ${runtime_id}: ${accessMode}` };
+    }
     const participantId =
       body.suggested_participant_id ??
       `ag-${runtime_id.slice(0, 8)}-${randomBytes(2).toString("hex")}`;
@@ -1396,12 +1769,12 @@ export function registerManagedAgentsRoutes(
     let hooksStatus: SpawnSetupStatus = "unknown";
     const userParticipantId = await firstUserParticipantId(p);
     try {
-      const setup = await preflightIntegration({
+      const setup = await preflightRegisteredIntegration({
         runtimeId: runtime_id,
         participantId,
         userParticipantId,
         projectRoot: p.root(),
-        env: process.env,
+        registryDeps: { fallback: paths, ref: deps.pathContextRef },
       });
       mcpStatus = setup.mcp.status;
       hooksStatus = setup.hooks.status;
@@ -1426,6 +1799,30 @@ export function registerManagedAgentsRoutes(
     } catch {
       // Keep the preflight-derived status when the lightweight hook probe fails.
     }
+    // Spawn must INSTALL the integration, not merely detect it. Without this
+    // a freshly spawned agent launches with no working fmark MCP server (and,
+    // for Claude, an incomplete tool allow-list), so instead of posting
+    // "Connected…" it reverse-engineers how to reach the kernel and trips
+    // permission prompts. applyIntegration is idempotent: it registers the
+    // MCP server, writes the full allow-list, and installs the hooks/plugin
+    // for the runtime's default scope (codex→user, others→project).
+    // Best-effort — a failure here must not abort the spawn.
+    if (mcpStatus !== "installed" || hooksStatus === "missing") {
+      try {
+        const applied = await applyIntegration({
+          runtimeId: runtime_id,
+          executable: runtime.executable,
+          projectRoot: p.root(),
+          participantId,
+          userParticipantId,
+          env: process.env,
+        });
+        mcpStatus = applied.mcp.status;
+        hooksStatus = applied.hooks.status;
+      } catch {
+        // Keep detected status; the launch packet reports what's missing.
+      }
+    }
     const knownRuntimeIds = new Set(Object.keys(runtimes.runtimes));
     try {
       await registerAgent(p, {
@@ -1449,6 +1846,10 @@ export function registerManagedAgentsRoutes(
       desired_name: desiredName,
       native_name_applied: false,
     };
+    const launchRecentEvents =
+      body.session_id !== undefined
+        ? await readEvents(p, body.session_id, {}).catch(() => [])
+        : [];
     const launchPrompt = buildLaunchPrompt({
       sessionId: body.session_id,
       participantId,
@@ -1457,6 +1858,7 @@ export function registerManagedAgentsRoutes(
       projectRoot: p.root(),
       mcpStatus,
       hooksStatus,
+      recentEvents: launchRecentEvents,
     });
     const spawnParticipants = await listParticipants(p, {
       agentState: agentState(),
@@ -1475,6 +1877,7 @@ export function registerManagedAgentsRoutes(
       desiredName,
       launchPrompt,
       override: spawnOverride,
+      accessMode,
     });
     runtimeSession.native_name_applied = spawnArgs.nativeNameApplied;
     const { sessionName } = await tmux.spawnAgent({
@@ -1498,6 +1901,9 @@ export function registerManagedAgentsRoutes(
       await state.writeTmuxSession(participantId, sessionName);
       await state.writeRuntime(participantId, runtime_id);
       await state.writeRuntimeSession(participantId, runtimeSession);
+      await state.updateControlState(participantId, {
+        access_mode: accessMode,
+      });
       if (body.session_id !== undefined) {
         await state.writeActiveSession(participantId, body.session_id);
       }
@@ -1509,6 +1915,7 @@ export function registerManagedAgentsRoutes(
       await state.appendLog(participantId, {
         event: "spawn",
         runtime: runtime_id,
+        access_mode: accessMode,
         tmux_session: sessionName,
         runtime_session: runtimeSession,
       });
@@ -1585,6 +1992,7 @@ export function registerManagedAgentsRoutes(
       runtime_id,
       active_session: activeSession,
     });
+    scheduleTerminalAccessPolling({ participantId, runtimeId: runtime_id });
 
     return {
       participant_id: participantId,
@@ -2020,12 +2428,17 @@ export function registerManagedAgentsRoutes(
               effort: override.effort_override,
             }
           : undefined;
+      const accessMode = normalizeAccessMode(
+        runtimeId,
+        (await state.readControlState(participantId)).access_mode,
+      );
       const spawnArgs = spawnArgsForRuntime({
         runtimeId,
         args: runtime.args,
         desiredName: activeSession,
         launchPrompt: prompt,
         override: overridePatch,
+        accessMode,
       });
       const { sessionName } = await tmux.spawnAgent({
         participantId,
@@ -2076,6 +2489,38 @@ export function registerManagedAgentsRoutes(
     try {
       if (body.type === "interrupt") {
         await inputQueue.enqueue(session, () => tmux.sendKey(session, "C-c"));
+        // Interrupting ends the agent's turn — hand it back to the user.
+        // C-c kills the run mid-stream so the agent's Stop hook may never
+        // fire a closing turn-end; without one, the feed's turn stays "ag"
+        // and the composer's "Stop run" button never reverts (and any
+        // run/working indicator stays stuck). Emit an agent-authored
+        // turn-end here so the turn flips back to the user. Best-effort:
+        // a missing/!active session just skips it.
+        try {
+          const p = routePaths(); // one snapshot for the read + the write
+          const activeSession = await state.readActiveSession(id);
+          if (activeSession !== null && activeSession.length > 0) {
+            // Idempotent: if the agent's turn is already closed (the newest
+            // event is already a turn-end by this agent — e.g. a rapid second
+            // interrupt, or the Stop hook beat us to it), don't append a
+            // duplicate / out-of-order turn boundary.
+            const events = await readEvents(p, activeSession, {});
+            const last = events[events.length - 1];
+            const alreadyEnded =
+              last !== undefined &&
+              last.kind === "turn-end" &&
+              last.participant_id === id;
+            if (!alreadyEnded) {
+              const written = await writeTurnEndEvent(p, activeSession, {
+                participant_id: id,
+                source: "manual",
+              });
+              publishEventWrites(bus, activeSession, written.publish);
+            }
+          }
+        } catch {
+          // never let turn-end bookkeeping fail the interrupt itself
+        }
       } else if (body.type === "slash") {
         if (typeof body.command !== "string") {
           reply.code(400);
@@ -2105,6 +2550,10 @@ export function registerManagedAgentsRoutes(
       await state.appendLog(id, {
         event: "command",
         type: body.type,
+      });
+      scheduleTerminalAccessPolling({
+        participantId: id,
+        runtimeId: await state.readRuntime(id),
       });
       return { ok: true };
     } catch (e: unknown) {

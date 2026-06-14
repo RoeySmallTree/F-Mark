@@ -8,12 +8,13 @@ import type {
   TodoTreeNode,
 } from "@f-mark/shared";
 import { createClient, type PostTodoBody } from "../api/client.js";
+import { createManagedAgentsClient } from "../api/managedAgents.js";
 import {
   buildTodoTreeFromEvents,
   fieldValue,
   flattenTree,
   generateTodoId,
-  getAgentIds,
+  getSessionAgentIds,
   latestTodoFilenames,
   nextIndentParentId,
   nextOutdentParentId,
@@ -104,7 +105,7 @@ export function TodoCard({
   const sessionId = useStore((s) => s.currentSessionId);
   const userId = useStore((s) => s.currentUserId);
   const token = useStore((s) => s.token);
-  const agentIds = getAgentIds(participants);
+  const agentIds = getSessionAgentIds(participants, sessionId);
   const [draft, setDraft] = useState<InlineDraft | null>(null);
   const [latestOverride, setLatestOverride] = useState<string | null>(null);
 
@@ -136,7 +137,18 @@ export function TodoCard({
   async function postTodo(body: PostTodoBody): Promise<void> {
     if (sessionId === null) return;
     const client = createClient({ baseUrl: "", token });
+    const managedClient = createManagedAgentsClient({ baseUrl: "", token });
     const result = await client.postTodo(sessionId, body);
+    if (
+      body.assigned_to !== undefined &&
+      agentIds.includes(body.assigned_to)
+    ) {
+      await managedClient.wakeSession(sessionId, {
+        reason: "todo",
+        source_event: result.filename,
+        target_participant_ids: [body.assigned_to],
+      });
+    }
     if (body.id === payload.id) setLatestOverride(result.filename);
   }
 

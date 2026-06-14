@@ -1,6 +1,7 @@
 /* PresetsPopover — anchored over the compose bar's ⚡ Presets button (P8).
-   Lists built-in presets grouped by `generate` / `critique` / `format`, plus
-   a "Project" group when project-local presets exist for the current session.
+   Lists presets grouped by user-defined categories (seeded with Generate
+   / Critique / Format on first run). Project presets render in a separate
+   "Project" group at the bottom regardless of their `group` field.
 
    Picking a preset:
      1. Writes the preset body to store.composeDraft.
@@ -8,12 +9,22 @@
      3. Compose.tsx watches composeDraft, appends/replaces, then clears it
         (a useEffect; see compose/Compose.tsx step 4).
 
-   The search input filters by a simple case-insensitive substring against
-   both `name` and `body`. (Inline because P7's fuzzy.ts is not yet shipped.) */
+   Workspace gating (two-tier intersection):
+     - A category is visible when its `workspaces` array is empty or
+       includes the current active path.
+     - A preset is visible when its category is visible AND its own
+       `workspaces` array is empty or includes the current active path.
+     - Presets whose `group` doesn't match any existing category fall
+       into a synthetic "Uncategorized" bucket rendered at the bottom
+       (above the Project group). Uncategorized is always visible
+       everywhere — there's no category record to gate it.
+
+   The search input filters by case-insensitive substring against both
+   `name` and `body`. */
 
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { Search, Zap, Plus } from "lucide-react";
-import type { Preset, PresetGroup } from "@f-mark/shared";
+import type { Preset } from "@f-mark/shared";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { chordToLabel } from "../modals/settings/shortcut-registry.js";
@@ -23,23 +34,19 @@ import {
   loadCustomPresets,
   toPreset,
 } from "./customPresets.js";
+import {
+  loadCustomCategories,
+  type CustomCategory,
+} from "./customCategories.js";
 
 interface Props {
   anchorRect: DOMRect | null;
   onClose(): void;
 }
 
-/* Fixed ordering of built-in groups per the prompt. Project presets come
-   last as a separate group regardless of their `group` field. */
-const GROUP_ORDER: PresetGroup[] = ["generate", "critique", "format"];
-
-const GROUP_LABELS: Record<PresetGroup, string> = {
-  generate: "Generate",
-  critique: "Critique",
-  format: "Format",
-};
-
 const PRESETS_SHORTCUT = chordToLabel("$mod+P");
+
+const UNCATEGORIZED_KEY = "__uncategorized__";
 
 function caseInsensitiveSubstring(p: Preset, needle: string): boolean {
   if (needle.length === 0) return true;
@@ -49,24 +56,22 @@ function caseInsensitiveSubstring(p: Preset, needle: string): boolean {
   );
 }
 
-function groupBuiltins(items: Preset[]): Array<[PresetGroup, Preset[]]> {
-  const out: Array<[PresetGroup, Preset[]]> = [];
-  for (const g of GROUP_ORDER) {
-    const matched = items.filter((p) => p.group === g);
-    if (matched.length > 0) out.push([g, matched]);
-  }
-  return out;
+function categoryVisible(
+  cat: CustomCategory,
+  activePath: string | null,
+): boolean {
+  if (cat.workspaces.length === 0) return true;
+  if (activePath === null) return false;
+  return cat.workspaces.includes(activePath);
 }
 
-/* Merge a built-in list with custom (renderer-local) presets so the
-   popover shows one Generate/Critique/Format section per category with
-   the user's entries slotted in. Custom presets appear AFTER built-ins
-   within each category so the familiar set stays at the top. */
-function mergeWithCustom(
-  builtin: Preset[],
-  custom: Preset[],
-): Preset[] {
-  return [...builtin, ...custom];
+function presetVisible(
+  p: Preset,
+  activePath: string | null,
+): boolean {
+  if (p.workspaces === undefined || p.workspaces.length === 0) return true;
+  if (activePath === null) return false;
+  return p.workspaces.includes(activePath);
 }
 
 export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
@@ -75,6 +80,8 @@ export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
   const setComposeDraft = useStore((s) => s.setComposeDraft);
   const openPresetEditor = useStore((s) => s.openPresetEditor);
   const customPresetsVersion = useStore((s) => s.customPresetsVersion);
+  const customCategoriesVersion = useStore((s) => s.customCategoriesVersion);
+  const activePath = useStore((s) => s.activePath);
 
   const [builtin, setBuiltin] = useState<Preset[]>([]);
   const [project, setProject] = useState<Preset[]>([]);
@@ -111,28 +118,65 @@ export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
     [customPresetsVersion],
   );
 
-  const filteredBuiltin = useMemo(
-    () => builtin.filter((p) => caseInsensitiveSubstring(p, query)),
-    [builtin, query],
+  /* Re-read categories whenever the editor bumps the version. */
+  const categories = useMemo<CustomCategory[]>(
+    () => loadCustomCategories(),
+    [customCategoriesVersion],
   );
-  const filteredCustom = useMemo(
-    () => custom.filter((p) => caseInsensitiveSubstring(p, query)),
-    [custom, query],
-  );
+
+  /* Group all built-in + custom presets by category id. Filter by
+     workspace gating (intersection at category + preset level). The
+     project list is rendered separately, untouched by category gating
+     beyond per-preset workspaces. */
+  const grouped = useMemo<
+    Array<{ category: CustomCategory | null; presets: Preset[] }>
+  >(() => {
+    const visibleCats = categories.filter((c) =>
+      categoryVisible(c, activePath),
+    );
+    const known = new Set(categories.map((c) => c.id));
+    const combined = [...builtin, ...custom].filter((p) =>
+      caseInsensitiveSubstring(p, query),
+    );
+
+    const byCat = new Map<string, Preset[]>();
+    const orphans: Preset[] = [];
+    for (const p of combined) {
+      if (!known.has(p.group)) {
+        orphans.push(p);
+        continue;
+      }
+      const list = byCat.get(p.group) ?? [];
+      list.push(p);
+      byCat.set(p.group, list);
+    }
+
+    const out: Array<{ category: CustomCategory | null; presets: Preset[] }> = [];
+    for (const c of visibleCats) {
+      const items = (byCat.get(c.id) ?? []).filter((p) =>
+        presetVisible(p, activePath),
+      );
+      if (items.length > 0) out.push({ category: c, presets: items });
+    }
+    /* Uncategorized last (still before Project). Preset-level workspaces
+       still gate orphan presets. */
+    const visibleOrphans = orphans.filter((p) => presetVisible(p, activePath));
+    if (visibleOrphans.length > 0) {
+      out.push({ category: null, presets: visibleOrphans });
+    }
+    return out;
+  }, [categories, builtin, custom, query, activePath]);
+
   const filteredProject = useMemo(
-    () => project.filter((p) => caseInsensitiveSubstring(p, query)),
-    [project, query],
+    () =>
+      project.filter(
+        (p) =>
+          caseInsensitiveSubstring(p, query) && presetVisible(p, activePath),
+      ),
+    [project, query, activePath],
   );
-  const merged = useMemo(
-    () => mergeWithCustom(filteredBuiltin, filteredCustom),
-    [filteredBuiltin, filteredCustom],
-  );
-  const groupedBuiltin = useMemo(
-    () => groupBuiltins(merged),
-    [merged],
-  );
-  const hasResults =
-    groupedBuiltin.length > 0 || filteredProject.length > 0;
+
+  const hasResults = grouped.length > 0 || filteredProject.length > 0;
 
   function onAddPreset(): void {
     /* Pass `null` to mean "create new" — the modal allocates the id. */
@@ -219,19 +263,26 @@ export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
           </div>
         ) : (
           <>
-            {groupedBuiltin.map(([group, items]) => (
-              <div key={group} data-testid={`presets-group-${group}`}>
-                <div className="presets-group">{GROUP_LABELS[group]}</div>
-                {items.map((p) => (
-                  <PresetItem
-                    key={p.path}
-                    preset={p}
-                    onPick={onPick}
-                    onEdit={p.source === "custom" ? onEditPreset : undefined}
-                  />
-                ))}
-              </div>
-            ))}
+            {grouped.map(({ category, presets }) => {
+              const key = category?.id ?? UNCATEGORIZED_KEY;
+              const label = category?.name ?? "Uncategorized";
+              return (
+                <div
+                  key={key}
+                  data-testid={`presets-group-${key}`}
+                >
+                  <div className="presets-group">{label}</div>
+                  {presets.map((p) => (
+                    <PresetItem
+                      key={p.path}
+                      preset={p}
+                      onPick={onPick}
+                      onEdit={p.source === "custom" ? onEditPreset : undefined}
+                    />
+                  ))}
+                </div>
+              );
+            })}
             {filteredProject.length > 0 ? (
               <div data-testid="presets-group-project">
                 <div className="presets-group">Project</div>

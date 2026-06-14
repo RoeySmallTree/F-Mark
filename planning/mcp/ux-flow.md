@@ -26,6 +26,13 @@ UI labels should avoid runtime-specific jargon where possible:
 
 The UI can show secondary text like "Project" and "Machine" under those labels so the scope is obvious.
 
+Research inputs now integrated:
+
+- `planning/mcp/research-mcp-kernel-architecture.md`: stdio MCP should ship first; HTTP MCP remains advanced/future until the Fastify Streamable HTTP spike passes.
+- `planning/mcp/research-claude-runtime.md`: Claude supports local/project/user MCP scopes, `--name`, status-line context, structured `PermissionRequest`, and final-result sub-agent capture.
+- `planning/mcp/research-codex-runtime.md`: Codex user/global MCP install can use CLI commands, but project install requires direct `.codex/config.toml` editing after trust; no CLI session-name setter exists.
+- `planning/mcp/research-gemini-runtime.md`: Gemini local/project config is `.gemini/settings.json`, global maps to user config, and `trust:false` must remain the default.
+
 ## Integration Roles
 
 ### MCP
@@ -48,6 +55,7 @@ It captures:
 
 - natural assistant text that was not explicitly posted through MCP
 - external tool-use telemetry
+- sub-agent/delegated-agent output when the runtime exposes it with reliable attribution
 - turn-end events
 - user prompt submission where supported
 
@@ -131,7 +139,10 @@ Versioning matters. Every F-Mark MCP/hook install should include a recognizable 
 
 - MCP config env: `F_MARK_MCP_VERSION=0.5.0`
 - hook command flag: `f-mark hook auto-stream --integration-version 0.5.0`
-- JSON/TOML comment or adjacent metadata where the runtime config format supports it
+- runtime-specific metadata where safe:
+  - Claude stdio env `F_MARK_MCP_VERSION`, future HTTP header `X-F-Mark-MCP-Version`.
+  - Codex TOML env/header/env-header entries; do not rely on comments.
+  - Gemini `description`, stdio env, or args; do not rely on JSON comments.
 
 If the currently installed version is lower than the bundled version, the setup sheet should suggest **Update** instead of **Install**.
 
@@ -311,19 +322,28 @@ Globally:
 
 Claude:
 
-- local/project MCP usually means `.mcp.json`.
-- stream hook can be applied to project `.claude/settings.json` or global `~/.claude/settings.json`.
+- **Locally** can offer Claude project scope `.mcp.json` or Claude local scope in `~/.claude.json` tied to the project. Show the exact path detected/applied.
+- **Globally** maps to Claude user scope in `~/.claude.json`.
+- Use stdio MCP first. HTTP is advanced because bearer headers can be stored in config.
+- Pass the active F-Mark `session_id` with `--name` when launching, then verify actual `session_name` through status-line JSON when available.
+- Stream hook access cards can use structured `PermissionRequest` payloads.
 
 Codex:
 
-- global MCP via `codex mcp add` is well-supported.
-- project MCP requires direct `.codex/config.toml` editing and project trust; show this clearly.
+- **Locally** maps to project `.codex/config.toml`, applied by F-Mark through a TOML writer after trust/preflight checks.
+- **Globally** maps to `~/.codex/config.toml` or `$CODEX_HOME/config.toml`; CLI `codex mcp add` can be used for user/global cases.
+- Do not promise native session naming in the setup UI; store F-Mark `session_id` as `desired_name`.
+- Show context as `Unknown` unless an app-server/transcript integration is verified.
+- Stream hook access cards can use structured `PermissionRequest` payloads.
 
 Gemini:
 
-- local/project MCP means `.gemini/settings.json`.
-- do not set `trust: true` automatically.
-- if folder trust blocks project config, show "Trust project in Gemini after launch" or launch with global config.
+- **Locally** maps to project `.gemini/settings.json`.
+- **Globally** maps to user `~/.gemini/settings.json`; Gemini does not call this scope `global`.
+- Do not set `trust: true` automatically. If folder trust blocks project config, show a blocked state with remediation or offer global/user setup.
+- Do not promise native session naming or native fork.
+- Show context as estimated/unknown.
+- Stream hook access cards can use `Notification` `ToolPermission` where available, but approval/change may require the live terminal or restart.
 
 ## First Prompt Injection
 
@@ -395,9 +415,10 @@ F-Mark should link the agent automatically before the first prompt:
 MCP server context should resolve session in this order:
 
 1. Explicit `session_id` in tool input.
-2. `F_MARK_SESSION_ID`.
+2. Managed-agent state `active_session`.
 3. `.f-mark/agents/<participant-id>/active-session`.
-4. If still missing, tool returns a clear "link first" error.
+4. `F_MARK_SESSION_ID`.
+5. If still missing, tool returns a clear "link first" error.
 
 Manual agents can still read `/guide`, but managed agents should receive it automatically.
 
@@ -460,8 +481,31 @@ Recommended v1:
 
 - Use MCP for named documents, todos, choices, flows, comments, revisions, and explicit "say this to the session" actions.
 - Let hooks continue capturing ordinary turn text and tool-use.
+- Let hooks/live stream capture sub-agent output when runtime data includes a reliable parent/sub-agent relationship.
 - Mark MCP-created events with `source: "mcp"` where event formats allow it.
 - Teach the hook to avoid posting duplicate final prose when the same turn already produced a deliberate MCP prose event.
+
+### Sub-Agent Output
+
+If an agent launches a sub-agent, the output should appear inside the parent agent's live output group as a nested sub-agent box.
+
+UI behavior:
+
+- show sub-agent name/title from the runtime when available,
+- show `launched by <parent agent>`,
+- stream child output when available,
+- show final result if live child output is unavailable,
+- collapse completed boxes after the parent turn ends,
+- keep failed/cancelled boxes visible.
+
+Research-backed v1:
+
+- Do not infer sub-agent structure from arbitrary terminal text.
+- Claude and Codex can support final-result boxes from structured sub-agent hooks once fixtures are captured.
+- Gemini can support final-result boxes from `invoke_agent`/`agent_name` once fixtures are captured.
+- Progressive child output stays behind runtime capability flags until smoke tests prove it.
+
+Detailed contract: `planning/mcp/subagent-streaming.md`.
 
 ## Waking Agents When Their Turn Arrives
 
@@ -514,6 +558,31 @@ Use a staged catch-up:
 4. `fmark_mark_seen` remains available for manual correction/advanced flows, but is not required after normal inbox reads.
 
 F-Mark should store per-agent per-session cursors so future wake prompts stay small.
+
+## Session Forking UX
+
+Forking is a user-driven branch action for a session.
+
+Entry points:
+
+- session row fork button in the Sessions panel,
+- compact fork button in the composer pane for the current session.
+
+Flow:
+
+1. User clicks fork.
+2. A small name popup opens.
+3. User confirms the fork name.
+4. Kernel duplicates the session folder.
+5. Kernel registers the fork in session/path state.
+6. UI switches to the fork and keeps the composer draft.
+7. Active managed agents are moved to the fork.
+8. MCP context and stream listeners now default to the fork.
+9. Runtime-native `/fork`, `/branch`, or equivalent is invoked only when verified for that runtime.
+
+Paused agents stay paused and are not relaunched automatically. Detached/offline agents show reconnect affordances after the fork.
+
+Detailed contract: `planning/mcp/session-forking.md`.
 
 ## Access Requests
 

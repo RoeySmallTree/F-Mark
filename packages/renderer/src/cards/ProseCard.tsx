@@ -58,8 +58,15 @@ export function ProseCard({
       return sum + wordCount(bp.content);
     }, 0);
 
+  /* Focus matches either the anchor itself OR any of its appended blocks —
+     LineCommentRail uses the block's own filename for comments on appended
+     blocks, but the surrounding ProseCard must still escape the feed's
+     `.dimmed` opacity so the block being commented on stays readable. */
   const isFocused =
-    commentTarget !== null && commentTarget.file === event.filename;
+    commentTarget !== null &&
+    commentTarget.kind === "event" &&
+    (commentTarget.file === event.filename ||
+      blocks.some((b) => b.filename === commentTarget.file));
   const classes = [
     "prose-card",
     who.isUser ? "user" : "agent",

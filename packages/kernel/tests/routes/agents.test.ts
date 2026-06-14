@@ -4,6 +4,9 @@ import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createSession } from "../../src/sessions.js";
 import { readActiveSession } from "../../src/agents/activeSession.js";
+import { activePaths } from "../../src/paths/active.js";
+import { globalPaths } from "../../src/paths/global.js";
+import { PathContextRef } from "../../src/paths/contextRef.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 async function setup(root: string) {
@@ -34,6 +37,52 @@ describe("POST /agents/:id/link", () => {
         sessionId,
       );
       await app.close();
+    });
+  });
+
+  it("writes active-session through the global store when an active path is set", async () => {
+    await withTempProject(async (fallbackRoot) => {
+      await withTempProject(async (activeRoot) => {
+        await withTempProject(async (configRoot) => {
+          const fallback = paths(fallbackRoot);
+          const active = paths(activeRoot);
+          await initProject(fallback);
+          await initProject(active);
+          const session = await createSession(active, { slug: "active" });
+          const activePath = activePaths(activeRoot);
+          const g = globalPaths(configRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePath,
+          });
+          const { app } = createServer({
+            token: null,
+            paths: fallback,
+            pathContextRef: ref,
+          });
+
+          const res = await app.inject({
+            method: "POST",
+            url: "/agents/ag-claude/link",
+            payload: { session_id: session.id },
+          });
+
+          expect(res.statusCode).toBe(200);
+          expect(
+            await readActiveSession(
+              g.projectAgentsDir(activePath.pathId()),
+              "ag-claude",
+            ),
+          ).toBe(session.id);
+          expect(
+            await readActiveSession(
+              `${active.fmarkDir()}/agents`,
+              "ag-claude",
+            ),
+          ).toBe(session.id);
+          await app.close();
+        });
+      });
     });
   });
 

@@ -3,7 +3,7 @@ name: f-mark
 description: Use whenever the user is collaborating inside an F-Mark session (presence of a `.f-mark/` directory in cwd, or the user references "the session" / "the document").
 ---
 
-> **Status: Preview.** The auto-stream hook command parses transcripts using Claude Code's JSONL content-block schema. Codex's transcript uses a different, unstable internal schema, so the Stop-hook path described below may not produce correct events in production. Until a Codex-specific transcript parser ships, prefer the manual-POST flow described in the Gemini skill (`packages/kernel/assets/gemini-skill/f-mark/SKILL.md`) — the model emits prose / tool-use / turn-end events itself. The Claude-Code-style auto-stream WILL work for Codex if its rollout JSONL happens to align block-by-block with Claude Code's, but assume that's not the case.
+> **Status: Preview.** The auto-stream hook command parses transcripts using Claude Code's JSONL content-block schema. Codex's transcript uses a different, unstable internal schema, so the Stop-hook path described below may not produce correct events in production. Until a Codex-specific transcript parser ships, prefer explicit MCP/REST posts for prose, tool-use, and turn-end events. The Claude-Code-style auto-stream WILL work for Codex if its rollout JSONL happens to align block-by-block with Claude Code's, but assume that's not the case.
 
 ## Detect
 If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up-to-date protocol before doing anything else.

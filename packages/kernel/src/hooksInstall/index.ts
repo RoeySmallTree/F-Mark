@@ -12,12 +12,6 @@ import {
   renderCodexInstallSnippet,
 } from "./codex.js";
 import {
-  applyGeminiHooks,
-  detectGeminiHooks,
-  loadGeminiSettings,
-  renderGeminiInstallSnippet,
-} from "./gemini.js";
-import {
   applyOpencodeHooks,
   detectOpencodeHooks,
   renderOpencodeInstallSnippet,
@@ -41,10 +35,6 @@ export async function checkHookInstallStatus(opts: {
     if (!opts.participantId) throw new Error("participantId required for codex hooks");
     const toml = await loadCodexConfig(opts.projectRoot);
     return detectCodexHooks(toml, opts.participantId, userId);
-  }
-  if (opts.runtimeId === "gemini") {
-    const { settings, configPath } = await loadGeminiSettings(opts.projectRoot);
-    return detectGeminiHooks(settings, configPath);
   }
   if (opts.runtimeId === "opencode") {
     return detectOpencodeHooks({ projectRoot: opts.projectRoot });
@@ -82,13 +72,6 @@ export function renderInstallInstructions(opts: {
     }
     const snippet = renderCodexInstallSnippet(opts.participantId, opts.userParticipantId);
     return { markdown: snippet, manualSteps: [{ configPath: "~/.codex/config.toml", snippet }] };
-  }
-  if (opts.runtimeId === "gemini") {
-    const snippet = renderGeminiInstallSnippet();
-    return {
-      markdown: snippet,
-      manualSteps: [{ configPath: ".gemini/settings.json", snippet }],
-    };
   }
   if (opts.runtimeId === "opencode") {
     const snippet = renderOpencodeInstallSnippet();
@@ -170,14 +153,6 @@ export async function applyAutomaticHookInstall(opts: {
     return {
       changed: applied.changed,
       configPath: applied.hooksPath,
-      status: await checkHookInstallStatus(opts),
-    };
-  }
-  if (opts.runtimeId === "gemini") {
-    const applied = await applyGeminiHooks(opts.projectRoot);
-    return {
-      changed: applied.changed,
-      configPath: applied.configPath,
       status: await checkHookInstallStatus(opts),
     };
   }

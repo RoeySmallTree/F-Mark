@@ -160,7 +160,11 @@ export function useAllSessionEvents(kinds?: EventKind[]): {
 
     refresh();
     const ws = connectWs({ baseUrl: "", token }, (msg) => {
-      if (msg.type === "event_added" || msg.type === "path-switched") {
+      if (
+        msg.type === "event_added" ||
+        msg.type === "path-switched" ||
+        msg.type === "session.forked"
+      ) {
         refresh();
       }
     });

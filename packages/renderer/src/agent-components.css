@@ -1,0 +1,265 @@
+/* ============================================================================
+   F-Mark — agent-components.css   ·   AGENT-SURFACE COMPONENT LAYER
+   ----------------------------------------------------------------------------
+   New conversation/agent components, painted ENTIRELY from the tokens in
+   tokens.css — so they inherit every theme with zero per-theme code.
+   Kept in a SEPARATE file from components.css so re-extracting the app's base
+   components never clobbers them. Catalogue:
+     .md-doc        rendered markdown (title, headings, table, code, quote, list)
+     .md-fold       collapsible markdown (native <details>)
+     .diff          code diff (file head, +/- lines, hunk, stats)
+     .approval      request-for-approval prompt (allow / always / deny)
+     .toolbox       running agent toolbox (collapsible, sub-tools, IO, raw+json)
+     .subagent      sub-agent run box
+     (agent chip + options popover live in components/chips.css — see §7 note)
+   Collapsibles use native <details>/<summary> — no JS required.
+   ============================================================================ */
+
+/* ---- shared bits ----
+   De-scoped from the reference's `.ac` page wrapper so these agent surfaces work
+   wherever they render (feed cards, grouped cards, inline prose blocks, right
+   panels). The collapsible <details> reset is scoped to the agent-surface classes
+   so it never touches modal / file-viewer <details>. */
+:is(.toolbox, .tool-call, .subagent, .md-fold, .md-sec, .diff) > summary { list-style: none; cursor: pointer; }
+:is(.toolbox, .tool-call, .subagent, .md-fold, .md-sec, .diff) > summary::-webkit-details-marker { display: none; }
+.chev { display: inline-block; transition: transform var(--slinky-dur-sm, .15s) ease; color: var(--ink-3); font-size: 11px; }
+details[open] > summary .chev { transform: rotate(90deg); }
+.ac-mono { font-family: var(--mono); }
+
+@keyframes ac-spin { to { transform: rotate(360deg); } }
+@keyframes ac-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--agent); animation: ac-spin .8s linear infinite; flex-shrink: 0; }
+.run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--agent); animation: ac-pulse 1.5s ease-in-out infinite; flex-shrink: 0; }
+.ok-dot { width: 13px; height: 13px; border-radius: 50%; background: var(--green-tint); color: var(--green); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+.err-dot { width: 13px; height: 13px; border-radius: 50%; background: color-mix(in srgb, var(--rose) 20%, transparent); color: var(--rose); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } .run-dot { animation: none; opacity: 1; } }
+
+/* ============================================================
+   1 · MARKDOWN  (.md-doc)
+   ============================================================ */
+.md-doc { font-family: var(--serif); color: var(--ink); font-size: 15px; line-height: 1.62; }
+.md-doc > :first-child { margin-top: 0; }
+.md-doc > :last-child { margin-bottom: 0; }
+.md-doc h1 { font-family: var(--serif); font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 6px; color: var(--ink); }
+.md-doc h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 22px 0 8px; color: var(--ink); letter-spacing: -.01em; padding-bottom: 5px; border-bottom: 1px solid var(--line-2); }
+.md-doc h3 { font-family: var(--serif); font-size: 16px; font-weight: 600; margin: 16px 0 6px; color: var(--ink); }
+.md-doc p { margin: 0 0 11px; }
+.md-doc a { color: var(--user); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--user-tint-2); }
+.md-doc ul, .md-doc ol { margin: 0 0 11px; padding-left: 22px; }
+.md-doc li { margin: 3px 0; }
+.md-doc li::marker { color: var(--ink-4); }
+.md-doc strong { font-weight: 700; color: var(--ink); }
+.md-doc code { font-family: var(--mono); font-size: .82em; background: var(--panel); border: 1px solid var(--line-2); padding: 1px 5px; border-radius: var(--radius); color: var(--ink); }
+.md-doc pre { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; overflow: auto; margin: 0 0 12px; }
+.md-doc pre code { background: none; border: 0; padding: 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.6; }
+.md-doc blockquote { margin: 12px 0; padding: 4px 16px; border-left: 3px solid var(--agent-tint-2); color: var(--ink-2); font-style: italic; }
+.md-doc hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+.md-doc .md-eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-style: normal; margin-bottom: 10px; }
+
+/* markdown table */
+.md-table { width: 100%; border-collapse: collapse; margin: 4px 0 14px; font-family: var(--sans); font-size: 13px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.md-table thead th { background: var(--panel); color: var(--ink); font-weight: 600; text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.md-table td { padding: 8px 14px; border-bottom: 1px solid var(--line-2); color: var(--ink-2); }
+.md-table tbody tr:last-child td { border-bottom: 0; }
+.md-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--panel) 45%, transparent); }
+.md-table td.num, .md-table th.num { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.md-table .pill-ok { font-family: var(--mono); font-size: 10.5px; color: var(--green); background: var(--green-tint); padding: 1px 8px; border-radius: var(--radius-pill); }
+.md-table .pill-wait { font-family: var(--mono); font-size: 10.5px; color: var(--agent); background: var(--agent-tint); padding: 1px 8px; border-radius: var(--radius-pill); }
+
+/* ============================================================
+   2 · FOLDED MARKDOWN  (.md-fold)
+   ============================================================ */
+.md-fold { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--canvas); box-shadow: var(--shadow); overflow: hidden; }
+.md-fold + .md-fold { margin-top: 10px; }
+.md-fold > summary { display: flex; align-items: center; gap: 10px; padding: 11px 16px; font-family: var(--sans); }
+.md-fold > summary:hover { background: var(--panel); }
+.md-fold .fold-ico { width: 20px; height: 20px; border-radius: var(--radius); background: var(--panel); display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); font-family: var(--mono); font-size: 11px; flex-shrink: 0; }
+.md-fold .fold-title { font-weight: 600; font-size: 14px; color: var(--ink); }
+.md-fold .fold-meta { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-4); white-space: nowrap; }
+.md-fold[open] > summary { border-bottom: 1px solid var(--line-2); }
+.md-fold .md-fold-body { padding: 16px 18px 18px; }
+.md-fold .md-fold-body .md-doc { font-size: 14.5px; }
+/* nested foldable section inside a markdown doc */
+.md-sec { border-top: 1px solid var(--line-2); }
+.md-sec > summary { display: flex; align-items: center; gap: 8px; padding: 10px 2px; font-family: var(--serif); font-weight: 600; font-size: 15px; color: var(--ink); }
+.md-sec > summary:hover .fold-title2 { color: var(--user); }
+.md-sec .fold-title2 { white-space: nowrap; flex: 0 0 auto; }
+.md-sec .md-sec-body { padding: 2px 0 12px 16px; }
+
+/* ============================================================
+   3 · CODE DIFF  (.diff)
+   ============================================================ */
+.diff { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--canvas); overflow: hidden; box-shadow: var(--shadow); }
+.diff > summary, .diff-head { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line-2); font-family: var(--mono); font-size: 12px; }
+.diff-lang { width: 18px; height: 18px; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--line); color: var(--ink-3); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+.diff-file { color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.diff-file .dir { color: var(--ink-4); }
+.diff-stats { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+.diff-stats .a { color: var(--green); }
+.diff-stats .d { color: var(--rose); }
+.diff-body { font-family: var(--mono); font-size: 12.5px; overflow: auto; }
+.diff-hunk { padding: 3px 14px; background: color-mix(in srgb, var(--user) 9%, transparent); color: var(--ink-3); font-size: 11.5px; border-bottom: 1px solid var(--line-3); }
+.diff-line { display: grid; grid-template-columns: 44px 44px 1fr; line-height: 1.75; }
+.diff-gutter { color: var(--ink-4); text-align: right; padding: 0 10px; user-select: none; -webkit-user-select: none; }
+.diff-code { white-space: pre; padding: 0 8px 0 12px; color: var(--ink-2); }
+.diff-code::before { display: inline-block; width: 1ch; }
+.diff-line.add { background: color-mix(in srgb, var(--green) 13%, transparent); }
+.diff-line.add .diff-code { color: var(--ink); }
+.diff-line.add .diff-code::before { content: "+"; color: var(--green); }
+.diff-line.del { background: color-mix(in srgb, var(--rose) 13%, transparent); }
+.diff-line.del .diff-code { color: var(--ink); }
+.diff-line.del .diff-code::before { content: "\2212"; color: var(--rose); }
+.diff-line.ctx .diff-code::before { content: " "; }
+/* app extensions: inline/side-by-side display toggle + side-by-side panes (an app
+   feature beyond the static reference; painted from the same tokens) */
+.diff-head .diff-mode-toggle { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; flex-shrink: 0; }
+.diff-head .diff-mode-toggle button { font-family: var(--mono); font-size: 10.5px; padding: 3px 9px; color: var(--ink-3); background: transparent; border: 0; cursor: pointer; }
+.diff-head .diff-mode-toggle button[aria-pressed="true"] { background: var(--panel); color: var(--ink); }
+.diff-head .diff-mode-toggle button:hover { color: var(--ink); }
+.diff-split { display: grid; grid-template-columns: 1fr 1fr; }
+.diff-pane { overflow: auto; max-height: 320px; }
+.diff-pane.before { border-right: 1px solid var(--line-2); background: color-mix(in srgb, var(--rose) 6%, transparent); }
+.diff-pane.after { background: color-mix(in srgb, var(--green) 6%, transparent); }
+.diff-pane-title { position: sticky; top: 0; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-4); padding: 5px 12px; background: var(--panel); border-bottom: 1px solid var(--line-3); }
+.diff-pane-row { display: grid; grid-template-columns: 44px 1fr; line-height: 1.75; }
+.diff-pane-row .diff-gutter { color: var(--ink-4); text-align: right; padding: 0 10px; user-select: none; -webkit-user-select: none; }
+.diff-pane-row .diff-code { white-space: pre; padding: 0 8px 0 12px; color: var(--ink-2); }
+.diff-stack { display: flex; flex-direction: column; gap: 10px; }
+/* The kept app-extra presentation parts (raw details, excerpt, meta) read these
+   --tool-card-* vars; provide them on the new agent-surface roots so nested parts
+   paint correctly (they also carry sane fallbacks of their own). */
+.tool-call, .subagent { --tool-card-pre-bg: var(--bg); --tool-card-pre-fg: var(--ink-2); --tool-card-muted: var(--ink-3); }
+
+/* ============================================================
+   4 · REQUEST FOR APPROVAL  (.approval)
+   ============================================================ */
+.approval { border: 1px solid var(--agent-tint-2); border-radius: var(--radius-lg); background: var(--canvas); overflow: hidden; box-shadow: var(--shadow); position: relative; --tool-card-pre-bg: var(--bg); --tool-card-pre-fg: var(--ink-2); --tool-card-muted: var(--ink-3); }
+.approval::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--agent); }
+.approval-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px 8px 18px; }
+.approval-ico { width: 26px; height: 26px; border-radius: var(--radius); background: var(--agent-tint); color: var(--agent); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.approval-ico svg { width: 15px; height: 15px; }
+.approval-title { font-family: var(--serif); font-size: 15.5px; font-weight: 600; color: var(--ink); }
+.approval-sub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: .04em; }
+/* app extensions: resolved-status chip in the head + a compact variant for panels */
+.approval-status { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); background: var(--panel); border: 1px solid var(--line-2); padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+.approval.compact { box-shadow: none; }
+/* resolved/denied status tint (ported from the app's access-request card) */
+.approval[data-status="approved"], .approval[data-status="resolved"] { border-color: color-mix(in srgb, var(--green) 34%, var(--line-2)); }
+.approval[data-status="denied"], .approval[data-status="expired"] { border-color: color-mix(in srgb, var(--rose) 32%, var(--line-2)); }
+.approval-body { padding: 4px 18px 14px; }
+.approval-desc { font-size: 13.5px; color: var(--ink-2); font-family: var(--serif); line-height: 1.55; margin: 0 0 10px; }
+.approval-cmd { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 12px; display: flex; gap: 8px; align-items: baseline; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
+.approval-cmd .pmt { color: var(--green); user-select: none; }
+.approval-foot { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-top: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 50%, transparent); }
+.approval-foot .spacer { flex: 1; }
+.approval-foot .hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); }
+.btn-approve { font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: var(--radius); background: var(--green); color: var(--bg); border: 0; cursor: pointer; }
+.btn-approve:hover { filter: brightness(1.06); }
+.btn-deny { font-family: var(--sans); font-size: 13px; padding: 7px 14px; border-radius: var(--radius); background: transparent; color: var(--rose); border: 1px solid color-mix(in srgb, var(--rose) 45%, var(--line)); cursor: pointer; }
+.btn-deny:hover { background: color-mix(in srgb, var(--rose) 12%, transparent); }
+.btn-soft { font-family: var(--sans); font-size: 13px; padding: 7px 14px; border-radius: var(--radius); background: var(--panel); color: var(--ink-2); border: 1px solid var(--line); cursor: pointer; }
+.btn-soft:hover { color: var(--ink); border-color: var(--ink-4); }
+
+/* ============================================================
+   5 · RUNNING TOOLBOX  (.toolbox)  + tool calls + sub-tools
+   ============================================================ */
+.toolbox { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--canvas); box-shadow: var(--shadow); overflow: hidden; }
+.toolbox > summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); }
+.toolbox > summary:hover { background: var(--panel-2); }
+.tb-ico { width: 22px; height: 22px; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); font-family: var(--mono); font-size: 12px; flex-shrink: 0; }
+.tb-title { font-family: var(--sans); font-weight: 600; font-size: 13.5px; color: var(--ink); white-space: nowrap; }
+.tb-count { font-family: var(--mono); font-size: 11px; color: var(--ink-4); white-space: nowrap; }
+.tb-status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.tb-status.running { color: var(--agent); }
+.tb-status.done { color: var(--green); }
+.toolbox-body { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+
+.tool-call { border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg); overflow: hidden; }
+.tool-call[open] { background: var(--canvas); }
+.tool-head { display: flex; align-items: center; gap: 9px; padding: 8px 11px; }
+.tool-head:hover { background: var(--panel); }
+.tool-type { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); background: var(--panel); border: 1px solid var(--line-2); padding: 1px 7px; border-radius: var(--radius); display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.tool-type .g { width: 6px; height: 6px; border-radius: 50%; }
+.t-bash .g { background: var(--ink-3); }
+.t-read .g { background: var(--user); }
+.t-grep .g { background: var(--agent); }
+.t-edit .g { background: var(--green); }
+.t-fetch .g { background: var(--rose); }
+.tool-summary { font-family: var(--mono); font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; max-width: min(68ch, 100%); display: inline-flex; align-items: baseline; }
+.tool-summary-primary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-summary.has-detail .tool-summary-primary { flex: 0 0 auto; color: var(--ink); font-weight: 600; }
+.tool-summary-muted { min-width: 0; margin-left: .5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-4); }
+.tool-head > .spin, .tool-head > .ok-dot, .tool-head > .err-dot { margin-left: auto; }
+.tool-dur { font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); flex-shrink: 0; }
+.tool-body { padding: 4px 11px 11px 30px; display: flex; flex-direction: column; gap: 10px; }
+
+.io { display: flex; flex-direction: column; gap: 5px; }
+.io-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-4); display: flex; align-items: center; gap: 7px; }
+.io-label .typ { color: var(--ink-3); background: var(--panel); border: 1px solid var(--line-2); padding: 0 6px; border-radius: var(--radius-pill); letter-spacing: .04em; }
+.io-cmd, .io-raw, .io-json { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 12px; overflow: auto; white-space: pre; line-height: 1.55; }
+.io-cmd { color: var(--ink); }
+.io-cmd .pmt { color: var(--green); user-select: none; }
+.io-raw { color: var(--ink-2); max-height: 150px; white-space: pre-wrap; }
+.io-raw .muted { color: var(--ink-4); }
+.io-json { color: var(--ink-2); }
+.j-key { color: var(--user); }
+.j-str { color: var(--green); }
+.j-num { color: var(--agent); }
+.j-bool { color: var(--rose); }
+.j-punc { color: var(--ink-4); }
+
+/* sub-tools: nested tool-calls with a connector */
+.tool-subs { margin-top: 4px; padding-left: 16px; border-left: 1px dashed var(--line); display: flex; flex-direction: column; gap: 4px; position: relative; }
+.tool-subs .sub-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 2px; }
+.tool-call.sub { background: var(--canvas); }
+/* app extensions: compact/internal + failed tool-call states + body summary line */
+.tool-call.internal { opacity: .72; }
+.tool-call.error { border-color: color-mix(in srgb, var(--rose) 35%, var(--line-2)); }
+.tool-call.error > summary .tool-summary { color: var(--rose); }
+.tool-summary-line { font-family: var(--serif); font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 0 0 2px; }
+/* Button-based collapsibles: the app drives open state in React (testable) for the
+   toolbox + tool-call; the reference's native <details> is kept for the sub-agent.
+   These give a <button> the same summary styling + chevron rotation. */
+button.tool-head, .toolbox > .tb-summary { width: 100%; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.toolbox > .tb-summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); }
+.toolbox > .tb-summary:hover { background: var(--panel-2); }
+.tool-call.open { background: var(--canvas); }
+.tool-head[aria-expanded="true"] .chev, .tb-summary[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.io-label { margin: 0; }
+
+/* ============================================================
+   6 · SUB-AGENT RUN BOX  (.subagent)
+   ============================================================ */
+.subagent { border: 1px solid var(--user-tint-2); border-radius: var(--radius-lg); background: var(--canvas); box-shadow: var(--shadow); overflow: hidden; position: relative; }
+.subagent::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--user); }
+.subagent > summary, .subagent-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px 11px 18px; }
+.subagent > summary:hover { background: var(--panel); }
+.sa-avatar { width: 26px; height: 26px; border-radius: var(--radius-pill); background: var(--user); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.sa-id { display: flex; flex-direction: column; line-height: 1.25; }
+.sa-id b { font-family: var(--sans); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.sa-id span { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+.model-chip { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); background: var(--panel); border: 1px solid var(--line-2); padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+.subagent .sa-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sa-pill { font-family: var(--mono); font-size: 10.5px; padding: 2px 9px; border-radius: var(--radius-pill); white-space: nowrap; }
+.sa-pill.run { background: var(--agent-tint); color: var(--agent); }
+.sa-pill.done { background: var(--green-tint); color: var(--green); }
+.subagent-body { padding: 2px 18px 14px; border-top: 1px solid var(--line-2); }
+.subagent-task { font-family: var(--serif); font-size: 13.5px; color: var(--ink-2); font-style: italic; margin: 12px 0; }
+.subagent-foot { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 50%, transparent); font-family: var(--mono); font-size: 12px; }
+.sa-verdict { display: flex; align-items: center; gap: 7px; color: var(--green); font-weight: 500; }
+.sa-verdict.fail { color: var(--rose); }
+/* app extensions: a fail pill variant + the sub-agent metadata row (ids/correlation) */
+.sa-pill.fail { background: color-mix(in srgb, var(--rose) 18%, transparent); color: var(--rose); }
+.subagent-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); }
+.subagent-meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* ============================================================
+   7 · AGENT CHIP + OPTIONS POPOVER
+   ----------------------------------------------------------------------------
+   The app ships a more capable agent chip than the static reference (runtime
+   icon, live presence dot, a model + effort badge, access/exited/wrench states)
+   in components/chips.css, and its options popover in .agent-action-menu there.
+   The reference's simpler .agent-chip / .ctx-gauge / .agent-menu rules are
+   intentionally omitted here so they neither collide with nor regress that
+   evolved, actively-developed component.
+   ============================================================ */

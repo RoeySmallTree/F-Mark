@@ -1,16 +1,9 @@
 /* Appearance section — Settings → Appearance.
-   Theme picker (6 cards, live preview swatches) + density slider (3-position
-   segmented control). Both persist to localStorage via the theme/density
-   modules so reloading the page keeps the choice. */
+   Theme (shared <ThemePicker>: list + live preview), density, and pane
+   arrangement. All three apply instantly and persist to localStorage via the
+   theme / density / layout modules so reloading keeps the choice. */
 
 import { useEffect, useState, type JSX } from "react";
-import {
-  applyTheme,
-  getCurrentTheme,
-  subscribeTheme,
-  THEMES,
-  type ThemeName,
-} from "../../themes/index.js";
 import {
   applyDensity,
   DENSITIES,
@@ -18,84 +11,63 @@ import {
   subscribeDensity,
   type DensityName,
 } from "../../themes/density.js";
+import {
+  applyPlacement,
+  enumeratePlacements,
+  getCurrentPlacement,
+  placementKey,
+  placementPreviewGrid,
+  SHELL_LAYOUT_KINDS,
+  subscribePlacement,
+  type PaneId,
+  type ShellPlacement,
+} from "../../themes/layout.js";
+import { ThemePicker } from "../../components/ThemePicker.js";
 
-/**
- * The preview swatches need the theme's tokens without applying that theme
- * globally — so we hardcode a 4-color sample (canvas / ink / user / agent)
- * for each. Values are lifted verbatim from `planning/redesign/design.html`.
- */
-const PREVIEWS: Record<
-  ThemeName,
-  { canvas: string; ink: string; user: string; agent: string }
-> = {
-  light: {
-    canvas: "#faf6ed",
-    ink: "#1a1714",
-    user: "#2a5fa8",
-    agent: "#b86a1f",
-  },
-  terminal: {
-    canvas: "#0a0c0a",
-    ink: "#cfe8c5",
-    user: "#4ec0ff",
-    agent: "#ffb13e",
-  },
-  ide: {
-    canvas: "#14171c",
-    ink: "#e6e8eb",
-    user: "#5b9dff",
-    agent: "#ffa657",
-  },
-  solarized: {
-    canvas: "#073642",
-    ink: "#fdf6e3",
-    user: "#268bd2",
-    agent: "#cb4b16",
-  },
-  brutalist: {
-    canvas: "#0a0a0a",
-    ink: "#ffffff",
-    user: "#ffffff",
-    agent: "#ffffff",
-  },
-  cyber: {
-    canvas: "#1a0b29",
-    ink: "#f5e9ff",
-    user: "#00e5ff",
-    agent: "#ff2bd6",
-  },
+const PANE_LABEL: Record<PaneId, string> = {
+  leftPanel: "L",
+  chat: "C",
+  rightPanel: "R",
 };
 
 export function Appearance(): JSX.Element {
-  const [theme, setTheme] = useState<ThemeName>(() => getCurrentTheme());
   const [density, setDensity] = useState<DensityName>(() =>
     getCurrentDensity(),
   );
+  const [placement, setPlacement] = useState<ShellPlacement>(() =>
+    getCurrentPlacement(),
+  );
+  const [pickerKind, setPickerKind] = useState<ShellPlacement["kind"]>(
+    () => getCurrentPlacement().kind,
+  );
 
   useEffect(() => {
-    const unsubTheme = subscribeTheme((n) => setTheme(n));
     const unsubDensity = subscribeDensity((n) => setDensity(n));
+    const unsubPlacement = subscribePlacement((p) => setPlacement(p));
     return () => {
-      unsubTheme();
       unsubDensity();
+      unsubPlacement();
     };
   }, []);
-
-  function pickTheme(name: ThemeName): void {
-    applyTheme(name);
-    setTheme(name);
-  }
 
   function pickDensity(name: DensityName): void {
     applyDensity(name);
     setDensity(name);
   }
 
+  function pickPlacement(p: ShellPlacement): void {
+    applyPlacement(p);
+    setPlacement(p);
+  }
+
+  const activeKey = placementKey(placement);
+
   return (
     <>
       <h3 className="settings-h">Appearance</h3>
       <div className="settings-sub">
-        Theme and density apply instantly and persist across reloads.
+        Theme, density, and pane arrangement apply instantly and persist across
+        reloads.
       </div>
 
       <div className="settings-row" style={{ alignItems: "flex-start" }}>
@@ -103,36 +75,7 @@ export function Appearance(): JSX.Element {
           Theme
         </div>
         <div className="settings-r">
-          <div
-            className="theme-grid"
-            role="radiogroup"
-            aria-label="Color theme"
-          >
-            {THEMES.map((t) => {
-              const active = t.name === theme;
-              const preview = PREVIEWS[t.name];
-              return (
-                <button
-                  key={t.name}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  className={`theme-card${active ? " active" : ""}`}
-                  onClick={() => pickTheme(t.name)}
-                  data-theme={t.name}
-                >
-                  <div className="theme-card-preview" aria-hidden="true">
-                    <span style={{ background: preview.canvas }} />
-                    <span style={{ background: preview.ink }} />
-                    <span style={{ background: preview.user }} />
-                    <span style={{ background: preview.agent }} />
-                  </div>
-                  <div className="theme-card-label">{t.label}</div>
-                  <div className="theme-card-desc">{t.description}</div>
-                </button>
-              );
-            })}
-          </div>
+          <ThemePicker />
         </div>
       </div>
 
@@ -166,6 +109,92 @@ export function Appearance(): JSX.Element {
             }}
           >
             {DENSITIES.find((d) => d.name === density)?.description}
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-row" style={{ alignItems: "flex-start" }}>
+        <div className="settings-l" style={{ paddingTop: 6 }}>
+          Pane arrangement
+        </div>
+        <div className="settings-r">
+          <div
+            className="seg-control"
+            role="radiogroup"
+            aria-label="Layout pattern"
+          >
+            {SHELL_LAYOUT_KINDS.map((k) => (
+              <button
+                key={k.kind}
+                type="button"
+                role="radio"
+                aria-checked={k.kind === pickerKind}
+                className={k.kind === pickerKind ? "on" : ""}
+                onClick={() => setPickerKind(k.kind)}
+                title={k.description}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="layout-grid"
+            role="radiogroup"
+            aria-label="Pane placement"
+          >
+            {enumeratePlacements(pickerKind).map((p) => {
+              const key = placementKey(p);
+              const preview = placementPreviewGrid(p);
+              const active = key === activeKey;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={key}
+                  className={`layout-card${active ? " active" : ""}`}
+                  onClick={() => pickPlacement(p)}
+                >
+                  <span
+                    className="layout-card-grid"
+                    style={{
+                      gridTemplateColumns: preview.columns,
+                      gridTemplateRows: preview.rows,
+                      gridTemplateAreas: preview.areas,
+                    }}
+                  >
+                    <span
+                      className="layout-card-rail"
+                      style={{ gridArea: "rail" }}
+                      aria-hidden
+                    />
+                    {(["leftPanel", "chat", "rightPanel"] as PaneId[]).map(
+                      (pane) => (
+                        <span
+                          key={pane}
+                          className={`layout-card-pane${pane === "chat" ? " is-chat" : ""}`}
+                          style={{ gridArea: pane }}
+                        >
+                          {PANE_LABEL[pane]}
+                        </span>
+                      ),
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "var(--ink-4)",
+              marginTop: 6,
+              fontFamily: "var(--sans)",
+            }}
+          >
+            L = left pane · C = chat · R = right pane. The icon rail stays pinned
+            to the left edge.
           </div>
         </div>
       </div>

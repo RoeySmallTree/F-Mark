@@ -75,7 +75,9 @@ describe("ProseCard", () => {
       "us-a7f3",
       {
         content: "Pin me",
-        target: { file: ev.filename, lines: [3, 3] },
+        append_to: ev.filename,
+        mode: "comment",
+        lines: [3, 3],
       },
     );
     const { container } = render(
@@ -91,7 +93,7 @@ describe("ProseCard", () => {
     await user.click(pin as Element);
     const target = useStore.getState().commentTarget;
     expect(target).not.toBeNull();
-    expect(target!.file).toBe(ev.filename);
+    expect(target).toMatchObject({ kind: "event", file: ev.filename });
     expect(target!.lines?.[0]).toBe(3);
     expect(useStore.getState().rightTab).toBe("comments");
   });
@@ -108,15 +110,21 @@ describe("ProseCard", () => {
     const comments = [
       makeProse("20260522T120503Z_us-a7f3.prose.md", "us-a7f3", {
         content: "Fourth",
-        target: { file: ev.filename, lines: [4, 4] },
+        append_to: ev.filename,
+        mode: "comment",
+        lines: [4, 4],
       }),
       makeProse("20260522T120501Z_us-a7f3.prose.md", "us-a7f3", {
         content: "Second",
-        target: { file: ev.filename, lines: [2, 2] },
+        append_to: ev.filename,
+        mode: "comment",
+        lines: [2, 2],
       }),
       makeProse("20260522T120502Z_us-a7f3.prose.md", "us-a7f3", {
         content: "Third",
-        target: { file: ev.filename, lines: [3, 3] },
+        append_to: ev.filename,
+        mode: "comment",
+        lines: [3, 3],
       }),
     ];
     const originalOrder = comments.map((comment) => comment.filename);

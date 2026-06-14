@@ -40,7 +40,9 @@ Every event is a file. You never write files directly — POST and the kernel wr
   - `in_reply_to: <filename>` → a reply in the conversational lane.
   - `supersedes: <filename>` → replace a prior contribution. The renderer hides the old one.
 
-- `POST /sessions/:id/events/choices` — body `{ participant_id, id, question, options: [{id, label}], multi, supersedes? }`. Asks the user to pick. `id` is your own, e.g. `ch_approach`.
+- `POST /sessions/:id/events/choices` — body `{ participant_id, id, question, options: [{id, label, html?}], multi, supersedes? }`. Asks the user to pick. `id` is your own, e.g. `ch_approach`. `options[].html` is an existing html-bundle filename to show as that option's preview — normally set for you by `/events/alternatives`, not hand-written.
+
+- `POST /sessions/:id/events/alternatives` — body `{ participant_id, id, question, multi, options: [{id, label, html, css?, js?, title?, dependencies?}], supersedes?, append_to? }`. Generates one HTML bundle per option, then one visual multi-option widget rendering them as selectable previews with a fullscreen view. Use when presenting several HTML mockups to compare and choose between.
 
 - `POST /sessions/:id/events/choice` — body `{ participant_id, choices_id, selected: [optionId...] }`. The user usually posts this from the UI, but you may post on your own behalf if needed.
 
@@ -129,7 +131,7 @@ The kernel exposes a CLI command (`npx -y f-mark hook auto-stream <participant_i
 - the final text block as `prose` with `arbitrary: false`
 - `turn-end` after the concluding prose
 
-Runtime-specific install instructions live in each runtime's skill bundle (Claude Code: `.claude/skills/f-mark/`, Codex: `.codex/skills/f-mark/`, Gemini: `.gemini/skills/f-mark/`).
+Runtime-specific install instructions live in each runtime's skill bundle (Claude Code: `.claude/skills/f-mark/`, Codex: `.codex/skills/f-mark/`, Opencode: `.opencode/skills/f-mark/`).
 
 To stream output from a runtime that lacks lifecycle hooks, post mid-turn narration manually with `arbitrary: true` — the renderer treats both paths identically.
 

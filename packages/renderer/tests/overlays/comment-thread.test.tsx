@@ -91,7 +91,7 @@ describe("CommentThreadOverlay — routing via RightPanel", () => {
     );
     useStore.setState({
       events: [target, comment],
-      commentTarget: { file: target.filename },
+      commentTarget: { kind: "event", file: target.filename },
     });
 
     render(<RightPanel />);
@@ -125,7 +125,7 @@ describe("CommentThreadOverlay — anchor-snippet + threads", () => {
     );
     useStore.setState({
       events: [target],
-      commentTarget: { file: target.filename, lines: [2, 3] },
+      commentTarget: { kind: "event", file: target.filename, lines: [2, 3] },
     });
 
     const { container } = render(
@@ -146,7 +146,7 @@ describe("CommentThreadOverlay — anchor-snippet + threads", () => {
     );
     useStore.setState({
       events: [target],
-      commentTarget: { file: target.filename },
+      commentTarget: { kind: "event", file: target.filename },
     });
     const { container } = render(
       <CommentThreadOverlay targetFile={target.filename} comments={[]} />,
@@ -165,7 +165,7 @@ describe("CommentThreadOverlay — anchor-snippet + threads", () => {
       "us-a7f3",
       {
         content: "Root comment",
-        target: { file: target.filename, lines: [1, 1] },
+        append_to: target.filename, mode: "comment", lines: [1, 1],
       },
     );
     const reply = makeProse(
@@ -173,13 +173,13 @@ describe("CommentThreadOverlay — anchor-snippet + threads", () => {
       "ag-c92e",
       {
         content: "A reply",
-        target: { file: target.filename, lines: [1, 1] },
+        append_to: target.filename, mode: "comment", lines: [1, 1],
         in_reply_to: root.filename,
       },
     );
     useStore.setState({
       events: [target, root, reply],
-      commentTarget: { file: target.filename, lines: [1, 1] },
+      commentTarget: { kind: "event", file: target.filename, lines: [1, 1] },
     });
 
     const { container } = render(
@@ -213,7 +213,7 @@ describe("CommentThreadOverlay — anchor-snippet + threads", () => {
     );
     useStore.setState({
       events: [target],
-      commentTarget: { file: target.filename },
+      commentTarget: { kind: "event", file: target.filename },
     });
     render(<CommentThreadOverlay targetFile={target.filename} comments={[]} />);
     // First 40 chars of `long`.
@@ -252,7 +252,7 @@ describe("CommentThreadOverlay — close button", () => {
     );
     useStore.setState({
       events: [target, comment],
-      commentTarget: { file: target.filename },
+      commentTarget: { kind: "event", file: target.filename },
     });
 
     render(<RightPanel />);
@@ -286,12 +286,12 @@ describe("CommentThreadOverlay — reply behavior", () => {
       "us-a7f3",
       {
         content: "Root comment",
-        target: { file: target.filename, lines: [1, 1] },
+        append_to: target.filename, mode: "comment", lines: [1, 1],
       },
     );
     useStore.setState({
       events: [target, root],
-      commentTarget: { file: target.filename, lines: [1, 1] },
+      commentTarget: { kind: "event", file: target.filename, lines: [1, 1] },
     });
 
     const fetchMock = vi
@@ -362,12 +362,12 @@ describe("CommentThreadOverlay — reply behavior", () => {
       "us-a7f3",
       {
         content: "Root",
-        target: { file: target.filename },
+        append_to: target.filename, mode: "comment",
       },
     );
     useStore.setState({
       events: [target, root],
-      commentTarget: { file: target.filename },
+      commentTarget: { kind: "event", file: target.filename },
     });
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
     vi.stubGlobal("fetch", fetchMock);
@@ -413,12 +413,12 @@ describe("CommentThreadOverlay — resolve behavior", () => {
       "us-a7f3",
       {
         content: "Pin",
-        target: { file: target.filename, lines: [2, 3] },
+        append_to: target.filename, mode: "comment", lines: [2, 3],
       },
     );
     useStore.setState({
       events: [target, root],
-      commentTarget: { file: target.filename, lines: [2, 3] },
+      commentTarget: { kind: "event", file: target.filename, lines: [2, 3] },
     });
 
     const fetchMock = vi
@@ -482,7 +482,7 @@ describe("CommentThreadOverlay — resolve behavior", () => {
       "us-a7f3",
       {
         content: "Pin",
-        target: { file: target.filename },
+        append_to: target.filename, mode: "comment",
       },
     );
     const resolution = makeProse(
@@ -490,13 +490,13 @@ describe("CommentThreadOverlay — resolve behavior", () => {
       "us-a7f3",
       {
         content: "_resolved_",
-        target: { file: target.filename },
+        append_to: target.filename, mode: "comment",
         supersedes: root.filename,
       },
     );
     useStore.setState({
       events: [target, root, resolution],
-      commentTarget: { file: target.filename },
+      commentTarget: { kind: "event", file: target.filename },
     });
 
     // Aggregator would hide `root` from the visible feed, but the overlay
@@ -522,12 +522,12 @@ describe("isResolvedComment helper", () => {
     const a = makeProse(
       "20260522T120100Z_us-a7f3.prose.md",
       "us-a7f3",
-      { content: "Root", target: { file: "x" } },
+      { content: "Root", append_to: "x", mode: "comment" },
     );
     const b = makeProse(
       "20260522T120200Z_us-a7f3.prose.md",
       "us-a7f3",
-      { content: "_resolved_", target: { file: "x" }, supersedes: a.filename },
+      { content: "_resolved_", append_to: "x", mode: "comment", supersedes: a.filename },
     );
     expect(isResolvedComment(a, [a, b])).toBe(true);
   });
@@ -536,7 +536,7 @@ describe("isResolvedComment helper", () => {
     const a = makeProse(
       "20260522T120100Z_us-a7f3.prose.md",
       "us-a7f3",
-      { content: "Root", target: { file: "x" } },
+      { content: "Root", append_to: "x", mode: "comment" },
     );
     expect(isResolvedComment(a, [a])).toBe(false);
   });
@@ -547,7 +547,7 @@ describe("isResolvedComment helper", () => {
       "us-a7f3",
       {
         content: "Root",
-        target: { file: "x" },
+        append_to: "x", mode: "comment",
         supersedes: "20260522T120100Z_us-a7f3.prose.md",
       },
     );
@@ -572,7 +572,7 @@ describe("ProseCard — focused class when commentTarget matches", () => {
     );
     useStore.setState({
       events: [ev],
-      commentTarget: { file: ev.filename },
+      commentTarget: { kind: "event", file: ev.filename },
     });
     const { container } = render(
       <ProseCard event={ev} participants={PARTICIPANTS} comments={[]} />,
@@ -603,7 +603,7 @@ describe("ProseCard — focused class when commentTarget matches", () => {
     );
     useStore.setState({
       events: [ev],
-      commentTarget: { file: "different-file.md" },
+      commentTarget: { kind: "event", file: "different-file.md" },
     });
     const { container } = render(
       <ProseCard event={ev} participants={PARTICIPANTS} comments={[]} />,
@@ -611,5 +611,35 @@ describe("ProseCard — focused class when commentTarget matches", () => {
     expect(container.querySelector(".prose-card.focused")).toBeNull();
     // Still has the base prose-card class though.
     expect(container.querySelector(".prose-card")).not.toBeNull();
+  });
+
+  test("prose-card gets .focused when commentTarget.file matches one of its appended blocks", async () => {
+    const { ProseCard } = await import("../../src/cards/ProseCard.js");
+    const anchor = makeProse(
+      "20260522T120000Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Plan", content: "" },
+    );
+    const block = makeProse(
+      "20260522T120100Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { content: "block body", append_to: anchor.filename },
+    );
+    useStore.setState({
+      events: [anchor, block],
+      commentTarget: { kind: "event", file: block.filename, lines: [1, 1] },
+    });
+    const { container } = render(
+      <ProseCard
+        event={anchor}
+        participants={PARTICIPANTS}
+        comments={[]}
+        blocks={[block]}
+      />,
+    );
+    // Without the block-aware focus check, the parent prose-card stays dimmed
+    // (no .focused class) even though the user is actively commenting on its
+    // appended block.
+    expect(container.querySelector(".prose-card.focused")).not.toBeNull();
   });
 });

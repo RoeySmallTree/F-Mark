@@ -36,32 +36,47 @@ describe("AgentChip — basic rendering", () => {
     expect(screen.getByText("Worker A")).toBeInTheDocument();
   });
 
+  /* The icon now renders as a CSS-mask span (so it can adopt the
+     theme's text color); the runtime URL lives in `--icon-url`. */
   test("renders the Claude icon for claude runtime", () => {
     const { container } = renderChip({ runtimeId: "claude" });
-    expect(
-      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
-    ).toContain("claude-icon.png");
+    const mask = container.querySelector(
+      ".agent-chip-runtime .icon-mask",
+    ) as HTMLElement | null;
+    expect(mask).not.toBeNull();
+    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
+      "claude-icon.png",
+    );
   });
 
   test("renders the GPT icon for codex runtime", () => {
     const { container } = renderChip({ runtimeId: "codex" });
-    expect(
-      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
-    ).toContain("gpt-icon.png");
+    const mask = container.querySelector(
+      ".agent-chip-runtime .icon-mask",
+    ) as HTMLElement | null;
+    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
+      "gpt-icon.png",
+    );
   });
 
-  test("renders the Gemini icon for gemini runtime", () => {
-    const { container } = renderChip({ runtimeId: "gemini" });
-    expect(
-      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
-    ).toContain("gemini-icon.png");
+  test("renders the Opencode icon for opencode runtime", () => {
+    const { container } = renderChip({ runtimeId: "opencode" });
+    const mask = container.querySelector(
+      ".agent-chip-runtime .icon-mask",
+    ) as HTMLElement | null;
+    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
+      "opencode-icon.svg",
+    );
   });
 
   test("renders the terminal icon for custom (null) runtime", () => {
     const { container } = renderChip({ runtimeId: null, name: "Worker" });
-    expect(
-      container.querySelector(".agent-chip-runtime img")?.getAttribute("src"),
-    ).toContain("terminal-icon.png");
+    const mask = container.querySelector(
+      ".agent-chip-runtime .icon-mask",
+    ) as HTMLElement | null;
+    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
+      "terminal-icon.png",
+    );
   });
 });
 

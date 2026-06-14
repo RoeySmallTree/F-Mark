@@ -232,53 +232,6 @@ export function extractAccessRequest(input: {
     };
   }
 
-  if (
-    hookEventName === "Notification" &&
-    stringField(payload, "notification_type") === "ToolPermission"
-  ) {
-    const details = payload.details;
-    const command = stringField(details, "command");
-    const title =
-      stringField(details, "title") ??
-      stringField(payload, "message") ??
-      "Tool permission";
-    /* For Gemini ToolPermission notifications, prefer detail-derived
-       content (toolName/toolDisplayName, then the well-known key list)
-       over the top-level `message`, which is usually generic boilerplate
-       like "Tool Confirm MCP Tool Execution requires MCP". Only fall
-       back to a JSON preview of details after exhausting both the
-       structured detail fields and the top-level message — so a
-       useful top-level message still wins over an opaque JSON dump. */
-    const detailMessage =
-      command ??
-      stringField(details, "toolDisplayName") ??
-      stringField(details, "toolName") ??
-      pickWellKnownMessageField(details);
-    const messageFallback = stringField(payload, "message");
-    return {
-      schema: "fmark.access-request.v1",
-      request_id: `ar-${randomUUID()}`,
-      status: "open",
-      request_type: command !== undefined ? "command" : "permission",
-      runtime_id: input.runtimeId ?? "gemini",
-      runtime_session_id: stringField(payload, "session_id"),
-      hook_event_name: hookEventName,
-      title,
-      message: detailMessage ?? messageFallback ?? jsonPreview(details),
-      tool_name: stringField(details, "type") ?? "ToolPermission",
-      ...(details !== undefined ? { tool_input: details } : {}),
-      ...(command !== undefined ? { command } : {}),
-      ...(stringField(payload, "cwd") !== undefined
-        ? { cwd: stringField(payload, "cwd")! }
-        : {}),
-      ...(stringField(payload, "transcript_path") !== undefined
-        ? { transcript_path: stringField(payload, "transcript_path")! }
-        : {}),
-      response_channel: "terminal",
-      raw: payload,
-      created_at: new Date().toISOString(),
-    };
-  }
   return null;
 }
 
@@ -457,9 +410,7 @@ function extractSubagentToolHookEvents(input: {
   const isClaudeAgent =
     (hookEventName === "PostToolUse" || hookEventName === "AfterTool") &&
     (normalizedTool === "agent" || normalizedTool === "task");
-  const isGeminiAgent =
-    hookEventName === "AfterTool" && normalizedTool === "invoke_agent";
-  if (!isClaudeAgent && !isGeminiAgent) return [];
+  if (!isClaudeAgent) return [];
 
   const rawInput =
     objectField(input.payload, "tool_input") ??
@@ -481,7 +432,7 @@ function extractSubagentToolHookEvents(input: {
       "agent_name",
       "name",
       "description",
-    ]) ?? (isGeminiAgent ? "Gemini sub-agent" : "Claude sub-agent"),
+    ]) ?? "Claude sub-agent",
     160,
   );
   const subagentId = truncateString(
@@ -516,7 +467,7 @@ function extractSubagentToolHookEvents(input: {
     kind: "subagent-run",
     schema: "fmark.subagent-run.v1",
     parent_participant_id: input.participantId,
-    parent_runtime_id: input.runtimeId ?? (isGeminiAgent ? "gemini" : "claude"),
+    parent_runtime_id: input.runtimeId ?? "claude",
     ...(runtimeSessionId !== undefined
       ? { parent_runtime_session_id: runtimeSessionId }
       : {}),
@@ -956,11 +907,12 @@ async function handleAccessRequest(input: {
     participant_id: input.participantId,
     schema: "fmark.access-response.v1",
     request_id: input.request.request_id,
-    decision: "expired",
-    status: "expired",
+    decision: "bridge-timeout",
+    status: "bridge-timeout",
     delivered: false,
     delivery: "hook",
-    error: "Timed out waiting for a F-Mark access response",
+    error:
+      "F-Mark hook bridge timed out; the provider may still be waiting in the terminal",
     responded_at: new Date().toISOString(),
   });
 }
@@ -968,7 +920,7 @@ async function handleAccessRequest(input: {
 /* Best-effort runtime-state probe. Reads the current model/effort via
    the runtime adapter and POSTs it to the kernel so the UI can render a
    live badge. Adapter returns null for runtimes without a probe path,
-   so this no-ops for gemini / custom / opencode-via-autoStream. */
+   so this no-ops for custom / opencode-via-autoStream. */
 async function maybePostRuntimeState(input: {
   ctx: import("./bootstrap.js").HookContext;
   participantId: string;

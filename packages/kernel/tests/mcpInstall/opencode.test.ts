@@ -9,7 +9,13 @@ let env: NodeJS.ProcessEnv;
 
 beforeEach(async () => {
   tmp = await mkdtemp(join(tmpdir(), "fmark-oc-mcp-"));
-  env = { ...process.env, HOME: tmp, XDG_CONFIG_HOME: join(tmp, ".config") };
+  env = {
+    ...process.env,
+    HOME: tmp,
+    XDG_CONFIG_HOME: join(tmp, ".config"),
+    F_MARK_MCP_COMMAND: "f-mark",
+    F_MARK_MCP_ARGS: '["mcp"]',
+  };
 });
 afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
@@ -105,7 +111,7 @@ describe("mcpInstall/opencode", () => {
   test("detect handles jsonc with comments", async () => {
     await writeFile(
       join(tmp, "opencode.jsonc"),
-      "// header comment\n{\n  // a comment\n  \"mcp\": { \"fmark\": { \"type\": \"local\", \"command\": [\"f-mark\"], \"environment\": { \"F_MARK_MCP_VERSION\": \"phase5-stdio-v1\" }, \"enabled\": true } }\n}\n",
+      `// header comment\n{\n  // a comment\n  "mcp": { "fmark": { "type": "local", "command": ["f-mark", "mcp", "--path", "${tmp}"], "environment": { "F_MARK_MCP_VERSION": "phase5-stdio-v1" }, "enabled": true } }\n}\n`,
     );
     const check = await detectOpencodeMcp({ runtimeId: "opencode", projectRoot: tmp, env });
     const project = check.locations.find((l) => l.scope === "project");
@@ -115,7 +121,7 @@ describe("mcpInstall/opencode", () => {
   test("detect handles trailing commas in jsonc", async () => {
     await writeFile(
       join(tmp, "opencode.jsonc"),
-      "{\n  \"mcp\": { \"fmark\": { \"type\": \"local\", \"command\": [\"f-mark\"], \"environment\": { \"F_MARK_MCP_VERSION\": \"phase5-stdio-v1\" }, \"enabled\": true, }, },\n}\n",
+      `{\n  "mcp": { "fmark": { "type": "local", "command": ["f-mark", "mcp", "--path", "${tmp}"], "environment": { "F_MARK_MCP_VERSION": "phase5-stdio-v1" }, "enabled": true, }, },\n}\n`,
     );
     const check = await detectOpencodeMcp({ runtimeId: "opencode", projectRoot: tmp, env });
     const project = check.locations.find((l) => l.scope === "project");
@@ -149,7 +155,7 @@ describe("mcpInstall/opencode", () => {
         mcp: {
           fmark: {
             type: "local",
-            command: ["f-mark"],
+            command: ["f-mark", "mcp", "--path", tmp],
             env: { F_MARK_MCP_VERSION: "phase5-stdio-v1" },
             enabled: true,
           },

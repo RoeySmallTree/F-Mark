@@ -19,6 +19,47 @@ export interface CliOptions {
   help: boolean;
 }
 
+function booleanValue(value: string): boolean | null {
+  if (value === "true" || value === "1" || value === "") return true;
+  if (value === "false" || value === "0") return false;
+  return null;
+}
+
+function readBooleanAssignment(arg: string, flag: string): boolean | null {
+  if (!arg.startsWith(`${flag}=`)) return null;
+  const parsed = booleanValue(arg.slice(flag.length + 1));
+  if (parsed === null) {
+    throw new Error(`${flag} must be true or false`);
+  }
+  return parsed;
+}
+
+function readValueAssignment(arg: string, flag: string): string | null {
+  if (!arg.startsWith(`${flag}=`)) return null;
+  return arg.slice(flag.length + 1);
+}
+
+function parsePortValue(value: string): number {
+  const port = Number.parseInt(value, 10);
+  if (
+    !Number.isInteger(port) ||
+    String(port) !== value ||
+    port < 1 ||
+    port > 65535
+  ) {
+    throw new Error(`--port: invalid port number "${value}"`);
+  }
+  return port;
+}
+
+function parseAuthValue(value: string): boolean {
+  const parsed = booleanValue(value);
+  if (parsed === null) {
+    throw new Error("--auth must be true or false");
+  }
+  return parsed;
+}
+
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     remote: false,
@@ -30,7 +71,64 @@ export function parseArgs(argv: string[]): CliOptions {
   };
 
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+    const arg = argv[i]!;
+
+    const remote = readBooleanAssignment(arg, "--remote");
+    if (remote !== null) {
+      options.remote = remote;
+      continue;
+    }
+    const container = readBooleanAssignment(arg, "--container");
+    if (container !== null) {
+      options.container = container;
+      continue;
+    }
+    const noAuth = readBooleanAssignment(arg, "--no-auth");
+    if (noAuth !== null) {
+      options.noAuth = noAuth;
+      continue;
+    }
+    const allowProcessApiNoAuth = readBooleanAssignment(
+      arg,
+      "--allow-process-api-no-auth",
+    );
+    if (allowProcessApiNoAuth !== null) {
+      options.allowProcessApiNoAuth = allowProcessApiNoAuth;
+      continue;
+    }
+    const quietCrossPathHooks = readBooleanAssignment(
+      arg,
+      "--quiet-cross-path-hooks",
+    );
+    if (quietCrossPathHooks !== null) {
+      options.quietCrossPathHooks = quietCrossPathHooks;
+      continue;
+    }
+    const auth = readBooleanAssignment(arg, "--auth");
+    if (auth !== null) {
+      options.noAuth = !auth;
+      continue;
+    }
+    const assignedPort = readValueAssignment(arg, "--port");
+    if (assignedPort !== null) {
+      options.port = parsePortValue(assignedPort);
+      continue;
+    }
+    const assignedPassword = readValueAssignment(arg, "--password");
+    if (assignedPassword !== null) {
+      if (assignedPassword === "") throw new Error("--password requires a value");
+      options.password = assignedPassword;
+      continue;
+    }
+    const assignedPath = readValueAssignment(arg, "--path");
+    if (assignedPath !== null) {
+      if (assignedPath === "" || !assignedPath.startsWith("/")) {
+        throw new Error("--path requires an absolute directory");
+      }
+      options.path = assignedPath;
+      continue;
+    }
+
     switch (arg) {
       case "--":
         continue;
@@ -43,6 +141,15 @@ export function parseArgs(argv: string[]): CliOptions {
       case "--no-auth":
         options.noAuth = true;
         break;
+      case "--auth": {
+        const value = argv[i + 1];
+        if (value === undefined || value === "" || value.startsWith("--")) {
+          throw new Error("--auth requires true or false");
+        }
+        options.noAuth = !parseAuthValue(value);
+        i++;
+        break;
+      }
       case "--allow-process-api-no-auth":
         options.allowProcessApiNoAuth = true;
         break;
@@ -58,16 +165,7 @@ export function parseArgs(argv: string[]): CliOptions {
         if (value === undefined || value.startsWith("--")) {
           throw new Error("--port requires a value");
         }
-        const port = Number.parseInt(value, 10);
-        if (
-          !Number.isInteger(port) ||
-          String(port) !== value ||
-          port < 1 ||
-          port > 65535
-        ) {
-          throw new Error(`--port: invalid port number "${value}"`);
-        }
-        options.port = port;
+        options.port = parsePortValue(value);
         i++;
         break;
       }
@@ -110,6 +208,7 @@ export function parseArgs(argv: string[]): CliOptions {
 export function printUsage(): void {
   console.log(`Usage: f-mark [options]
        f-mark hook auto-stream [participant_id] [--kind assistant|user]
+       f-mark mcp [--path <abs-dir>]
 
 Options:
   --remote            Print SSH port forwarding instructions
@@ -119,6 +218,7 @@ Options:
                       Overrides the persisted state.json activePath.
   --password <value>  Use a specific auth token instead of generating one
   --no-auth           Disable auth entirely (prints a warning)
+  --auth false        Alias for --no-auth
   --allow-process-api-no-auth
                       Allow the process-spawning API (managed-agents, pane WS)
                       under --no-auth. Off by default — without this flag,
@@ -161,6 +261,42 @@ export async function runCli(
     }
     const stdinRaw = opts.stdin ?? (await readAllStdin());
     return autoStream.runAutoStream(participantId, kind, stdinRaw);
+  }
+
+  if (argv[0] === "mcp") {
+    let path: string | undefined;
+    for (let i = 1; i < argv.length; i++) {
+      const arg = argv[i];
+      if (arg === "--path") {
+        const value = argv[i + 1];
+        if (value === undefined || value === "" || value.startsWith("--")) {
+          process.stderr.write("--path requires an absolute directory\n");
+          return 2;
+        }
+        if (!value.startsWith("/")) {
+          process.stderr.write(`--path must be absolute: ${value}\n`);
+          return 2;
+        }
+        path = value;
+        i++;
+      } else if (arg === "--help" || arg === "-h") {
+        process.stderr.write("Usage: f-mark mcp [--path <abs-dir>]\n");
+        return 0;
+      } else {
+        process.stderr.write(`unknown mcp argument: ${arg}\n`);
+        return 2;
+      }
+    }
+    const { runFmarkMcpStdio } = await import("./mcp/stdio.js");
+    try {
+      await runFmarkMcpStdio({ path });
+      return 0;
+    } catch (err) {
+      process.stderr.write(
+        `f-mark mcp failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      return 1;
+    }
   }
 
   process.stderr.write(`unknown subcommand: ${argv.join(" ")}\n`);

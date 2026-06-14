@@ -6,31 +6,7 @@
 import { useEffect, useState, type JSX } from "react";
 import { createClient } from "../../api/client.js";
 import { useStore } from "../../state/store.js";
-
-/**
- * The opening frame of `planning/ascii-art.md`. Lines 7-25 of that file, kept
- * here as a string literal so the renderer doesn't need to fetch it at
- * runtime. If the source changes the maintainer should re-copy.
- */
-const ASCII_LOGO = `           ↑↑↑↑↑↑↑↑↑  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
-         ↑↑↑↑↑↑↑↑↑↑↑  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
-        ↑↑↑↑↑↑↑                                                ↑↑↑↑↑↑
-        ↑↑↑↑↑                                       ↑↑          ↑↑↑↑↑
-        ↑↑↑↑     ↑↑↑↑↑↑          ↑↑↑↑↑↑           ↑↑↑↑↑↑         ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑          ↑↑↑↑↑↑         ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑          ↑↑↑↑↑↑         ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑↑↑       ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑↑↑↑      ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑ ↑↑↑↑↑↑↑↑ ↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑  ↑↑↑↑↑↑  ↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑     ↑    ↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   ↑↑↑↑
-        ↑↑↑↑    ↑↑↑↑↑↑↑          ↑↑↑↑↑↑↑     ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑
-        ↑↑↑↑     ↑↑↑↑↑            ↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑↑↑↑↑↑     ↑↑↑↑
-        ↑↑↑↑↑                                    ↑↑↑↑↑↑↑↑       ↑↑↑↑↑
-        ↑↑↑↑↑↑↑                                               ↑↑↑↑↑↑↑
-         ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑
-           ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑
-              ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑      ↑↑↑↑↑↑↑↑`;
+import { ASCII_LOGO } from "../../branding.js";
 
 const DESCRIPTION = `F-Mark is a document-based interface for AI agents to collaborate with humans on an append-only event log. The kernel runs a small Fastify server; each session is a directory of plain-text events that the renderer aggregates into a live feed.`;
 

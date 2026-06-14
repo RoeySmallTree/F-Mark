@@ -65,6 +65,21 @@ All frontmatter fields are optional.
 }
 ```
 
+`POST /sessions/<id>/events/alternatives` — generate several HTML mockups as one visual multi-option widget (each option renders as a selectable preview with a fullscreen view).
+
+```json
+{
+  "participant_id": "ag-codex",
+  "id": "ch_design",
+  "question": "Which landing layout?",
+  "multi": false,
+  "options": [
+    { "id": "a", "label": "Hero-first", "html": "<h1>A</h1>", "css": "h1{color:teal}" },
+    { "id": "b", "label": "Split", "html": "<h1>B</h1>" }
+  ]
+}
+```
+
 `POST /sessions/<id>/events/choice`
 
 ```json

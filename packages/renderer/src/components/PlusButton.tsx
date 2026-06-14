@@ -19,7 +19,12 @@ import {
   type CSSProperties,
   type JSX,
 } from "react";
-import { avatarIconSrc, avatarKind } from "./ParticipantAvatar.js";
+import type { RuntimeAccessModeOption } from "@f-mark/shared";
+import {
+  runtimeProviderIconStyle,
+  runtimeProviderVisual,
+} from "../runtimes.js";
+import { iconMaskStyle } from "./ParticipantAvatar.js";
 import "./chips.css";
 
 export interface PlusButtonRuntime {
@@ -33,6 +38,9 @@ export interface PlusButtonProps {
   onSpawnRuntime(id: string): void;
   onSpawnTerminal(): void;
   onManageRuntimes(): void;
+  accessModeForRuntime?(id: string): string;
+  accessModeOptionsForRuntime?(id: string): RuntimeAccessModeOption[];
+  onAccessModeChange?(id: string, mode: string): void;
   /* When env-probe reports tmux is missing the terminal entry becomes
      non-actionable. This is optional so the renderer doesn't need to
      thread the env probe through if it's known good. */
@@ -42,11 +50,88 @@ export interface PlusButtonProps {
   spawnDisabledReason?: string | null;
 }
 
+function RuntimeMenuItem({
+  runtime,
+  disabled,
+  title,
+  hint,
+  accessMode,
+  accessModeOptions,
+  onAccessModeChange,
+  onClick,
+}: {
+  runtime: PlusButtonRuntime;
+  disabled: boolean;
+  title: string | undefined;
+  hint: string | null;
+  accessMode: string;
+  accessModeOptions: RuntimeAccessModeOption[];
+  onAccessModeChange?(mode: string): void;
+  onClick(): void;
+}): JSX.Element {
+  const visual = runtimeProviderVisual(runtime.id, runtime.displayName);
+
+  return (
+    <div className="plus-menu-runtime">
+      <button
+        type="button"
+        role="menuitem"
+        className="plus-menu-item"
+        disabled={disabled}
+        title={title}
+        onClick={onClick}
+      >
+        <span
+          className="plus-menu-icon"
+          aria-hidden
+          data-provider-mark={
+            visual.type === "icon" ? visual.icon.kind : "initials"
+          }
+        >
+          {visual.type === "icon" ? (
+            <span
+              className="icon-mask"
+              data-provider-icon={visual.icon.kind}
+              style={runtimeProviderIconStyle(visual.icon)}
+            />
+          ) : (
+            <span data-provider-initials={visual.initials}>
+              {visual.initials}
+            </span>
+          )}
+        </span>
+        <span className="plus-menu-label">{runtime.displayName}</span>
+        {hint !== null ? <span className="plus-menu-hint">{hint}</span> : null}
+      </button>
+      {accessModeOptions.length > 1 ? (
+        <select
+          className="plus-menu-access"
+          aria-label={`${runtime.displayName} permission mode`}
+          value={accessMode}
+          disabled={disabled}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onAccessModeChange?.(event.currentTarget.value)}
+        >
+          {accessModeOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+              {option.deprecated === true ? " (deprecated)" : ""}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
 export function PlusButton({
   runtimes,
   onSpawnRuntime,
   onSpawnTerminal,
   onManageRuntimes,
+  accessModeForRuntime,
+  accessModeOptionsForRuntime,
+  onAccessModeChange,
   tmuxMissing,
   spawnDisabledReason = null,
 }: PlusButtonProps): JSX.Element {
@@ -172,34 +257,30 @@ export function PlusButton({
           style={menuStyle}
         >
           {runtimes.map((rt) => (
-            <button
+            <RuntimeMenuItem
               key={rt.id}
-              type="button"
-              role="menuitem"
-              className="plus-menu-item"
+              runtime={rt}
               disabled={spawnDisabledReason !== null || !rt.available}
               title={
                 spawnDisabledReason ??
                 (!rt.available ? "Not on PATH" : undefined)
               }
+              hint={
+                spawnDisabledReason !== null
+                  ? "disabled"
+                  : !rt.available
+                    ? "Not on PATH"
+                    : null
+              }
+              accessMode={
+                accessModeForRuntime?.(rt.id) ??
+                accessModeOptionsForRuntime?.(rt.id)?.[0]?.id ??
+                "default"
+              }
+              accessModeOptions={accessModeOptionsForRuntime?.(rt.id) ?? []}
+              onAccessModeChange={(mode) => onAccessModeChange?.(rt.id, mode)}
               onClick={() => handleSpawnRuntime(rt.id, rt.available)}
-            >
-              <span className="plus-menu-icon" aria-hidden>
-                <img
-                  src={avatarIconSrc(
-                    avatarKind({ kind: "agent", runtimeId: rt.id, name: rt.displayName }),
-                  )}
-                  alt=""
-                  draggable={false}
-                />
-              </span>
-              <span className="plus-menu-label">{rt.displayName}</span>
-              {spawnDisabledReason !== null ? (
-                <span className="plus-menu-hint">disabled</span>
-              ) : !rt.available ? (
-                <span className="plus-menu-hint">Not on PATH</span>
-              ) : null}
-            </button>
+            />
           ))}
 
           <div className="plus-menu-sep" role="separator" />
@@ -216,7 +297,7 @@ export function PlusButton({
             onClick={handleSpawnTerminal}
           >
             <span className="plus-menu-icon" aria-hidden>
-              <img src={avatarIconSrc("terminal")} alt="" draggable={false} />
+              <span className="icon-mask" style={iconMaskStyle("terminal")} />
             </span>
             <span className="plus-menu-label">Terminal</span>
             {spawnDisabledReason !== null ? (

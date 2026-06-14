@@ -20,12 +20,19 @@ interface AgentRow {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-function buildOrientationSnippet(origin: string, token: string | null): string {
-  const tokenPart =
-    token !== null && token.length > 0
-      ? `?token=${encodeURIComponent(token)}`
-      : "";
-  return `You're joining an F-Mark project as an agent. Fetch ${origin}/guide${tokenPart} for the full protocol — connection URL, bearer token usage, the event schema, and your first action.`;
+function buildOrientationSnippet(
+  origin: string,
+  token: string | null,
+  agentId?: string,
+): string {
+  const params = new URLSearchParams();
+  if (token !== null && token.length > 0) params.set("token", token);
+  if (agentId !== undefined && agentId.length > 0) {
+    params.set("agent_id", agentId);
+  }
+  const query = params.toString();
+  const guideUrl = query.length > 0 ? `${origin}/guide?${query}` : `${origin}/guide`;
+  return `You're joining an F-Mark project as an agent. Fetch ${guideUrl} for the MCP tool guide and your first action. Use the provided fmark MCP tools instead of raw HTTP calls.`;
 }
 
 export function Agents(): JSX.Element {
@@ -70,7 +77,7 @@ export function Agents(): JSX.Element {
   async function copySnippet(id: string): Promise<void> {
     const origin =
       typeof window !== "undefined" ? window.location.origin : "http://localhost:7777";
-    const snippet = buildOrientationSnippet(origin, token);
+    const snippet = buildOrientationSnippet(origin, token, id);
     try {
       await navigator.clipboard?.writeText(snippet);
       setCopiedId(id);
@@ -173,7 +180,7 @@ export function Agents(): JSX.Element {
                   onClick={() => {
                     void copySnippet(a.id);
                   }}
-                  title="Copy /guide orientation snippet"
+                  title="Copy MCP orientation snippet"
                 >
                   {copiedId === a.id ? "Copied" : "Copy snippet"}
                 </button>

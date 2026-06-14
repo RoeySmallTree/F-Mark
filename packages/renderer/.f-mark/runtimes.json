@@ -15,13 +15,6 @@
       "icon": "codex",
       "readyDelayMs": 1500
     },
-    "gemini": {
-      "displayName": "Gemini",
-      "executable": "gemini",
-      "args": [],
-      "icon": "gemini",
-      "readyDelayMs": 1500
-    },
     "opencode": {
       "displayName": "Opencode",
       "executable": "opencode",

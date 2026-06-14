@@ -4,14 +4,23 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerManagedAgentsRoutes } from "../../src/routes/managedAgents.js";
+import { createServer } from "../../src/server.js";
 import { initProject, readConfig } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
+import { activePaths } from "../../src/paths/active.js";
+import { globalPaths } from "../../src/paths/global.js";
+import { PathContextRef } from "../../src/paths/contextRef.js";
 import { createPresenceTracker } from "../../src/presence/tracker.js";
 import { fakeCommandRunner } from "../../src/tmux/commandRunner.js";
 import { createTmuxManager } from "../../src/tmux/manager.js";
 import { createInputQueue } from "../../src/tmux/inputQueue.js";
 import type { Bus, BusMessage } from "../../src/ws/bus.js";
 import type { DetectResult } from "../../src/hooksInstall/types.js";
+import { FMARK_LAUNCH_PROMPT_MARKER } from "../../src/launchPrompt.js";
+import { createSession } from "../../src/sessions.js";
+import { writeEventFile } from "../../src/events/writer.js";
+import { serializeProse } from "../../src/events/prose.js";
+import { readEvents } from "../../src/events/reader.js";
 
 function fakeBus(): Bus & { messages: BusMessage[] } {
   const messages: BusMessage[] = [];
@@ -102,8 +111,60 @@ describe("POST /managed-agents/spawn", () => {
     await cleanup();
   });
 
+  it("applies and persists launch access_mode when the runtime supports it", async () => {
+    const { app, runner, p, cleanup } = await makeApp();
+    expectSpawnCalls(runner);
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "codex",
+        suggested_participant_id: "ag-codex-access",
+        access_mode: "never",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const spawnCall = runner.calls.find((call) =>
+      call[0] === "tmux" &&
+      call[1] === "new-session" &&
+      call.includes("codex"),
+    );
+    expect(spawnCall).toBeDefined();
+    expect(spawnCall).toContain("-a");
+    expect(spawnCall).toContain("never");
+    const state = JSON.parse(
+      await readFile(
+        join(p.fmarkDir(), "agents", "ag-codex-access", "state.json"),
+        "utf8",
+      ),
+    ) as { access_mode?: string };
+    expect(state.access_mode).toBe("never");
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("rejects unsupported launch access_mode before spawning", async () => {
+    const { app, runner, cleanup } = await makeApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "opencode",
+        suggested_participant_id: "ag-opencode-access",
+        access_mode: "never",
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain("unsupported access_mode");
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
   it("writes active-session pointer when session_id provided", async () => {
     const { app, runner, p, cleanup } = await makeApp();
+    const session = await createSession(p, { slug: "sess-abc" });
     expectSpawnCalls(runner);
     const res = await app.inject({
       method: "POST",
@@ -111,7 +172,7 @@ describe("POST /managed-agents/spawn", () => {
       payload: {
         runtime_id: "claude",
         suggested_participant_id: "ag-claude-sx",
-        session_id: "sess-abc",
+        session_id: session.id,
       },
     });
     expect(res.statusCode).toBe(200);
@@ -119,13 +180,158 @@ describe("POST /managed-agents/spawn", () => {
       join(p.fmarkDir(), "agents", "ag-claude-sx", "active-session"),
       "utf8",
     );
-    expect(active).toBe("sess-abc");
+    expect(active).toBe(session.id);
     // Response surfaces active_session so the renderer can scope the chip
     // strip without a /participants refetch.
-    expect(res.json().active_session).toBe("sess-abc");
+    expect(res.json().active_session).toBe(session.id);
     runner.verifyExpectationsConsumed();
     await app.close();
     await cleanup();
+  });
+
+  it("404s before spawning when session_id does not exist", async () => {
+    const { app, runner, p, cleanup } = await makeApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-miss-sess",
+        session_id: "definitely-not-real",
+      },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toContain("session not found");
+    const cfg = await readConfig(p);
+    expect(cfg.participants["ag-miss-sess"]).toBeUndefined();
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("writes managed state to the active path global bucket in multi-path mode", async () => {
+    const fallbackRoot = await mkdtemp(join(tmpdir(), "fmark-mgd-fb-"));
+    const activeRoot = await mkdtemp(join(tmpdir(), "fmark-mgd-active-"));
+    const configRoot = await mkdtemp(join(tmpdir(), "fmark-mgd-cfg-"));
+    try {
+      const fallback = paths(fallbackRoot);
+      const active = paths(activeRoot);
+      await initProject(fallback);
+      await initProject(active);
+      const session = await createSession(active, { slug: "sess-global" });
+      const activePath = activePaths(activeRoot);
+      const g = globalPaths(configRoot);
+      const ref = new PathContextRef({ global: g, active: activePath });
+      const runner = fakeCommandRunner();
+      const mgr = createTmuxManager({ runner, projectRoot: activeRoot });
+      const tracker = createPresenceTracker({ broadcast: () => {} });
+      const app = Fastify();
+      registerManagedAgentsRoutes(app, {
+        paths: fallback,
+        tmux: mgr,
+        tracker,
+        projectRoot: activeRoot,
+        inputQueue: createInputQueue(),
+        bus: { publish: () => {} },
+        pathContextRef: ref,
+      });
+
+      expectSpawnCalls(runner);
+      const res = await app.inject({
+        method: "POST",
+        url: "/managed-agents/spawn",
+        payload: {
+          runtime_id: "claude",
+          suggested_participant_id: "ag-cg",
+          session_id: session.id,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const primary = g.projectAgentsDir(activePath.pathId());
+      expect(
+        await readFile(
+          join(primary, "ag-cg", "tmux-session"),
+          "utf8",
+        ),
+      ).toBe(res.json().tmux_session);
+      expect(await readFile(join(primary, "ag-cg", "runtime"), "utf8")).toBe(
+        "claude",
+      );
+      expect(
+        await readFile(
+          join(primary, "ag-cg", "active-session"),
+          "utf8",
+        ),
+      ).toBe(session.id);
+      expect(
+        await readFile(
+          join(active.fmarkDir(), "agents", "ag-cg", "active-session"),
+          "utf8",
+        ),
+      ).toBe(session.id);
+      await expect(
+        readFile(
+          join(active.fmarkDir(), "agents", "ag-cg", "tmux-session"),
+          "utf8",
+        ),
+      ).rejects.toThrow();
+
+      runner.verifyExpectationsConsumed();
+      await app.close();
+    } finally {
+      await rm(fallbackRoot, { recursive: true, force: true });
+      await rm(activeRoot, { recursive: true, force: true });
+      await rm(configRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("createServer initializes tmux against the active path when one exists", async () => {
+    const fallbackRoot = await mkdtemp(join(tmpdir(), "fmark-mgd-fb-"));
+    const activeRoot = await mkdtemp(join(tmpdir(), "fmark-mgd-active-"));
+    const configRoot = await mkdtemp(join(tmpdir(), "fmark-mgd-cfg-"));
+    try {
+      const fallback = paths(fallbackRoot);
+      const active = paths(activeRoot);
+      await initProject(fallback);
+      await initProject(active);
+      const ref = new PathContextRef({
+        global: globalPaths(configRoot),
+        active: activePaths(activeRoot),
+      });
+      const runner = fakeCommandRunner();
+      const { app } = createServer({
+        token: null,
+        paths: fallback,
+        pathContextRef: ref,
+        allowProcessApiNoAuth: true,
+        commandRunner: runner,
+      });
+
+      expectSpawnCalls(runner);
+      const res = await app.inject({
+        method: "POST",
+        url: "/managed-agents/spawn",
+        payload: {
+          runtime_id: "claude",
+          suggested_participant_id: "ag-csr",
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const newSessionCall = runner.calls.find(
+        (call) => call[0] === "tmux" && call[1] === "new-session",
+      );
+      expect(newSessionCall).toBeDefined();
+      const cwdIndex = newSessionCall!.indexOf("-c");
+      expect(newSessionCall![cwdIndex + 1]).toBe(activeRoot);
+      runner.verifyExpectationsConsumed();
+      await app.close();
+    } finally {
+      await rm(fallbackRoot, { recursive: true, force: true });
+      await rm(activeRoot, { recursive: true, force: true });
+      await rm(configRoot, { recursive: true, force: true });
+    }
   });
 
   it("response active_session is null when spawn omits session_id", async () => {
@@ -507,7 +713,8 @@ describe("GET /managed-agents/:id/logs", () => {
 describe("Bus publishing (managed-agent WS messages)", () => {
   it("POST /managed-agents/spawn publishes managed-agent.spawned", async () => {
     const bus = fakeBus();
-    const { app, runner, cleanup } = await makeApp({ bus });
+    const { app, runner, p, cleanup } = await makeApp({ bus });
+    const session = await createSession(p, { slug: "sess-bus" });
     expectSpawnCalls(runner);
     const res = await app.inject({
       method: "POST",
@@ -515,7 +722,7 @@ describe("Bus publishing (managed-agent WS messages)", () => {
       payload: {
         runtime_id: "claude",
         suggested_participant_id: "ag-claude-bus",
-        session_id: "sess-bus",
+        session_id: session.id,
       },
     });
     expect(res.statusCode).toBe(200);
@@ -525,7 +732,7 @@ describe("Bus publishing (managed-agent WS messages)", () => {
       type: "managed-agent.spawned",
       participant_id: "ag-claude-bus",
       runtime_id: "claude",
-      active_session: "sess-bus",
+      active_session: session.id,
     });
     // tmux_session field should also be present (the route returns it)
     expect((spawned as { tmux_session: string }).tmux_session).toMatch(
@@ -597,10 +804,9 @@ describe("Bus publishing (managed-agent WS messages)", () => {
   });
 });
 
-describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
-  /** Rewrite .f-mark/runtimes.json so the test runtime uses readyDelayMs=0
-      and the kickoff fires inline (no setTimeout). Keeps the test fast and
-      deterministic. */
+describe("POST /managed-agents/spawn — hooks_status + launch prompt", () => {
+  /** Rewrite .f-mark/runtimes.json so tests can make any tmux-fallback launch
+      delivery inline. Claude itself should receive the first prompt natively. */
   async function setZeroDelayClaude(p: ReturnType<typeof paths>): Promise<void> {
     const { writeFile } = await import("node:fs/promises");
     const { join: pjoin } = await import("node:path");
@@ -623,7 +829,7 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
     await writeFile(pjoin(p.fmarkDir(), "runtimes.json"), txt, "utf8");
   }
 
-  it("returns hooks_status='installed' and sends kickoff via send-keys when checkHookInstallStatus reports installed", async () => {
+  it("returns hooks_status='installed' and passes Claude the launch prompt as native argv", async () => {
     const fakeCheck = async (): Promise<DetectResult> => ({
       installed: true,
       configPath: "~/.claude/settings.json",
@@ -634,20 +840,19 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
       checkHookInstallStatus: fakeCheck,
     });
     await setZeroDelayClaude(p);
+    const session = await createSession(p, { slug: "sess-x" });
+    const cfg = await readConfig(p);
+    const userId = Object.entries(cfg.participants).find(
+      ([, participant]) => participant.kind === "user",
+    )?.[0];
+    expect(userId).toBeDefined();
+    await writeEventFile(p, session.id, {
+      participant_id: userId!,
+      kind: "prose",
+      ext: "md",
+      contents: serializeProse({ content: "Please continue the active task." }),
+    });
     expectSpawnCalls(runner);
-    // Kickoff send-keys: literal text + Enter. With readyDelayMs=0 the route
-    // awaits the kickoff inline before responding, so the runner expectations
-    // are consumed by the time inject() resolves.
-    runner.expect(["tmux", "send-keys", "-t"], {
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-    });
-    runner.expect(["tmux", "send-keys", "-t"], {
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-    });
 
     const res = await app.inject({
       method: "POST",
@@ -655,11 +860,27 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
       payload: {
         runtime_id: "claude",
         suggested_participant_id: "ag-hk-ok",
-        session_id: "sess-x",
+        session_id: session.id,
       },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().hooks_status).toBe("installed");
+    const newSessionCall = runner.calls.find(
+      (call) => call[0] === "tmux" && call[1] === "new-session",
+    );
+    expect(newSessionCall).toBeDefined();
+    expect(newSessionCall).toContain("claude");
+    expect(newSessionCall?.at(-1)).toContain(FMARK_LAUNCH_PROMPT_MARKER);
+    expect(newSessionCall?.at(-1)).toContain("F-Mark agent onboarding");
+    expect(newSessionCall?.at(-1)).toContain("Existing Session Brief");
+    expect(newSessionCall?.at(-1)).toContain("joining an existing F-Mark session");
+    expect(newSessionCall?.at(-1)).toContain("Please continue the active task.");
+    expect(newSessionCall?.at(-1)).toContain(session.id);
+    expect(newSessionCall?.at(-1)).toContain("ag-hk-ok");
+    expect(newSessionCall?.at(-1)).toContain('"hooks_status": "installed"');
+    expect(
+      runner.calls.some((call) => call[0] === "tmux" && call[1] === "send-keys"),
+    ).toBe(false);
     // Tracker should reflect hooks installed.
     const snap = tracker.snapshot();
     const entry = snap.get("ag-hk-ok");
@@ -672,7 +893,7 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
     await cleanup();
   });
 
-  it("returns hooks_status='missing' and does NOT send kickoff when not installed", async () => {
+  it("returns hooks_status='missing' and does not send a fallback kickoff", async () => {
     const fakeCheck = async (): Promise<DetectResult> => ({
       installed: false,
       configPath: "~/.claude/settings.json",
@@ -689,7 +910,7 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
     });
     await setZeroDelayClaude(p);
     expectSpawnCalls(runner);
-    // No kickoff send-keys expected.
+    // No fallback send-keys expected.
 
     const res = await app.inject({
       method: "POST",
@@ -731,6 +952,197 @@ describe("POST /managed-agents/spawn — hooks_status + kickoff", () => {
     expect(res.json().hooks_status).toBe("not_required");
     expect(tracker.snapshot().get("ag-hk-manual")?.state).toBe("stale");
     runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+
+  it("projects a terminal approval prompt into the chat and responds with the selected provider option", async () => {
+    const fakeCheck = async (): Promise<DetectResult> => ({
+      installed: false,
+      configPath: "(manual-stream mode)",
+      detectedEntries: [],
+      expectedEntries: [],
+    });
+    const bus = fakeBus();
+    const { app, runner, p, cleanup } = await makeApp({
+      bus,
+      checkHookInstallStatus: fakeCheck,
+    });
+    await setZeroDelayClaude(p);
+    const session = await createSession(p, { slug: "terminal-approval" });
+    expectSpawnCalls(runner);
+
+    const spawn = await app.inject({
+      method: "POST",
+      url: "/managed-agents/spawn",
+      payload: {
+        runtime_id: "claude",
+        suggested_participant_id: "ag-terminal",
+        session_id: session.id,
+      },
+    });
+    expect(spawn.statusCode).toBe(200);
+    const tmuxSession = spawn.json().tmux_session as string;
+    const cfg = await readConfig(p);
+    const userId = Object.entries(cfg.participants).find(
+      ([, participant]) => participant.kind === "user",
+    )?.[0];
+    expect(userId).toBeDefined();
+    const terminalPrompt = [
+      "Bash command",
+      "ls /tmp && timeout 10 ./node_modules/.bin/tsx src/index.ts mcp",
+      "Do you want to proceed?",
+      "› 1. Yes",
+      "  2. Yes, and allow access to .bin/ and timeout 10 commands",
+      "  3. No",
+    ].join("\n");
+
+    runner.expect(["tmux", "display-message"], {
+      stdout: "0\n",
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "capture-pane"], {
+      stdout: terminalPrompt,
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "ls"], {
+      stdout: `${tmuxSession}\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "show-options"], {
+      stdout: `${p.root()}\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const request = (await readEvents(p, session.id, { kinds: ["access-request"] }))
+      .find((event) => event.kind === "access-request");
+    expect(request).toBeDefined();
+    expect(request?.participant_id).toBe("ag-terminal");
+    expect(request?.payload).toMatchObject({
+      response_channel: "terminal",
+      hook_event_name: "TerminalPermissionPrompt",
+      command: expect.stringContaining("timeout 10"),
+      suggestions: [
+        expect.objectContaining({ id: "terminal:1", terminal_input: "1" }),
+        expect.objectContaining({ id: "terminal:2", terminal_input: "2" }),
+        expect.objectContaining({ id: "terminal:3", terminal_input: "3" }),
+      ],
+    });
+    expect(
+      bus.messages.some((message) => message.type === "event_added"),
+    ).toBe(true);
+
+    runner.expect(["tmux", "ls"], {
+      stdout: `${tmuxSession}\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "show-options"], {
+      stdout: `${p.root()}\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "send-keys", "-t", tmuxSession, "-l"], {
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "send-keys", "-t", tmuxSession, "--", "C-m"], {
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "ls"], {
+      stdout: `${tmuxSession}\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+    runner.expect(["tmux", "show-options"], {
+      stdout: `${p.root()}\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/managed-agents/ag-terminal/access-requests/${encodeURIComponent(
+        (request!.payload as { request_id: string }).request_id,
+      )}/respond`,
+      payload: {
+        session_id: session.id,
+        participant_id: userId!,
+        decision: "approve",
+        option_id: "terminal:2",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      delivered: true,
+      delivery: "terminal",
+      status: "approved",
+    });
+    expect(
+      runner.calls.some((call) => call.includes("2")),
+    ).toBe(true);
+    const accessResponse = (await readEvents(p, session.id, {
+      kinds: ["access-response"],
+    })).find((event) => event.kind === "access-response");
+    expect(accessResponse?.payload).toMatchObject({
+      option_id: "terminal:2",
+      terminal_input: "2",
+      delivery: "terminal",
+    });
+
+    runner.verifyExpectationsConsumed();
+    await app.close();
+    await cleanup();
+  });
+});
+
+describe("POST /managed-agents/preflight", () => {
+  it("blocks Opencode when the runtime registry would reject spawn", async () => {
+    const { app, p, cleanup } = await makeApp();
+    const { writeFile } = await import("node:fs/promises");
+    const { join: pjoin } = await import("node:path");
+    await writeFile(
+      pjoin(p.fmarkDir(), "runtimes.json"),
+      JSON.stringify(
+        {
+          version: "1.0",
+          runtimes: {
+            claude: {
+              displayName: "Claude Code",
+              executable: "claude",
+              args: [],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/preflight",
+      payload: { runtime_id: "opencode", participant_id: "ag-opencode-x" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.runtime.available).toBe(false);
+    expect(body.runtime.reason).toContain("not registered");
+    expect(body.mcp.status).toBe("blocked");
+    expect(body.hooks.status).toBe("blocked");
+    expect(body.can_apply).toBe(false);
     await app.close();
     await cleanup();
   });

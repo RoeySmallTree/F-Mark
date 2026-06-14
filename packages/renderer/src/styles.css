@@ -6,8 +6,13 @@
 @import "./cards/cards.css";
 @import "./modals/modals.css";
 @import "./modals/cmdk/cmdk.css";
+@import "./modals/onboarding/onboarding.css";
+@import "./components/theme-picker.css";
 @import "./popovers/popovers.css";
 @import "./overlays/overlays.css";
+@import "./panels/right/files/files.css";
+@import "./panels/fileViewer/fileViewer.css";
+@import "./agent-components.css";
 
 @tailwind base;
 @tailwind components;

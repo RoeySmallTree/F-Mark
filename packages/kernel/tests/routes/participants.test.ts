@@ -8,6 +8,7 @@ import { paths } from "../../src/paths.js";
 import { activePaths } from "../../src/paths/active.js";
 import { globalPaths } from "../../src/paths/global.js";
 import { PathContextRef } from "../../src/paths/contextRef.js";
+import { writeActiveSession } from "../../src/agents/activeSession.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 describe("routes /participants", () => {
@@ -98,6 +99,52 @@ describe("routes /participants", () => {
     });
   });
 
+  it("PATCH /participants/:id updates and removes a user avatar image", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: null, paths: p });
+      const listed = await app.inject({ method: "GET", url: "/participants" });
+      const userId = Object.entries(
+        listed.json().participants as Record<string, { kind: string }>,
+      ).find(([, v]) => v.kind === "user")![0];
+      const avatar = "data:image/png;base64,aGVsbG8=";
+
+      const updated = await app.inject({
+        method: "PATCH",
+        url: `/participants/${userId}`,
+        payload: { avatar_data_url: avatar },
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json().avatar_data_url).toBe(avatar);
+
+      const refetched = await app.inject({
+        method: "GET",
+        url: "/participants",
+      });
+      expect(refetched.json().participants[userId].avatar_data_url).toBe(
+        avatar,
+      );
+
+      const removed = await app.inject({
+        method: "PATCH",
+        url: `/participants/${userId}`,
+        payload: { avatar_data_url: null },
+      });
+      expect(removed.statusCode).toBe(200);
+      expect(removed.json().avatar_data_url).toBeUndefined();
+
+      const afterRemove = await app.inject({
+        method: "GET",
+        url: "/participants",
+      });
+      expect(
+        afterRemove.json().participants[userId].avatar_data_url,
+      ).toBeUndefined();
+      await app.close();
+    });
+  });
+
   it("PATCH /participants/:id 404 on unknown id", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
@@ -126,6 +173,25 @@ describe("routes /participants", () => {
         method: "PATCH",
         url: `/participants/${userId}`,
         payload: { color: "not-a-color" },
+      });
+      expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("PATCH /participants/:id rejects non-image avatar data URLs", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: null, paths: p });
+      const listed = await app.inject({ method: "GET", url: "/participants" });
+      const userId = Object.entries(
+        listed.json().participants as Record<string, { kind: string }>,
+      ).find(([, v]) => v.kind === "user")![0];
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/participants/${userId}`,
+        payload: { avatar_data_url: "data:text/plain;base64,aGVsbG8=" },
       });
       expect(res.statusCode).toBe(400);
       await app.close();
@@ -200,6 +266,55 @@ describe("routes /participants", () => {
           const res2 = await app.inject({ method: "GET", url: "/participants" });
           const list2 = res2.json().participants as Record<string, { name: string }>;
           expect(Object.values(list2).some((p) => p.name === "OtherAgent")).toBe(false);
+
+          await app.close();
+        } finally {
+          rmSync(otherRoot, { recursive: true, force: true });
+          rmSync(configRoot, { recursive: true, force: true });
+        }
+      });
+    });
+
+    it("enriches active-path participants from global agent state", async () => {
+      await withTempProject(async (fallbackRoot) => {
+        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-pt-other-"));
+        const configRoot = mkdtempSync(join(tmpdir(), "fmark-pt-cfg-"));
+        try {
+          const fallback = paths(fallbackRoot);
+          await initProject(fallback);
+          const other = paths(otherRoot);
+          await initProject(other);
+
+          const g = globalPaths(configRoot);
+          const active = activePaths(otherRoot);
+          const ref = new PathContextRef({ global: g, active });
+          const { app } = createServer({
+            token: null,
+            paths: fallback,
+            pathContextRef: ref,
+          });
+
+          await app.inject({
+            method: "POST",
+            url: "/participants/register",
+            payload: {
+              kind: "agent",
+              name: "GlobalAgent",
+              suggested_id: "ag-global",
+            },
+          });
+          await writeActiveSession(
+            g.projectAgentsDir(active.pathId()),
+            "ag-global",
+            "session-from-global",
+          );
+
+          const res = await app.inject({ method: "GET", url: "/participants" });
+          const list = res.json().participants as Record<
+            string,
+            { active_session: string | null }
+          >;
+          expect(list["ag-global"]?.active_session).toBe("session-from-global");
 
           await app.close();
         } finally {

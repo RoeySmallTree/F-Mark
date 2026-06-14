@@ -58,6 +58,40 @@ export const DEFAULT_FILES_SEARCH: FilesSearchState = {
   caseSensitive: false,
   exts: [],
 };
+
+/** What the user is inspecting comments for. Discriminated so a repo-file
+ *  comment target (`kind: "file"`, a `file_path`) is never confused with an
+ *  event-anchored comment target (`kind: "event"`, an event filename used as a
+ *  DOM/scroll selector). */
+export type CommentTarget =
+  | { kind: "event"; file: string; lines?: [number, number] }
+  | { kind: "file"; file_path: string; lines?: [number, number] };
+
+/* File viewer — opened tabs, active tab, layout geometry, and the
+   transient toggles that drive each layout's chrome (collapsed extra
+   pane, open/closed modal, chat-vs-files split, compose visibility). */
+export type FileViewerLayout = "extra" | "replace-chat" | "lower" | "modal";
+
+export const FILE_VIEWER_LAYOUTS: FileViewerLayout[] = [
+  "extra",
+  "replace-chat",
+  "lower",
+  "modal",
+];
+
+export const DEFAULT_FILE_VIEWER_LAYOUT: FileViewerLayout = "replace-chat";
+
+export interface OpenFileTab {
+  path: string;
+  pinned: boolean;
+}
+
+export const FILE_VIEWER_EXTRA_MIN_W = 280;
+export const FILE_VIEWER_EXTRA_MAX_W = 900;
+export const FILE_VIEWER_EXTRA_DEFAULT_W = 420;
+export const FILE_VIEWER_LOWER_MIN_R = 0.15;
+export const FILE_VIEWER_LOWER_MAX_R = 0.85;
+export const FILE_VIEWER_LOWER_DEFAULT_R = 0.5;
 export type ViewMode = "everything" | "document" | "conversation";
 export type SettingsSectionKey =
   | "profile"
@@ -76,7 +110,18 @@ export type ModalKey =
   | "presets"
   | "skills"
   | "log-filter"
-  | "preset-editor";
+  | "preset-editor"
+  | "html-preview";
+
+/* Payload for the fullscreen html-preview modal (opened from EmbedCard and
+   visual choice-option previews). `mode: "source"` shows the bundle's raw
+   index.html text instead of the live iframe. */
+export interface HtmlPreviewModalState {
+  sessionId: string;
+  filename: string;
+  title: string;
+  mode: "preview" | "source";
+}
 
 /* Popover state — additive to the modal state above. Popovers anchor to a
    DOM element (the caller passes the anchor's bounding rect) so they can
@@ -131,6 +176,8 @@ function saveViewModeBySession(map: Record<string, ViewMode>): void {
    session. Used by the Feed to (a) restore scroll on session return and
    (b) compute an "X unread" floater for items beyond the last-seen point. */
 export const LAST_SEEN_STORAGE_KEY = "fmark.lastSeenBySession";
+export const LAST_FOCUSED_SESSION_STORAGE_KEY =
+  "fmark.lastFocusedSessionByPath";
 
 export function loadLastSeenBySession(): Record<string, string> {
   try {
@@ -159,6 +206,69 @@ function saveLastSeenBySession(map: Record<string, string>): void {
   }
 }
 
+function focusPathKey(
+  activePathId: string | null | undefined,
+  activePath: string | null | undefined,
+): string | null {
+  if (typeof activePathId === "string" && activePathId.length > 0) {
+    return `id:${activePathId}`;
+  }
+  if (typeof activePath === "string" && activePath.length > 0) {
+    return `path:${activePath}`;
+  }
+  return null;
+}
+
+export function loadLastFocusedSessionByPath(): Record<string, string> {
+  try {
+    const raw = globalThis.localStorage?.getItem(
+      LAST_FOCUSED_SESSION_STORAGE_KEY,
+    );
+    if (raw === null || raw === undefined) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" && v.length > 0) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveLastFocusedSessionByPath(map: Record<string, string>): void {
+  try {
+    globalThis.localStorage?.setItem(
+      LAST_FOCUSED_SESSION_STORAGE_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    /* swallow */
+  }
+}
+
+export function persistedLastFocusedSession(
+  activePathId: string | null,
+  activePath: string | null,
+): string | null {
+  const key = focusPathKey(activePathId, activePath);
+  if (key === null) return null;
+  return loadLastFocusedSessionByPath()[key] ?? null;
+}
+
+export function clearPersistedLastFocusedSession(
+  activePathId: string | null,
+  activePath: string | null,
+): void {
+  const key = focusPathKey(activePathId, activePath);
+  if (key === null) return;
+  const map = loadLastFocusedSessionByPath();
+  if (map[key] === undefined) return;
+  delete map[key];
+  saveLastFocusedSessionByPath(map);
+}
+
 /* Per-session pane state — width of the left/right panels, which right tab is
    selected, and scroll position of the right panel. Each lives in its own
    localStorage key and follows the same load/save shape as the maps above.
@@ -173,6 +283,37 @@ export const PANE_MIN_WIDTH = 200;
 export const PANE_MAX_WIDTH = 600;
 export const LEFT_PANEL_DEFAULT_WIDTH = 288;
 export const RIGHT_PANEL_DEFAULT_WIDTH = 340;
+/* Heights matter once a pane can be stacked vertically (rows / side-stack /
+   band-split placements — see themes/layout.ts). */
+export const PANE_MIN_HEIGHT = 120;
+export const PANE_MAX_HEIGHT = 900;
+export const LEFT_PANEL_DEFAULT_HEIGHT = 260;
+export const RIGHT_PANEL_DEFAULT_HEIGHT = 300;
+
+/* Unified per-session pane sizes. Replaces the old width-only maps
+   (`fmark.leftPanelWidthBySession` / `…right…`) — those are migrated once on
+   first load then deleted, since pane placement can now require heights too. */
+export const PANEL_SIZE_STORAGE_KEY = "fmark.panelSizeBySession";
+
+export type PanelId = "leftPanel" | "rightPanel";
+export interface PaneSize {
+  width: number;
+  height: number;
+}
+export type SessionPaneSizes = Record<PanelId, PaneSize>;
+
+export function defaultPaneSizes(): SessionPaneSizes {
+  return {
+    leftPanel: {
+      width: LEFT_PANEL_DEFAULT_WIDTH,
+      height: LEFT_PANEL_DEFAULT_HEIGHT,
+    },
+    rightPanel: {
+      width: RIGHT_PANEL_DEFAULT_WIDTH,
+      height: RIGHT_PANEL_DEFAULT_HEIGHT,
+    },
+  };
+}
 
 function loadNumberMap(key: string): Record<string, number> {
   try {
@@ -234,12 +375,203 @@ function saveRightTabBySession(map: Record<string, RightTabKey>): void {
   }
 }
 
-export const loadLeftPanelWidthBySession = (): Record<string, number> =>
-  loadNumberMap(LEFT_PANEL_WIDTH_STORAGE_KEY);
-export const loadRightPanelWidthBySession = (): Record<string, number> =>
-  loadNumberMap(RIGHT_PANEL_WIDTH_STORAGE_KEY);
+function isPaneSize(v: unknown): v is PaneSize {
+  if (v === null || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.width === "number" &&
+    Number.isFinite(o.width) &&
+    typeof o.height === "number" &&
+    Number.isFinite(o.height)
+  );
+}
+
+function savePanelSizeBySession(map: Record<string, SessionPaneSizes>): void {
+  try {
+    globalThis.localStorage?.setItem(
+      PANEL_SIZE_STORAGE_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    /* swallow */
+  }
+}
+
+/* Load unified pane sizes. If the new key is absent, migrate the legacy
+   width-only maps once (then delete them — no back-compat reader kept). */
+export function loadPanelSizeBySession(): Record<string, SessionPaneSizes> {
+  try {
+    const raw = globalThis.localStorage?.getItem(PANEL_SIZE_STORAGE_KEY);
+    if (raw !== null && raw !== undefined) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed !== null && typeof parsed === "object") {
+        const out: Record<string, SessionPaneSizes> = {};
+        for (const [sid, v] of Object.entries(
+          parsed as Record<string, unknown>,
+        )) {
+          const o = (v ?? {}) as Record<string, unknown>;
+          if (isPaneSize(o.leftPanel) && isPaneSize(o.rightPanel)) {
+            out[sid] = {
+              leftPanel: o.leftPanel,
+              rightPanel: o.rightPanel,
+            };
+          }
+        }
+        return out;
+      }
+    }
+  } catch {
+    /* fall through to migration */
+  }
+
+  // Migrate the legacy width maps, then remove them.
+  const lw = loadNumberMap(LEFT_PANEL_WIDTH_STORAGE_KEY);
+  const rw = loadNumberMap(RIGHT_PANEL_WIDTH_STORAGE_KEY);
+  const out: Record<string, SessionPaneSizes> = {};
+  for (const sid of new Set([...Object.keys(lw), ...Object.keys(rw)])) {
+    const base = defaultPaneSizes();
+    out[sid] = {
+      leftPanel: { ...base.leftPanel, width: lw[sid] ?? base.leftPanel.width },
+      rightPanel: {
+        ...base.rightPanel,
+        width: rw[sid] ?? base.rightPanel.width,
+      },
+    };
+  }
+  if (Object.keys(out).length > 0) savePanelSizeBySession(out);
+  try {
+    globalThis.localStorage?.removeItem(LEFT_PANEL_WIDTH_STORAGE_KEY);
+    globalThis.localStorage?.removeItem(RIGHT_PANEL_WIDTH_STORAGE_KEY);
+  } catch {
+    /* swallow */
+  }
+  return out;
+}
 export const loadRightScrollBySession = (): Record<string, number> =>
   loadNumberMap(RIGHT_SCROLL_STORAGE_KEY);
+
+/* File-viewer persistence — per-project layout, per-session open tabs +
+   active tab, per-session extra-pane width and lower-split ratio. */
+export const FILE_VIEWER_LAYOUT_STORAGE_KEY = "fmark.fileViewer.layoutByPath";
+export const FILE_VIEWER_TABS_STORAGE_KEY = "fmark.fileViewer.tabsBySession";
+export const FILE_VIEWER_ACTIVE_STORAGE_KEY =
+  "fmark.fileViewer.activeBySession";
+export const FILE_VIEWER_EXTRA_WIDTH_STORAGE_KEY =
+  "fmark.fileViewer.extraWidthBySession";
+export const FILE_VIEWER_LOWER_RATIO_STORAGE_KEY =
+  "fmark.fileViewer.lowerRatioBySession";
+
+function isFileViewerLayout(v: unknown): v is FileViewerLayout {
+  return typeof v === "string" && (FILE_VIEWER_LAYOUTS as string[]).includes(v);
+}
+
+export function loadFileViewerLayoutByPath(): Record<string, FileViewerLayout> {
+  try {
+    const raw = globalThis.localStorage?.getItem(FILE_VIEWER_LAYOUT_STORAGE_KEY);
+    if (raw === null || raw === undefined) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object") return {};
+    const out: Record<string, FileViewerLayout> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (isFileViewerLayout(v)) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveFileViewerLayoutByPath(
+  map: Record<string, FileViewerLayout>,
+): void {
+  try {
+    globalThis.localStorage?.setItem(
+      FILE_VIEWER_LAYOUT_STORAGE_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    /* swallow */
+  }
+}
+
+export function loadFileViewerTabsBySession(): Record<string, OpenFileTab[]> {
+  try {
+    const raw = globalThis.localStorage?.getItem(FILE_VIEWER_TABS_STORAGE_KEY);
+    if (raw === null || raw === undefined) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object") return {};
+    const out: Record<string, OpenFileTab[]> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!Array.isArray(v)) continue;
+      const tabs: OpenFileTab[] = [];
+      const seen = new Set<string>();
+      for (const item of v) {
+        if (item === null || typeof item !== "object") continue;
+        const p = (item as { path?: unknown }).path;
+        const pinned = (item as { pinned?: unknown }).pinned;
+        if (typeof p !== "string" || p.length === 0) continue;
+        if (seen.has(p)) continue;
+        seen.add(p);
+        tabs.push({ path: p, pinned: pinned === true });
+      }
+      out[k] = tabs;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveFileViewerTabsBySession(
+  map: Record<string, OpenFileTab[]>,
+): void {
+  try {
+    globalThis.localStorage?.setItem(
+      FILE_VIEWER_TABS_STORAGE_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    /* swallow */
+  }
+}
+
+export function loadFileViewerActiveBySession(): Record<string, string> {
+  try {
+    const raw = globalThis.localStorage?.getItem(FILE_VIEWER_ACTIVE_STORAGE_KEY);
+    if (raw === null || raw === undefined) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" && v.length > 0) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveFileViewerActiveBySession(map: Record<string, string>): void {
+  try {
+    globalThis.localStorage?.setItem(
+      FILE_VIEWER_ACTIVE_STORAGE_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    /* swallow */
+  }
+}
+
+export const loadFileViewerExtraWidthBySession = (): Record<string, number> =>
+  loadNumberMap(FILE_VIEWER_EXTRA_WIDTH_STORAGE_KEY);
+export const loadFileViewerLowerRatioBySession = (): Record<string, number> =>
+  loadNumberMap(FILE_VIEWER_LOWER_RATIO_STORAGE_KEY);
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
 
 /* Right-tab layout (order + enabled) persistence. Two localStorage keys:
    one for the global default and one for per-session overrides. Resolution
@@ -416,7 +748,8 @@ interface State extends PresenceSlice {
   knownPaths: string[];
   favorites: PathFavorite[];
   composeMode: "message" | "named" | "comment";
-  commentTarget: { file: string; lines?: [number, number] } | null;
+  commentTarget: CommentTarget | null;
+  focusedCommentId: string | null;
   /* composeDraft — text the compose textarea should adopt when next mounted
      or when this value flips from null to a string. P8 (presets) sets this
      to the chosen preset body; Compose appends or replaces, then clears. */
@@ -443,8 +776,7 @@ interface State extends PresenceSlice {
   /* Per-session pane state. Widths default to LEFT/RIGHT_PANEL_DEFAULT_WIDTH
      when a session has no entry. rightScrollBySession holds scrollTop of the
      right panel's content scroller. */
-  leftPanelWidthBySession: Record<string, number>;
-  rightPanelWidthBySession: Record<string, number>;
+  panelSizeBySession: Record<string, SessionPaneSizes>;
   rightTabBySession: Record<string, RightTabKey>;
   rightScrollBySession: Record<string, number>;
   activeModal: ModalKey;
@@ -453,6 +785,8 @@ interface State extends PresenceSlice {
      edited. `null` means "create new". The popover sets this before
      opening the editor. */
   editingPreset: CustomPreset | null;
+  /* When `activeModal === 'html-preview'`, the bundle + mode to show. */
+  htmlPreview: HtmlPreviewModalState | null;
   /* Bumped whenever the custom-preset list changes so listeners (the
      popover) can re-read localStorage and re-render. */
   customPresetsVersion: number;
@@ -477,6 +811,21 @@ interface State extends PresenceSlice {
   filesFavoritesProjectByPath: Record<string, string[]>;
   filesFavoritesSession: Record<string, string[]>;
   filesSearch: FilesSearchState;
+  /* File viewer state — see FileViewerLayout / OpenFileTab declarations.
+     Layout is per-project (each workspace remembers its own geometry).
+     Tabs are per-session (forking a session gets an empty list). The
+     transient toggles (extra-collapsed, modal-open, replace-center,
+     compose-open) are session-agnostic so they survive a session swap. */
+  fileViewerLayoutByPath: Record<string, FileViewerLayout>;
+  fileViewerTabsBySession: Record<string, OpenFileTab[]>;
+  fileViewerActiveBySession: Record<string, string>;
+  fileViewerExtraWidthBySession: Record<string, number>;
+  fileViewerLowerRatioBySession: Record<string, number>;
+  fileViewerExtraCollapsed: boolean;
+  fileViewerModalOpen: boolean;
+  fileViewerModalDismissed: boolean;
+  fileViewerReplaceCenter: "chat" | "files";
+  fileViewerComposeOpenInFiles: boolean;
   setToken(token: string | null): void;
   setSessions(s: SessionMeta[]): void;
   setPathsState(p: {
@@ -495,9 +844,8 @@ interface State extends PresenceSlice {
   setEvents(events: AnyEventRecord[]): void;
   upsertEvent(event: AnyEventRecord): void;
   setComposeMode(mode: "message" | "named" | "comment"): void;
-  setCommentTarget(
-    target: { file: string; lines?: [number, number] } | null,
-  ): void;
+  setCommentTarget(target: CommentTarget | null): void;
+  setFocusedCommentId(id: string | null): void;
   setComposeDraft(draft: string | null): void;
   setLeftRail(v: LeftRailKey): void;
   setRightTab(v: RightPanelView): void;
@@ -505,8 +853,7 @@ interface State extends PresenceSlice {
   setRightTabsConfigForSession(cfg: RightTabConfig): void;
   clearRightTabsConfigForSessionOverride(): void;
   setViewMode(v: ViewMode): void;
-  setLeftPanelWidth(px: number): void;
-  setRightPanelWidth(px: number): void;
+  setPaneSize(pane: PanelId, axis: "width" | "height", px: number): void;
   setRightScroll(scrollTop: number): void;
   /* Advance the lastSeen anchor for the current session to `filename`
      iff it is later than the existing anchor. No-op when there's no
@@ -521,6 +868,7 @@ interface State extends PresenceSlice {
   setSettingsSection(section: SettingsSectionKey): void;
   closeModal(): void;
   openPresetEditor(preset: CustomPreset | null): void;
+  openHtmlPreview(payload: HtmlPreviewModalState): void;
   bumpCustomPresets(): void;
   bumpCustomCategories(): void;
   openPopover(key: PopoverKey, anchorRect: DOMRect | null): void;
@@ -534,6 +882,21 @@ interface State extends PresenceSlice {
   setFilesFavoritesSession(sessionId: string, list: string[]): void;
   setFilesSearch(patch: Partial<FilesSearchState>): void;
   resetFilesSearch(): void;
+  /* File-viewer actions. `openFile` is the main entry — it adds the tab if
+     absent, marks it active, and reveals the viewer per the current
+     layout (uncollapses extra-pane, opens modal, flips replace-center). */
+  openFile(absPath: string): void;
+  closeFileTab(absPath: string): void;
+  setFileViewerActive(absPath: string | null): void;
+  togglePinFileTab(absPath: string): void;
+  reorderFileTabs(fromPath: string, toPath: string): void;
+  setFileViewerLayout(layout: FileViewerLayout): void;
+  setFileViewerExtraWidth(px: number): void;
+  setFileViewerLowerRatio(r: number): void;
+  setFileViewerExtraCollapsed(collapsed: boolean): void;
+  setFileViewerModalOpen(open: boolean): void;
+  setFileViewerReplaceCenter(v: "chat" | "files"): void;
+  setFileViewerComposeOpen(open: boolean): void;
   /* Routes a typed managed-agent / presence / env-probe WS message into the
      presence slice. Other message types (e.g. event_added) are handled by
      the existing flow in App.tsx and must be dispatched separately. */
@@ -550,6 +913,7 @@ export const useStore = create<State>((set, get) => ({
   events: [],
   composeMode: "message",
   commentTarget: null,
+  focusedCommentId: null,
   composeDraft: null,
   leftRail: "sessions",
   rightTab: "log",
@@ -560,13 +924,13 @@ export const useStore = create<State>((set, get) => ({
   lastSeenBySession: loadLastSeenBySession(),
   followMode: true,
   scrollToBottomTick: 0,
-  leftPanelWidthBySession: loadLeftPanelWidthBySession(),
-  rightPanelWidthBySession: loadRightPanelWidthBySession(),
+  panelSizeBySession: loadPanelSizeBySession(),
   rightTabBySession: loadRightTabBySession(),
   rightScrollBySession: loadRightScrollBySession(),
   activeModal: null,
   settingsSection: "profile",
   editingPreset: null,
+  htmlPreview: null,
   customPresetsVersion: 0,
   customCategoriesVersion: 0,
   activePopover: { key: null, anchorRect: null },
@@ -583,6 +947,16 @@ export const useStore = create<State>((set, get) => ({
   filesFavoritesProjectByPath: {},
   filesFavoritesSession: {},
   filesSearch: DEFAULT_FILES_SEARCH,
+  fileViewerLayoutByPath: loadFileViewerLayoutByPath(),
+  fileViewerTabsBySession: loadFileViewerTabsBySession(),
+  fileViewerActiveBySession: loadFileViewerActiveBySession(),
+  fileViewerExtraWidthBySession: loadFileViewerExtraWidthBySession(),
+  fileViewerLowerRatioBySession: loadFileViewerLowerRatioBySession(),
+  fileViewerExtraCollapsed: false,
+  fileViewerModalOpen: false,
+  fileViewerModalDismissed: false,
+  fileViewerReplaceCenter: "chat",
+  fileViewerComposeOpenInFiles: false,
   setToken: (token) => set({ token }),
   setSessions: (sessions) => set({ sessions }),
   setPathsState: (p) =>
@@ -605,6 +979,16 @@ export const useStore = create<State>((set, get) => ({
        won't refire because currentSessionId didn't change. */
     const state = get();
     if (state.currentSessionId === currentSessionId) return;
+    if (currentSessionId !== null) {
+      const key = focusPathKey(state.activePathId, state.activePath);
+      if (key !== null) {
+        const nextFocused = {
+          ...loadLastFocusedSessionByPath(),
+          [key]: currentSessionId,
+        };
+        saveLastFocusedSessionByPath(nextFocused);
+      }
+    }
     const nextMode: ViewMode =
       currentSessionId !== null
         ? (state.viewModeBySession[currentSessionId] ?? "everything")
@@ -644,6 +1028,7 @@ export const useStore = create<State>((set, get) => ({
     }),
   setComposeMode: (composeMode) => set({ composeMode }),
   setCommentTarget: (commentTarget) => set({ commentTarget }),
+  setFocusedCommentId: (focusedCommentId) => set({ focusedCommentId }),
   setComposeDraft: (composeDraft) => set({ composeDraft }),
   setLeftRail: (leftRail) => set({ leftRail }),
   setRightTab: (rightTab) => {
@@ -684,27 +1069,20 @@ export const useStore = create<State>((set, get) => ({
     saveRightTabsConfigBySession(next);
     set({ rightTabsConfigBySession: next });
   },
-  setLeftPanelWidth: (px) => {
+  setPaneSize: (pane, axis, px) => {
     const state = get();
-    const clamped = Math.min(PANE_MAX_WIDTH, Math.max(PANE_MIN_WIDTH, px));
     if (state.currentSessionId === null) return;
+    const sid = state.currentSessionId;
+    const min = axis === "width" ? PANE_MIN_WIDTH : PANE_MIN_HEIGHT;
+    const max = axis === "width" ? PANE_MAX_WIDTH : PANE_MAX_HEIGHT;
+    const clamped = Math.min(max, Math.max(min, px));
+    const cur = state.panelSizeBySession[sid] ?? defaultPaneSizes();
     const next = {
-      ...state.leftPanelWidthBySession,
-      [state.currentSessionId]: clamped,
+      ...state.panelSizeBySession,
+      [sid]: { ...cur, [pane]: { ...cur[pane], [axis]: clamped } },
     };
-    saveNumberMap(LEFT_PANEL_WIDTH_STORAGE_KEY, next);
-    set({ leftPanelWidthBySession: next });
-  },
-  setRightPanelWidth: (px) => {
-    const state = get();
-    const clamped = Math.min(PANE_MAX_WIDTH, Math.max(PANE_MIN_WIDTH, px));
-    if (state.currentSessionId === null) return;
-    const next = {
-      ...state.rightPanelWidthBySession,
-      [state.currentSessionId]: clamped,
-    };
-    saveNumberMap(RIGHT_PANEL_WIDTH_STORAGE_KEY, next);
-    set({ rightPanelWidthBySession: next });
+    savePanelSizeBySession(next);
+    set({ panelSizeBySession: next });
   },
   setRightScroll: (scrollTop) => {
     const state = get();
@@ -753,9 +1131,12 @@ export const useStore = create<State>((set, get) => ({
   openSettings: (settingsSection = "profile") =>
     set({ activeModal: "settings", settingsSection }),
   setSettingsSection: (settingsSection) => set({ settingsSection }),
-  closeModal: () => set({ activeModal: null, editingPreset: null }),
+  closeModal: () =>
+    set({ activeModal: null, editingPreset: null, htmlPreview: null }),
   openPresetEditor: (editingPreset) =>
     set({ activeModal: "preset-editor", editingPreset }),
+  openHtmlPreview: (htmlPreview) =>
+    set({ activeModal: "html-preview", htmlPreview }),
   bumpCustomPresets: () =>
     set((s) => ({ customPresetsVersion: s.customPresetsVersion + 1 })),
   bumpCustomCategories: () =>
@@ -802,6 +1183,176 @@ export const useStore = create<State>((set, get) => ({
   setFilesSearch: (patch) =>
     set((s) => ({ filesSearch: { ...s.filesSearch, ...patch } })),
   resetFilesSearch: () => set({ filesSearch: DEFAULT_FILES_SEARCH }),
+  openFile: (absPath) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    const existing = s.fileViewerTabsBySession[sid] ?? [];
+    const has = existing.some((t) => t.path === absPath);
+    const nextTabs = has
+      ? existing
+      : [...existing, { path: absPath, pinned: false }];
+    const nextTabsBySession = has
+      ? s.fileViewerTabsBySession
+      : { ...s.fileViewerTabsBySession, [sid]: nextTabs };
+    const nextActiveBySession = {
+      ...s.fileViewerActiveBySession,
+      [sid]: absPath,
+    };
+    if (!has) saveFileViewerTabsBySession(nextTabsBySession);
+    saveFileViewerActiveBySession(nextActiveBySession);
+    /* Reveal the viewer per the user's chosen layout for this project. */
+    const layout =
+      s.activePath !== null
+        ? (s.fileViewerLayoutByPath[s.activePath] ??
+          DEFAULT_FILE_VIEWER_LAYOUT)
+        : DEFAULT_FILE_VIEWER_LAYOUT;
+    const patch: Partial<State> = {
+      fileViewerTabsBySession: nextTabsBySession,
+      fileViewerActiveBySession: nextActiveBySession,
+    };
+    if (layout === "extra") {
+      patch.fileViewerExtraCollapsed = false;
+    } else if (layout === "replace-chat") {
+      patch.fileViewerReplaceCenter = "files";
+    } else if (layout === "modal") {
+      patch.fileViewerModalOpen = true;
+      patch.fileViewerModalDismissed = false;
+    }
+    set(patch);
+  },
+  closeFileTab: (absPath) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    const tabs = s.fileViewerTabsBySession[sid] ?? [];
+    const idx = tabs.findIndex((t) => t.path === absPath);
+    if (idx < 0) return;
+    const nextTabs = tabs.filter((t) => t.path !== absPath);
+    const nextTabsBySession = {
+      ...s.fileViewerTabsBySession,
+      [sid]: nextTabs,
+    };
+    let nextActiveBySession = s.fileViewerActiveBySession;
+    if (s.fileViewerActiveBySession[sid] === absPath) {
+      /* Activate previous tab, or next if first; else clear. */
+      const fallback =
+        nextTabs[idx - 1]?.path ?? nextTabs[0]?.path ?? null;
+      const copy = { ...s.fileViewerActiveBySession };
+      if (fallback === null) {
+        delete copy[sid];
+      } else {
+        copy[sid] = fallback;
+      }
+      nextActiveBySession = copy;
+    }
+    saveFileViewerTabsBySession(nextTabsBySession);
+    saveFileViewerActiveBySession(nextActiveBySession);
+    set({
+      fileViewerTabsBySession: nextTabsBySession,
+      fileViewerActiveBySession: nextActiveBySession,
+    });
+  },
+  setFileViewerActive: (absPath) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    const copy = { ...s.fileViewerActiveBySession };
+    if (absPath === null) delete copy[sid];
+    else copy[sid] = absPath;
+    saveFileViewerActiveBySession(copy);
+    set({ fileViewerActiveBySession: copy });
+  },
+  togglePinFileTab: (absPath) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    const tabs = s.fileViewerTabsBySession[sid] ?? [];
+    if (!tabs.some((t) => t.path === absPath)) return;
+    const next = tabs.map((t) =>
+      t.path === absPath ? { ...t, pinned: !t.pinned } : t,
+    );
+    const nextBySession = { ...s.fileViewerTabsBySession, [sid]: next };
+    saveFileViewerTabsBySession(nextBySession);
+    set({ fileViewerTabsBySession: nextBySession });
+  },
+  reorderFileTabs: (fromPath, toPath) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    if (fromPath === toPath) return;
+    const tabs = s.fileViewerTabsBySession[sid] ?? [];
+    const from = tabs.findIndex((t) => t.path === fromPath);
+    const to = tabs.findIndex((t) => t.path === toPath);
+    if (from < 0 || to < 0) return;
+    /* Only reorder within the same pinned group — moving a pinned tab into
+       the unpinned group (or vice versa) is what togglePinFileTab is for. */
+    if (tabs[from]!.pinned !== tabs[to]!.pinned) return;
+    const next = [...tabs];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved!);
+    const nextBySession = { ...s.fileViewerTabsBySession, [sid]: next };
+    saveFileViewerTabsBySession(nextBySession);
+    set({ fileViewerTabsBySession: nextBySession });
+  },
+  setFileViewerLayout: (layout) => {
+    const s = get();
+    if (s.activePath === null) return;
+    const next = { ...s.fileViewerLayoutByPath, [s.activePath]: layout };
+    saveFileViewerLayoutByPath(next);
+    const patch: Partial<State> = { fileViewerLayoutByPath: next };
+    /* When switching INTO a layout, ensure it's revealed so the user sees
+       their file immediately. Modal layout opens the modal; extra layout
+       uncollapses the extra-pane; replace-chat flips to files. */
+    if (layout === "extra") {
+      patch.fileViewerExtraCollapsed = false;
+    } else if (layout === "modal") {
+      patch.fileViewerModalOpen = true;
+      patch.fileViewerModalDismissed = false;
+    } else if (layout === "replace-chat") {
+      patch.fileViewerReplaceCenter = "files";
+    }
+    set(patch);
+  },
+  setFileViewerExtraWidth: (px) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    const clamped = clamp(
+      px,
+      FILE_VIEWER_EXTRA_MIN_W,
+      FILE_VIEWER_EXTRA_MAX_W,
+    );
+    const next = { ...s.fileViewerExtraWidthBySession, [sid]: clamped };
+    saveNumberMap(FILE_VIEWER_EXTRA_WIDTH_STORAGE_KEY, next);
+    set({ fileViewerExtraWidthBySession: next });
+  },
+  setFileViewerLowerRatio: (r) => {
+    const s = get();
+    const sid = s.currentSessionId;
+    if (sid === null) return;
+    const clamped = clamp(
+      r,
+      FILE_VIEWER_LOWER_MIN_R,
+      FILE_VIEWER_LOWER_MAX_R,
+    );
+    const next = { ...s.fileViewerLowerRatioBySession, [sid]: clamped };
+    saveNumberMap(FILE_VIEWER_LOWER_RATIO_STORAGE_KEY, next);
+    set({ fileViewerLowerRatioBySession: next });
+  },
+  setFileViewerExtraCollapsed: (collapsed) =>
+    set({ fileViewerExtraCollapsed: collapsed }),
+  setFileViewerModalOpen: (open) =>
+    set({
+      fileViewerModalOpen: open,
+      /* If the user closes the modal, mark "dismissed" so the floating
+         reopen button appears. Opening clears the dismissed flag so the
+         button hides. */
+      fileViewerModalDismissed: !open,
+    }),
+  setFileViewerReplaceCenter: (v) => set({ fileViewerReplaceCenter: v }),
+  setFileViewerComposeOpen: (open) =>
+    set({ fileViewerComposeOpenInFiles: open }),
   dispatchManagedAgentWsMessage: (msg) => {
     const s = get();
     if (msg.type === "presence") {

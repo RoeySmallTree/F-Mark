@@ -81,6 +81,20 @@ export function getAgentIds(
     .map(([id]) => id);
 }
 
+export function getSessionAgentIds(
+  participants: Record<string, Participant>,
+  sessionId: string | null,
+): string[] {
+  if (sessionId === null) return [];
+  return Object.entries(participants)
+    .filter(
+      ([, participant]) =>
+        participant.kind === "agent" &&
+        participant.active_session === sessionId,
+    )
+    .map(([id]) => id);
+}
+
 export function pickRandomAgentId(agentIds: string[]): string | undefined {
   if (agentIds.length === 0) return undefined;
   const idx = Math.floor(Math.random() * agentIds.length);

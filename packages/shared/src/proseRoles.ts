@@ -22,6 +22,13 @@ export type ProseRole =
   | { kind: "named-block"; name: string; anchor: string }
   | { kind: "unnamed-block"; anchor: string }
   | { kind: "comment"; anchor: string; lines?: [number, number] }
+  | {
+      kind: "file-comment";
+      file_path: string;
+      lines?: [number, number];
+      hunk?: string;
+      base?: string;
+    }
   | { kind: "tombstone"; anchor: string };
 
 /**
@@ -31,7 +38,7 @@ export type ProseRole =
  * walk supersession — the aggregate owns live-parent resolution.
  *
  * Precedence:
- * 1. legacy `target` (when `append_to` absent) → `comment` shape
+ * 1. `file_path` → `file-comment` (a comment on a repo file/diff hunk)
  * 2. `append_to` + `mode: "comment"` → `comment`
  * 3. `append_to` + `removed: true` → `tombstone`
  * 4. `append_to` + `name` → `named-block`
@@ -40,19 +47,20 @@ export type ProseRole =
  * 7. default → `message`
  */
 export function getProseRole(payload: ProsePayload): ProseRole {
-  /* 1. Legacy `target` mapped to the new comment shape. Only honoured
-     when `append_to` is absent — if both are present, `append_to` wins
-     (the parser warns about that combination separately). */
+  /* 1. File/diff comment — keyed on `file_path`. Highest precedence; a file
+     comment never carries `append_to` (it targets a repo path, not an
+     event). */
   if (
-    payload.append_to === undefined &&
-    payload.target !== undefined &&
-    typeof payload.target.file === "string" &&
-    payload.target.file.length > 0
+    typeof payload.file_path === "string" &&
+    payload.file_path.length > 0
   ) {
-    const lines = payload.target.lines;
-    return lines === undefined
-      ? { kind: "comment", anchor: payload.target.file }
-      : { kind: "comment", anchor: payload.target.file, lines };
+    return {
+      kind: "file-comment",
+      file_path: payload.file_path,
+      ...(payload.lines !== undefined ? { lines: payload.lines } : {}),
+      ...(payload.diff_hunk !== undefined ? { hunk: payload.diff_hunk } : {}),
+      ...(payload.diff_base !== undefined ? { base: payload.diff_base } : {}),
+    };
   }
 
   const appendTo = payload.append_to;

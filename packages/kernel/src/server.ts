@@ -12,6 +12,7 @@ import { registerEventRoutes } from "./routes/events.js";
 import { registerTodoRoutes } from "./routes/todos.js";
 import { MAX_ATTACHMENT_BYTES, registerFileRoutes } from "./routes/files.js";
 import { registerHtmlRoutes } from "./routes/html.js";
+import { registerAlternativesRoutes } from "./routes/alternatives.js";
 import { registerFlowRoutes } from "./routes/flow.js";
 import { registerRawRoutes } from "./routes/raw.js";
 import { registerPresetRoutes } from "./routes/presets.js";
@@ -21,13 +22,17 @@ import { registerGuideRoute } from "./routes/guide.js";
 import { registerBestPracticesRoute } from "./routes/bestPractices.js";
 import { registerRuntimeRoutes } from "./routes/runtimes.js";
 import { registerEnvProbeRoute, realProbe } from "./routes/envProbe.js";
-import { loadRuntimes } from "./runtimes/registry.js";
+import { loadOfferableRuntimeRegistry } from "./runtimes/store.js";
 import { registerStaticRoutes } from "./routes/static.js";
 import { registerPresenceRoutes } from "./routes/presence.js";
 import { registerManagedAgentsRoutes } from "./routes/managedAgents.js";
 import { registerHookInstallRoutes } from "./routes/hookInstall.js";
 import { registerPathRoutes } from "./routes/paths.js";
 import { registerFsRoutes } from "./routes/fs.js";
+import { registerFilesTreeRoute } from "./routes/filesTree.js";
+import { registerFilesFavoritesRoutes } from "./routes/filesFavorites.js";
+import { registerFilesContentRoute } from "./routes/filesContent.js";
+import { registerFilesTextRoute } from "./routes/filesText.js";
 import type { PathContextRef } from "./paths/contextRef.js";
 import { createPresenceTracker, type PresenceTracker } from "./presence/tracker.js";
 import { registerWebSocket, type Bus, type BusMessage } from "./ws/bus.js";
@@ -37,6 +42,8 @@ import { registerPaneWebSocket } from "./ws/pane.js";
 import { createTmuxManager, type TmuxManager } from "./tmux/manager.js";
 import { realCommandRunner, type CommandRunner } from "./tmux/commandRunner.js";
 import { createInputQueue } from "./tmux/inputQueue.js";
+import { registerMcpHttpRoute } from "./mcp/http.js";
+import { createFilesWatcher } from "./services/filesWatcher.js";
 
 export interface ServerDeps {
   token: string | null;
@@ -80,11 +87,13 @@ export function createServer(deps: ServerDeps): CreatedServer {
   const app = Fastify({ logger: false });
   const processApiEnabled =
     deps.token !== null || deps.allowProcessApiNoAuth === true;
+  const initialProjectRoot =
+    deps.pathContextRef?.get().active?.root() ?? deps.paths.root();
 
   void seqLog("server create", {
     module: "server",
     authConfigured: deps.token !== null,
-    projectRoot: deps.paths.root(),
+    projectRoot: initialProjectRoot,
   });
 
   app.addHook("onRequest", async (req) => {
@@ -159,7 +168,11 @@ export function createServer(deps: ServerDeps): CreatedServer {
     reply.header("Access-Control-Allow-Credentials", "true");
     reply.header(
       "Access-Control-Allow-Headers",
-      "Authorization, Content-Type",
+      "Authorization, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID",
+    );
+    reply.header(
+      "Access-Control-Expose-Headers",
+      "Mcp-Session-Id, MCP-Protocol-Version, WWW-Authenticate",
     );
     reply.header(
       "Access-Control-Allow-Methods",
@@ -202,11 +215,23 @@ export function createServer(deps: ServerDeps): CreatedServer {
   const tracker = createPresenceTracker({
     broadcast: (m) => busRef.publish(m),
   });
+  const filesWatcher = createFilesWatcher({
+    getRoot: () =>
+      deps.pathContextRef
+        ? (deps.pathContextRef.get().active?.root() ?? null)
+        : deps.paths.root(),
+    bus: { publish: (m) => busRef.publish(m) },
+  });
   const presenceTicker = setInterval(() => tracker.tick(), 5_000);
   presenceTicker.unref();
   app.addHook("onClose", async () => {
     clearInterval(presenceTicker);
+    filesWatcher.close();
   });
+
+  // Shared by routes that can change the active path before/after the tmux
+  // manager is constructed. When process APIs are disabled this stays null.
+  let tmuxRef: TmuxManager | null = null;
 
   // All path-scoped routes get { fallback, ref } so they resolve paths
   // against the active path when one is wired (multi-path mode), falling
@@ -215,14 +240,17 @@ export function createServer(deps: ServerDeps): CreatedServer {
     fallback: deps.paths,
     ref: deps.pathContextRef,
     quietCrossPathHooks: deps.quietCrossPathHooks ?? false,
+    getTmuxManager: () => tmuxRef,
+    token: deps.token,
   };
   registerParticipantRoutes(app, pathDeps);
-  registerAgentsRoutes(app, deps.paths);
-  registerSessionRoutes(app, pathDeps);
+  registerAgentsRoutes(app, pathDeps);
+  registerSessionRoutes(app, pathDeps, () => busRef);
   registerEventRoutes(app, pathDeps, () => busRef);
   registerTodoRoutes(app, pathDeps, () => busRef);
   registerFileRoutes(app, pathDeps, () => busRef);
   registerHtmlRoutes(app, pathDeps, () => busRef);
+  registerAlternativesRoutes(app, pathDeps, () => busRef);
   registerFlowRoutes(app, pathDeps, () => busRef);
   registerRawRoutes(app, pathDeps);
   registerPresetRoutes(app, pathDeps);
@@ -232,6 +260,12 @@ export function createServer(deps: ServerDeps): CreatedServer {
   registerBestPracticesRoute(app);
   registerRuntimeRoutes(app, pathDeps);
   registerPresenceRoutes(app, () => tracker);
+  registerMcpHttpRoute(app, {
+    token: deps.token,
+    getProjectRoot: () =>
+      deps.pathContextRef?.get().active?.root() ?? deps.paths.root(),
+    env: process.env,
+  });
 
   if (deps.pathContextRef) {
     registerPathRoutes(
@@ -239,9 +273,15 @@ export function createServer(deps: ServerDeps): CreatedServer {
       deps.pathContextRef,
       () => busRef,
       () => tmuxRef,
+      deps.token,
+      deps.paths,
     );
   }
   registerFsRoutes(app);
+  registerFilesTreeRoute(app);
+  registerFilesFavoritesRoutes(app, pathDeps);
+  registerFilesContentRoute(app, pathDeps);
+  registerFilesTextRoute(app, pathDeps);
 
   // /env-probe is a read-only PATH-detection endpoint; it lives outside the
   // process-API gate so the UI can render the install banner even under
@@ -253,8 +293,7 @@ export function createServer(deps: ServerDeps): CreatedServer {
   const probeFn = realProbe(async () => {
     try {
       // Read from the active path if wired, else the boot-time fallback.
-      const root = deps.pathContextRef?.get().active?.root() ?? deps.paths.root();
-      const cfg = await loadRuntimes(`${root}/.f-mark`);
+      const cfg = await loadOfferableRuntimeRegistry(pathDeps);
       return Object.entries(cfg.runtimes).map(([id, entry]) => ({
         id,
         executable: entry.executable,
@@ -271,15 +310,12 @@ export function createServer(deps: ServerDeps): CreatedServer {
   // Process-spawning routes are gated. They're always enabled when a token is
   // set (bearer auth protects them), and additionally enabled under --no-auth
   // only when the operator explicitly opts in with --allow-process-api-no-auth.
-  // tmuxRef is hoisted so registerPathRoutes (registered earlier in scope)
-  // can call tmux.rebind on path switch via its getter. Stays null when
-  // the process-API is disabled — registerPathRoutes treats that case as
-  // "no tmux manager to rebind".
-  let tmuxRef: TmuxManager | null = null;
+  // tmuxRef is declared above so path-changing routes can call tmux.rebind
+  // through their getter. Stays null when the process API is disabled.
   if (processApiEnabled) {
     const tmux = createTmuxManager({
       runner: deps.commandRunner ?? realCommandRunner(),
-      projectRoot: deps.paths.root(),
+      projectRoot: initialProjectRoot,
     });
     tmuxRef = tmux;
     // One per-pane input queue shared between /managed-agents/:id/command
@@ -292,12 +328,13 @@ export function createServer(deps: ServerDeps): CreatedServer {
       paths: deps.paths,
       tmux,
       tracker,
-      projectRoot: deps.paths.root(),
+      projectRoot: initialProjectRoot,
       inputQueue: paneInputQueue,
       // Pass a thin pass-through bus so route publishes go through the live
       // `busRef` (which is reassigned once the WebSocket plugin is ready).
       bus: { publish: (m) => busRef.publish(m) },
       pathContextRef: deps.pathContextRef,
+      authToken: deps.token,
     });
     registerHookInstallRoutes(app, pathDeps);
 

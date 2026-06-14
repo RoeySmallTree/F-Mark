@@ -23,7 +23,7 @@ afterEach(() => {
 const RUNTIMES = [
   { id: "claude", displayName: "Claude Code", available: true },
   { id: "codex", displayName: "Codex", available: true },
-  { id: "gemini", displayName: "Gemini CLI", available: false },
+  { id: "opencode", displayName: "Opencode", available: false },
 ];
 
 interface Handlers {
@@ -125,7 +125,52 @@ describe("PlusButton — open menu", () => {
     );
     expect(screen.getByRole("menuitem", { name: /Claude Code/i })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Codex/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Gemini CLI/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Opencode/i })).toBeInTheDocument();
+  });
+
+  test("runtime rows use provider icons, with initials only for custom runtimes", async () => {
+    const user = userEvent.setup();
+    const h = makeHandlers();
+    render(
+      <PlusButton
+        runtimes={[
+          ...RUNTIMES,
+          { id: "openai", displayName: "OpenAI CLI", available: true },
+          { id: "custom-agent", displayName: "Custom Agent", available: true },
+        ]}
+        onSpawnRuntime={h.onSpawnRuntime}
+        onSpawnTerminal={h.onSpawnTerminal}
+        onManageRuntimes={h.onManageRuntimes}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Add agent or terminal/i }),
+    );
+
+    expect(
+      screen
+        .getByRole("menuitem", { name: /Claude Code/i })
+        .querySelector('[data-provider-icon="claude"]'),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("menuitem", { name: /^Codex/i })
+        .querySelector('[data-provider-icon="openai"]'),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("menuitem", { name: /OpenAI CLI/i })
+        .querySelector('[data-provider-icon="openai"]'),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("menuitem", { name: /Opencode/i })
+        .querySelector('[data-provider-icon="opencode"]'),
+    ).not.toBeNull();
+
+    const custom = screen.getByRole("menuitem", { name: /Custom Agent/i });
+    expect(custom.querySelector('[data-provider-initials="CA"]')).not.toBeNull();
+    expect(custom.querySelector("[data-provider-icon]")).toBeNull();
   });
 
   test("unavailable runtime is disabled with 'Not on PATH' tooltip", async () => {
@@ -142,9 +187,9 @@ describe("PlusButton — open menu", () => {
     await user.click(
       screen.getByRole("button", { name: /Add agent or terminal/i }),
     );
-    const gemini = screen.getByRole("menuitem", { name: /Gemini CLI/i });
-    expect(gemini).toBeDisabled();
-    expect(gemini.getAttribute("title")).toMatch(/Not on PATH/i);
+    const opencode = screen.getByRole("menuitem", { name: /Opencode/i });
+    expect(opencode).toBeDisabled();
+    expect(opencode.getAttribute("title")).toMatch(/Not on PATH/i);
   });
 
   test("available runtime is enabled", async () => {
@@ -255,7 +300,7 @@ describe("PlusButton — actions", () => {
     await user.click(
       screen.getByRole("button", { name: /Add agent or terminal/i }),
     );
-    await user.click(screen.getByRole("menuitem", { name: /Gemini CLI/i }));
+    await user.click(screen.getByRole("menuitem", { name: /Opencode/i }));
     expect(h.onSpawnRuntime).not.toHaveBeenCalled();
   });
 

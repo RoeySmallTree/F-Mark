@@ -35,14 +35,25 @@ describe("themes", () => {
     clearThemeClasses();
   });
 
-  test("THEMES exposes all 6 entries in the expected order", () => {
+  test("THEMES exposes all 17 entries in the expected order", () => {
     expect(THEMES.map((t) => t.name)).toEqual([
       "light",
+      "ember",
       "terminal",
       "ide",
       "solarized",
       "brutalist",
       "cyber",
+      "amber",
+      "dracula",
+      "catppuccin",
+      "tokyo",
+      "gruvbox",
+      "nord",
+      "monokai",
+      "borland",
+      "sepia",
+      "contrast",
     ]);
     for (const theme of THEMES) {
       expect(theme.label.length).toBeGreaterThan(0);

@@ -19,6 +19,23 @@
   color: var(--ink);
 }
 
+/* Inline file-path links wrapped post-render by the path linkifier
+   (prose/linkifyPaths.ts). Click is delegated by MarkdownRenderer; CSS
+   only signals affordance. The dotted underline reads as "interactive
+   but not an outbound URL" — distinct from markdown URL links. */
+.fm-prose a.path-link {
+  color: var(--agent);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.fm-prose a.path-link:hover {
+  text-decoration: underline;
+  color: color-mix(in srgb, var(--agent) 80%, var(--ink));
+}
+
 /* Headings — serif, decreasing scale, accent underline on h1 to anchor
    the section without competing with the prose name in the card head. */
 .fm-prose h1,

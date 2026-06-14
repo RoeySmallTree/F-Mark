@@ -1,6 +1,6 @@
 /* RuntimesPanel — Settings → Runtimes.
    Shows the system probe summary first (OS, installer, tmux), then renders
-   the runtime catalog (claude/codex/gemini + custom entries) as a table.
+   the runtime catalog (claude/codex/opencode + custom entries) as a table.
    Each row has Edit + Remove buttons; builtin rows can be edited but not
    removed. The "Add runtime" button expands an inline form whose `executable`
    field is validated against the same regex the kernel uses
@@ -9,8 +9,12 @@
 
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
-import type { EnvProbeResult, RuntimeEntry } from "@f-mark/shared";
-import { avatarIconSrc, avatarKind } from "../../components/ParticipantAvatar.js";
+import {
+  isOfferableRuntimeId,
+  type EnvProbeResult,
+  type RuntimeEntry,
+} from "@f-mark/shared";
+import { avatarKind, iconMaskStyle } from "../../components/ParticipantAvatar.js";
 
 export interface RuntimesPanelProps {
   runtimes: Record<string, RuntimeEntry>;
@@ -26,15 +30,19 @@ export interface RuntimesPanelProps {
 const ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const EXEC_RE = /^[a-zA-Z0-9_./-]+$/;
 
-/* The kernel ships these three IDs as builtins (see
+/* The kernel ships these IDs as builtins (see
    packages/kernel/src/runtimes/defaults.ts). Anything else is "custom". */
-const BUILTIN_IDS = new Set(["claude", "codex", "gemini"]);
+const BUILTIN_IDS = new Set(["claude", "codex", "opencode"]);
 
-const ICON_CHOICES = ["bot", "claude", "codex", "gemini"] as const;
+const ICON_CHOICES = ["bot", "claude", "codex", "opencode"] as const;
 type IconName = (typeof ICON_CHOICES)[number];
 
-function runtimeIconSrc(icon: string | undefined, id: string, entry: RuntimeEntry): string {
-  return avatarIconSrc(
+function runtimeIconStyle(
+  icon: string | undefined,
+  id: string,
+  entry: RuntimeEntry,
+): ReturnType<typeof iconMaskStyle> {
+  return iconMaskStyle(
     avatarKind({
       kind: "agent",
       runtimeId: icon === "bot" ? id : (icon ?? id),
@@ -174,6 +182,7 @@ export function RuntimesPanel({
 
   const rows = useMemo(() => {
     return Object.entries(runtimes)
+      .filter(([id]) => isOfferableRuntimeId(id))
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([id, entry]) => ({
         id,
@@ -213,6 +222,10 @@ export function RuntimesPanel({
       setError(
         "Invalid id: must match ^[a-z][a-z0-9_-]{0,31}$ (lowercase, starts with a letter).",
       );
+      return;
+    }
+    if (form.mode === "add" && !isOfferableRuntimeId(form.id)) {
+      setError("This runtime is no longer supported.");
       return;
     }
     if (form.displayName.trim().length === 0) {
@@ -474,10 +487,9 @@ export function RuntimesPanel({
                   className="runtime-icon"
                   title={entry.icon ?? "bot"}
                 >
-                  <img
-                    src={runtimeIconSrc(entry.icon, id, entry)}
-                    alt=""
-                    draggable={false}
+                  <span
+                    className="icon-mask"
+                    style={runtimeIconStyle(entry.icon, id, entry)}
                   />
                 </span>
               </td>

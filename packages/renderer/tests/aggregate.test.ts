@@ -55,18 +55,21 @@ function choice(
 }
 
 describe("aggregate", () => {
-  it("groups visible feed (excludes superseded + comments)", () => {
+  it("groups visible feed (excludes superseded but keeps comment activity)", () => {
     const a = prose("20260522T000001Z_us-x.prose.md", { content: "hi" });
     const b = prose("20260522T000002Z_us-x.prose.md", {
       content: "comment",
-      target: { file: a.filename },
+      append_to: a.filename, mode: "comment",
     });
     const c = prose("20260522T000003Z_us-x.prose.md", {
       content: "v2",
       supersedes: a.filename,
     });
     const agg = aggregate([a, b, c]);
-    expect(agg.feed.map((e) => e.filename)).toEqual([c.filename]);
+    expect(agg.feed.map((e) => e.filename)).toEqual([
+      b.filename,
+      c.filename,
+    ]);
   });
 
   it("derives named list", () => {
@@ -82,11 +85,11 @@ describe("aggregate", () => {
     const a = prose("20260522T000001Z_us-x.prose.md", { content: "anchor" });
     const c1 = prose("20260522T000002Z_us-x.prose.md", {
       content: "first",
-      target: { file: a.filename },
+      append_to: a.filename, mode: "comment",
     });
     const c2 = prose("20260522T000003Z_us-x.prose.md", {
       content: "second",
-      target: { file: a.filename },
+      append_to: a.filename, mode: "comment",
     });
     const agg = aggregate([a, c1, c2]);
     expect(agg.commentsByTarget.get(a.filename)?.map((c) => c.filename)).toEqual([
@@ -122,12 +125,12 @@ describe("aggregate", () => {
       });
       const comment = prose("20260522T000003Z_us-x.prose.md", {
         content: "feedback",
-        target: { file: named.filename },
+        append_to: named.filename, mode: "comment",
       });
       const namedWithTarget = prose("20260522T000004Z_us-x.prose.md", {
         content: "comment with both",
         name: "Note",
-        target: { file: named.filename },
+        append_to: named.filename, mode: "comment",
       });
       const tend = turnEnd("20260522T000005Z_us-x.turn-end.json");
       const ch = choices("20260522T000006Z_us-x.choices.json");
@@ -169,7 +172,7 @@ describe("aggregate", () => {
   });
 
   describe("feedConversation", () => {
-    it("includes unnamed prose + choices + choice + turn-end; excludes named prose and comments", () => {
+    it("includes unnamed prose, comment activity, choices, choice, and turn-end; excludes named prose", () => {
       const unnamed = prose("20260522T000001Z_us-x.prose.md", { content: "hi" });
       const named = prose("20260522T000002Z_us-x.prose.md", {
         content: "doc body",
@@ -177,7 +180,7 @@ describe("aggregate", () => {
       });
       const comment = prose("20260522T000003Z_us-x.prose.md", {
         content: "note",
-        target: { file: named.filename },
+        append_to: named.filename, mode: "comment",
       });
       const ch = choices("20260522T000004Z_us-x.choices.json");
       const chSel = choice("20260522T000005Z_us-x.choice.json", "q1", ["a"]);
@@ -186,6 +189,7 @@ describe("aggregate", () => {
       const agg = aggregate([unnamed, named, comment, ch, chSel, tend]);
       expect(agg.feedConversation.map((e) => e.filename)).toEqual([
         unnamed.filename,
+        comment.filename,
         ch.filename,
         chSel.filename,
         tend.filename,

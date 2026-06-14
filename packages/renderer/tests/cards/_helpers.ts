@@ -13,7 +13,12 @@ import { DEFAULT_FILTER } from "../../src/popovers/log-filter-types.js";
 
 export const PARTICIPANTS: Record<string, Participant> = {
   "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-  "ag-c92e": { kind: "agent", name: "Claude", color: "#b86a1f" },
+  "ag-c92e": {
+    kind: "agent",
+    name: "Claude",
+    color: "#b86a1f",
+    active_session: "2026-05-22-launch-planning",
+  },
 };
 
 export const SESSION_META: SessionMeta = {
@@ -32,6 +37,7 @@ export function resetStore(overrides: Partial<ReturnType<typeof useStore.getStat
     events: [],
     composeMode: "message",
     commentTarget: null,
+    focusedCommentId: null,
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",

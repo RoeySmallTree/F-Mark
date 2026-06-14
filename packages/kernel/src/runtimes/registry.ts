@@ -1,5 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { filterOfferableRuntimeEntries } from "@f-mark/shared";
 import { DEFAULT_RUNTIMES } from "./defaults.js";
 import { validateRuntimeEntry, type RuntimeEntryShape } from "./validation.js";
 
@@ -42,6 +43,17 @@ export async function loadRuntimes(fmarkDir: string): Promise<RuntimesFile> {
   validateRuntimesFile(parsed);
   for (const [, entry] of Object.entries(parsed.runtimes)) validateRuntimeEntry(entry);
   return parsed;
+}
+
+export function offerableRuntimesFile(cfg: RuntimesFile): RuntimesFile {
+  return {
+    version: cfg.version,
+    runtimes: filterOfferableRuntimeEntries(cfg.runtimes),
+  };
+}
+
+export async function loadOfferableRuntimes(fmarkDir: string): Promise<RuntimesFile> {
+  return offerableRuntimesFile(await loadRuntimes(fmarkDir));
 }
 
 export async function saveRuntimes(fmarkDir: string, cfg: RuntimesFile): Promise<void> {

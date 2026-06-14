@@ -42,8 +42,13 @@ const KIND_DEFAULT_LABEL: Record<EventKind, string> = {
   choices: "Choices",
   todo: "Todo",
   "tool-use": "Tool use",
+  "subagent-run": "Sub-agent run",
+  "subagent-output": "Sub-agent output",
   "turn-end": "Turn end",
   choice: "Choice",
+  "access-request": "Access request",
+  "access-response": "Access response",
+  "fork-link": "Fork link",
 };
 
 function blockLabel(

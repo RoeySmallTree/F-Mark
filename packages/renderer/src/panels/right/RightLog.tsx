@@ -16,9 +16,11 @@ import {
   ChevronRight,
   FileCode2,
   Flag,
+  GitFork,
   ListChecks,
   MousePointerClick,
   Paperclip,
+  ShieldAlert,
   Text,
   Workflow,
   Wrench,
@@ -35,6 +37,7 @@ import {
   hasActiveFilter,
   type LogFilter,
 } from "../../popovers/log-filter-types.js";
+import { LogLevel, useSeqLog } from "../../hooks/useSeqLog.js";
 
 /* Lucide icon per event kind. Picks something semantically grounded — no
    abstract glyphs that the reader would have to decode. */
@@ -47,7 +50,12 @@ const KIND_ICON: Record<EventKind, typeof Text> = {
   html: FileCode2,
   file: Paperclip,
   "tool-use": Wrench,
+  "subagent-run": Workflow,
+  "subagent-output": Text,
   flow: Workflow,
+  "access-request": ShieldAlert,
+  "access-response": ShieldAlert,
+  "fork-link": GitFork,
 };
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -59,7 +67,12 @@ const KIND_LABEL: Record<EventKind, string> = {
   html: "html",
   file: "file",
   "tool-use": "tool use",
+  "subagent-run": "sub-agent",
+  "subagent-output": "sub-agent output",
   flow: "flow",
+  "access-request": "access request",
+  "access-response": "access response",
+  "fork-link": "fork",
 };
 
 function formatTs(ts: string): string {
@@ -118,6 +131,34 @@ function shortSummary(ev: AnyEventRecord): string {
     };
     return p.description ?? p.display_name ?? p.path ?? "file";
   }
+  if (ev.kind === "access-request") {
+    const p = ev.payload as { title?: string; command?: string; message?: string };
+    return p.command ?? p.message ?? p.title ?? "access request";
+  }
+  if (ev.kind === "access-response") {
+    const p = ev.payload as { status?: string; decision?: string };
+    return `${p.status ?? p.decision ?? "response"}`;
+  }
+  if (ev.kind === "subagent-run") {
+    const p = ev.payload as { name?: string; status?: string; source?: string };
+    return `${p.name ?? "sub-agent"} ${p.status ?? ""} (${p.source ?? "unknown"})`;
+  }
+  if (ev.kind === "subagent-output") {
+    const p = ev.payload as { name?: string; content?: string };
+    const text = (p.content ?? "").replace(/\s+/g, " ").trim();
+    const head = p.name ?? "sub-agent";
+    return text.length > 0
+      ? `${head}: ${text.length > 60 ? `${text.slice(0, 59)}…` : text}`
+      : `${head}: output`;
+  }
+  if (ev.kind === "fork-link") {
+    const p = ev.payload as {
+      direction?: "from" | "to";
+      other_session_slug?: string;
+    };
+    const verb = p.direction === "from" ? "Forked from" : "Forked to";
+    return `${verb} ${p.other_session_slug ?? "session"}`;
+  }
   return ev.kind;
 }
 
@@ -173,10 +214,24 @@ export function RightLog(): JSX.Element {
     setFilter(DEFAULT_FILTER);
   }
 
+  const log = useSeqLog("RightLog");
+
   function jumpTo(filename: string): void {
     if (typeof document === "undefined") return;
     const el = document.querySelector(`[data-event-filename="${filename}"]`);
-    if (el !== null && el instanceof HTMLElement) {
+    const elementMatched = el !== null && el instanceof HTMLElement;
+    log(
+      "RightLog row clicked",
+      {
+        filename,
+        elementFound: el !== null,
+        elementMatched,
+        $note:
+          "Click on an activity-log row should smooth-scroll the feed to the matching card",
+      },
+      elementMatched ? LogLevel.Info : LogLevel.Warning,
+    );
+    if (elementMatched) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }

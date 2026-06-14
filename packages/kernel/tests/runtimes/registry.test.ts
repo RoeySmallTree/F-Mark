@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   loadRuntimes,
+  loadOfferableRuntimes,
   saveRuntimes,
   initRuntimesFile,
   upsertRuntime,
@@ -34,6 +35,29 @@ describe("runtimes registry", () => {
       await initRuntimesFile(fmarkDir);
       const after = await loadRuntimes(fmarkDir);
       expect(after.runtimes.claude!.args).toEqual(["--model", "haiku"]);
+    });
+  });
+
+  it("loads historical retired runtimes but excludes them from the offerable view", async () => {
+    await withTmpFmark(async (fmarkDir) => {
+      await saveRuntimes(fmarkDir, {
+        version: "1.0",
+        runtimes: {
+          ...DEFAULT_RUNTIMES,
+          gemini: { displayName: "Gemini", executable: "gemini", args: [] },
+        },
+      });
+
+      const full = await loadRuntimes(fmarkDir);
+      expect(full.runtimes.gemini?.displayName).toBe("Gemini");
+
+      const offerable = await loadOfferableRuntimes(fmarkDir);
+      expect(offerable.runtimes.gemini).toBeUndefined();
+      expect(Object.keys(offerable.runtimes).sort()).toEqual([
+        "claude",
+        "codex",
+        "opencode",
+      ]);
     });
   });
 

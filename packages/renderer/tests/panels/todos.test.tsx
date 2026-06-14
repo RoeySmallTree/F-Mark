@@ -303,7 +303,8 @@ describe("Todos panel — unified tree item flow", () => {
       });
     });
     await waitFor(() => {
-      expect(screen.getByText("in progress")).toBeInTheDocument();
+      const wipPill = document.querySelector(".todo-status-pill.wip");
+      expect(wipPill).not.toBeNull();
     });
 
     await user.click(screen.getByRole("button", { name: /Mark as done/i }));
@@ -467,7 +468,7 @@ describe("Todos panel — unified tree item flow", () => {
     });
   });
 
-  test("empty session auto-creates the first task with default agent assignee", async () => {
+  test("empty session opens a focused draft without posting an empty-title todo", async () => {
     const treeRef: { current: TodoTreeNode[] } = { current: [] };
     const { posts } = installTodoFetch(treeRef);
     const originalFetch = globalThis.fetch;
@@ -503,17 +504,12 @@ describe("Todos panel — unified tree item flow", () => {
 
     render(<Todos />);
 
-    await waitFor(() => {
-      expect(posts).toHaveLength(1);
-    });
-    expect(String(posts[0]!.title).trim()).toBe("");
-    expect(posts[0]).toMatchObject({
-      status: "open",
-      assigned_to: "ag-c92e",
-      participant_id: "us-a7f3",
-    });
-    const firstTitle = await screen.findByPlaceholderText("First task title");
-    expect(firstTitle).toHaveFocus();
+    const draftTitle = await screen.findByPlaceholderText("Task title");
+    expect(draftTitle).toHaveFocus();
+    expect(draftTitle).toHaveValue("");
+    /* No POST should have been issued — the empty draft is UI-only and
+       must remain unposted until a title is entered. */
+    expect(posts).toHaveLength(0);
   });
 
   test("+ Add task creates a draft sibling and posts it on first commit", async () => {

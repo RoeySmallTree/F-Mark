@@ -82,7 +82,7 @@ export async function clearManagedSiblings(
 ): Promise<void> {
   assertValid(id);
   const dir = agentDir(agentsDir, id);
-  for (const name of ["tmux-session", "runtime"]) {
+  for (const name of ["tmux-session", "runtime", "runtime-session.json"]) {
     try {
       await unlink(join(dir, name));
     } catch (e: unknown) {

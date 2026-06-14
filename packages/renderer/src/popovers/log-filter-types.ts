@@ -41,6 +41,12 @@ export const FILTERABLE_KINDS: readonly EventKind[] = [
   "html",
   "file",
   "tool-use",
+  "subagent-run",
+  "subagent-output",
+  "access-request",
+  "access-response",
+  "flow",
+  "fork-link",
 ];
 
 export function hasActiveFilter(filter: LogFilter): boolean {

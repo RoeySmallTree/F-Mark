@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { registerHookInstallRoutes } from "../../src/routes/hookInstall.js";
 import { paths } from "../../src/paths.js";
+import { autoStreamHookCommand } from "../../src/hooksInstall/command.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 async function makeApp(root?: string) {
@@ -14,15 +16,24 @@ async function makeApp(root?: string) {
 }
 
 describe("hook-install routes", () => {
-  it("GET hook-install-status returns gemini result", async () => {
+  it("GET hook-install-status returns opencode result", async () => {
+    const savedHome = process.env.HOME;
+    const home = await mkdtemp(join(tmpdir(), "fmark-oc-hook-route-home-"));
+    process.env.HOME = home;
     const app = await makeApp();
-    const res = await app.inject({
-      method: "GET",
-      url: "/managed-agents/hook-install-status?runtime_id=gemini&participant_id=ag-gemini-1",
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().installed).toBe(false);
-    await app.close();
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/managed-agents/hook-install-status?runtime_id=opencode&participant_id=ag-opencode-1",
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().installed).toBe(false);
+    } finally {
+      await app.close();
+      if (savedHome === undefined) delete process.env.HOME;
+      else process.env.HOME = savedHome;
+      await rm(home, { recursive: true, force: true });
+    }
   });
 
   it("GET hook-install-status 400 on missing params", async () => {
@@ -49,15 +60,15 @@ describe("hook-install routes", () => {
       url: "/managed-agents/hook-install-instructions?runtime_id=claude",
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().markdown).toContain("npx -y f-mark hook auto-stream");
+    expect(res.json().markdown).toContain("hook auto-stream");
+    expect(res.json().markdown).not.toContain("npx -y f-mark");
     expect(res.json().markdown).not.toContain("ag-claude-1");
     expect(res.json().markdown).not.toContain("UserPromptSubmit");
     expect(res.json().manualSteps[0].configPath).toBe(
       ".claude/settings.json or ~/.claude/settings.json",
     );
-    expect(res.json().promptSteps[0].text).toContain(
-      "npx -y f-mark hook auto-stream",
-    );
+    expect(res.json().promptSteps[0].text).toContain("hook auto-stream");
+    expect(res.json().promptSteps[0].text).not.toContain("npx -y f-mark");
     await app.close();
   });
 
@@ -75,14 +86,26 @@ describe("hook-install routes", () => {
     await withTempProject(async (root) => {
       const agentId = "ag-codex-projectlocal";
       const userId = "us-projectlocal";
+      const agentCommand = autoStreamHookCommand({ participantId: agentId });
+      const userCommand = autoStreamHookCommand({
+        participantId: userId,
+        kind: "user",
+      });
       const toml = [
+        "[features]",
+        "hooks = true",
+        "",
         "[[hooks.Stop]]",
-        `command = ["npx", "-y", "f-mark", "hook", "auto-stream", "${agentId}"]`,
+        `command = ${JSON.stringify(agentCommand)}`,
         "timeout = 30",
         "",
         "[[hooks.UserPromptSubmit]]",
-        `command = ["npx", "-y", "f-mark", "hook", "auto-stream", "${userId}", "--kind", "user"]`,
+        `command = ${JSON.stringify(userCommand)}`,
         "timeout = 10",
+        "",
+        "[[hooks.PermissionRequest]]",
+        `command = ${JSON.stringify(agentCommand)}`,
+        "timeout = 300",
         "",
       ].join("\n");
       await mkdir(join(root, ".codex"), { recursive: true });
@@ -102,6 +125,11 @@ describe("hook-install routes", () => {
       expect(
         body.detectedEntries.some(
           (e: { event: string }) => e.event === "UserPromptSubmit",
+        ),
+      ).toBe(true);
+      expect(
+        body.detectedEntries.some(
+          (e: { event: string }) => e.event === "PermissionRequest",
         ),
       ).toBe(true);
       await app.close();
@@ -134,9 +162,8 @@ describe("hook-install routes", () => {
         await readFile(join(root, ".claude", "settings.json"), "utf8"),
       );
       expect(saved.theme).toBe("dark");
-      expect(JSON.stringify(saved.hooks)).toContain(
-        "npx -y f-mark hook auto-stream",
-      );
+      expect(JSON.stringify(saved.hooks)).toContain("hook auto-stream");
+      expect(JSON.stringify(saved.hooks)).not.toContain("npx -y f-mark");
       expect(JSON.stringify(saved.hooks)).not.toContain("ag-claude-1");
       expect(JSON.stringify(saved.hooks)).not.toContain("us-1");
       await app.close();

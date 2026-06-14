@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { serializeProse, parseProse } from "../../src/events/prose.js";
 
 describe("prose serialize/parse", () => {
@@ -27,15 +27,18 @@ describe("prose serialize/parse", () => {
     expect(out).not.toContain("target:");
   });
 
-  it("never emits `target` field in serialized frontmatter (legacy ignored)", () => {
-    /* Even if a caller passes the legacy `target`, the serializer drops
-       it — only `append_to`/`mode`/`lines` make it to disk. */
+  it("serialises a file comment (file_path + lines + diff_hunk + diff_base)", () => {
     const out = serializeProse({
-      content: "comment",
-      // @ts-expect-error — intentionally pass legacy field
-      target: { file: "x.prose.md", lines: [3, 5] },
+      content: "this hunk looks wrong",
+      file_path: "src/app.ts",
+      lines: [10, 12],
+      diff_hunk: "@@ -1 +1 @@\n-a\n+b",
+      diff_base: "current-session",
     });
-    expect(out).not.toContain("target:");
+    expect(out).toContain("file_path: src/app.ts");
+    expect(out).toContain("diff_base: current-session");
+    expect(out).toContain("lines:");
+    expect(out).not.toContain("append_to:");
   });
 
   it("parseProse on no-frontmatter content", () => {
@@ -59,57 +62,40 @@ describe("prose serialize/parse", () => {
     expect(parseProse(out).supersedes).toBe("old.prose.md");
   });
 
-  it("parseProse maps legacy `target` → append_to + mode=comment + lines", () => {
-    /* Build a legacy-shape doc by hand (the serializer no longer emits it). */
-    const legacy = [
-      "---",
-      "target:",
-      "  file: x.prose.md",
-      "  lines:",
-      "    - 3",
-      "    - 5",
-      "---",
-      "comment",
-    ].join("\n");
-    const parsed = parseProse(legacy);
-    expect(parsed.target).toBeUndefined();
-    expect(parsed.append_to).toBe("x.prose.md");
-    expect(parsed.mode).toBe("comment");
+  it("parseProse round-trips a file comment", () => {
+    const out = serializeProse({
+      content: "comment",
+      file_path: "src/app.ts",
+      lines: [3, 5],
+      diff_hunk: "@@ -1 +1 @@",
+      diff_base: "whole-branch",
+    });
+    const parsed = parseProse(out);
+    expect(parsed.file_path).toBe("src/app.ts");
     expect(parsed.lines).toEqual([3, 5]);
+    expect(parsed.diff_hunk).toBe("@@ -1 +1 @@");
+    expect(parsed.diff_base).toBe("whole-branch");
+    expect(parsed.append_to).toBeUndefined();
   });
 
-  it("parseProse legacy `target` without lines → card-level comment", () => {
-    const legacy = [
-      "---",
-      "target:",
-      "  file: x.prose.md",
-      "---",
-      "comment",
-    ].join("\n");
-    const parsed = parseProse(legacy);
-    expect(parsed.append_to).toBe("x.prose.md");
-    expect(parsed.mode).toBe("comment");
-    expect(parsed.lines).toBeUndefined();
-    expect(parsed.target).toBeUndefined();
-  });
-
-  it("parseProse prefers new fields when BOTH legacy `target` and new are present + warns", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const both = [
-      "---",
-      "append_to: new.prose.md",
-      "mode: comment",
-      "target:",
-      "  file: old.prose.md",
-      "---",
-      "comment",
-    ].join("\n");
-    const parsed = parseProse(both);
-    expect(parsed.append_to).toBe("new.prose.md");
-    expect(parsed.mode).toBe("comment");
-    expect(parsed.target).toBeUndefined();
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+  it("parseProse round-trips line_context for line-drift repair", () => {
+    const out = serializeProse({
+      content: "c",
+      file_path: "a.ts",
+      line_context: {
+        selected: "const x = 1;",
+        sha256: "abc123",
+        before: "// header",
+        after: "}",
+      },
+    });
+    const parsed = parseProse(out);
+    expect(parsed.line_context).toEqual({
+      selected: "const x = 1;",
+      sha256: "abc123",
+      before: "// header",
+      after: "}",
+    });
   });
 
   it("parseProse reads new fields cleanly", () => {

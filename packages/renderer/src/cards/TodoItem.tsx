@@ -8,10 +8,11 @@ import {
   useState,
 } from "react";
 import type { Participant, TodoPayload, TodoTreeNode } from "@f-mark/shared";
-import { Check, CircleDot, CornerDownRight, Plus, X } from "lucide-react";
+import { Check, CircleDot, CornerDownRight, Plus, User, X } from "lucide-react";
 import { fieldValue, countDescendants } from "../panels/todoPanelUtils.js";
 import { whoOf } from "./format.js";
 import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
+import { LogLevel, useSeqLog } from "../hooks/useSeqLog.js";
 
 export interface TodoItemNode {
   id: string;
@@ -80,18 +81,24 @@ function depthOffset(depth: number): string {
 
 function participantEntries(
   participants: Record<string, Participant>,
+  agentIds: string[],
 ): Array<[string, Participant]> {
-  return Object.entries(participants).sort(([, a], [, b]) => {
-    if (a.kind !== b.kind) return a.kind === "user" ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  return agentIds
+    .map((id): [string, Participant] | null => {
+      const participant = participants[id];
+      return participant === undefined ? null : [id, participant];
+    })
+    .filter((entry): entry is [string, Participant] => entry !== null)
+    .sort(([, a], [, b]) => {
+      return a.name.localeCompare(b.name);
+    });
 }
 
 export function TodoItem({
   node,
   depth,
   participants,
-  agentIds: _agentIds,
+  agentIds,
   onUpdate,
   onToggleDone,
   onToggleWip,
@@ -169,8 +176,8 @@ export function TodoItem({
     : null;
 
   const participantsList = useMemo(
-    () => participantEntries(participants),
-    [participants],
+    () => participantEntries(participants, agentIds),
+    [participants, agentIds],
   );
 
   function currentValues(): TodoItemValues {
@@ -289,6 +296,9 @@ export function TodoItem({
 
   const titleLabel =
     fieldValue(node.title).length > 0 ? fieldValue(node.title) : "untitled task";
+  const log = useSeqLog("TodoItem", { todoId: node.id });
+  const assigneeLabel =
+    assignee === null ? "Unassigned" : `Assigned to ${assignee.name}`;
 
   return (
     <div
@@ -316,21 +326,170 @@ export function TodoItem({
           aria-pressed={done}
           aria-label={done ? "Mark as open" : "Mark as done"}
           onMouseDown={skipActiveInputBlurCommit}
-          onClick={() => void onToggleDone(currentValues())}
+          onClick={() => {
+            log(
+              "TodoItem check toggled",
+              { previousStatus: node.status },
+              LogLevel.Info,
+            );
+            void onToggleDone(currentValues());
+          }}
         >
           {done ? <Check size={12} strokeWidth={3.2} aria-hidden /> : null}
         </button>
         <div className="todo-info">
-          <input
-            ref={titleRef}
-            className="todo-title"
-            value={title}
-            placeholder={titlePlaceholder}
-            aria-label="Task title"
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => onInputKeyDown(event, "title")}
-            onBlur={() => void commitTitle()}
-          />
+          <div className="todo-top-row">
+            <input
+              ref={titleRef}
+              className="todo-title"
+              value={title}
+              placeholder={titlePlaceholder}
+              aria-label="Task title"
+              onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => onInputKeyDown(event, "title")}
+              onBlur={() => void commitTitle()}
+            />
+            <div className="todo-actions" role="group" aria-label="Task actions">
+              {wip ? (
+                <span
+                  className="todo-status-pill wip"
+                  aria-hidden="true"
+                  title="In progress"
+                >
+                  ●
+                </span>
+              ) : null}
+              <div className="todo-assignee">
+                <button
+                  ref={assigneeButtonRef}
+                  type="button"
+                  className={[
+                    "assign-badge",
+                    "icon-only",
+                    assignee === null ? "unassigned" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  aria-haspopup="menu"
+                  aria-expanded={assigneeOpen}
+                  aria-label={assigneeLabel}
+                  title={assigneeLabel}
+                  onClick={() => {
+                    log(
+                      "TodoItem assignee dropdown toggled",
+                      { currentAssignee: node.assigned_to ?? null },
+                      LogLevel.Info,
+                    );
+                    setAssigneeOpen((value) => !value);
+                  }}
+                >
+                  {assignee !== null ? (
+                    <ParticipantAvatar
+                      participantId={assignee.id}
+                      kind={assignee.isUser ? "user" : "agent"}
+                      name={assignee.name}
+                      color={assignee.color}
+                      runtimeId={assignee.runtimeId}
+                      size="sm"
+                    />
+                  ) : (
+                    <User size={13} aria-hidden />
+                  )}
+                </button>
+                {assigneeOpen ? (
+                  <div className="todo-assignee-menu" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="todo-assignee-option"
+                      onClick={() => void selectAssignee(null)}
+                    >
+                      <span className="avatar sm ghost" aria-hidden>
+                        -
+                      </span>
+                      Unassign
+                    </button>
+                    {participantsList.map(([participantId, participant]) => {
+                      const who = whoOf(participantId, participants);
+                      return (
+                        <button
+                          key={participantId}
+                          type="button"
+                          role="menuitem"
+                          className="todo-assignee-option"
+                          onClick={() => void selectAssignee(participantId)}
+                        >
+                          <ParticipantAvatar
+                            participantId={participantId}
+                            participant={participant}
+                            kind={participant.kind}
+                            name={who.name}
+                            color={participant.color}
+                            runtimeId={participant.runtime_id ?? null}
+                            size="sm"
+                          />
+                          {who.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className={["todo-icon-btn", "todo-wip-btn", wip ? "active" : ""]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-pressed={wip}
+                aria-label={wip ? "Mark as open" : "Mark as in progress"}
+                title={wip ? "Mark as open" : "Mark as in progress"}
+                onMouseDown={skipActiveInputBlurCommit}
+                onClick={() => {
+                  log(
+                    "TodoItem wip toggled",
+                    { previousStatus: node.status },
+                    LogLevel.Info,
+                  );
+                  void onToggleWip(currentValues());
+                }}
+              >
+                <CircleDot size={13} aria-hidden />
+              </button>
+              {showAddSubtask ? (
+                <button
+                  type="button"
+                  className="todo-icon-btn"
+                  aria-label={`Add subtask to ${titleLabel}`}
+                  title="Add subtask"
+                  onMouseDown={skipActiveInputBlurCommit}
+                  onClick={() => {
+                    log("TodoItem add subtask clicked", {}, LogLevel.Info);
+                    void onAddSubtask(currentValues());
+                  }}
+                >
+                  <CornerDownRight size={13} aria-hidden />
+                  <Plus size={12} aria-hidden />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="todo-icon-btn danger"
+                aria-label={`Remove task ${titleLabel}`}
+                title="Remove"
+                onMouseDown={skipActiveInputBlurCommit}
+                onClick={() => {
+                  log(
+                    "TodoItem remove clicked",
+                    { descendants, status: node.status },
+                    LogLevel.Info,
+                  );
+                  void remove();
+                }}
+              >
+                <X size={13} aria-hidden />
+              </button>
+            </div>
+          </div>
           <textarea
             ref={bodyRef}
             className="todo-desc"
@@ -342,117 +501,6 @@ export function TodoItem({
             onKeyDown={(event) => onInputKeyDown(event, "body")}
             onBlur={() => void commitBody()}
           />
-          <div className="todo-meta">
-            {wip ? (
-              <span className="todo-status-pill wip">in progress</span>
-            ) : null}
-            <div className="todo-assignee">
-              <button
-                ref={assigneeButtonRef}
-                type="button"
-                className={[
-                  "assign-badge",
-                  assignee === null ? "unassigned" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                aria-haspopup="menu"
-                aria-expanded={assigneeOpen}
-                aria-label={
-                  assignee === null
-                    ? "unassigned"
-                    : `assigned to ${assignee.name}`
-                }
-                onClick={() => setAssigneeOpen((value) => !value)}
-              >
-                {assignee !== null ? (
-                  <ParticipantAvatar
-                    participantId={assignee.id}
-                    kind={assignee.isUser ? "user" : "agent"}
-                    name={assignee.name}
-                    color={assignee.color}
-                    runtimeId={assignee.runtimeId}
-                    size="sm"
-                  />
-                ) : null}
-                {assignee === null ? "unassigned" : `assigned to ${assignee.name}`}
-              </button>
-              {assigneeOpen ? (
-                <div className="todo-assignee-menu" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="todo-assignee-option"
-                    onClick={() => void selectAssignee(null)}
-                  >
-                    <span className="avatar sm ghost" aria-hidden>
-                      -
-                    </span>
-                    Unassign
-                  </button>
-                  {participantsList.map(([participantId, participant]) => {
-                    const who = whoOf(participantId, participants);
-                    return (
-                      <button
-                        key={participantId}
-                        type="button"
-                        role="menuitem"
-                        className="todo-assignee-option"
-                        onClick={() => void selectAssignee(participantId)}
-                      >
-                        <ParticipantAvatar
-                          participantId={participantId}
-                          participant={participant}
-                          kind={participant.kind}
-                          name={who.name}
-                          color={participant.color}
-                          runtimeId={participant.runtime_id ?? null}
-                          size="sm"
-                        />
-                        {who.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            {showAddSubtask ? (
-              <button
-                type="button"
-                className="todo-icon-btn"
-                aria-label={`Add subtask to ${titleLabel}`}
-                title="Add subtask"
-                onMouseDown={skipActiveInputBlurCommit}
-                onClick={() => void onAddSubtask(currentValues())}
-              >
-                <CornerDownRight size={13} aria-hidden />
-                <Plus size={12} aria-hidden />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className={["todo-icon-btn", "todo-wip-btn", wip ? "active" : ""]
-                .filter(Boolean)
-                .join(" ")}
-              aria-pressed={wip}
-              aria-label={wip ? "Mark as open" : "Mark as in progress"}
-              title={wip ? "Mark as open" : "Mark as in progress"}
-              onMouseDown={skipActiveInputBlurCommit}
-              onClick={() => void onToggleWip(currentValues())}
-            >
-              <CircleDot size={13} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="todo-icon-btn danger"
-              aria-label={`Remove task ${titleLabel}`}
-              title="Remove"
-              onMouseDown={skipActiveInputBlurCommit}
-              onClick={() => void remove()}
-            >
-              <X size={13} aria-hidden />
-            </button>
-          </div>
         </div>
       </div>
       {confirmingRemove ? (

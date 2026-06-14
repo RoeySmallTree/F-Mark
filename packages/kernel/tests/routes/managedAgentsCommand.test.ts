@@ -8,7 +8,11 @@ import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createPresenceTracker } from "../../src/presence/tracker.js";
 import { writeTmuxSession } from "../../src/agents/managed.js";
+import { writeActiveSession } from "../../src/agents/activeSession.js";
+import { createSession } from "../../src/sessions.js";
+import { registerAgent } from "../../src/participants.js";
 import { createInputQueue } from "../../src/tmux/inputQueue.js";
+import type { BusMessage } from "../../src/ws/bus.js";
 import type { TmuxManager } from "../../src/tmux/manager.js";
 
 interface FakeCall {
@@ -56,6 +60,7 @@ async function makeApp() {
   );
   const tmux = fakeTmux();
   const tracker = createPresenceTracker({ broadcast: () => {} });
+  const published: BusMessage[] = [];
   const app = Fastify();
   registerManagedAgentsRoutes(app, {
     paths: p,
@@ -63,12 +68,14 @@ async function makeApp() {
     tracker,
     projectRoot: root,
     inputQueue: createInputQueue(),
-    bus: { publish: () => {} },
+    bus: { publish: (m: BusMessage) => published.push(m) },
   });
   return {
     app,
     tmux,
     root,
+    p,
+    published,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
 }
@@ -88,6 +95,77 @@ describe("POST /managed-agents/:id/command", () => {
     );
     expect(c).toBeDefined();
     expect(c?.args[0]).toBe("fmark-test-12345678-ag-ag-claude");
+    await app.close();
+    await cleanup();
+  });
+
+  it("interrupt -> emits an agent turn-end so the run/Stop-run state reverts", async () => {
+    const { app, p, published, cleanup } = await makeApp();
+    // Register the agent participant + a session + link it as active so the
+    // interrupt handler has a session to write the closing turn-end into.
+    await registerAgent(p, { name: "Claude", suggested_id: "ag-claude" });
+    const session = await createSession(p, { slug: "run" });
+    await writeActiveSession(join(p.fmarkDir(), "agents"), "ag-claude", session.id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/ag-claude/command",
+      payload: { type: "interrupt" },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const turnEnd = published.find(
+      (m) =>
+        m.type === "event_added" &&
+        m.kind === "turn-end" &&
+        m.participant_id === "ag-claude" &&
+        m.session_id === session.id,
+    );
+    expect(turnEnd).toBeDefined();
+    await app.close();
+    await cleanup();
+  });
+
+  it("interrupt is idempotent — a second interrupt appends no extra turn-end", async () => {
+    const { app, p, published, cleanup } = await makeApp();
+    await registerAgent(p, { name: "Claude", suggested_id: "ag-claude" });
+    const session = await createSession(p, { slug: "run" });
+    await writeActiveSession(join(p.fmarkDir(), "agents"), "ag-claude", session.id);
+
+    await app.inject({
+      method: "POST",
+      url: "/managed-agents/ag-claude/command",
+      payload: { type: "interrupt" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/managed-agents/ag-claude/command",
+      payload: { type: "interrupt" },
+    });
+
+    const turnEnds = published.filter(
+      (m) =>
+        m.type === "event_added" &&
+        m.kind === "turn-end" &&
+        m.participant_id === "ag-claude",
+    );
+    expect(turnEnds.length).toBe(1);
+    await app.close();
+    await cleanup();
+  });
+
+  it("interrupt with no active session -> still C-c, no turn-end, no error", async () => {
+    const { app, published, tmux, cleanup } = await makeApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/managed-agents/ag-claude/command",
+      payload: { type: "interrupt" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      tmux.calls.some((x) => x.method === "sendKey" && x.args[1] === "C-c"),
+    ).toBe(true);
+    expect(published.some((m) => m.type === "event_added")).toBe(false);
     await app.close();
     await cleanup();
   });

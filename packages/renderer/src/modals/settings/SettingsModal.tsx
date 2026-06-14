@@ -24,7 +24,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import type { RuntimeEntry } from "@f-mark/shared";
+import { isOfferableRuntimeId, type RuntimeEntry } from "@f-mark/shared";
 import { useStore, type SettingsSectionKey } from "../../state/store.js";
 import { Profile } from "./Profile.js";
 import { Agents } from "./Agents.js";
@@ -52,7 +52,7 @@ const SECTIONS: SectionDef[] = [
   { id: "about", label: "About", icon: <FileText size={14} /> },
 ];
 
-/* The kernel ships these three runtimes as builtins (see
+/* The kernel ships these runtimes as builtins (see
    packages/kernel/src/runtimes/defaults.ts). The kernel `/runtimes` routes
    persist custom entries to `.f-mark/runtimes.json`; env-probe supplies the
    current PATH availability for the same ids. */
@@ -71,11 +71,11 @@ const BUILTIN_RUNTIME_ENTRIES: Record<string, RuntimeEntry> = {
     icon: "codex",
     readyDelayMs: 1500,
   },
-  gemini: {
-    displayName: "Gemini",
-    executable: "gemini",
+  opencode: {
+    displayName: "Opencode",
+    executable: "opencode",
     args: [],
-    icon: "gemini",
+    icon: "opencode",
     readyDelayMs: 1500,
   },
 };
@@ -130,8 +130,12 @@ export function SettingsModal(): JSX.Element {
   const runtimes = useMemo<Record<string, RuntimeEntry>>(() => {
     const ids = new Set([
       ...Object.keys(BUILTIN_RUNTIME_ENTRIES),
-      ...(runtimeRegistry !== null ? Object.keys(runtimeRegistry) : []),
-      ...(envProbe !== null ? Object.keys(envProbe.runtimes) : []),
+      ...(runtimeRegistry !== null
+        ? Object.keys(runtimeRegistry).filter(isOfferableRuntimeId)
+        : []),
+      ...(envProbe !== null
+        ? Object.keys(envProbe.runtimes).filter(isOfferableRuntimeId)
+        : []),
     ]);
     const out: Record<string, RuntimeEntry> = {};
     for (const id of ids) {

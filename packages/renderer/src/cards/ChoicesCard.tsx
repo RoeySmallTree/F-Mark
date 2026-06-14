@@ -3,7 +3,7 @@
    Clicking an option POSTs a new `choice` event via the API client. */
 
 import { type JSX } from "react";
-import { HelpCircle, MoreHorizontal } from "lucide-react";
+import { HelpCircle, Maximize2, MoreHorizontal } from "lucide-react";
 import type {
   AnyEventRecord,
   ChoicePayload,
@@ -13,6 +13,7 @@ import type {
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
+import { HtmlPreviewFrame } from "../components/HtmlPreviewFrame.js";
 import { formatWhen, whoOf } from "./format.js";
 import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
@@ -35,6 +36,13 @@ export function ChoicesCard({
   const token = useStore((s) => s.token);
   const sessionId = useStore((s) => s.currentSessionId);
   const userId = useStore((s) => s.currentUserId);
+  const openHtmlPreview = useStore((s) => s.openHtmlPreview);
+
+  // Visual alternatives: any option carrying an html bundle ref renders the
+  // whole widget as a preview grid instead of a vertical text-button list.
+  const hasHtml = payload.options.some(
+    (o) => typeof o.html === "string" && o.html.length > 0,
+  );
 
   // Find the most recent choice event by the current user for this choices_id.
   const myChoices = allEvents
@@ -99,34 +107,105 @@ export function ChoicesCard({
       )}
       <div className="choices-body">
         <h3 className="choices-q">{payload.question}</h3>
-        {payload.options.map((opt) => {
-          const chosen = selectedIds.includes(opt.id);
-          const faded = selectedIds.length > 0 && !chosen;
-          const classes = [
-            "choice-opt",
-            chosen ? "chosen" : "",
-            faded ? "faded" : "",
-          ]
-            .filter(Boolean)
-            .join(" ");
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              className={classes}
-              aria-pressed={chosen}
-              onClick={() => void pick(opt.id)}
-            >
-              <span className="choice-radio" aria-hidden />
-              <span style={{ flex: 1 }}>
-                <span className="lbl">
-                  {opt.label}
-                  {chosen ? <span className="check">Chose</span> : null}
+        {hasHtml ? (
+          <div className="choices-options-grid">
+            {payload.options.map((opt) => {
+              const chosen = selectedIds.includes(opt.id);
+              const faded = selectedIds.length > 0 && !chosen;
+              const html =
+                typeof opt.html === "string" && opt.html.length > 0
+                  ? opt.html
+                  : null;
+              return (
+                <div
+                  key={opt.id}
+                  className={[
+                    "choice-preview-card",
+                    chosen ? "chosen" : "",
+                    faded ? "faded" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <button
+                    type="button"
+                    className="choice-preview-select"
+                    aria-pressed={chosen}
+                    onClick={() => void pick(opt.id)}
+                  >
+                    <span className="choice-radio" aria-hidden />
+                    <span className="lbl">
+                      {opt.label}
+                      {chosen ? <span className="check">Chose</span> : null}
+                    </span>
+                  </button>
+                  {html !== null ? (
+                    <>
+                      <HtmlPreviewFrame
+                        sessionId={sessionId}
+                        filename={html}
+                        title={opt.label}
+                        frameClassName="choice-preview-frame"
+                      />
+                      <div className="choice-preview-foot">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (sessionId !== null) {
+                              openHtmlPreview({
+                                sessionId,
+                                filename: html,
+                                title: opt.label,
+                                mode: "preview",
+                              });
+                            }
+                          }}
+                        >
+                          <Maximize2 size={11} aria-hidden /> Fullscreen
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="choice-preview-frame">
+                      <div className="placeholder">
+                        <div className="label">text option</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          payload.options.map((opt) => {
+            const chosen = selectedIds.includes(opt.id);
+            const faded = selectedIds.length > 0 && !chosen;
+            const classes = [
+              "choice-opt",
+              chosen ? "chosen" : "",
+              faded ? "faded" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                className={classes}
+                aria-pressed={chosen}
+                onClick={() => void pick(opt.id)}
+              >
+                <span className="choice-radio" aria-hidden />
+                <span style={{ flex: 1 }}>
+                  <span className="lbl">
+                    {opt.label}
+                    {chosen ? <span className="check">Chose</span> : null}
+                  </span>
                 </span>
-              </span>
-            </button>
-          );
-        })}
+              </button>
+            );
+          })
+        )}
         {latest !== undefined && (
           <div className="choices-foot">
             Answered {formatWhen(latest.timestamp)}

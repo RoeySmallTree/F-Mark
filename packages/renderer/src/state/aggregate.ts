@@ -1,7 +1,12 @@
-import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
+import type {
+  AnyEventRecord,
+  ChoicesPayload,
+  ProsePayload,
+} from "@f-mark/shared";
 import {
   getProseRole,
   getCommentTarget,
+  getFileCommentTarget,
   getAppendTo,
   isNamedAnchor,
 } from "@f-mark/shared";
@@ -19,6 +24,10 @@ export interface Aggregated {
   feedConversation: AnyEventRecord[];
   named: AnyEventRecord[];
   commentsByTarget: Map<string, AnyEventRecord[]>;
+  /** File/diff comments bucketed by `file_path::base::hunk` (when a hunk is
+   *  attached) or `file_path::lines`. Parallel to commentsByTarget but keyed
+   *  on a repo file path instead of an event anchor. */
+  fileCommentsByPath: Map<string, AnyEventRecord[]>;
   /** Blocks whose resolved (live) parent is a visible composable parent.
    *  Sorted by the ROOT block's timestamp+filename so an edit-in-place
    *  preserves slot. Phase 6 will filter these out of `feed`. */
@@ -42,12 +51,49 @@ function isProseComment(e: AnyEventRecord): boolean {
   return getProseRole(e.payload as ProsePayload).kind === "comment";
 }
 
+function isProseFileComment(e: AnyEventRecord): boolean {
+  if (e.kind !== "prose") return false;
+  return getProseRole(e.payload as ProsePayload).kind === "file-comment";
+}
+
+/** Grouping key for a file comment: pin to the hunk identity when present
+ *  (so the same line in different diff modes stays distinct), else the line
+ *  range, else the whole file. */
+function fileCommentKey(ft: {
+  file_path: string;
+  lines?: [number, number];
+  hunk?: string;
+  base?: string;
+}): string {
+  if (ft.hunk !== undefined) {
+    return `${ft.file_path}::${ft.base ?? "working"}::${ft.hunk}`;
+  }
+  return `${ft.file_path}::${ft.lines ? ft.lines.join("-") : "file"}`;
+}
+
 function isRemovedCommentMarker(e: AnyEventRecord): boolean {
   if (e.kind !== "prose") return false;
   const payload = e.payload as ProsePayload;
   return (
     payload.content.trim() === "_removed_" &&
     typeof payload.supersedes === "string"
+  );
+}
+
+function isResolvedCommentMarker(e: AnyEventRecord): boolean {
+  if (e.kind !== "prose") return false;
+  const payload = e.payload as ProsePayload;
+  return (
+    payload.content.trim() === "_resolved_" &&
+    typeof payload.supersedes === "string"
+  );
+}
+
+function isCommentActivity(e: AnyEventRecord): boolean {
+  return (
+    (isProseComment(e) || isProseFileComment(e)) &&
+    !isRemovedCommentMarker(e) &&
+    !isResolvedCommentMarker(e)
   );
 }
 
@@ -128,6 +174,22 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
   });
   const supersedorOf = buildSupersedorOf(sorted);
   const superseded = new Set<string>(supersedorOf.keys());
+
+  /* Visual-alternatives: an html event whose filename is referenced by ANY
+     choices option (a visual alternative's preview) is rendered inside its
+     ChoicesCard, never as a standalone EmbedCard. Computed from ALL choices
+     events — including superseded ones — so a superseded alternatives widget
+     doesn't let its old option bundles reappear as standalone cards. The
+     events stay in `agg.events` for ChoicesCard/search/source lookups. */
+  const optionHtmlFilenames = new Set<string>();
+  for (const e of sorted) {
+    if (e.kind !== "choices") continue;
+    for (const o of (e.payload as ChoicesPayload).options) {
+      if (typeof o.html === "string" && o.html.length > 0) {
+        optionHtmlFilenames.add(o.html);
+      }
+    }
+  }
 
   /* Tombstone suppression — buddy_final finding "tombstones do not suppress
      a block chain". A prose event with `removed: true` that supersedes
@@ -219,25 +281,32 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
 
   const feed = visible.filter(
     (e) =>
-      !isProseComment(e) &&
+      (!isProseComment(e) || isCommentActivity(e)) &&
       e.kind !== "choice" &&
+      !optionHtmlFilenames.has(e.filename) &&
       !consumedFilenames.has(e.filename),
   );
   const feedDocument = visible.filter(
     (e) =>
       (isNamedAnchor(e) || e.kind === "flow") &&
+      !optionHtmlFilenames.has(e.filename) &&
       !consumedFilenames.has(e.filename),
   );
   const feedConversation = visible.filter((e) => {
+    if (optionHtmlFilenames.has(e.filename)) return false;
     if (consumedFilenames.has(e.filename)) return false;
     if (e.kind === "prose") {
-      return getProseRole(e.payload as ProsePayload).kind === "message";
+      const role = getProseRole(e.payload as ProsePayload);
+      return role.kind === "message" || isCommentActivity(e);
     }
     return (
       e.kind === "file" ||
       e.kind === "choices" ||
       e.kind === "choice" ||
-      e.kind === "turn-end"
+      e.kind === "subagent-run" ||
+      e.kind === "subagent-output" ||
+      e.kind === "turn-end" ||
+      e.kind === "fork-link"
     );
   });
   const named = visible.filter(isNamedAnchor);
@@ -261,6 +330,20 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
     commentsByTarget.set(key, arr);
   }
 
+  /* File/diff comments: bucket by repo path (+ hunk/lines). No supersedes
+     chain walk — file comments anchor to a path, not an event. */
+  const fileCommentsByPath = new Map<string, AnyEventRecord[]>();
+  for (const e of visible) {
+    if (e.kind !== "prose") continue;
+    if (isRemovedCommentMarker(e)) continue;
+    const ft = getFileCommentTarget(e.payload as ProsePayload);
+    if (ft === undefined) continue;
+    const key = fileCommentKey(ft);
+    const arr = fileCommentsByPath.get(key) ?? [];
+    arr.push(e);
+    fileCommentsByPath.set(key, arr);
+  }
+
   let currentTurnParticipantPrefix: "us" | "ag" = "us";
   for (let i = sorted.length - 1; i >= 0; i--) {
     if (sorted[i]!.kind === "turn-end") {
@@ -277,6 +360,7 @@ export function aggregate(events: AnyEventRecord[]): Aggregated {
     feedConversation,
     named,
     commentsByTarget,
+    fileCommentsByPath,
     consumedBlocksByAnchor,
     orphanBlocks,
     liveAnchorOf,

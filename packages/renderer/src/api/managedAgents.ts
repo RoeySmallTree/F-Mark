@@ -1,13 +1,36 @@
 import type {
   EnvProbeResult,
+  EffortDescriptor,
   HookInstallApplyResponse,
+  HookInstallQuery,
   HookInstallInstructions,
+  HookInstallScope,
   HookInstallStatus,
+  IntegrationApplyRequest,
+  IntegrationApplyResponse,
+  IntegrationPreflightRequest,
+  IntegrationPreflightResponse,
+  ManagedAgentCommandRequest,
+  ManagedAgentCommandResponse,
+  ManagedAgentConfirmTokenResponse,
+  ManagedAgentControlResponse,
+  ManagedAgentGoodbyeResponse,
+  ManagedAgentLogsResponse,
+  ManagedAccessResponseRequest,
+  ManagedAccessResponseResponse,
+  ManagedAgentAccessPatch,
+  ManagedAgentRenameRequest,
   ManagedAgentsListResponse,
+  ManagedAgentsStatusResponse,
+  ModelDescriptor,
   RuntimesFile,
+  SpawnTerminalResponse,
   SpawnRequest,
   SpawnResponse,
   RuntimeEntry,
+  RuntimeOverridePatch,
+  WakeSessionRequest,
+  WakeSessionResponse,
 } from "@f-mark/shared";
 
 export const PROCESS_API_DISABLED_MESSAGE =
@@ -24,40 +47,66 @@ export function isProcessApiDisabledError(err: unknown): boolean {
 export interface ManagedAgentsClient {
   list(): Promise<ManagedAgentsListResponse>;
   spawn(req: SpawnRequest): Promise<SpawnResponse>;
-  spawnTerminal(name?: string): Promise<{ tmux_session: string; label: string }>;
+  preflight(req: IntegrationPreflightRequest): Promise<IntegrationPreflightResponse>;
+  integrationApply(req: IntegrationApplyRequest): Promise<IntegrationApplyResponse>;
+  status(sessionId?: string): Promise<ManagedAgentsStatusResponse>;
+  pause(participantId: string): Promise<ManagedAgentControlResponse>;
+  resume(participantId: string): Promise<ManagedAgentControlResponse>;
+  rename(
+    participantId: string,
+    body: ManagedAgentRenameRequest,
+  ): Promise<ManagedAgentControlResponse>;
+  reconnect(participantId: string): Promise<ManagedAgentControlResponse>;
+  compact(participantId: string): Promise<ManagedAgentControlResponse>;
+  clear(participantId: string): Promise<ManagedAgentControlResponse>;
+  context(participantId: string): Promise<ManagedAgentControlResponse["agent"]["context"]>;
+  access(participantId: string): Promise<ManagedAgentControlResponse["agent"]["access"]>;
+  runtimeModels(
+    participantId: string,
+    opts?: { refresh?: boolean },
+  ): Promise<ModelDescriptor[]>;
+  runtimeEfforts(
+    participantId: string,
+    model?: string,
+  ): Promise<EffortDescriptor[]>;
+  setRuntime(
+    participantId: string,
+    body: RuntimeOverridePatch & { restart?: boolean },
+  ): Promise<{ ok: true; state: ManagedAgentControlResponse["agent"]["runtime_state"] }>;
+  setAccess(
+    participantId: string,
+    body: ManagedAgentAccessPatch,
+  ): Promise<ManagedAgentControlResponse>;
+  respondAccessRequest(
+    participantId: string,
+    requestId: string,
+    body: ManagedAccessResponseRequest,
+  ): Promise<ManagedAccessResponseResponse>;
+  wakeSession(
+    sessionId: string,
+    req?: WakeSessionRequest,
+  ): Promise<WakeSessionResponse>;
+  spawnTerminal(name?: string): Promise<SpawnTerminalResponse>;
   getConfirmToken(participantId: string): Promise<string>;
-  goodbye(participantId: string, confirmToken: string): Promise<void>;
+  goodbye(
+    participantId: string,
+    confirmToken: string,
+  ): Promise<ManagedAgentGoodbyeResponse>;
   command(
     participantId: string,
-    body:
-      | { type: "interrupt" }
-      | { type: "slash"; command: string }
-      | { type: "message"; text: string },
-  ): Promise<void>;
+    body: ManagedAgentCommandRequest,
+  ): Promise<ManagedAgentCommandResponse>;
   envProbe(): Promise<EnvProbeResult>;
   refreshEnvProbe(): Promise<EnvProbeResult>;
-  hookInstallStatus(opts: {
-    runtime_id: string;
-    participant_id?: string;
-    user_participant_id?: string;
-  }): Promise<HookInstallStatus>;
-  hookInstallInstructions(opts: {
-    runtime_id: string;
-    participant_id?: string;
-    user_participant_id?: string;
-  }): Promise<HookInstallInstructions>;
-  hookInstallApply(opts: {
-    runtime_id: string;
-    participant_id?: string;
-    user_participant_id?: string;
-    scope: "local" | "global";
-  }): Promise<HookInstallApplyResponse>;
+  hookInstallStatus(opts: HookInstallQuery): Promise<HookInstallStatus>;
+  hookInstallInstructions(opts: HookInstallQuery): Promise<HookInstallInstructions>;
+  hookInstallApply(
+    opts: HookInstallQuery & { scope: HookInstallScope },
+  ): Promise<HookInstallApplyResponse>;
   logs(
     participantId: string,
     limit?: number,
-  ): Promise<{
-    entries: { ts: string; event: string; [k: string]: unknown }[];
-  }>;
+  ): Promise<ManagedAgentLogsResponse>;
   listRuntimes(): Promise<RuntimesFile>;
   upsertRuntime(id: string, entry: RuntimeEntry): Promise<RuntimesFile>;
   removeRuntime(id: string): Promise<RuntimesFile>;
@@ -66,6 +115,34 @@ export interface ManagedAgentsClient {
 export interface ManagedAgentsClientConfig {
   baseUrl: string;
   token: string | null;
+}
+
+export class ManagedAgentsApiError extends Error {
+  method: string;
+  path: string;
+  status: number;
+  body: string;
+  backendError?: string;
+
+  constructor(input: {
+    method: string;
+    path: string;
+    status: number;
+    body: string;
+    backendError?: string;
+  }) {
+    super(
+      input.backendError !== undefined
+        ? `${input.method} ${input.path} → ${input.status}: ${input.backendError}`
+        : `${input.method} ${input.path} → ${input.status}`,
+    );
+    this.name = "ManagedAgentsApiError";
+    this.method = input.method;
+    this.path = input.path;
+    this.status = input.status;
+    this.body = input.body;
+    this.backendError = input.backendError;
+  }
 }
 
 export function createManagedAgentsClient(
@@ -138,7 +215,27 @@ export function createManagedAgentsClient(
       }
     }
     if (!res.ok) {
-      throw new Error(`${method} ${path} → ${res.status}: ${text}`);
+      let backendError: string | undefined;
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "error" in parsed &&
+          typeof parsed.error === "string"
+        ) {
+          backendError = parsed.error;
+        }
+      } catch {
+        backendError = text.trim().length > 0 ? text : undefined;
+      }
+      throw new ManagedAgentsApiError({
+        method,
+        path,
+        status: res.status,
+        body: text,
+        backendError,
+      });
     }
     if (res.status === 204) return undefined as unknown as T;
     if (text.length === 0) return undefined as unknown as T;
@@ -159,26 +256,126 @@ export function createManagedAgentsClient(
   return {
     list: () => req<ManagedAgentsListResponse>("GET", "/managed-agents"),
     spawn: (r) => req<SpawnResponse>("POST", "/managed-agents/spawn", r),
+    preflight: (r) =>
+      req<IntegrationPreflightResponse>("POST", "/managed-agents/preflight", r),
+    integrationApply: (r) =>
+      req<IntegrationApplyResponse>(
+        "POST",
+        "/managed-agents/integration-apply",
+        r,
+      ),
+    status: (sessionId) => {
+      const q =
+        sessionId !== undefined
+          ? `?session_id=${encodeURIComponent(sessionId)}`
+          : "";
+      return req<ManagedAgentsStatusResponse>(
+        "GET",
+        `/managed-agents/status${q}`,
+      );
+    },
+    pause: (id) =>
+      req<ManagedAgentControlResponse>(
+        "POST",
+        `/managed-agents/${encodeURIComponent(id)}/pause`,
+      ),
+    resume: (id) =>
+      req<ManagedAgentControlResponse>(
+        "POST",
+        `/managed-agents/${encodeURIComponent(id)}/resume`,
+      ),
+    rename: (id, body) =>
+      req<ManagedAgentControlResponse>(
+        "PATCH",
+        `/managed-agents/${encodeURIComponent(id)}`,
+        body,
+      ),
+    reconnect: (id) =>
+      req<ManagedAgentControlResponse>(
+        "POST",
+        `/managed-agents/${encodeURIComponent(id)}/reconnect`,
+      ),
+    compact: (id) =>
+      req<ManagedAgentControlResponse>(
+        "POST",
+        `/managed-agents/${encodeURIComponent(id)}/compact`,
+      ),
+    clear: (id) =>
+      req<ManagedAgentControlResponse>(
+        "POST",
+        `/managed-agents/${encodeURIComponent(id)}/clear`,
+      ),
+    context: (id) =>
+      req<ManagedAgentControlResponse["agent"]["context"]>(
+        "GET",
+        `/managed-agents/${encodeURIComponent(id)}/context`,
+      ),
+    access: (id) =>
+      req<ManagedAgentControlResponse["agent"]["access"]>(
+        "GET",
+        `/managed-agents/${encodeURIComponent(id)}/access`,
+      ),
+    runtimeModels: (id, opts) => {
+      const q = opts?.refresh === true ? "?refresh=true" : "";
+      return req<{ models: ModelDescriptor[] }>(
+        "GET",
+        `/managed-agents/${encodeURIComponent(id)}/runtime/models${q}`,
+      ).then((r) => r.models);
+    },
+    runtimeEfforts: (id, model) => {
+      const q =
+        model !== undefined && model.length > 0
+          ? `?model=${encodeURIComponent(model)}`
+          : "";
+      return req<{ efforts: EffortDescriptor[] }>(
+        "GET",
+        `/managed-agents/${encodeURIComponent(id)}/runtime/efforts${q}`,
+      ).then((r) => r.efforts);
+    },
+    setRuntime: (id, body) =>
+      req<{ ok: true; state: ManagedAgentControlResponse["agent"]["runtime_state"] }>(
+        "PUT",
+        `/managed-agents/${encodeURIComponent(id)}/runtime`,
+        body,
+      ),
+    setAccess: (id, body) =>
+      req<ManagedAgentControlResponse>(
+        "PATCH",
+        `/managed-agents/${encodeURIComponent(id)}/access`,
+        body,
+      ),
+    respondAccessRequest: (id, requestId, body) =>
+      req<ManagedAccessResponseResponse>(
+        "POST",
+        `/managed-agents/${encodeURIComponent(id)}/access-requests/${encodeURIComponent(requestId)}/respond`,
+        body,
+      ),
+    wakeSession: (sessionId, body) =>
+      req<WakeSessionResponse>(
+        "POST",
+        `/sessions/${encodeURIComponent(sessionId)}/wake`,
+        body,
+      ),
     spawnTerminal: (name) =>
-      req<{ tmux_session: string; label: string }>(
+      req<SpawnTerminalResponse>(
         "POST",
         "/managed-agents/terminal",
         { name },
       ),
     getConfirmToken: async (id) => {
-      const r = await req<{ token: string }>(
+      const r = await req<ManagedAgentConfirmTokenResponse>(
         "GET",
         `/managed-agents/${encodeURIComponent(id)}/confirm-token`,
       );
       return r.token;
     },
     goodbye: (id, confirmToken) =>
-      req<void>(
+      req<ManagedAgentGoodbyeResponse>(
         "DELETE",
         `/managed-agents/${encodeURIComponent(id)}?confirm=${encodeURIComponent(confirmToken)}`,
       ),
     command: (id, body) =>
-      req<void>(
+      req<ManagedAgentCommandResponse>(
         "POST",
         `/managed-agents/${encodeURIComponent(id)}/command`,
         body,
@@ -230,9 +427,10 @@ export function createManagedAgentsClient(
     },
     logs: (id, limit) => {
       const q = limit !== undefined ? `?since=${limit}` : "";
-      return req<{
-        entries: { ts: string; event: string; [k: string]: unknown }[];
-      }>("GET", `/managed-agents/${encodeURIComponent(id)}/logs${q}`);
+      return req<ManagedAgentLogsResponse>(
+        "GET",
+        `/managed-agents/${encodeURIComponent(id)}/logs${q}`,
+      );
     },
     listRuntimes: () => req<RuntimesFile>("GET", "/runtimes"),
     upsertRuntime: (id, entry) =>

@@ -21,7 +21,12 @@ describe("project", () => {
       const runtimes = JSON.parse(await readFile(join(p.fmarkDir(), "runtimes.json"), "utf8"));
       expect(runtimes.runtimes.claude).toBeDefined();
       expect(runtimes.runtimes.codex).toBeDefined();
-      expect(runtimes.runtimes.gemini).toBeDefined();
+      expect(runtimes.runtimes.opencode).toBeDefined();
+      expect(Object.keys(runtimes.runtimes).sort()).toEqual([
+        "claude",
+        "codex",
+        "opencode",
+      ]);
     });
   });
 

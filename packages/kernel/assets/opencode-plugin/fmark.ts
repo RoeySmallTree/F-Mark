@@ -1,7 +1,6 @@
 // F-Mark opencode plugin. Managed by `f-mark integration apply --runtime opencode`.
 // Version + sha256 lives in fmark.meta.json (sidecar). Do not edit by hand.
-// Architecture: see planning/replace-gemini-with-opencode/hot-tests/03-assistant-output.md
-//               + 07-permission-gating.md (in F-Mark repo).
+// Architecture notes live with the opencode hot-test reports in the F-Mark repo.
 
 import type { Plugin } from "@opencode-ai/plugin";
 import { readFile, stat } from "node:fs/promises";

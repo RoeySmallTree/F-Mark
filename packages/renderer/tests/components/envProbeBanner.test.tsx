@@ -15,7 +15,7 @@ afterEach(() => {
 const runtimes = {
   claude: { displayName: "Claude Code", executable: "claude" },
   codex: { displayName: "Codex", executable: "codex" },
-  gemini: { displayName: "Gemini", executable: "gemini" },
+  opencode: { displayName: "Opencode", executable: "opencode" },
 };
 
 describe("EnvProbeBanner", () => {
@@ -36,7 +36,7 @@ describe("EnvProbeBanner", () => {
         envProbe={{
           tmux: true,
           tmuxVersion: "3.4",
-          runtimes: { claude: true, codex: true, gemini: true },
+          runtimes: { claude: true, codex: true, opencode: true },
           installer: "apt",
           os: "linux",
         }}
@@ -142,7 +142,7 @@ describe("EnvProbeBanner", () => {
         envProbe={{
           tmux: true,
           tmuxVersion: "3.4",
-          runtimes: { claude: true, codex: false, gemini: false },
+          runtimes: { claude: true, codex: false, opencode: false },
           installer: "apt",
           os: "linux",
         }}
@@ -152,6 +152,6 @@ describe("EnvProbeBanner", () => {
     );
     expect(screen.getByText(/not on PATH/i)).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
-    expect(screen.getByText("Gemini")).toBeInTheDocument();
+    expect(screen.getByText("Opencode")).toBeInTheDocument();
   });
 });

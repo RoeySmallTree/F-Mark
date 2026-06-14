@@ -13,8 +13,11 @@ import { type FC, type JSX, lazy, Suspense } from "react";
 import type {
   AnyEventRecord,
   EventKind,
+  FlowPayload,
   Participant,
   ProsePayload,
+  SubagentOutputEventRecord,
+  SubagentRunEventRecord,
   ToolUseEventRecord,
 } from "@f-mark/shared";
 import { type MarkdownMode } from "../render/MarkdownRenderer.js";
@@ -29,6 +32,7 @@ import { FileCard } from "./FileCard.js";
 import { ChoicesCard } from "./ChoicesCard.js";
 import { TodoCard } from "./TodoCard.js";
 import { ToolUseCard } from "./ToolUseCard.js";
+import { SubagentCard } from "./SubagentCard.js";
 
 export interface InlineProps {
   event: AnyEventRecord;
@@ -72,8 +76,27 @@ const InlineProseBlock: FC<InlineProps> = ({
     </div>
   );
 };
+
+function flowFallbackTitle(event: AnyEventRecord): string {
+  const payload = event.payload as Partial<FlowPayload>;
+  if (typeof payload.title === "string" && payload.title.length > 0) {
+    return payload.title;
+  }
+  return typeof payload.id === "string" ? payload.id : "";
+}
+
+function FlowCardFallback({ event }: { event: AnyEventRecord }): JSX.Element {
+  const title = flowFallbackTitle(event);
+  return (
+    <div className="flow-card flow-card-embedded" data-event-kind="flow">
+      {title.length > 0 ? <div className="flow-title">{title}</div> : null}
+      <div className="flow-canvas" aria-hidden />
+    </div>
+  );
+}
+
 const InlineFlowBlock: FC<InlineProps> = ({ event, participants }) => (
-  <Suspense fallback={<div className="flow-card flow-card-embedded" data-event-kind="flow" />}>
+  <Suspense fallback={<FlowCardFallback event={event} />}>
     <FlowCard event={event} participants={participants} variant="embedded" />
   </Suspense>
 );
@@ -102,6 +125,11 @@ const InlineTodoBlock: FC<InlineProps> = ({ event, participants }) => (
 const InlineToolUseBlock: FC<InlineProps> = ({ event }) => (
   <ToolUseCard event={event as ToolUseEventRecord} />
 );
+const InlineSubagentBlock: FC<InlineProps> = ({ event }) => (
+  <SubagentCard
+    event={event as SubagentRunEventRecord | SubagentOutputEventRecord}
+  />
+);
 
 const INLINE_RENDERERS: Partial<Record<EventKind, FC<InlineProps>>> = {
   prose: InlineProseBlock,
@@ -111,6 +139,8 @@ const INLINE_RENDERERS: Partial<Record<EventKind, FC<InlineProps>>> = {
   choices: InlineChoicesBlock,
   todo: InlineTodoBlock,
   "tool-use": InlineToolUseBlock,
+  "subagent-run": InlineSubagentBlock,
+  "subagent-output": InlineSubagentBlock,
 };
 
 function UnsupportedBlock({ event }: { event: AnyEventRecord }): JSX.Element {

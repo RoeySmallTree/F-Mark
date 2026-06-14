@@ -32,11 +32,11 @@ const RUNTIMES: Record<string, RuntimeEntry> = {
     args: [],
     icon: "codex",
   },
-  gemini: {
-    displayName: "Gemini",
-    executable: "gemini",
+  opencode: {
+    displayName: "Opencode",
+    executable: "opencode",
     args: [],
-    icon: "gemini",
+    icon: "opencode",
   },
 };
 
@@ -103,13 +103,13 @@ describe("HookStatusPanel", () => {
       detectedEntries: [
         {
           event: "Stop",
-          command: "npx -y f-mark hook auto-stream",
+          command: "node /repo/packages/kernel/dist/index.js hook auto-stream",
         },
       ],
       expectedEntries: [
         {
           event: "Stop",
-          command: "npx -y f-mark hook auto-stream",
+          command: "node /repo/packages/kernel/dist/index.js hook auto-stream",
         },
       ],
     });
@@ -231,27 +231,32 @@ describe("HookStatusPanel", () => {
     expect(within(row).getByText(/not installed/i)).toBeInTheDocument();
   });
 
-  it("shows Gemini as not required instead of not installed", async () => {
+  it("shows Opencode as not installed when the plugin hook is missing", async () => {
     const client = makeClient({
       installed: false,
-      configPath: "(manual-stream mode — no hooks needed in v0.4)",
+      configPath: "/project/.opencode/plugin/fmark.ts",
       detectedEntries: [],
-      expectedEntries: [],
+      expectedEntries: [
+        {
+          event: "Plugin",
+          command: "node /repo/packages/kernel/dist/index.js hook auto-stream",
+        },
+      ],
     });
     render(
       <HookStatusPanel
-        runtimes={{ gemini: RUNTIMES.gemini! }}
-        participantIdForRuntime={{ gemini: "ag-gemini" }}
+        runtimes={{ opencode: RUNTIMES.opencode! }}
+        participantIdForRuntime={{ opencode: "ag-opencode" }}
         userParticipantId="us-a7f3"
         apiClient={client as never}
         onShowInstructions={() => {}}
       />,
     );
     await flush();
-    const row = screen.getByTestId("hook-row-gemini");
-    expect(within(row).getByText(/not required/i)).toBeInTheDocument();
+    const row = screen.getByTestId("hook-row-opencode");
+    expect(within(row).getByText(/not installed/i)).toBeInTheDocument();
     expect(
-      within(row).getByRole("button", { name: /manual-stream note/i }),
+      within(row).getByRole("button", { name: /show install instructions/i }),
     ).toBeInTheDocument();
   });
 

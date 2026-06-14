@@ -349,7 +349,9 @@ export function FileCard({
   const href = hrefFor(sessionId, payload, token);
   const kind = previewKind(payload);
   const isFocused =
-    commentTarget !== null && commentTarget.file === event.filename;
+    commentTarget !== null &&
+    commentTarget.kind === "event" &&
+    commentTarget.file === event.filename;
   const canRename =
     sessionId !== null &&
     currentUserId !== null &&
@@ -466,7 +468,9 @@ export function FileCard({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCommentTarget({ file: event.filename })}
+                  onClick={() =>
+                    setCommentTarget({ kind: "event", file: event.filename })
+                  }
                   aria-label="Comment on file"
                   title="Comment on file"
                 >

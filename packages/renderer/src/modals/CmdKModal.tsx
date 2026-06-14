@@ -22,6 +22,7 @@ import {
   Code,
   FileText,
   Folder,
+  Palette,
   Plus,
   Search,
   Settings,
@@ -38,7 +39,7 @@ import {
   type SessionMeta,
 } from "../api/client.js";
 import { useStore } from "../state/store.js";
-import { applyTheme, type ThemeName } from "../themes/index.js";
+import { applyTheme, THEMES, type ThemeName } from "../themes/index.js";
 import {
   defaultGroups,
   flattenRows,
@@ -73,20 +74,18 @@ function IconFor(props: { icon: CmdkIcon; size?: number }): JSX.Element {
       return <Square size={size} aria-hidden="true" />;
     case "Zap":
       return <Zap size={size} aria-hidden="true" />;
+    case "Palette":
+      return <Palette size={size} aria-hidden="true" />;
     default:
       return <Folder size={size} aria-hidden="true" />;
   }
 }
 
-/** Theme-action ids map directly to ThemeName values. */
-const THEME_FROM_ACTION: Record<string, ThemeName> = {
-  "theme-light": "light",
-  "theme-terminal": "terminal",
-  "theme-ide": "ide",
-  "theme-solarized": "solarized",
-  "theme-brutalist": "brutalist",
-  "theme-cyber": "cyber",
-};
+/** Theme-action ids map directly to ThemeName values. Generated from THEMES so
+ *  newly registered themes are dispatchable without editing this map. */
+const THEME_FROM_ACTION: Record<string, ThemeName> = Object.fromEntries(
+  THEMES.map((t) => [`theme-${t.name}`, t.name]),
+);
 
 export function CmdKModal(): JSX.Element {
   const sessions = useStore((s) => s.sessions);
@@ -144,7 +143,7 @@ export function CmdKModal(): JSX.Element {
     const handle = setTimeout(() => {
       const client = createClient({ baseUrl: "", token });
       void client
-        .search(q, undefined, "all")
+        .search(q, undefined, "all", 200)
         .then((hits) => {
           // Only commit if the query hasn't changed under us.
           setSearchHits(hits);

@@ -10,24 +10,33 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
+  AlignLeft,
+  Bot,
   Check,
+  List,
   MessageSquare,
   Pencil,
   SendHorizontal,
   SmilePlus,
   Trash2,
   X,
+  XCircle,
 } from "lucide-react";
 import type {
   AnyEventRecord,
   Participant,
+  ProseMention,
   ProsePayload,
 } from "@f-mark/shared";
-import { getCommentTarget } from "@f-mark/shared";
+import { getCommentTarget, getFileCommentTarget } from "@f-mark/shared";
 import { createClient, type PostProseBody } from "../../api/client.js";
+import { createManagedAgentsClient } from "../../api/managedAgents.js";
 import { formatWhen, whoOf } from "../../cards/format.js";
+import { AgentMentionPicker } from "../../components/AgentMentionPicker.js";
+import { LoadingAnimation } from "../../components/LoadingAnimation.js";
 import { ParticipantAvatar } from "../../components/ParticipantAvatar.js";
 import { useStore } from "../../state/store.js";
+import { LogLevel, useSeqLog } from "../../hooks/useSeqLog.js";
 
 type LineRange = [number, number];
 
@@ -46,6 +55,11 @@ interface CommentGroup {
   quote: string | null;
   roots: CommentNode[];
   anchorOrder: string;
+  /** Set when this is a file/diff comment group (repo path target) rather than
+   *  an event-anchored one. `targetFile` then holds the file path. */
+  filePath?: string;
+  hunk?: string;
+  base?: string;
 }
 
 interface LayoutState {
@@ -57,6 +71,13 @@ const EMOJIS = ["👍", "❤️", "👀", "✅"];
 const PASSIVE_HEIGHT = 82;
 const LINE_HEIGHT = 25;
 const CARD_GAP = 12;
+/* Top buffer (px) reserved above natural-top-zero in anchored mode so a
+   thread whose anchor scrolled above the feed viewport can also scroll
+   above the panel viewport. Without this, top is clamped to 0 and the
+   thread "sticks" at the top of the panel while its anchor disappears
+   upward in the feed. The buffer is paired with an initial panel.scrollTop
+   set to BUFFER so visually the first paint matches the old behavior. */
+const TOP_BUFFER = 800;
 
 function lineKey(lines: LineRange | undefined): string {
   return lines === undefined ? "all" : `${lines[0]}:${lines[1]}`;
@@ -152,13 +173,32 @@ function cssEscape(value: string): string {
 }
 
 function findTargetElement(filename: string): HTMLElement | null {
+  const candidate = findFeedEventElement(filename);
+  if (candidate === null) return null;
+  const content = candidate.querySelector<HTMLElement>(".commentable-content");
+  return content ?? candidate;
+}
+
+function findFeedEventElement(filename: string): HTMLElement | null {
   const selector = `[data-event-filename="${cssEscape(filename)}"]`;
   const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector));
-  for (const candidate of candidates) {
-    const content = candidate.querySelector<HTMLElement>(".commentable-content");
-    if (content !== null) return content;
-  }
   return candidates[0] ?? null;
+}
+
+function feedAnchorTop(group: CommentGroup): number | null {
+  const eventEl = findFeedEventElement(group.targetFile);
+  if (eventEl === null) return null;
+  if (group.lines !== undefined) {
+    const marker = eventEl.querySelector<HTMLElement>(
+      `[data-target-lines="${cssEscape(lineKey(group.lines))}"]`,
+    );
+    if (marker !== null) return marker.getBoundingClientRect().top;
+  }
+  const targetEl = findTargetElement(group.targetFile);
+  if (targetEl === null) return eventEl.getBoundingClientRect().top;
+  const fallbackOffset =
+    group.lines === undefined ? 0 : (group.lines[0] - 1) * LINE_HEIGHT;
+  return targetEl.getBoundingClientRect().top + fallbackOffset;
 }
 
 function scrollByAmount(el: HTMLElement, top: number): void {
@@ -179,11 +219,8 @@ function scrollToTop(el: HTMLElement, top: number): void {
 
 function alignFeedAnchorToCard(group: CommentGroup, card: HTMLElement): void {
   const feed = document.querySelector<HTMLElement>(".feed-scroll");
-  const targetEl = findTargetElement(group.targetFile);
-  if (feed === null || targetEl === null) return;
-  const lineOffset =
-    group.lines === undefined ? 0 : (group.lines[0] - 1) * LINE_HEIGHT;
-  const anchorTop = targetEl.getBoundingClientRect().top + lineOffset;
+  const anchorTop = feedAnchorTop(group);
+  if (feed === null || anchorTop === null) return;
   const cardTop = card.getBoundingClientRect().top;
   scrollByAmount(feed, anchorTop - cardTop);
 }
@@ -226,6 +263,57 @@ function buildCommentGroups(events: AnyEventRecord[]): CommentGroup[] {
       quote: extractQuote(target, bucket.lines),
       roots,
       anchorOrder: `${bucket.targetFile}:${lineKey(bucket.lines)}`,
+    });
+  }
+
+  /* File/diff comment groups — keyed on repo path (+ hunk/lines). No event
+     anchor, so `target` stays undefined and the title is the file basename. */
+  const fileBuckets = new Map<
+    string,
+    {
+      filePath: string;
+      lines?: LineRange;
+      hunk?: string;
+      base?: string;
+      comments: AnyEventRecord[];
+    }
+  >();
+  for (const event of events) {
+    if (event.kind !== "prose") continue;
+    const ft = getFileCommentTarget(event.payload as ProsePayload);
+    if (ft === undefined) continue;
+    const fkey =
+      ft.hunk !== undefined
+        ? `${ft.file_path}::${ft.base ?? "working"}::${ft.hunk}`
+        : `${ft.file_path}::${ft.lines ? `${ft.lines[0]}:${ft.lines[1]}` : "all"}`;
+    const existing = fileBuckets.get(fkey);
+    if (existing === undefined) {
+      fileBuckets.set(fkey, {
+        filePath: ft.file_path,
+        ...(ft.lines === undefined ? {} : { lines: ft.lines }),
+        ...(ft.hunk === undefined ? {} : { hunk: ft.hunk }),
+        ...(ft.base === undefined ? {} : { base: ft.base }),
+        comments: [event],
+      });
+    } else {
+      existing.comments.push(event);
+    }
+  }
+  for (const [fkey, bucket] of fileBuckets) {
+    const roots = buildThreads(bucket.comments);
+    if (roots.length === 0) continue;
+    const base = bucket.filePath.split("/").pop() ?? bucket.filePath;
+    groups.push({
+      key: fkey,
+      targetFile: bucket.filePath,
+      filePath: bucket.filePath,
+      ...(bucket.lines === undefined ? {} : { lines: bucket.lines }),
+      ...(bucket.hunk === undefined ? {} : { hunk: bucket.hunk }),
+      ...(bucket.base === undefined ? {} : { base: bucket.base }),
+      title: base,
+      quote: bucket.hunk ?? null,
+      roots,
+      anchorOrder: `~file:${fkey}`,
     });
   }
 
@@ -310,6 +398,8 @@ export function RightComments(): JSX.Element {
   const participants = useStore((s) => s.participants);
   const commentTarget = useStore((s) => s.commentTarget);
   const setCommentTarget = useStore((s) => s.setCommentTarget);
+  const focusedCommentId = useStore((s) => s.focusedCommentId);
+  const setFocusedCommentId = useStore((s) => s.setFocusedCommentId);
   const setRightTab = useStore((s) => s.setRightTab);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const currentUserId = useStore((s) => s.currentUserId);
@@ -322,15 +412,29 @@ export function RightComments(): JSX.Element {
     height: 240,
   });
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyMentions, setReplyMentions] = useState<Record<string, ProseMention[]>>({});
+  const [mentionTarget, setMentionTarget] = useState<{
+    rootFilename: string;
+    rect: DOMRect;
+  } | null>(null);
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  /* Anchored mode is the default — thread cards align with their feed
+     anchors and gaps between them stretch proportionally. List mode lays
+     thread cards out flow-statically with a constant gap, decoupling them
+     from feed scroll position. */
+  const [layoutMode, setLayoutMode] = useState<"anchored" | "list">("anchored");
   const focusedScrollRafRef = useRef<number | null>(null);
+  const replyInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const groups = useMemo(() => buildCommentGroups(events), [events]);
   const activeKey =
     commentTarget === null
       ? null
-      : targetKey(commentTarget.file, commentTarget.lines);
+      : commentTarget.kind === "event"
+        ? targetKey(commentTarget.file, commentTarget.lines)
+        : `${commentTarget.file_path}::${lineKey(commentTarget.lines)}`;
+  const log = useSeqLog("RightComments");
 
   const currentWho =
     currentUserId !== null
@@ -376,23 +480,24 @@ export function RightComments(): JSX.Element {
     const panel = panelRef.current;
     if (panel === null) return;
     const panelRect = panel.getBoundingClientRect();
+    /* Natural top can be negative when the anchor has scrolled above the
+       feed viewport. We add TOP_BUFFER inside the cursor loop so positions
+       end up non-negative; the panel-scroll's initial scrollTop matches
+       TOP_BUFFER so the buffered area becomes scrollable upward. */
     const anchored = groups
       .map((group) => {
-        const targetEl = findTargetElement(group.targetFile);
-        const targetRect = targetEl?.getBoundingClientRect();
-        const lineOffset =
-          group.lines === undefined ? 0 : (group.lines[0] - 1) * LINE_HEIGHT;
+        const anchorTop = feedAnchorTop(group);
         const top =
-          targetRect === undefined
+          anchorTop === null
             ? 0
-            : targetRect.top - panelRect.top + lineOffset;
+            : anchorTop - panelRect.top;
         const card = panel.querySelector<HTMLElement>(
           `[data-thread-key="${cssEscape(group.key)}"]`,
         );
         const measuredHeight = card?.getBoundingClientRect().height ?? 0;
         return {
           group,
-          top: Math.max(0, top),
+          top,
           height:
             measuredHeight > 0
               ? measuredHeight
@@ -404,15 +509,16 @@ export function RightComments(): JSX.Element {
     const positions: Record<string, number> = {};
     let cursor = 0;
     for (const item of anchored) {
-      const nextTop = Math.max(item.top, cursor);
+      const desired = item.top + TOP_BUFFER;
+      const nextTop = Math.max(desired, cursor);
       positions[item.group.key] = nextTop;
       cursor = nextTop + item.height + CARD_GAP;
     }
 
     const height = anchored.reduce((max, item) => {
-      const top = positions[item.group.key] ?? item.top;
+      const top = positions[item.group.key] ?? item.top + TOP_BUFFER;
       return Math.max(max, top + item.height + CARD_GAP);
-    }, 240);
+    }, TOP_BUFFER + 240);
     setLayout({ positions, height });
   }, [activeKey, groups]);
 
@@ -438,12 +544,107 @@ export function RightComments(): JSX.Element {
 
   useEffect(() => cancelFocusedScroll, [cancelFocusedScroll]);
 
+  /* First mount with anchored layout and threads visible: scroll the panel
+     past the TOP_BUFFER so the user starts looking at thread positions
+     (instead of the empty buffer area). Subsequent activeKey-driven scrolls
+     handled by scheduleFocusedGroupScroll. */
+  const initialScrollSetRef = useRef(false);
+  useEffect(() => {
+    if (layoutMode !== "anchored") return;
+    if (initialScrollSetRef.current) return;
+    if (groups.length === 0) return;
+    const panel = panelRef.current?.closest<HTMLElement>(".panel-scroll");
+    if (panel === null || panel === undefined) return;
+    if (panel.scrollTop === 0) {
+      panel.scrollTop = TOP_BUFFER;
+    }
+    initialScrollSetRef.current = true;
+  }, [groups.length, layoutMode]);
+
   useEffect(() => {
     if (activeKey === null) return;
     const group = groups.find((item) => item.key === activeKey);
     if (group === undefined) return;
     scheduleFocusedGroupScroll(group);
   }, [activeKey, groups, scheduleFocusedGroupScroll]);
+
+  useEffect(() => {
+    if (focusedCommentId === null) return;
+    if (activeKey === null) return;
+    let cancelled = false;
+    let timeout: number | null = null;
+    const raf = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        const node = panelRef.current?.querySelector<HTMLElement>(
+          `[data-comment-event-id="${cssEscape(focusedCommentId)}"]`,
+        );
+        if (node === null || node === undefined) return;
+        node.scrollIntoView({ block: "center", behavior: "smooth" });
+        node.classList.add("comment-focus-pulse");
+        timeout = window.setTimeout(() => {
+          node.classList.remove("comment-focus-pulse");
+        }, 900);
+        setFocusedCommentId(null);
+      });
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf);
+      if (timeout !== null) window.clearTimeout(timeout);
+    };
+  }, [activeKey, focusedCommentId, setFocusedCommentId]);
+
+  /* Dismiss focus on Escape or on mousedown outside the comment-related UI.
+     "Comment-related UI" is: any thread card in the right panel, a line
+     comment marker/anchor/highlight/popover in the feed, or the
+     close-thread button. Clicks on plain feed content (other cards, empty
+     space) clear the focus so the user can move on without hunting for the
+     close button. Inputs/textareas/contenteditable skip Escape so the key
+     still cancels in-progress edits. */
+  useEffect(() => {
+    if (commentTarget === null) return;
+    function isInsideCommentUi(target: EventTarget | null): boolean {
+      if (!(target instanceof Element)) return false;
+      // Clicks anywhere inside the right panel (thread cards, mode toggle,
+      // tab row) keep the comment focus alive — the user is still working
+      // with the comment UI. Clicks on in-feed comment affordances (line
+      // markers, the active-range highlight, an open draft popover) also
+      // count, since they either set a new focus or interact with the
+      // existing one.
+      return (
+        target.closest(".right-panel") !== null ||
+        target.closest(".line-comment-anchor") !== null ||
+        target.closest(".line-comment-highlight") !== null ||
+        target.closest(".line-comment-popover") !== null
+      );
+    }
+    function onKey(e: globalThis.KeyboardEvent): void {
+      if (e.key !== "Escape") return;
+      const target = e.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      setCommentTarget(null);
+    }
+    function onMouseDown(e: globalThis.MouseEvent): void {
+      if (isInsideCommentUi(e.target)) return;
+      setCommentTarget(null);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onMouseDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onMouseDown);
+    };
+  }, [commentTarget, setCommentTarget]);
 
   async function refreshEvents(): Promise<void> {
     if (currentSessionId === null) return;
@@ -452,46 +653,169 @@ export function RightComments(): JSX.Element {
     for (const event of fresh) upsertEvent(event);
   }
 
+  function wakeTargetsForComment(
+    group: CommentGroup,
+    mentions: ProseMention[] | undefined,
+  ): string[] {
+    const ids = new Set<string>();
+    for (const mention of mentions ?? []) ids.add(mention.participant_id);
+    const targetParticipantId = group.target?.participant_id;
+    if (
+      targetParticipantId !== undefined &&
+      participants[targetParticipantId]?.kind === "agent"
+    ) {
+      ids.add(targetParticipantId);
+    }
+    return [...ids];
+  }
+
   async function postComment(
     key: string,
     group: CommentGroup,
     body: Omit<PostProseBody, "participant_id" | "append_to" | "mode" | "lines">,
   ): Promise<void> {
-    if (currentSessionId === null || currentUserId === null) return;
+    if (currentSessionId === null || currentUserId === null) {
+      log(
+        "RightComments postComment skipped — no session or user",
+        {
+          key,
+          hasSession: currentSessionId !== null,
+          hasUser: currentUserId !== null,
+        },
+        LogLevel.Warning,
+      );
+      return;
+    }
     setBusyKey(key);
     try {
       const client = createClient({ baseUrl: "", token });
-      await client.postProse(currentSessionId, {
+      const managedClient = createManagedAgentsClient({ baseUrl: "", token });
+      const response = await client.postProse(currentSessionId, {
         participant_id: currentUserId,
-        append_to: group.targetFile,
-        mode: "comment",
-        ...(group.lines === undefined ? {} : { lines: group.lines }),
+        ...(group.filePath !== undefined
+          ? {
+              file_path: group.filePath,
+              ...(group.lines === undefined ? {} : { lines: group.lines }),
+              ...(group.hunk === undefined ? {} : { diff_hunk: group.hunk }),
+              ...(group.base === undefined ? {} : { diff_base: group.base }),
+            }
+          : {
+              append_to: group.targetFile,
+              mode: "comment" as const,
+              ...(group.lines === undefined ? {} : { lines: group.lines }),
+            }),
         ...body,
       });
+      const targetIds = wakeTargetsForComment(group, body.mentions);
+      if (targetIds.length > 0) {
+        await managedClient.wakeSession(currentSessionId, {
+          reason: "comment",
+          source_event: response.filename,
+          target_participant_ids: targetIds,
+        });
+      }
       await refreshEvents();
+      log(
+        "RightComments postComment ok",
+        { key, filename: response.filename },
+        LogLevel.Info,
+      );
+    } catch (err) {
+      log(
+        "RightComments postComment failed",
+        {
+          key,
+          appendTo: group.targetFile,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        LogLevel.Error,
+      );
+      throw err;
     } finally {
       setBusyKey(null);
     }
   }
 
   function focusGroup(group: CommentGroup): void {
+    const targetEl = findTargetElement(group.targetFile);
+    log(
+      "RightComments thread focused",
+      {
+        targetFile: group.targetFile,
+        lines: group.lines ?? null,
+        groupKey: group.key,
+        rootCount: group.roots.length,
+        targetElementFound: targetEl !== null,
+        $note:
+          "Click on a comment thread should focus the group and scroll the feed to the anchor",
+      },
+      targetEl === null ? LogLevel.Warning : LogLevel.Info,
+    );
     setCommentTarget(
-      group.lines === undefined
-        ? { file: group.targetFile }
-        : { file: group.targetFile, lines: group.lines },
+      group.filePath !== undefined
+        ? {
+            kind: "file",
+            file_path: group.filePath,
+            ...(group.lines === undefined ? {} : { lines: group.lines }),
+          }
+        : group.lines === undefined
+          ? { kind: "event", file: group.targetFile }
+          : { kind: "event", file: group.targetFile, lines: group.lines },
     );
     setRightTab("comments");
     scheduleFocusedGroupScroll(group);
+  }
+
+  function setReplyInputRef(root: AnyEventRecord, node: HTMLInputElement | null): void {
+    replyInputRefs.current[root.filename] = node;
+  }
+
+  function openReplyMentions(root: AnyEventRecord, rect: DOMRect): void {
+    setMentionTarget({ rootFilename: root.filename, rect });
+  }
+
+  function closeReplyMentions(): void {
+    setMentionTarget(null);
+  }
+
+  function addReplyMention(rootFilename: string, mention: ProseMention): void {
+    const existing = replyMentions[rootFilename] ?? [];
+    if (existing.some((item) => item.participant_id === mention.participant_id)) {
+      setMentionTarget(null);
+      queueMicrotask(() => replyInputRefs.current[rootFilename]?.focus());
+      return;
+    }
+    setReplyMentions((prev) => ({
+      ...prev,
+      [rootFilename]: [...(prev[rootFilename] ?? []), mention],
+    }));
+    setReplyDrafts((prev) => {
+      const value = prev[rootFilename] ?? "";
+      const needsSpace = value.length > 0 && !/\s$/.test(value);
+      return {
+        ...prev,
+        [rootFilename]: `${value}${needsSpace ? " " : ""}${mention.token} `,
+      };
+    });
+    setMentionTarget(null);
+    queueMicrotask(() => replyInputRefs.current[rootFilename]?.focus());
   }
 
   async function submitReply(group: CommentGroup, root: AnyEventRecord): Promise<void> {
     const key = root.filename;
     const text = replyDrafts[key]?.trim() ?? "";
     if (text.length === 0) return;
+    const mentions = replyMentions[key] ?? [];
     setReplyDrafts((prev) => ({ ...prev, [key]: "" }));
+    setReplyMentions((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     await postComment(`reply:${key}`, group, {
       content: text,
       in_reply_to: root.filename,
+      ...(mentions.length > 0 ? { mentions } : {}),
     });
   }
 
@@ -548,15 +872,40 @@ export function RightComments(): JSX.Element {
   }
 
   if (groups.length === 0) {
-    return <p className="right-comments-empty">No comment threads in this session.</p>;
+    return <LoadingAnimation className="panel-loading" />;
   }
 
+  const isAnchored = layoutMode === "anchored";
+
   return (
-    <div
-      ref={panelRef}
-      className="right-comments tethered"
-      style={{ minHeight: layout.height }}
-    >
+    <div className="right-comments-wrap">
+      <div className="right-comments-mode-toggle" role="group" aria-label="Thread layout mode">
+        <button
+          type="button"
+          className={isAnchored ? "on" : ""}
+          onClick={() => setLayoutMode("anchored")}
+          aria-pressed={isAnchored}
+          aria-label="Anchored to feed"
+          title="Anchored — align with feed"
+        >
+          <AlignLeft size={12} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={!isAnchored ? "on" : ""}
+          onClick={() => setLayoutMode("list")}
+          aria-pressed={!isAnchored}
+          aria-label="List"
+          title="List — uniform gaps"
+        >
+          <List size={12} aria-hidden />
+        </button>
+      </div>
+      <div
+        ref={panelRef}
+        className={`right-comments ${isAnchored ? "tethered" : "list"}`}
+        style={isAnchored ? { minHeight: layout.height } : undefined}
+      >
       {groups.map((group) => {
         const isActive = group.key === activeKey;
         return (
@@ -566,15 +915,19 @@ export function RightComments(): JSX.Element {
             participants={participants}
             currentWho={currentWho}
             active={isActive}
-            style={{ top: layout.positions[group.key] ?? 0 }}
+            style={isAnchored ? { top: layout.positions[group.key] ?? 0 } : undefined}
             replyDrafts={replyDrafts}
+            replyMentions={replyMentions}
             editing={editing}
             busyKey={busyKey}
             onFocus={() => focusGroup(group)}
+            onClose={() => setCommentTarget(null)}
+            onReplyInputRef={setReplyInputRef}
             onReplyDraft={(root, value) =>
               setReplyDrafts((prev) => ({ ...prev, [root.filename]: value }))
             }
             onReplyKey={onReplyKey}
+            onOpenMentions={openReplyMentions}
             onSubmitReply={submitReply}
             onEmoji={addEmoji}
             onStartEdit={(event) =>
@@ -599,6 +952,26 @@ export function RightComments(): JSX.Element {
           />
         );
       })}
+      {mentionTarget !== null ? (
+        <AgentMentionPicker
+          anchorRect={mentionTarget.rect}
+          sessionId={currentSessionId}
+          token={token}
+          participants={participants}
+          selectedIds={
+            new Set(
+              (replyMentions[mentionTarget.rootFilename] ?? []).map(
+                (mention) => mention.participant_id,
+              ),
+            )
+          }
+          onSelect={(mention) =>
+            addReplyMention(mentionTarget.rootFilename, mention)
+          }
+          onClose={closeReplyMentions}
+        />
+      ) : null}
+      </div>
     </div>
   );
 }
@@ -608,17 +981,21 @@ interface ThreadCardProps {
   participants: Record<string, Participant>;
   currentWho: ReturnType<typeof whoOf>;
   active: boolean;
-  style: CSSProperties;
+  style: CSSProperties | undefined;
   replyDrafts: Record<string, string>;
+  replyMentions: Record<string, ProseMention[]>;
   editing: Record<string, string>;
   busyKey: string | null;
   onFocus(): void;
+  onClose(): void;
+  onReplyInputRef(root: AnyEventRecord, node: HTMLInputElement | null): void;
   onReplyDraft(root: AnyEventRecord, value: string): void;
   onReplyKey(
     e: KeyboardEvent<HTMLInputElement>,
     group: CommentGroup,
     root: AnyEventRecord,
   ): void;
+  onOpenMentions(root: AnyEventRecord, rect: DOMRect): void;
   onSubmitReply(group: CommentGroup, root: AnyEventRecord): Promise<void>;
   onEmoji(group: CommentGroup, root: AnyEventRecord, emoji: string): Promise<void>;
   onStartEdit(event: AnyEventRecord): void;
@@ -636,11 +1013,15 @@ function ThreadCard({
   active,
   style,
   replyDrafts,
+  replyMentions,
   editing,
   busyKey,
   onFocus,
+  onClose,
+  onReplyInputRef,
   onReplyDraft,
   onReplyKey,
+  onOpenMentions,
   onSubmitReply,
   onEmoji,
   onStartEdit,
@@ -678,6 +1059,20 @@ function ThreadCard({
             {messageCount === 1 ? "comment" : "comments"}
           </span>
         </div>
+        {active && (
+          <button
+            type="button"
+            className="right-comments-thread-close"
+            aria-label="Close comment focus"
+            title="Close (Esc)"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
+            <XCircle size={14} aria-hidden />
+          </button>
+        )}
       </div>
       {group.quote !== null && <blockquote className="right-comments-quote">{group.quote}</blockquote>}
       {!active && first !== undefined && firstWho !== null && (
@@ -705,10 +1100,13 @@ function ThreadCard({
               participants={participants}
               currentWho={currentWho}
               replyDraft={replyDrafts[root.event.filename] ?? ""}
+              replyMentions={replyMentions[root.event.filename] ?? []}
               editing={editing}
               busyKey={busyKey}
+              onReplyInputRef={onReplyInputRef}
               onReplyDraft={onReplyDraft}
               onReplyKey={onReplyKey}
+              onOpenMentions={onOpenMentions}
               onSubmitReply={onSubmitReply}
               onEmoji={onEmoji}
               onStartEdit={onStartEdit}
@@ -731,14 +1129,17 @@ interface CommentRootProps {
   participants: Record<string, Participant>;
   currentWho: ReturnType<typeof whoOf>;
   replyDraft: string;
+  replyMentions: ProseMention[];
   editing: Record<string, string>;
   busyKey: string | null;
+  onReplyInputRef(root: AnyEventRecord, node: HTMLInputElement | null): void;
   onReplyDraft(root: AnyEventRecord, value: string): void;
   onReplyKey(
     e: KeyboardEvent<HTMLInputElement>,
     group: CommentGroup,
     root: AnyEventRecord,
   ): void;
+  onOpenMentions(root: AnyEventRecord, rect: DOMRect): void;
   onSubmitReply(group: CommentGroup, root: AnyEventRecord): Promise<void>;
   onEmoji(group: CommentGroup, root: AnyEventRecord, emoji: string): Promise<void>;
   onStartEdit(event: AnyEventRecord): void;
@@ -755,10 +1156,13 @@ function CommentRoot({
   participants,
   currentWho,
   replyDraft,
+  replyMentions,
   editing,
   busyKey,
+  onReplyInputRef,
   onReplyDraft,
   onReplyKey,
+  onOpenMentions,
   onSubmitReply,
   onEmoji,
   onStartEdit,
@@ -811,13 +1215,36 @@ function CommentRoot({
             size="sm"
           />
           <input
+            ref={(node) => onReplyInputRef(root.event, node)}
             type="text"
             value={replyDraft}
             placeholder="Reply…"
             aria-label={`Reply to ${whoOf(root.event.participant_id, participants).name}`}
-            onChange={(e) => onReplyDraft(root.event, e.target.value)}
+            onChange={(e) => {
+              onReplyDraft(root.event, e.target.value);
+              if (e.target.value.endsWith("@")) {
+                onOpenMentions(root.event, e.currentTarget.getBoundingClientRect());
+              }
+            }}
             onKeyDown={(e) => onReplyKey(e, group, root.event)}
           />
+          <button
+            type="button"
+            className={[
+              "right-comment-icon-btn",
+              replyMentions.length > 0 ? "active" : "",
+            ]
+              .join(" ")
+              .trim()}
+            aria-label="Mention agent"
+            title="Mention agent"
+            onClick={(e) =>
+              onOpenMentions(root.event, e.currentTarget.getBoundingClientRect())
+            }
+            disabled={busyKey !== null}
+          >
+            <Bot size={13} aria-hidden />
+          </button>
           <button
             type="button"
             className="right-comment-icon-btn"
@@ -892,7 +1319,10 @@ function CommentMessage({
   const isEditing = editText !== undefined;
 
   return (
-    <div className={["right-comment-msg", reply ? "reply" : ""].join(" ").trim()}>
+    <div
+      className={["right-comment-msg", reply ? "reply" : ""].join(" ").trim()}
+      data-comment-event-id={event.filename}
+    >
       <ParticipantAvatar
         participantId={who.id}
         kind={who.isUser ? "user" : "agent"}

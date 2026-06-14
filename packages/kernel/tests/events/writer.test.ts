@@ -105,4 +105,49 @@ describe("writeEventFile", () => {
       expect(files.filter((f) => f.endsWith(".prose.md"))).toHaveLength(2);
     });
   });
+
+  it("honors an explicit timestamp input", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const session = await createSession(p, { slug: "ts" });
+      const pid = await userId(p);
+      const T = "20260530T120000.000Z";
+      const filename = await writeEventFile(p, session.id, {
+        participant_id: pid,
+        kind: "prose",
+        ext: "md",
+        contents: "explicit",
+        timestamp: T,
+      });
+      expect(filename.startsWith(`${T}_`)).toBe(true);
+    });
+  });
+
+  it("collision-bumps when an explicit timestamp is already taken", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const session = await createSession(p, { slug: "ts2" });
+      const pid = await userId(p);
+      const T = "20260530T120100.000Z";
+      const a = await writeEventFile(p, session.id, {
+        participant_id: pid,
+        kind: "prose",
+        ext: "md",
+        contents: "a",
+        timestamp: T,
+      });
+      const b = await writeEventFile(p, session.id, {
+        participant_id: pid,
+        kind: "prose",
+        ext: "md",
+        contents: "b",
+        timestamp: T,
+      });
+      expect(a).not.toBe(b);
+      // Second filename must sort after the first (millisecond bump).
+      expect(b > a).toBe(true);
+    });
+  });
 });

@@ -7,24 +7,49 @@ import {
   detectClaudeHooks,
   renderClaudeInstallSnippet,
 } from "../../src/hooksInstall/claude.js";
+import { autoStreamHookCommand } from "../../src/hooksInstall/command.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 describe("Claude hooks adapter", () => {
-  it("detects installed when the generic Stop hook is present", () => {
+  it("detects installed when the generic Stop+PermissionRequest+PostToolUse hooks are present", () => {
+    const command = autoStreamHookCommand();
     const settings = {
       hooks: {
-        Stop: [{ hooks: [{ type: "command", command: "npx -y f-mark hook auto-stream" }] }],
+        Stop: [{ hooks: [{ type: "command", command }] }],
+        PermissionRequest: [{ hooks: [{ type: "command", command }] }],
+        PostToolUse: [{ hooks: [{ type: "command", command }] }],
       },
     };
     const r = detectClaudeHooks(settings);
     expect(r.installed).toBe(true);
-    expect(r.detectedEntries.length).toBe(1);
+    expect(r.status).toBe("installed");
+    expect(r.detectedEntries.length).toBe(3);
+    expect(r.detectedEntries.every((entry) => entry.version !== null)).toBe(true);
   });
 
-  it("legacy participant-specific hooks are reported as not installed", () => {
+  it("reports stale when PostToolUse hook is missing (v1 install upgraded to v2)", () => {
+    const command = autoStreamHookCommand();
+    const settings = {
+      hooks: {
+        Stop: [{ hooks: [{ type: "command", command }] }],
+        PermissionRequest: [{ hooks: [{ type: "command", command }] }],
+        /* No PostToolUse — v1 layout. */
+      },
+    };
+    const r = detectClaudeHooks(settings);
+    expect(r.installed).toBe(false);
+    expect(r.status).toBe("stale");
+    expect(r.detectedEntries.length).toBe(2);
+    expect(r.expectedEntries.length).toBe(3);
+  });
+
+  it("legacy participant-specific hooks are reported as stale", () => {
     const settings = { hooks: { Stop: [{ hooks: [{ type: "command", command: "npx -y f-mark hook auto-stream ag-claude" }] }] } };
     const r = detectClaudeHooks(settings);
     expect(r.installed).toBe(false);
+    expect(r.status).toBe("stale");
+    expect(r.detectedEntries).toHaveLength(1);
+    expect(r.detectedVersion).toBeNull();
   });
 
   it("renders a valid generic snippet with no participant ids", () => {
@@ -33,14 +58,16 @@ describe("Claude hooks adapter", () => {
     expect(s).not.toContain("us-1");
     expect(s).not.toContain("UserPromptSubmit");
     expect(s).toContain("Stop");
-    expect(s).toContain("npx -y f-mark hook auto-stream");
+    expect(s).toContain("hook auto-stream");
+    expect(s).not.toContain("npx -y f-mark");
   });
 
   it("returns empty detected entries when settings is missing hooks", () => {
     const r = detectClaudeHooks({});
     expect(r.installed).toBe(false);
+    expect(r.status).toBe("missing");
     expect(r.detectedEntries).toEqual([]);
-    expect(r.expectedEntries.length).toBe(1);
+    expect(r.expectedEntries.length).toBe(3);
   });
 
   it("returns empty detected entries when settings is null", () => {
@@ -48,7 +75,7 @@ describe("Claude hooks adapter", () => {
     expect(r.installed).toBe(false);
   });
 
-  it("renders parseable JSON in the snippet", () => {
+  it("renders parseable JSON in the snippet that includes PostToolUse", () => {
     const s = renderClaudeInstallSnippet();
     const match = /```json\n([\s\S]+?)\n```/.exec(s);
     expect(match).not.toBeNull();
@@ -57,10 +84,16 @@ describe("Claude hooks adapter", () => {
     const parsed = JSON.parse(json) as {
       hooks: {
         Stop: Array<{ hooks: Array<{ type: string; command: string }> }>;
+        PermissionRequest: Array<{ hooks: Array<{ type: string; command: string }> }>;
+        PostToolUse: Array<{ hooks: Array<{ type: string; command: string }> }>;
       };
     };
-    expect(parsed.hooks.Stop[0]!.hooks[0]!.command).toBe(
-      "npx -y f-mark hook auto-stream",
+    expect(parsed.hooks.Stop[0]!.hooks[0]!.command).toBe(autoStreamHookCommand());
+    expect(parsed.hooks.PermissionRequest[0]!.hooks[0]!.command).toBe(
+      autoStreamHookCommand(),
+    );
+    expect(parsed.hooks.PostToolUse[0]!.hooks[0]!.command).toBe(
+      autoStreamHookCommand(),
     );
     expect("UserPromptSubmit" in parsed.hooks).toBe(false);
   });
@@ -77,7 +110,27 @@ describe("Claude hooks adapter", () => {
                 hooks: [
                   {
                     type: "command",
-                    command: "npx -y f-mark hook auto-stream",
+                    command: autoStreamHookCommand(),
+                  },
+                ],
+              },
+            ],
+            PermissionRequest: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: autoStreamHookCommand(),
+                  },
+                ],
+              },
+            ],
+            PostToolUse: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: autoStreamHookCommand(),
                   },
                 ],
               },
@@ -151,9 +204,11 @@ describe("Claude hooks adapter", () => {
       expect(second.changed).toBe(false);
       expect(saved.theme).toBe("dark");
       expect(serializedHooks).toContain("echo existing");
+      /* Three F-Mark hooks now: Stop, PermissionRequest, PostToolUse. */
       expect(
-        serializedHooks.match(/npx -y f-mark hook auto-stream/g)?.length,
-      ).toBe(1);
+        serializedHooks.match(/hook auto-stream/g)?.length,
+      ).toBe(3);
+      expect(serializedHooks).not.toContain("npx -y f-mark");
       expect(serializedHooks).not.toContain("ag-old");
       expect(serializedHooks).not.toContain("us-1");
       expect(serializedHooks).not.toContain("--kind user");
@@ -176,7 +231,8 @@ describe("Claude hooks adapter", () => {
       expect(applied.configPath).toBe(configPath);
       const saved = JSON.parse(await readFile(configPath, "utf8"));
       expect(saved.theme).toBe("parent");
-      expect(JSON.stringify(saved.hooks)).toContain("npx -y f-mark hook auto-stream");
+      expect(JSON.stringify(saved.hooks)).toContain("hook auto-stream");
+      expect(JSON.stringify(saved.hooks)).not.toContain("npx -y f-mark");
     });
   });
 });

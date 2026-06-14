@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "port": 7777,
+  "port": 7779,
   "participants": {
     "us-5233": {
       "kind": "user",

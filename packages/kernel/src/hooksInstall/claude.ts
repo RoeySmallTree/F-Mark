@@ -2,10 +2,14 @@ import { homedir } from "node:os";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { DetectResult, HookEntry, HookLocationStatus } from "./types.js";
+import {
+  FMARK_HOOK_INSTALL_VERSION,
+  autoStreamHookCommand,
+  autoStreamHookVersion,
+  isFmarkAutoStreamCommand,
+} from "./command.js";
 
 export type ClaudeHookScope = "local" | "global";
-
-const GENERIC_AUTO_STREAM_COMMAND = "npx -y f-mark hook auto-stream";
 
 export function claudeConfigPath(scope: ClaudeHookScope = "global", projectRoot?: string): string {
   if (scope === "local") {
@@ -52,15 +56,28 @@ async function resolveClaudeConfigPath(
 }
 
 function expectedClaudeEntries(): HookEntry[] {
-  return [{ event: "Stop", command: GENERIC_AUTO_STREAM_COMMAND }];
-}
-
-function isFmarkAutoStreamCommand(command: string): boolean {
-  return command.includes("f-mark hook auto-stream");
+  const command = autoStreamHookCommand();
+  return [
+    { event: "Stop", command, version: FMARK_HOOK_INSTALL_VERSION },
+    { event: "PermissionRequest", command, version: FMARK_HOOK_INSTALL_VERSION },
+    /* PostToolUse lets the kernel stream tool-use events live during a
+       turn instead of only at Stop. Fmark-MCP tools are filtered out in
+       the auto-stream handler since they already post via the MCP server. */
+    { event: "PostToolUse", command, version: FMARK_HOOK_INSTALL_VERSION },
+  ];
 }
 
 function isExpectedClaudeCommand(command: string): boolean {
-  return command.trim() === GENERIC_AUTO_STREAM_COMMAND;
+  return command.trim() === autoStreamHookCommand();
+}
+
+function detectedVersion(entries: HookEntry[]): string | null {
+  return entries[0]?.version ?? null;
+}
+
+function statusForEntries(installed: boolean, detected: HookEntry[]) {
+  if (installed) return "installed" as const;
+  return detected.length > 0 ? "stale" as const : "missing" as const;
 }
 
 export function detectClaudeHooks(
@@ -72,23 +89,34 @@ export function detectClaudeHooks(
     hooks?: Record<string, Array<{ hooks?: Array<{ type?: string; command?: string }> }>>;
   };
   const hooks = s.hooks ?? {};
-  for (const event of ["Stop"]) {
+  for (const event of ["Stop", "PermissionRequest", "PostToolUse"]) {
     const arr = hooks[event] ?? [];
     for (const group of arr) {
       for (const h of group.hooks ?? []) {
-        if (
-          typeof h.command === "string" &&
-          isExpectedClaudeCommand(h.command)
-        ) {
-          detected.push({ event, command: h.command });
+        if (typeof h.command === "string" && isFmarkAutoStreamCommand(h.command)) {
+          detected.push({
+            event,
+            command: h.command,
+            version: autoStreamHookVersion(h.command),
+          });
         }
       }
     }
   }
-  const installed = detected.some((e) => e.event === "Stop");
+  const installed = detected.some((e) => e.event === "Stop" && isExpectedClaudeCommand(e.command));
+  const hasPermissionRequest = detected.some(
+    (e) => e.event === "PermissionRequest" && isExpectedClaudeCommand(e.command),
+  );
+  const hasPostToolUse = detected.some(
+    (e) => e.event === "PostToolUse" && isExpectedClaudeCommand(e.command),
+  );
+  const allInstalled = installed && hasPermissionRequest && hasPostToolUse;
   return {
-    installed,
+    installed: allInstalled,
+    status: statusForEntries(allInstalled, detected),
     configPath,
+    expectedVersion: FMARK_HOOK_INSTALL_VERSION,
+    detectedVersion: detectedVersion(detected),
     detectedEntries: detected,
     expectedEntries: expectedClaudeEntries(),
   };
@@ -155,6 +183,9 @@ export async function detectClaudeHookLocations(opts: {
       configPath: spec.configPath,
       exists: loaded.exists,
       installed: loaded.error ? false : detected.installed,
+      status: loaded.error ? "blocked" : detected.status,
+      expectedVersion: FMARK_HOOK_INSTALL_VERSION,
+      detectedVersion: loaded.error ? null : detected.detectedVersion,
       detectedEntries: loaded.error ? [] : detected.detectedEntries,
       expectedEntries: detected.expectedEntries,
       ...(loaded.error ? { error: loaded.error } : {}),
@@ -162,10 +193,21 @@ export async function detectClaudeHookLocations(opts: {
   }
 
   const installedLocation = locations.find((l) => l.installed);
-  const first = installedLocation ?? locations[0]!;
+  const staleLocation = locations.find((l) => l.status === "stale");
+  const first = installedLocation ?? staleLocation ?? locations[0]!;
+  const overallStatus = locations.some((l) => l.status === "installed")
+    ? "installed"
+    : locations.some((l) => l.status === "stale")
+      ? "stale"
+      : locations.some((l) => l.status === "blocked")
+        ? "blocked"
+        : "missing";
   return {
     installed: locations.some((l) => l.installed),
+    status: overallStatus,
     configPath: first.configPath,
+    expectedVersion: FMARK_HOOK_INSTALL_VERSION,
+    detectedVersion: first.detectedVersion,
     detectedEntries: first.detectedEntries,
     expectedEntries: first.expectedEntries,
     locations,
@@ -227,7 +269,12 @@ function pruneLegacyClaudeHooks(settings: Record<string, unknown>): void {
       const nextHooks = group.hooks.filter((hook) => {
         if (!isObject(hook) || typeof hook.command !== "string") return true;
         if (!isFmarkAutoStreamCommand(hook.command)) return true;
-        return event === "Stop" && isExpectedClaudeCommand(hook.command);
+        return (
+          (event === "Stop" ||
+            event === "PermissionRequest" ||
+            event === "PostToolUse") &&
+          isExpectedClaudeCommand(hook.command)
+        );
       });
       if (nextHooks.length > 0) {
         nextGroups.push({ ...group, hooks: nextHooks });
@@ -261,12 +308,33 @@ export async function applyClaudeHooks(opts: {
 }
 
 export function renderClaudeInstallSnippet(): string {
+  const command = autoStreamHookCommand();
   const snippet = {
     hooks: {
       Stop: [
         {
           hooks: [
-            { type: "command", command: GENERIC_AUTO_STREAM_COMMAND },
+            { type: "command", command },
+          ],
+        },
+      ],
+      PermissionRequest: [
+        {
+          matcher: "Bash|Edit|Write|MultiEdit|Read|WebFetch|WebSearch",
+          hooks: [
+            { type: "command", command },
+          ],
+        },
+      ],
+      /* PostToolUse captures every tool call after it runs so F-Mark
+         can stream live tool-use events. The matcher is unset so all
+         tools route through; the auto-stream handler skips
+         `mcp__fmark__*` to avoid double-writes (the MCP server emits
+         those itself). */
+      PostToolUse: [
+        {
+          hooks: [
+            { type: "command", command },
           ],
         },
       ],

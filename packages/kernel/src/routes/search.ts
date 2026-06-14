@@ -7,6 +7,8 @@ import type {
   HtmlManifest,
   ProsePayload,
   SearchHit,
+  SubagentOutputPayload,
+  SubagentRunPayload,
   TodoPayload,
   ToolUsePayload,
 } from "@f-mark/shared";
@@ -133,6 +135,35 @@ function matchEvent(
       payload.tool_use_id,
       JSON.stringify(payload.input),
       JSON.stringify(payload.result),
+    ].join(" ");
+    return text.toLowerCase().includes(queryLower)
+      ? buildSnippet(text, queryLower)
+      : null;
+  }
+  if (event.kind === "subagent-run") {
+    const payload = event.payload as SubagentRunPayload;
+    const text = [
+      payload.name,
+      payload.role,
+      payload.prompt_preview,
+      payload.status,
+      payload.subagent_id,
+      payload.correlation_id,
+      payload.source,
+    ].join(" ");
+    return text.toLowerCase().includes(queryLower)
+      ? buildSnippet(text, queryLower)
+      : null;
+  }
+  if (event.kind === "subagent-output") {
+    const payload = event.payload as SubagentOutputPayload;
+    const text = [
+      payload.name,
+      payload.content,
+      payload.status,
+      payload.subagent_id,
+      payload.correlation_id,
+      payload.source,
     ].join(" ");
     return text.toLowerCase().includes(queryLower)
       ? buildSnippet(text, queryLower)

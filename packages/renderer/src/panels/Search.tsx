@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Search as SearchIcon } from "lucide-react";
 import type { SearchHit } from "@f-mark/shared";
 import { createClient } from "../api/client.js";
+import { LoadingAnimation } from "../components/LoadingAnimation.js";
 import { useStore } from "../state/store.js";
 import { basename } from "./allSessions.js";
 
@@ -64,7 +65,7 @@ export function Search(): JSX.Element {
       const client = createClient({ baseUrl: "", token });
       void (async () => {
         try {
-          const next = await client.search(trimmed, undefined, "all");
+          const next = await client.search(trimmed, undefined, "all", 200);
           if (seq === requestSeqRef.current) {
             setHits(next);
             setError(null);
@@ -119,18 +120,7 @@ export function Search(): JSX.Element {
             {error}
           </p>
         ) : null}
-        {busy ? (
-          <p
-            style={{
-              fontFamily: "var(--mono)",
-              fontSize: 11,
-              color: "var(--ink-4)",
-              padding: "4px 8px",
-            }}
-          >
-            Searching...
-          </p>
-        ) : null}
+        {busy ? <LoadingAnimation className="panel-loading" /> : null}
         {!busy && error === null && query.trim().length === 0 ? (
           <p
             style={{

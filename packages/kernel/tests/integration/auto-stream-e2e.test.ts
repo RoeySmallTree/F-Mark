@@ -133,6 +133,7 @@ describe("auto-stream end-to-end", () => {
           hook_event_name: "Stop",
           stop_hook_active: false,
         }),
+        { env: { ...process.env, F_MARK_AGENT_ID: pid } },
       );
       expect(exit).toBe(0);
 
@@ -226,6 +227,7 @@ describe("auto-stream end-to-end", () => {
           hook_event_name: "Stop",
           stop_hook_active: true,
         }),
+        { env: { ...process.env, F_MARK_AGENT_ID: pid } },
       );
       expect(exit).toBe(0);
 
@@ -284,7 +286,9 @@ describe("auto-stream end-to-end", () => {
         stop_hook_active: false,
       };
 
-      const exit = await runAutoStream(pid, "assistant", JSON.stringify(stdin));
+      const exit = await runAutoStream(pid, "assistant", JSON.stringify(stdin), {
+        env: { ...process.env, F_MARK_AGENT_ID: pid },
+      });
       expect(exit).toBe(0);
 
       const sessionDir = p.sessionDir(sessionId);

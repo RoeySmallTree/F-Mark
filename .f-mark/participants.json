@@ -355,6 +355,60 @@
       "name": "Claude Code",
       "color": "#ef4444",
       "runtime_id": "claude"
+    },
+    "ag-claude-af77": {
+      "kind": "agent",
+      "name": "Claude Code fc24",
+      "color": "#f59e0b",
+      "runtime_id": "claude"
+    },
+    "ag-codex-673d": {
+      "kind": "agent",
+      "name": "Codex 3efc",
+      "color": "#f59e0b",
+      "runtime_id": "codex"
+    },
+    "ag-gemini-6999": {
+      "kind": "agent",
+      "name": "Gemini df68",
+      "color": "#8b5cf6",
+      "runtime_id": "gemini"
+    },
+    "ag-claude-cdb2": {
+      "kind": "agent",
+      "name": "Claude Code 539d",
+      "color": "#ec4899",
+      "runtime_id": "claude"
+    },
+    "ag-codex-5cdd": {
+      "kind": "agent",
+      "name": "Codex 02ad",
+      "color": "#8b5cf6",
+      "runtime_id": "codex"
+    },
+    "ag-gemini-da1e": {
+      "kind": "agent",
+      "name": "Gemini f928",
+      "color": "#f59e0b",
+      "runtime_id": "gemini"
+    },
+    "ag-claude-d982": {
+      "kind": "agent",
+      "name": "Claude Code a6cd",
+      "color": "#06b6d4",
+      "runtime_id": "claude"
+    },
+    "ag-codex-d78e": {
+      "kind": "agent",
+      "name": "Codex 6056",
+      "color": "#ef4444",
+      "runtime_id": "codex"
+    },
+    "ag-gemini-cb71": {
+      "kind": "agent",
+      "name": "Gemini 6c6f",
+      "color": "#06b6d4",
+      "runtime_id": "gemini"
     }
   }
 }

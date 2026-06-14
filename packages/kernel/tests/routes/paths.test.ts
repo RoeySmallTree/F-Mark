@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
-import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { globalPaths } from "../../src/paths/global.js";
@@ -17,7 +17,10 @@ interface Harness {
   busMessages: BusMessage[];
 }
 
-async function makeHarness(opts?: { withBus?: boolean }): Promise<Harness> {
+async function makeHarness(opts?: {
+  withBus?: boolean;
+  token?: string | null;
+}): Promise<Harness> {
   const scratch = mkdtempSync(join(tmpdir(), "fmark-paths-route-"));
   const configRoot = join(scratch, "config");
   mkdirSync(configRoot, { recursive: true });
@@ -26,7 +29,13 @@ async function makeHarness(opts?: { withBus?: boolean }): Promise<Harness> {
   const app = Fastify();
   const busMessages: BusMessage[] = [];
   const bus: Bus = { publish: (m) => { busMessages.push(m); } };
-  registerPathRoutes(app, ref, opts?.withBus ? () => bus : undefined);
+  registerPathRoutes(
+    app,
+    ref,
+    opts?.withBus ? () => bus : undefined,
+    undefined,
+    opts?.token,
+  );
   await app.ready();
   return { app, configRoot, scratch, ref, busMessages };
 }
@@ -91,6 +100,25 @@ describe("/paths routes", () => {
       expect(body.knownPaths).toEqual([project]);
       // Ref updated synchronously.
       expect(h.ref.get().active?.root()).toBe(project);
+    });
+
+    it("mirrors the auth token when activating a path", async () => {
+      const h2 = await makeHarness({ token: "secret" });
+      try {
+        const project = join(h2.scratch, "auth-project");
+        mkdirSync(project);
+        const res = await h2.app.inject({
+          method: "POST",
+          url: "/paths/active",
+          payload: { path: project },
+        });
+        expect(res.statusCode).toBe(200);
+        const tokenPath = join(project, ".f-mark", ".token");
+        expect(readFileSync(tokenPath, "utf8")).toBe("secret");
+        expect(statSync(tokenPath).mode & 0o777).toBe(0o600);
+      } finally {
+        await tearDown(h2);
+      }
     });
 
     it("broadcasts a path-switched message when a bus is wired", async () => {

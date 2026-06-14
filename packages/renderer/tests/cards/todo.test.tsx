@@ -118,7 +118,7 @@ describe("TodoCard", () => {
   });
 
   test("Add subtask in an inline todo creates an editable draft before posting", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn().mockImplementation(() =>
       jsonResponse({ filename: "20260522T110350Z_us-a7f3.todo.json" }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -146,7 +146,7 @@ describe("TodoCard", () => {
     fireEvent.blur(draftTitle!);
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
     expect(body).toMatchObject({
@@ -154,10 +154,13 @@ describe("TodoCard", () => {
       parent_id: "parent",
       assigned_to: "ag-c92e",
     });
+    expect(String(fetchMock.mock.calls[1]![0])).toMatch(
+      /\/sessions\/2026-05-22-launch-planning\/wake$/,
+    );
   });
 
   test("assignee dropdown opens and selecting an assignee posts an update", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn().mockImplementation(() =>
       jsonResponse({ filename: "20260522T110400Z_us-a7f3.todo.json" }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -174,11 +177,14 @@ describe("TodoCard", () => {
     await user.click(screen.getByRole("menuitem", { name: /Claude/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
     expect(body.assigned_to).toBe("ag-c92e");
     expect(body.supersedes).toBe(ev.filename);
+    expect(String(fetchMock.mock.calls[1]![0])).toMatch(
+      /\/sessions\/2026-05-22-launch-planning\/wake$/,
+    );
   });
 
   test("title and description edits commit on blur", async () => {

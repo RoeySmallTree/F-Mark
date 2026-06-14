@@ -1,10 +1,26 @@
 export type ParticipantKind = "user" | "agent" | "sys" | "grp";
 
+export const PARTICIPANT_AVATAR_IMAGE_MAX_BYTES = 256 * 1024;
+export const PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH =
+  "data:image/jpeg;base64,".length +
+  Math.ceil(PARTICIPANT_AVATAR_IMAGE_MAX_BYTES / 3) * 4;
+export const PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+] as const;
+export type ParticipantAvatarDataUrlMimeType =
+  (typeof PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES)[number];
+
 export interface Participant {
-  kind: "user" | "agent";
+  kind: "user" | "agent" | "sys";
   name: string;
   color: string;
-  /* Runtime id (e.g. "claude", "codex", "gemini") for managed agents.
+  /* Optional project-local profile image for user participants. Stored as a
+     bounded data URL so profile identity travels with participants.json. */
+  avatar_data_url?: string;
+  /* Runtime id (e.g. "claude", "codex", "opencode") for managed agents.
      Set on register/spawn; omitted for user participants and for legacy
      agents recorded before this field existed. Renderers map this to a
      human-readable display name via the runtime registry. */
@@ -40,13 +56,15 @@ export interface RegisterAgentRequest {
 export interface UpdateParticipantPatch {
   name?: string;
   color?: string;
+  avatar_data_url?: string | null;
 }
 
 export interface UpdatedParticipant {
   id: string;
-  kind: "user" | "agent";
+  kind: "user" | "agent" | "sys";
   name: string;
   color: string;
+  avatar_data_url?: string;
 }
 
 export interface LinkAgentRequest {

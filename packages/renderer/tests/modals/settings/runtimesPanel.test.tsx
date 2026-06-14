@@ -31,11 +31,11 @@ const BASE_RUNTIMES: Record<string, RuntimeEntry> = {
     icon: "codex",
     readyDelayMs: 1500,
   },
-  gemini: {
-    displayName: "Gemini",
-    executable: "gemini",
+  opencode: {
+    displayName: "Opencode",
+    executable: "opencode",
     args: [],
-    icon: "gemini",
+    icon: "opencode",
     readyDelayMs: 1500,
   },
 };
@@ -43,7 +43,7 @@ const BASE_RUNTIMES: Record<string, RuntimeEntry> = {
 const HEALTHY_PROBE: EnvProbeResult = {
   tmux: true,
   tmuxVersion: "3.4",
-  runtimes: { claude: true, codex: false, gemini: true },
+  runtimes: { claude: true, codex: false, opencode: true },
   installer: "apt",
   os: "linux",
 };
@@ -68,7 +68,7 @@ describe("RuntimesPanel", () => {
     expect(rows).toHaveLength(4);
     expect(within(table).getByText("Claude Code")).toBeInTheDocument();
     expect(within(table).getByText("Codex")).toBeInTheDocument();
-    expect(within(table).getByText("Gemini")).toBeInTheDocument();
+    expect(within(table).getByText("Opencode")).toBeInTheDocument();
     // The args column for codex should show "--hello"
     expect(within(table).getByText(/--hello/)).toBeInTheDocument();
   });
@@ -166,6 +166,28 @@ describe("RuntimesPanel", () => {
     const row = screen.getByTestId("runtime-row-mybot");
     expect(within(row).getByText("My Bot")).toBeInTheDocument();
     expect(within(row).getByText(/custom/i)).toBeInTheDocument();
+  });
+
+  it("hides retired runtime rows passed by stale registry data", () => {
+    const extras: Record<string, RuntimeEntry> = {
+      ...BASE_RUNTIMES,
+      gemini: {
+        displayName: "Gemini",
+        executable: "gemini",
+        args: [],
+      },
+    };
+    render(
+      <RuntimesPanel
+        runtimes={extras}
+        onAdd={() => noopAsync()}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+      />,
+    );
+
+    expect(screen.queryByTestId("runtime-row-gemini")).toBeNull();
+    expect(screen.queryByText(/^gemini$/i)).toBeNull();
   });
 
   it("disables the Remove button for builtins", () => {
@@ -323,6 +345,29 @@ describe("RuntimesPanel", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/id/i);
   });
 
+  it("rejects adding a retired runtime id", async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(
+      <RuntimesPanel
+        runtimes={BASE_RUNTIMES}
+        onAdd={onAdd}
+        onUpdate={() => noopAsync()}
+        onRemove={() => noopAsync()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /add runtime/i }));
+    await user.type(screen.getByLabelText(/runtime id/i), "gemini");
+    await user.type(screen.getByLabelText(/display name/i), "Gemini");
+    await user.type(screen.getByLabelText(/executable/i), "gemini");
+    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /no longer supported/i,
+    );
+  });
+
   it("opens an inline edit form and calls onUpdate when Save is clicked", async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);
@@ -388,7 +433,7 @@ describe("RuntimesPanel", () => {
     for (const row of [
       screen.getByTestId("runtime-row-claude"),
       screen.getByTestId("runtime-row-codex"),
-      screen.getByTestId("runtime-row-gemini"),
+      screen.getByTestId("runtime-row-opencode"),
       screen.getByTestId("runtime-row-mybot"),
     ]) {
       const editBtn = within(row).getByRole("button", { name: /edit/i });

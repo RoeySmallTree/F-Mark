@@ -223,24 +223,33 @@ describe("validateProseFrontmatter — mutual-exclusion rules", () => {
     );
   });
 
-  it("rejects both legacy `target` and new `append_to`", () => {
-    err(
+  it("accepts a file comment (file_path + lines, no append_to/mode)", () => {
+    ok(
       validateProseFrontmatter({
-        content: "x",
-        target: { file: "y.prose.md" },
-        append_to: VALID_FILENAME,
+        content: "this line looks off",
+        file_path: "src/app.ts",
+        lines: [10, 12],
       }),
-      "both legacy",
     );
   });
 
-  it("rejects legacy `target` alone (write-time)", () => {
+  it("accepts a file comment with no lines (file-level)", () => {
+    ok(
+      validateProseFrontmatter({
+        content: "whole-file note",
+        file_path: "src/app.ts",
+      }),
+    );
+  });
+
+  it("rejects `file_path` combined with `append_to`/`mode`", () => {
     err(
       validateProseFrontmatter({
         content: "x",
-        target: { file: VALID_FILENAME },
+        file_path: "src/app.ts",
+        append_to: VALID_FILENAME,
       }),
-      "normalised",
+      "mutually exclusive",
     );
   });
 

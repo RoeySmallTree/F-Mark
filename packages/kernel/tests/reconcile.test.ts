@@ -11,6 +11,7 @@ import {
   readRuntime,
   writeRuntime,
 } from "../src/agents/managed.js";
+import { autoStreamHookCommand } from "../src/hooksInstall/command.js";
 import { createPresenceTracker } from "../src/presence/tracker.js";
 
 interface FakeSession {
@@ -78,23 +79,23 @@ describe("reconcile", () => {
     expect(tracker.snapshot().size).toBe(0);
   });
 
-  it("CASE A: manual-stream runtime with a live tmux session reconciles as stale", async () => {
+  it("CASE A: runtime with missing plugin surfaces hook-not-installed", async () => {
     const { paths: p } = await makeFixture();
+    const fakeHome = await mkdtemp(join(tmpdir(), "fmark-oc-home-"));
+    process.env.HOME = fakeHome;
     await writeTmuxSession(
       join(p.fmarkDir(), "agents"),
-      "ag-claude",
-      "fmark-x-12345678-ag-ag-claude",
+      "ag-opencode",
+      "fmark-x-12345678-ag-ag-opencode",
     );
-    // gemini runtime → checkHookInstallStatus reports no expected hook entries,
-    // so this is manual-stream mode rather than a missing-hook problem.
-    await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "gemini");
+    await writeRuntime(join(p.fmarkDir(), "agents"), "ag-opencode", "opencode");
 
     const tmux = fakeTmux({
       sessions: [
         {
-          sessionName: "fmark-x-12345678-ag-ag-claude",
+          sessionName: "fmark-x-12345678-ag-ag-opencode",
           kind: "agent",
-          participantId: "ag-claude",
+          participantId: "ag-opencode",
         },
       ],
     });
@@ -102,9 +103,9 @@ describe("reconcile", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await reconcile({ paths: p, tmux: tmux as any, tracker });
 
-    const s = tracker.snapshot().get("ag-claude");
+    const s = tracker.snapshot().get("ag-opencode");
     expect(s).toBeDefined();
-    expect(s?.state).toBe("stale");
+    expect(s?.state).toBe("hook-not-installed");
   });
 
   it("CASE A (hooks installed): surviving managed agent with installed hooks → tracker state 'stale'", async () => {
@@ -139,7 +140,29 @@ describe("reconcile", () => {
               hooks: [
                 {
                   type: "command",
-                  command: "npx -y f-mark hook auto-stream",
+                  command: autoStreamHookCommand(),
+                },
+              ],
+            },
+          ],
+          PermissionRequest: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: autoStreamHookCommand(),
+                },
+              ],
+            },
+          ],
+          /* `managed-only-v2` requires PostToolUse for the install to
+             be reported as `installed`. */
+          PostToolUse: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: autoStreamHookCommand(),
                 },
               ],
             },

@@ -74,29 +74,20 @@ describe("POST /sessions/:id/events/prose", () => {
   });
 });
 
-describe("POST /sessions/:id/events/prose — composable-prose write-body normaliser", () => {
-  it("translates legacy `target` body into new-shape file (append_to + mode + lines)", async () => {
+describe("POST /sessions/:id/events/prose — file comments", () => {
+  it("writes a file comment (file_path + lines + diff_base) to disk", async () => {
     await withTempProject(async (root) => {
       const { app, p, sessionId, pid } = await setup(root);
 
-      /* First post a prose anchor so we have a real filename to target. */
-      const anchorRes = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Doc" },
-      });
-      expect(anchorRes.statusCode).toBe(200);
-      const anchorFilename = anchorRes.json().filename;
-
-      /* Now post a comment using the LEGACY shape. The server should
-         normalise it and write the new-shape frontmatter to disk. */
       const commentRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
           participant_id: pid,
           content: "a comment",
-          target: { file: anchorFilename, lines: [2, 4] },
+          file_path: "src/app.ts",
+          lines: [2, 4],
+          diff_base: "current-session",
         },
       });
       expect(commentRes.statusCode).toBe(200);
@@ -105,31 +96,25 @@ describe("POST /sessions/:id/events/prose — composable-prose write-body normal
         join(p.sessionDir(sessionId), commentFilename),
         "utf8",
       );
-      expect(onDisk).toContain(`append_to: ${anchorFilename}`);
-      expect(onDisk).toContain("mode: comment");
+      expect(onDisk).toContain("file_path: src/app.ts");
       expect(onDisk).toContain("lines:");
-      expect(onDisk).not.toMatch(/^target:/m);
+      expect(onDisk).toContain("diff_base: current-session");
+      expect(onDisk).not.toMatch(/^append_to:/m);
       await app.close();
     });
   });
 
-  it("translates legacy `target` body without `lines` into card-level comment", async () => {
+  it("writes a whole-file comment (file_path, no lines)", async () => {
     await withTempProject(async (root) => {
       const { app, p, sessionId, pid } = await setup(root);
-      const anchorRes = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Doc" },
-      });
-      const anchorFilename = anchorRes.json().filename;
 
       const commentRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
           participant_id: pid,
-          content: "card-level",
-          target: { file: anchorFilename },
+          content: "whole-file note",
+          file_path: "src/app.ts",
         },
       });
       expect(commentRes.statusCode).toBe(200);
@@ -137,14 +122,13 @@ describe("POST /sessions/:id/events/prose — composable-prose write-body normal
         join(p.sessionDir(sessionId), commentRes.json().filename),
         "utf8",
       );
-      expect(onDisk).toContain(`append_to: ${anchorFilename}`);
-      expect(onDisk).toContain("mode: comment");
+      expect(onDisk).toContain("file_path: src/app.ts");
       expect(onDisk).not.toMatch(/^lines:/m);
       await app.close();
     });
   });
 
-  it("400s when body has BOTH legacy `target` and new `append_to`", async () => {
+  it("400s when body has BOTH file_path and append_to", async () => {
     await withTempProject(async (root) => {
       const { app, sessionId, pid } = await setup(root);
       const anchorRes = await app.inject({
@@ -159,7 +143,7 @@ describe("POST /sessions/:id/events/prose — composable-prose write-body normal
         payload: {
           participant_id: pid,
           content: "x",
-          target: { file: anchorFilename },
+          file_path: "src/app.ts",
           append_to: anchorFilename,
         },
       });
@@ -567,6 +551,36 @@ describe("GET /sessions/:id/events", () => {
       });
       expect(res.json().events).toHaveLength(1);
       await app.close();
+    });
+  });
+
+  it("reads from the explicit path query instead of the server fallback path", async () => {
+    await withTempProject(async (fallbackRoot) => {
+      await withTempProject(async (eventRoot) => {
+        const eventProject = paths(eventRoot);
+        await initProject(eventProject);
+        const session = await createSession(eventProject, { slug: "path-scope" });
+        const [pid] = Object.keys(await listParticipants(eventProject));
+        const { app: writer } = createServer({ token: null, paths: eventProject });
+        await writer.inject({
+          method: "POST",
+          url: `/sessions/${session.id}/events/prose`,
+          payload: { participant_id: pid!, content: "from explicit path" },
+        });
+        await writer.close();
+
+        const fallbackProject = paths(fallbackRoot);
+        await initProject(fallbackProject);
+        const { app } = createServer({ token: null, paths: fallbackProject });
+        const res = await app.inject({
+          method: "GET",
+          url: `/sessions/${session.id}/events?path=${encodeURIComponent(eventRoot)}`,
+        });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().events).toHaveLength(1);
+        expect(res.json().events[0].payload.content).toBe("from explicit path");
+        await app.close();
+      });
     });
   });
 });

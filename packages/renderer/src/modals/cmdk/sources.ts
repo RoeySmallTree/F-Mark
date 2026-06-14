@@ -22,6 +22,7 @@ import type {
 } from "@f-mark/shared";
 import type { SessionMeta } from "../../api/client.js";
 import { aggregate } from "../../state/aggregate.js";
+import { THEMES, type ThemeName } from "../../themes/index.js";
 import { fuzzyFilter } from "./fuzzy.js";
 
 export type CmdkIcon =
@@ -35,7 +36,8 @@ export type CmdkIcon =
   | "Code"
   | "Sunrise"
   | "Square"
-  | "Zap";
+  | "Zap"
+  | "Palette";
 
 export type CmdkKind = "session" | "named" | "search" | "agent" | "action";
 
@@ -116,6 +118,29 @@ export interface QuickAction {
  * render time (so `applyTheme`, `openModal`, etc. can be injected with the
  * right closures). Keeping the list pure makes it easy to test.
  */
+/** Per-theme palette icons; themes without a specific one fall back to Palette. */
+const THEME_ICONS: Partial<Record<ThemeName, CmdkIcon>> = {
+  light: "Sun",
+  ember: "Zap",
+  terminal: "Terminal",
+  ide: "Code",
+  solarized: "Sunrise",
+  brutalist: "Square",
+  cyber: "Zap",
+  amber: "Sunrise",
+};
+
+/**
+ * One "Theme: X" quick action per registered theme, generated from THEMES so a
+ * newly added theme appears in the palette automatically (no edits needed here).
+ */
+const THEME_ACTIONS: QuickAction[] = THEMES.map((t) => ({
+  id: `theme-${t.name}`,
+  label: `Theme: ${t.label}`,
+  sub: t.description,
+  icon: THEME_ICONS[t.name] ?? "Palette",
+}));
+
 export const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "new-session",
@@ -129,42 +154,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
     sub: "Profile, agents, appearance, shortcuts",
     icon: "Settings",
   },
-  {
-    id: "theme-light",
-    label: "Theme: Light",
-    sub: "Warm paper canvas — the default daytime look",
-    icon: "Sun",
-  },
-  {
-    id: "theme-terminal",
-    label: "Theme: Terminal",
-    sub: "Phosphor green on near-black",
-    icon: "Terminal",
-  },
-  {
-    id: "theme-ide",
-    label: "Theme: IDE Dark",
-    sub: "GitHub-style cool greys",
-    icon: "Code",
-  },
-  {
-    id: "theme-solarized",
-    label: "Theme: Solarized",
-    sub: "Classic Solarized Dark",
-    icon: "Sunrise",
-  },
-  {
-    id: "theme-brutalist",
-    label: "Theme: Brutalist",
-    sub: "Pure black & white, monospace, zero radius",
-    icon: "Square",
-  },
-  {
-    id: "theme-cyber",
-    label: "Theme: Cyberpunk",
-    sub: "Deep purple with cyan/magenta neon",
-    icon: "Zap",
-  },
+  ...THEME_ACTIONS,
 ];
 
 /** Truncate a string to a maximum length, appending an ellipsis if cut. */
@@ -318,7 +308,7 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
   }
 
   // 3) Backend search results.
-  const searchRows = searchHits.slice(0, 10).map((h): CmdkRowSearch => {
+  const searchRows = searchHits.map((h): CmdkRowSearch => {
     const payload = h.event.payload as Partial<ProsePayload>;
     const labelBase =
       payload.name ?? `${h.event.kind} · ${h.event.filename.slice(0, 24)}`;

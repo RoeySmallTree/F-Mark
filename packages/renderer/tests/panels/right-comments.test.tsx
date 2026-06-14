@@ -88,7 +88,7 @@ describe("RightComments", () => {
       "us-a7f3",
       {
         content: "Near the top",
-        target: { file: target.filename, lines: [1, 1] },
+        append_to: target.filename, mode: "comment", lines: [1, 1],
       },
     );
     const second = makeProse(
@@ -96,13 +96,18 @@ describe("RightComments", () => {
       "us-a7f3",
       {
         content: "Lower down",
-        target: { file: target.filename, lines: [9, 9] },
+        append_to: target.filename, mode: "comment", lines: [9, 9],
       },
     );
     useStore.setState({ events: [target, first, second] });
     const { panel, feedScrollBy, panelScrollTo } = appendScrollHarness(
       target.filename,
     );
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
 
     render(<RightComments />, { container: panel });
     await user.click(
@@ -121,11 +126,24 @@ describe("RightComments", () => {
     });
 
     expect(useStore.getState().commentTarget).toEqual({
+      kind: "event",
       file: target.filename,
       lines: [9, 9],
     });
     expect(useStore.getState().rightTab).toBe("comments");
     await waitFor(() => expect(panelScrollTo).toHaveBeenCalled());
     expect(feedScrollBy).toHaveBeenCalled();
+
+    act(() => {
+      useStore.setState({ focusedCommentId: second.filename });
+    });
+    await act(async () => {
+      flushRaf();
+    });
+    await act(async () => {
+      flushRaf();
+    });
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(useStore.getState().focusedCommentId).toBeNull();
   });
 });

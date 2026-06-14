@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import matter from "gray-matter";
 import type { SkillRef } from "@f-mark/shared";
 
-export const KNOWN_AGENTS = ["claude", "codex", "gemini"] as const;
+export const KNOWN_AGENTS = ["claude", "codex", "opencode"] as const;
 export type KnownAgent = (typeof KNOWN_AGENTS)[number];
 
 interface FoundSkill {

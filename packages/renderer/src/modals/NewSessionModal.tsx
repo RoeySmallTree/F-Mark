@@ -1,20 +1,22 @@
-/* NewSessionModal — v0.5 multi-path. Two fields (Folder + Slug) plus the
-   keep-open toggle. Template grid and agent-invite sections have been
-   removed; the path display in the slug input and modal footer is also
-   gone. The session is created at the user-chosen folder via
-   POST /sessions { slug, path }. */
+/* NewSessionModal — v0.5 multi-path. Two fields (Folder + Slug). Favorites
+   and recent paths surface as clickable presets above the folder field so a
+   common folder is a single click. The session is created at the user-chosen
+   folder via POST /sessions { slug, path }. */
 
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { FolderClosed, X } from "lucide-react";
+import { FolderClosed, Star, X } from "lucide-react";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 import { FolderPicker } from "./newsession/FolderPicker.js";
-import {
-  OpenAndCopyToggle,
-  orientationSnippet,
-} from "./newsession/OpenAndCopyToggle.js";
 
 const SLUG_RE = /^[a-z0-9-]+$/;
+
+function basename(absPath: string): string {
+  const trimmed = absPath.replace(/\/+$/, "");
+  const slash = trimmed.lastIndexOf("/");
+  if (slash < 0) return trimmed;
+  return trimmed.slice(slash + 1) || trimmed;
+}
 
 export function NewSessionModal(): JSX.Element {
   const token = useStore((s) => s.token);
@@ -22,20 +24,26 @@ export function NewSessionModal(): JSX.Element {
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const setParticipants = useStore((s) => s.setParticipants);
   const setPathsState = useStore((s) => s.setPathsState);
+  const activePath = useStore((s) => s.activePath);
+  const knownPaths = useStore((s) => s.knownPaths) ?? [];
+  const favorites = useStore((s) => s.favorites) ?? [];
   const closeModal = useStore((s) => s.closeModal);
 
-  const [folder, setFolder] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string | null>(activePath);
   const [slug, setSlug] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [openImmediately, setOpenImmediately] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const slugRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
 
-  // Default folder = the kernel-reported home dir. Future: prefer the
-  // renderer-known activePath once it lands in the store.
+  // Default folder = the active project path. If the renderer has no active
+  // path yet, fall back to the kernel-reported home dir.
+  useEffect(() => {
+    if (folder === null && activePath !== null) setFolder(activePath);
+  }, [activePath, folder]);
+
   useEffect(() => {
     let cancelled = false;
     if (folder !== null) return;
@@ -49,6 +57,15 @@ export function NewSessionModal(): JSX.Element {
     })();
     return () => { cancelled = true; };
   }, [folder, client]);
+
+  const favoritePaths = useMemo(
+    () => new Set(favorites.map((f) => f.path)),
+    [favorites],
+  );
+  const recentPresets = useMemo(
+    () => knownPaths.filter((p) => !favoritePaths.has(p)),
+    [knownPaths, favoritePaths],
+  );
 
   const slugValid = SLUG_RE.test(slug);
   const canSubmit =
@@ -78,28 +95,6 @@ export function NewSessionModal(): JSX.Element {
         /* legacy or temporarily unavailable participant route */
       }
       setCurrentSession(session.id);
-
-      if (openImmediately) {
-        const origin =
-          typeof window !== "undefined" && window.location.origin.length > 0
-            ? window.location.origin
-            : "";
-        const snippet = orientationSnippet({
-          origin,
-          sessionId: session.id,
-          token,
-        });
-        try {
-          if (
-            typeof navigator !== "undefined" &&
-            typeof navigator.clipboard?.writeText === "function"
-          ) {
-            await navigator.clipboard.writeText(snippet);
-          }
-        } catch {
-          /* clipboard may be unavailable (test env / permissions) */
-        }
-      }
 
       closeModal();
     } catch (e) {
@@ -151,6 +146,41 @@ export function NewSessionModal(): JSX.Element {
               <div className="form-label" style={{ marginBottom: 6 }}>
                 FOLDER
               </div>
+              {(favorites.length > 0 || recentPresets.length > 0) && (
+                <div
+                  className="folder-presets"
+                  aria-label="Folder presets"
+                >
+                  {favorites.map((f) => (
+                    <button
+                      key={`fav-${f.path}`}
+                      type="button"
+                      className={`folder-preset folder-preset-fav${
+                        f.path === folder ? " on" : ""
+                      }`}
+                      title={f.path}
+                      onClick={() => setFolder(f.path)}
+                      aria-pressed={f.path === folder}
+                    >
+                      <Star size={10} aria-hidden />
+                      <span className="folder-preset-name">{f.name}</span>
+                    </button>
+                  ))}
+                  {recentPresets.map((p) => (
+                    <button
+                      key={`recent-${p}`}
+                      type="button"
+                      className={`folder-preset${p === folder ? " on" : ""}`}
+                      title={p}
+                      onClick={() => setFolder(p)}
+                      aria-pressed={p === folder}
+                    >
+                      <FolderClosed size={10} aria-hidden />
+                      <span className="folder-preset-name">{basename(p)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="folder-field">
                 <FolderClosed size={14} aria-hidden className="folder-field-icon" />
                 <span className="folder-field-path" title={folder ?? ""}>
@@ -196,13 +226,6 @@ export function NewSessionModal(): JSX.Element {
                   Name must match a–z, 0–9, hyphen.
                 </div>
               )}
-            </div>
-
-            <div className="form-row" style={{ marginTop: 16 }}>
-              <OpenAndCopyToggle
-                value={openImmediately}
-                onChange={setOpenImmediately}
-              />
             </div>
 
             {error !== null && (

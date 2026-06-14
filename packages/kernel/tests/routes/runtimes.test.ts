@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerRuntimeRoutes } from "../../src/routes/runtimes.js";
@@ -29,7 +29,79 @@ describe("runtime routes", () => {
       const body = res.json();
       expect(body.runtimes.claude.displayName).toBe("Claude Code");
       expect(body.runtimes.codex.executable).toBe("codex");
-      expect(body.runtimes.gemini.executable).toBe("gemini");
+      expect(body.runtimes.opencode.executable).toBe("opencode");
+      expect(Object.keys(body.runtimes).sort()).toEqual([
+        "claude",
+        "codex",
+        "opencode",
+      ]);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("GET /runtimes hides historical Gemini entries without rewriting the file", async () => {
+    const { app, p, cleanup } = await makeApp();
+    try {
+      await writeFile(
+        join(p.fmarkDir(), "runtimes.json"),
+        `${JSON.stringify({
+          version: "1.0",
+          runtimes: {
+            claude: {
+              displayName: "Claude Code",
+              executable: "claude",
+              args: [],
+            },
+            codex: {
+              displayName: "Codex",
+              executable: "codex",
+              args: [],
+            },
+            opencode: {
+              displayName: "Opencode",
+              executable: "opencode",
+              args: [],
+            },
+            gemini: {
+              displayName: "Gemini",
+              executable: "gemini",
+              args: [],
+            },
+          },
+        })}\n`,
+        "utf8",
+      );
+
+      const res = await app.inject({ method: "GET", url: "/runtimes" });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.runtimes.gemini).toBeUndefined();
+      expect(Object.keys(body.runtimes).sort()).toEqual([
+        "claude",
+        "codex",
+        "opencode",
+      ]);
+
+      const raw = JSON.parse(
+        await readFile(join(p.fmarkDir(), "runtimes.json"), "utf8"),
+      ) as { runtimes: Record<string, unknown> };
+      expect(raw.runtimes.gemini).toBeDefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("PUT /runtimes/gemini rejects re-adding the retired runtime", async () => {
+    const { app, cleanup } = await makeApp();
+    try {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/runtimes/gemini",
+        payload: { displayName: "Gemini", executable: "gemini", args: [] },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toMatch(/no longer supported/i);
     } finally {
       await cleanup();
     }

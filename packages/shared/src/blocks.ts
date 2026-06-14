@@ -28,7 +28,9 @@ export function isComposableBlock(event: AnyEventRecord): boolean {
     event.kind === "html" ||
     event.kind === "choices" ||
     event.kind === "todo" ||
-    event.kind === "tool-use"
+    event.kind === "tool-use" ||
+    event.kind === "subagent-run" ||
+    event.kind === "subagent-output"
   );
 }
 
@@ -50,4 +52,20 @@ export function getCommentTarget(
   return role.lines === undefined
     ? { anchor: role.anchor }
     : { anchor: role.anchor, lines: role.lines };
+}
+
+/** Read the file-comment target off a prose payload. Returns `undefined`
+    when the role isn't `file-comment`. Parallel to `getCommentTarget`, but
+    keyed on a repo `file_path` (+ optional line range, diff hunk, base). */
+export function getFileCommentTarget(payload: ProsePayload):
+  | { file_path: string; lines?: [number, number]; hunk?: string; base?: string }
+  | undefined {
+  const role = getProseRole(payload);
+  if (role.kind !== "file-comment") return undefined;
+  return {
+    file_path: role.file_path,
+    ...(role.lines !== undefined ? { lines: role.lines } : {}),
+    ...(role.hunk !== undefined ? { hunk: role.hunk } : {}),
+    ...(role.base !== undefined ? { base: role.base } : {}),
+  };
 }

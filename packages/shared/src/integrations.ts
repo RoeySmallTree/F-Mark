@@ -1,4 +1,22 @@
-export type RuntimeId = "claude" | "codex" | "gemini" | "opencode" | string;
+export type RuntimeId = "claude" | "codex" | "opencode" | string;
+
+export const RETIRED_RUNTIME_IDS = ["gemini"] as const;
+
+const RETIRED_RUNTIME_ID_SET = new Set<string>(RETIRED_RUNTIME_IDS);
+
+export function isOfferableRuntimeId(runtimeId: string): boolean {
+  return !RETIRED_RUNTIME_ID_SET.has(runtimeId);
+}
+
+export function filterOfferableRuntimeEntries<T>(
+  runtimes: Record<string, T>,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [id, entry] of Object.entries(runtimes)) {
+    if (isOfferableRuntimeId(id)) out[id] = entry;
+  }
+  return out;
+}
 
 export type IntegrationScope = "project" | "user" | "local";
 

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "fmark": {
+      "type": "stdio",
+      "command": "/home/roey/workspace/F-Mark/packages/kernel/node_modules/.bin/tsx",
+      "args": [
+        "/home/roey/workspace/F-Mark/packages/kernel/src/index.ts",
+        "mcp",
+        "--path",
+        "/home/roey/workspace/F-Mark"
+      ],
+      "env": {
+        "F_MARK_MCP_VERSION": "phase5-stdio-v1"
+      }
+    }
+  }
+}

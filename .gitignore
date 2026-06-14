@@ -12,3 +12,6 @@ dist/
 .playwright-mcp/
 packages/*/f-mark-*.tgz
 *.tsbuildinfo
+
+# F-Mark project data
+.f-mark/

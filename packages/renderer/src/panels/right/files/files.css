@@ -1,0 +1,389 @@
+/* Files pane — section-based sticky file tree, search, chips, favorites.
+   Lives inside .panel-scroll (RightPanel). The pane uses negative margins
+   to bleed past the parent's padding so the sticky chrome lands flush
+   against the top edge of the scroll area. */
+
+:root {
+  --folder-row-h: 26px;
+  --file-indent: 14px;
+}
+
+/* Drop the parent's padding when the files-pane is mounted so sticky
+   chrome (which positions relative to the scrollport's content box) lands
+   flush against the scroll-area's visual top edge. Other tabs keep the
+   standard padding. */
+.panel-scroll:has(> .files-pane) {
+  padding: 0;
+}
+
+.files-pane {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--ink);
+  /* Local stacking context so the sticky chrome's high z-indexes
+     (header/search/chips and folder rows) compete only against each
+     other, not against globally-positioned UI like modals (z=100),
+     popovers (z=91), or the topbar. Without this, the file tree
+     paints over open menus. */
+  isolation: isolate;
+  /* Total height of the sticky chrome above the tree. JSX bumps this
+     when the search row or chips become visible so the folder-row
+     `top:` math lands below the chrome rather than under it. */
+  --files-chrome-h: 35px;
+}
+/* When the lower-split layout is active, the pane must fill the parent
+   scrollport so the percentage-based split between tree (top) and
+   viewer (bottom) has a known total to split. Without an explicit
+   height the children fall back to their natural content size and the
+   split ratio becomes meaningless. */
+.files-pane.fv-lower {
+  height: 100%;
+  min-height: 0;
+}
+/* In lower-split mode the top half is its own scroll container so the
+   chrome can stick at its top (sticky top:0 resolves to the nearest
+   scrolling ancestor). The chrome stays pinned while the tree scrolls
+   independently of the viewer below. */
+.files-pane.fv-lower .files-pane-top {
+  overflow: auto;
+  min-height: 0;
+  display: block;
+}
+.files-pane.fv-lower .files-pane-bottom {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.files-empty,
+.files-loading,
+.files-truncated {
+  padding: 14px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.files-truncated {
+  background: color-mix(in srgb, var(--agent) 8%, transparent);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.files-header {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-2);
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--panel);
+  height: 35px;
+  box-sizing: border-box;
+}
+.files-header-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out-quart),
+    color var(--dur-base) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart);
+}
+.files-header-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.files-header-btn.is-on {
+  border-color: var(--line-2);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.files-header-btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.files-header-btn .is-spinning {
+  animation: files-spin 0.8s linear infinite;
+}
+@keyframes files-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Search row */
+.files-search {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-2);
+  position: sticky;
+  top: 35px;
+  z-index: 199;
+  background: var(--panel);
+  height: 37px;
+  box-sizing: border-box;
+}
+.files-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--dur-base) var(--ease-out-quart);
+}
+.files-search-input:focus {
+  border-color: color-mix(in srgb, var(--agent) 50%, var(--line));
+}
+.files-search-input.is-invalid {
+  border-color: #b54848;
+}
+.files-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out-quart),
+    color var(--dur-base) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart);
+}
+.files-search-toggle:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.files-search-toggle.is-on {
+  background: color-mix(in srgb, var(--agent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 40%, var(--line));
+  color: var(--agent);
+}
+
+/* Chips */
+.files-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line-2);
+  position: sticky;
+  top: 72px;
+  z-index: 198;
+  background: var(--panel);
+  scrollbar-width: thin;
+  height: 34px;
+  box-sizing: border-box;
+}
+.files-chips::-webkit-scrollbar { height: 6px; }
+.files-chips::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: var(--radius-pill);
+}
+.files-chip {
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--canvas);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out-quart),
+    color var(--dur-base) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart);
+}
+.files-chip:hover {
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+.files-chip.is-on {
+  background: color-mix(in srgb, var(--agent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 50%, var(--line));
+  color: var(--agent);
+}
+
+/* Tree */
+.file-tree {
+  display: flex;
+  flex-direction: column;
+}
+.file-tree-empty {
+  padding: 16px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* Each folder + its descendants live in a `.folder-section` wrapper.
+   The folder-row inside is sticky relative to this section, so the row
+   naturally scrolls out when the section's bottom passes the top of
+   the scrollport — that's what produces the "next folder pushes the
+   previous one out" effect rather than depth-stacking. */
+.folder-section {
+  display: block;
+}
+
+.file-folder-row,
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--folder-row-h);
+  font-size: 12px;
+  cursor: default;
+  user-select: none;
+  position: relative;
+  transition: background var(--dur-base) var(--ease-out-quart);
+}
+
+.file-folder-row {
+  position: sticky;
+  /* All folder rows stick at the same vertical slot (just below chrome).
+     Within a nested section the deeper row paints on top of the shallower
+     one by DOM order, which gives the user a clean "current folder at
+     top" view instead of stacked breadcrumbs. */
+  top: var(--files-chrome-h);
+  z-index: 50;
+  background: var(--panel);
+  padding-left: calc(var(--depth) * var(--file-indent) + 8px);
+  padding-right: 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.file-folder-row::after {
+  /* hairline that blends with adjacent stuck headers */
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: var(--line-2);
+}
+.file-folder-row:hover {
+  background: color-mix(in srgb, var(--ink) 4%, var(--panel));
+}
+
+.file-row {
+  padding-left: calc((var(--depth) + 1) * var(--file-indent) + 8px);
+  padding-right: 8px;
+  color: var(--ink-2);
+}
+.file-row:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink);
+}
+
+.file-row.is-ignored,
+.file-folder-row.is-ignored {
+  opacity: 0.45;
+}
+
+.file-folder-chevron {
+  flex: 0 0 auto;
+  color: var(--ink-4);
+}
+.file-folder-chevron.is-empty {
+  visibility: hidden;
+}
+.file-row-icon {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+.file-folder-row .file-row-icon {
+  color: var(--ink-2);
+}
+.file-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row-symlink {
+  flex: 0 0 auto;
+  color: var(--ink-4);
+}
+
+/* Icon color coding by extension class. Folder icons inherit from the
+   row color above; only file icons are tinted so the type is readable
+   at a glance. Subtle, theme-neutral hues that don't fight the agent
+   accent. */
+.file-row-icon.icon-code { color: #6b9bd1; }
+.file-row-icon.icon-text { color: var(--ink-3); }
+.file-row-icon.icon-json { color: #c89a3a; }
+.file-row-icon.icon-image { color: #b076c4; }
+.file-row-icon.icon-video { color: #c4715a; }
+.file-row-icon.icon-audio { color: #6dba94; }
+.file-row-icon.icon-spreadsheet { color: #6da884; }
+.file-row-icon.icon-archive { color: #b89968; }
+
+/* Favorites — emphasize name and color the star with --agent */
+.is-fav-session .file-row-name,
+.is-fav-project .file-row-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.is-fav-project .file-row-name {
+  color: var(--agent);
+}
+
+/* Star button — single star = session, double star = project */
+.file-row-star {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius);
+  color: var(--ink-4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out-quart),
+    color var(--dur-base) var(--ease-out-quart),
+    background var(--dur-base) var(--ease-out-quart);
+}
+.file-row:hover .file-row-star,
+.file-folder-row:hover .file-row-star {
+  opacity: 0.7;
+}
+.file-row-star:hover {
+  opacity: 1 !important;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.file-row-star[data-fav="session"],
+.file-row-star[data-fav="project"] {
+  opacity: 1;
+  color: var(--agent);
+}
+.file-row-star[data-fav="session"] svg,
+.file-row-star[data-fav="project"] svg {
+  fill: currentColor;
+}
+.file-row-star-second {
+  margin-left: -3px;
+}

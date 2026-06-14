@@ -11,10 +11,11 @@ import { ListChecks } from "lucide-react";
 import type { TodoTreeNode } from "@f-mark/shared";
 import type { PostTodoBody } from "../api/client.js";
 import { createClient } from "../api/client.js";
+import { createManagedAgentsClient } from "../api/managedAgents.js";
 import {
   flattenTreeForDropdown,
   generateTodoId,
-  getAgentIds,
+  getSessionAgentIds,
   normalizeTodos,
   pickRandomAgentId,
 } from "../panels/todoPanelUtils.js";
@@ -58,7 +59,7 @@ export function CreateTodoPopover({
   const [description, setDescription] = useState("");
   const [parentId, setParentId] = useState("");
   const [assignedTo, setAssignedTo] = useState<string>(() => {
-    const agentIds = getAgentIds(participants);
+    const agentIds = getSessionAgentIds(participants, sessionId);
     return pickRandomAgentId(agentIds) ?? "";
   });
   const [roots, setRoots] = useState<TodoTreeNode[]>([]);
@@ -71,14 +72,37 @@ export function CreateTodoPopover({
     () => flattenTreeForDropdown(roots),
     [roots],
   );
+  const sessionAgentIds = useMemo(
+    () => getSessionAgentIds(participants, sessionId),
+    [participants, sessionId],
+  );
   const participantOptions = useMemo(
     () =>
-      Object.entries(participants).map(([id, participant]) => ({
-        id,
-        label: participantName(participant),
-      })),
-    [participants],
+      sessionAgentIds
+        .map((id) => {
+          const participant = participants[id];
+          if (participant === undefined) return null;
+          return {
+            id,
+            label: participantName(participant),
+          };
+        })
+        .filter((option): option is { id: string; label: string } => option !== null)
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [participants, sessionAgentIds],
   );
+
+  useEffect(() => {
+    setAssignedTo((current) => {
+      if (current.length > 0 && sessionAgentIds.includes(current)) {
+        return current;
+      }
+      return pickRandomAgentId(sessionAgentIds) ?? "";
+    });
+  }, [sessionAgentIds]);
+
+  const assignedToCurrentSessionAgent =
+    assignedTo.length > 0 && sessionAgentIds.includes(assignedTo);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -128,13 +152,24 @@ export function CreateTodoPopover({
     };
     if (trimmedDescription.length > 0) body.body = trimmedDescription;
     if (parentId.length > 0) body.parent_id = parentId;
-    if (assignedTo.length > 0) body.assigned_to = assignedTo;
+    if (assignedToCurrentSessionAgent) body.assigned_to = assignedTo;
 
     setBusy(true);
     setSubmitError(null);
     try {
       const client = createClient({ baseUrl: "", token });
-      await client.postTodo(sessionId, body);
+      const managedClient = createManagedAgentsClient({ baseUrl: "", token });
+      const response = await client.postTodo(sessionId, body);
+      if (
+        body.assigned_to !== undefined &&
+        sessionAgentIds.includes(body.assigned_to)
+      ) {
+        await managedClient.wakeSession(sessionId, {
+          reason: "todo",
+          source_event: response.filename,
+          target_participant_ids: [body.assigned_to],
+        });
+      }
     } catch (err) {
       setBusy(false);
       setSubmitError(err instanceof Error ? err.message : String(err));

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { executableExistsOnDisk } from "../runtimes/executableSearch.js";
 import { realCommandRunner, type CommandRunner } from "../tmux/commandRunner.js";
 
 export interface EnvProbeResult {
@@ -38,6 +39,9 @@ export function realProbe(
   return async () => {
     const which = async (name: string): Promise<boolean> =>
       (await runner.run(["which", name])).exitCode === 0;
+    const runtimeAvailable = async (name: string): Promise<boolean> =>
+      (await runner.run(["which", name])).exitCode === 0 ||
+      (await executableExistsOnDisk(name, process.env));
     const tmux = await which("tmux");
     let tmuxVersion: string | null = null;
     if (tmux) {
@@ -49,7 +53,9 @@ export function realProbe(
     }
     const runtimes = await getRuntimes();
     const rt: Record<string, boolean> = {};
-    for (const { id, executable } of runtimes) rt[id] = await which(executable);
+    for (const { id, executable } of runtimes) {
+      rt[id] = await runtimeAvailable(executable);
+    }
     const installers = [
       "brew",
       "apt",

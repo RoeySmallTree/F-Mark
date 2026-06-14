@@ -43,7 +43,18 @@ export function getObject(value: unknown, key: string): Record<string, unknown> 
   return child as Record<string, unknown>;
 }
 
-export function statusFromServer(server: unknown): {
+function stringArraysEqual(a: unknown, b: string[]): boolean {
+  return (
+    Array.isArray(a) &&
+    a.length === b.length &&
+    a.every((item, index) => item === b[index])
+  );
+}
+
+export function statusFromServer(
+  server: unknown,
+  expected?: { command: string; args: string[] },
+): {
   status: "installed" | "stale" | "missing";
   version?: string;
   reason?: string;
@@ -58,31 +69,28 @@ export function statusFromServer(server: unknown): {
     const raw = (env as Record<string, unknown>).F_MARK_MCP_VERSION;
     if (typeof raw === "string") version = raw;
   }
+  if (version === "phase5-stdio-v1" && expected !== undefined) {
+    if (
+      value.command !== expected.command ||
+      !stringArraysEqual(value.args, expected.args)
+    ) {
+      return {
+        status: "stale",
+        version,
+        reason: "fmark MCP command does not match this project path",
+      };
+    }
+  }
   return {
     status: version === "phase5-stdio-v1" ? "installed" : "stale",
     version,
   };
 }
 
-export function statusFromGeminiServer(server: unknown): {
-  status: "installed" | "stale" | "missing";
-  version?: string;
-  reason?: string;
-} {
-  const base = statusFromServer(server);
-  if (base.status !== "installed") return base;
-  const trust = (server as Record<string, unknown>).trust;
-  if (trust !== false) {
-    return {
-      status: "stale",
-      version: base.version,
-      reason: "Gemini MCP trust must be false",
-    };
-  }
-  return base;
-}
-
-export function statusFromOpencodeServer(server: unknown): {
+export function statusFromOpencodeServer(
+  server: unknown,
+  expected?: { command: string; args: string[] },
+): {
   status: "installed" | "stale" | "missing";
   version?: string;
   reason?: string;
@@ -100,6 +108,15 @@ export function statusFromOpencodeServer(server: unknown): {
   if (envCandidate !== null && typeof envCandidate === "object" && !Array.isArray(envCandidate)) {
     const raw = (envCandidate as Record<string, unknown>).F_MARK_MCP_VERSION;
     if (typeof raw === "string") version = raw;
+  }
+  if (version === "phase5-stdio-v1" && expected !== undefined) {
+    if (!stringArraysEqual(value.command, [expected.command, ...expected.args])) {
+      return {
+        status: "stale",
+        version,
+        reason: "fmark MCP command does not match this project path",
+      };
+    }
   }
   return {
     status: version === "phase5-stdio-v1" ? "installed" : "stale",

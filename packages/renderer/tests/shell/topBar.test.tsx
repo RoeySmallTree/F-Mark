@@ -16,7 +16,6 @@ import {
 import {
   act,
   cleanup,
-  render,
   screen,
   waitFor,
   within,
@@ -29,12 +28,15 @@ import type {
   ManagedTerminal,
   Participant,
 } from "@f-mark/shared";
-import { TopBar } from "../../src/shell/TopBar.js";
+import { ParticipantStrip } from "../../src/components/ParticipantStrip.js";
+import { TopBar as ShellTopBar } from "../../src/shell/TopBar.js";
 import { TopBarModalContext } from "../../src/App.js";
+import { ModalRoot } from "../../src/modals/ModalRoot.js";
 import { useStore } from "../../src/state/store.js";
 import { DEFAULT_FILTER } from "../../src/popovers/log-filter-types.js";
 import { PROCESS_API_DISABLED_MESSAGE } from "../../src/api/managedAgents.js";
 import type { SessionMeta } from "../../src/api/client.js";
+import { renderWithAgentSpawn as render } from "../agentSpawnProvider.js";
 
 const SESSION: SessionMeta = {
   id: "2026-05-23-phase12",
@@ -83,7 +85,7 @@ const TERMINALS: ManagedTerminal[] = [
 const HEALTHY_PROBE: EnvProbeResult = {
   tmux: true,
   tmuxVersion: "3.4",
-  runtimes: { claude: true, codex: true, gemini: true },
+  runtimes: { claude: true, codex: true, opencode: true },
   installer: "apt",
   os: "linux",
 };
@@ -91,7 +93,7 @@ const HEALTHY_PROBE: EnvProbeResult = {
 const TMUX_MISSING_PROBE: EnvProbeResult = {
   tmux: false,
   tmuxVersion: null,
-  runtimes: { claude: true, codex: true, gemini: false },
+  runtimes: { claude: true, codex: true, opencode: false },
   installer: "apt",
   os: "linux",
 };
@@ -139,6 +141,38 @@ function resetStore(overrides: ResetOverrides = {}): void {
       setPresence(id, p as { state: never; last_hook_at: number | null });
     }
   }
+}
+
+function testRect({
+  top,
+  left,
+  width,
+  height,
+}: {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}): DOMRect {
+  const right = left + width;
+  const bottom = top + height;
+  return {
+    x: left,
+    y: top,
+    top,
+    right,
+    bottom,
+    left,
+    width,
+    height,
+    toJSON() {
+      return { top, right, bottom, left, width, height };
+    },
+  } as DOMRect;
+}
+
+function TopBar(): JSX.Element {
+  return <ParticipantStrip variant="compose" />;
 }
 
 describe("TopBar — chip strip (Phase 12)", () => {
@@ -216,6 +250,43 @@ describe("TopBar — chip strip (Phase 12)", () => {
       screen.getByRole("button", { name: /add agent or terminal/i }),
     ).toBeInTheDocument();
   });
+
+  test("clicking the current user's avatar opens Settings on Profile", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ runtimes: {} }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    resetStore();
+    useStore.setState({ activeModal: null, settingsSection: "agents" });
+    render(
+      <>
+        <TopBar />
+        <ModalRoot />
+      </>,
+    );
+
+    try {
+      await user.click(
+        screen.getByRole("button", { name: /open profile settings/i }),
+      );
+
+      expect(screen.getByRole("dialog", { name: /settings/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /^profile$/i })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(
+        screen.getByRole("heading", { level: 3, name: /^profile$/i }),
+      ).toBeInTheDocument();
+      expect(useStore.getState().activeModal).toBe("settings");
+      expect(useStore.getState().settingsSection).toBe("profile");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
 
 describe("TopBar — EnvProbeBanner (Phase 12)", () => {
@@ -230,19 +301,19 @@ describe("TopBar — EnvProbeBanner (Phase 12)", () => {
 
   test("does not render banner when envProbe is null", () => {
     resetStore();
-    const { container } = render(<TopBar />);
+    const { container } = render(<ShellTopBar />);
     expect(container.querySelector(".env-probe-banner")).toBeNull();
   });
 
   test("does not render banner when envProbe is healthy", () => {
     resetStore({ envProbe: HEALTHY_PROBE });
-    const { container } = render(<TopBar />);
+    const { container } = render(<ShellTopBar />);
     expect(container.querySelector(".env-probe-banner")).toBeNull();
   });
 
   test("renders banner above the chip row when tmux is missing", () => {
     resetStore({ envProbe: TMUX_MISSING_PROBE });
-    const { container } = render(<TopBar />);
+    const { container } = render(<ShellTopBar />);
     const banner = container.querySelector(".env-probe-banner");
     expect(banner).not.toBeNull();
     /* Banner is the first child of the TopBar wrapper (renders above
@@ -254,22 +325,159 @@ describe("TopBar — EnvProbeBanner (Phase 12)", () => {
 
 describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
   let fetchSpy: MockInstance<typeof fetch>;
+  let preflightHooksStatus: "installed" | "missing" | "not_required";
 
   beforeEach(() => {
     globalThis.localStorage?.clear();
     resetStore({ envProbe: HEALTHY_PROBE });
+    preflightHooksStatus = "installed";
     fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
-      async () =>
-        new Response(
-          JSON.stringify({
-            participant_id: "ag-new",
-            tmux_session: "fmark-ag-new",
-            runtime_id: "claude",
-            active_session: SESSION.id,
-            hooks_status: "installed",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
+      async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const u =
+          typeof url === "string"
+            ? url
+            : url instanceof URL
+              ? url.toString()
+              : url.url;
+        const body =
+          typeof init?.body === "string"
+            ? (JSON.parse(init.body) as { runtime_id?: string; suggested_participant_id?: string })
+            : {};
+        const runtimeId = body.runtime_id ?? "claude";
+        if (u.endsWith("/managed-agents/preflight")) {
+          return new Response(
+            JSON.stringify({
+              runtime: { runtime_id: runtimeId, executable: runtimeId, available: true },
+              mcp: {
+                status: "installed",
+                expected_version: "phase5-stdio-v1",
+                locations: [
+                  ...(runtimeId === "codex"
+                    ? [
+                        {
+                          scope: "project",
+                          path: "/tmp/project-config",
+                          status: "unsupported",
+                          safe_auto_apply: false,
+                        },
+                      ]
+                    : [
+                        {
+                          scope: "project",
+                          path: "/tmp/project-config",
+                          status: "installed",
+                          safe_auto_apply: true,
+                        },
+                      ]),
+                  {
+                    scope: "user",
+                    path: "/tmp/user-config",
+                    status: "installed",
+                    safe_auto_apply: true,
+                  },
+                ],
+              },
+              hooks: {
+                status: preflightHooksStatus,
+                locations: [
+                  {
+                    scope: "project",
+                    path: "/tmp/project-hooks",
+                    status: preflightHooksStatus,
+                    safe_auto_apply: true,
+                  },
+                  {
+                    scope: "user",
+                    path: "/tmp/user-hooks",
+                    status: preflightHooksStatus,
+                    safe_auto_apply: true,
+                  },
+                ],
+              },
+              can_apply: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (u.endsWith("/managed-agents/integration-apply")) {
+          return new Response(
+            JSON.stringify({
+              runtime: { runtime_id: runtimeId, executable: runtimeId, available: true },
+              mcp: {
+                status: "installed",
+                expected_version: "phase5-stdio-v1",
+                locations: [
+                  {
+                    scope: "project",
+                    path: "/tmp/project-config",
+                    status: "installed",
+                    safe_auto_apply: true,
+                  },
+                  {
+                    scope: "user",
+                    path: "/tmp/user-config",
+                    status: "installed",
+                    safe_auto_apply: true,
+                  },
+                ],
+              },
+              hooks: {
+                status: "installed",
+                locations: [
+                  {
+                    scope: "project",
+                    path: "/tmp/project-hooks",
+                    status: "installed",
+                    safe_auto_apply: true,
+                  },
+                  {
+                    scope: "user",
+                    path: "/tmp/user-hooks",
+                    status: "installed",
+                    safe_auto_apply: true,
+                  },
+                ],
+              },
+              can_apply: true,
+              applied: {
+                mcp: {
+                  scope: "user",
+                  path: "/tmp/user-config",
+                  status: "installed",
+                  safe_auto_apply: true,
+                },
+                hooks: {
+                  scope: "user",
+                  path: "/tmp/user-hooks",
+                  status: "installed",
+                  safe_auto_apply: true,
+                },
+              },
+              changed: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (u.endsWith("/managed-agents/spawn")) {
+          const participantId =
+            runtimeId === "opencode" ? "ag-opencode-new" : "ag-new";
+          return new Response(
+            JSON.stringify({
+              participant_id: participantId,
+              tmux_session: `fmark-${participantId}`,
+              runtime_id: runtimeId,
+              active_session: SESSION.id,
+              hooks_status:
+                runtimeId === "opencode" ? "not_required" : "installed",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
     );
   });
   afterEach(() => {
@@ -291,40 +499,38 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
     /* Wait one tick for the async handler to fire. */
     await new Promise<void>((r) => setTimeout(r, 0));
     expect(fetchSpy).toHaveBeenCalled();
+    const preflightCall = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/managed-agents/preflight"),
+    );
+    expect(preflightCall).toBeDefined();
+    const preflightBody = JSON.parse(
+      (preflightCall![1] as { body: string }).body,
+    );
     const call = fetchSpy.mock.calls.find(([url]) =>
       String(url).endsWith("/managed-agents/spawn"),
     );
     expect(call).toBeDefined();
-    const body = (call![1] as { body: string }).body;
-    expect(body).toContain('"runtime_id":"claude"');
+    const body = JSON.parse((call![1] as { body: string }).body);
+    expect(preflightBody.runtime_id).toBe("claude");
+    expect(preflightBody.participant_id).toMatch(/^ag-claude-/);
+    expect(body.runtime_id).toBe("claude");
+    expect(body.suggested_participant_id).toBe(preflightBody.participant_id);
   });
 
-  test("spawn responses with missing Claude hooks open the generic hook modal", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          participant_id: "ag-missing-hooks",
-          tmux_session: "fmark-ag-missing-hooks",
-          runtime_id: "claude",
-          active_session: SESSION.id,
-          hooks_status: "missing",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+  test("missing Claude hooks open setup before spawn", async () => {
+    preflightHooksStatus = "missing";
     const user = userEvent.setup();
-    const openHookInstall = vi.fn();
     resetStore({
       envProbe: HEALTHY_PROBE,
       participants: {
         "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
       },
     });
-    const { container } = render(
+    render(
       <TopBarModalContext.Provider
         value={{
           openTerminalOverlay: vi.fn(),
-          openHookInstall,
+          openHookInstall: vi.fn(),
           openReconnect: vi.fn(),
         }}
       >
@@ -338,14 +544,35 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
     const menu = screen.getByRole("menu");
     await user.click(within(menu).getByRole("menuitem", { name: /claude/i }));
 
-    await waitFor(() =>
-      expect(openHookInstall).toHaveBeenCalledWith("claude", undefined),
+    expect(
+      await screen.findByRole("dialog", { name: /claude/i }),
+    ).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: /claude/i });
+    expect(within(dialog).getByRole("tab", { name: /globally/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
-    const chip = container.querySelector(
-      '.agent-chip[data-participant-id="ag-missing-hooks"]',
+    expect(within(dialog).queryByText("/tmp/project-hooks")).toBeNull();
+    expect(within(dialog).queryByText("/tmp/user-hooks")).toBeNull();
+    expect(within(dialog).queryByText("/tmp/project-config")).toBeNull();
+    expect(within(dialog).queryByText("/tmp/user-config")).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: /setup/i }));
+    const applyCall = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/managed-agents/integration-apply"),
     );
-    expect(chip).not.toBeNull();
-    expect(chip?.getAttribute("data-state")).toBe("hook-not-installed");
+    expect(applyCall).toBeDefined();
+    expect(JSON.parse((applyCall![1] as { body: string }).body).scope).toBe(
+      "user",
+    );
+    expect(
+      await within(dialog).findByText("We're all set up and ready to go"),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /apply and launch/i })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: /^launch$/i })).toBeEnabled();
+    const spawnCall = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/managed-agents/spawn"),
+    );
+    expect(spawnCall).toBeUndefined();
   });
 
   test("clicking + then Manage runtimes opens the Settings modal", async () => {
@@ -377,7 +604,28 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
       within(menu).getByRole("menuitem", { name: /^codex$/i }),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitem", { name: /^gemini$/i }),
+      within(menu).getByRole("menuitem", { name: /^opencode$/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("retired runtimes from env probe are not offered in the spawn menu", async () => {
+    const user = userEvent.setup();
+    resetStore({
+      envProbe: {
+        ...HEALTHY_PROBE,
+        runtimes: { ...HEALTHY_PROBE.runtimes, gemini: true },
+      },
+    });
+    render(<TopBar />);
+    await user.click(
+      screen.getByRole("button", { name: /add agent or terminal/i }),
+    );
+    const menu = screen.getByRole("menu");
+    expect(
+      within(menu).queryByRole("menuitem", { name: /gemini/i }),
+    ).toBeNull();
+    expect(
+      within(menu).getByRole("menuitem", { name: /claude code/i }),
     ).toBeInTheDocument();
   });
 
@@ -546,18 +794,6 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
   });
 
   test("spawn responses with hooks_status=not_required do not mark the chip as hook-not-installed", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          participant_id: "ag-gemini-new",
-          tmux_session: "fmark-ag-gemini-new",
-          runtime_id: "gemini",
-          active_session: SESSION.id,
-          hooks_status: "not_required",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
     const user = userEvent.setup();
     resetStore({
       envProbe: HEALTHY_PROBE,
@@ -570,10 +806,10 @@ describe("TopBar — PlusButton spawn wiring (Phase 12)", () => {
       screen.getByRole("button", { name: /add agent or terminal/i }),
     );
     const menu = screen.getByRole("menu");
-    await user.click(within(menu).getByRole("menuitem", { name: /gemini/i }));
+    await user.click(within(menu).getByRole("menuitem", { name: /opencode/i }));
     await new Promise<void>((r) => setTimeout(r, 0));
     const chip = container.querySelector(
-      '.agent-chip[data-participant-id="ag-gemini-new"]',
+      '.agent-chip[data-participant-id="ag-opencode-new"]',
     );
     expect(chip).not.toBeNull();
     expect(chip?.getAttribute("data-state")).toBe("stale");
@@ -626,7 +862,7 @@ describe("TopBar — terminal spawn local state (Phase 12)", () => {
   });
 });
 
-describe("TopBar — turn pill gates on agent presence", () => {
+describe("TopBar — active-turn indicator gates on agent presence", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
     resetStore();
@@ -636,10 +872,10 @@ describe("TopBar — turn pill gates on agent presence", () => {
     globalThis.localStorage?.clear();
   });
 
-  test("turn pill shows Idle when no agent is online (even if the event log's latest turn-end was from a user — which would otherwise say 'Agent thinking…')", () => {
+  test("strip falls back to idle when no agent is online (even if the event log's latest turn-end was from a user)", () => {
     /* Event log contains a user-finished turn — currentTurnParticipantPrefix
        would resolve to "ag" purely from the log. But no agent presence is
-       online/stale, so the pill must read "Idle". */
+       online/stale, so the strip must read "idle" and pulse nothing. */
     const userTurnEnd: AnyEventRecord = {
       filename: "20260523T000001Z_us-a7f3.turn-end.json",
       timestamp: "20260523T000001Z",
@@ -651,14 +887,12 @@ describe("TopBar — turn pill gates on agent presence", () => {
       events: [userTurnEnd],
       /* No managed agents, no presence — agent is offline / not present. */
     });
-    render(<TopBar />);
-    /* The pill renders with role="status". */
-    const pill = screen.getByRole("status");
-    expect(pill.textContent).toContain("Idle");
-    expect(pill.textContent).not.toContain("Agent thinking");
+    const { container } = render(<TopBar />);
+    expect(container.querySelector(".participant-strip")).not.toBeNull();
+    expect(container.querySelectorAll(".active-turn").length).toBe(0);
   });
 
-  test("turn pill still shows 'Agent thinking…' when an agent has online presence after a user turn-end", () => {
+  test("strip marks an agent as active when it has online presence after a user turn-end", () => {
     const userTurnEnd: AnyEventRecord = {
       filename: "20260523T000001Z_us-a7f3.turn-end.json",
       timestamp: "20260523T000001Z",
@@ -671,12 +905,15 @@ describe("TopBar — turn pill gates on agent presence", () => {
       managedAgents: [AGENTS[0]!],
       presence: { "ag-c92e": { state: "online", last_hook_at: 1 } },
     });
-    render(<TopBar />);
-    const pill = screen.getByRole("status");
-    expect(pill.textContent).toContain("Agent thinking");
+    const { container } = render(
+      <ParticipantStrip variant="compose" activeAgentIds={new Set(["ag-c92e"])} />,
+    );
+    const activeAnchor = container.querySelector(".agent-chip-anchor.active-turn");
+    expect(activeAnchor).not.toBeNull();
+    expect(activeAnchor!.getAttribute("data-flip-id")).toBe("agent:ag-c92e");
   });
 
-  test("turn pill still shows 'Agent thinking…' when an agent has stale presence", () => {
+  test("strip still marks the agent active when its presence is stale", () => {
     const userTurnEnd: AnyEventRecord = {
       filename: "20260523T000001Z_us-a7f3.turn-end.json",
       timestamp: "20260523T000001Z",
@@ -689,9 +926,12 @@ describe("TopBar — turn pill gates on agent presence", () => {
       managedAgents: [AGENTS[0]!],
       presence: { "ag-c92e": { state: "stale", last_hook_at: 1 } },
     });
-    render(<TopBar />);
-    const pill = screen.getByRole("status");
-    expect(pill.textContent).toContain("Agent thinking");
+    const { container } = render(
+      <ParticipantStrip variant="compose" activeAgentIds={new Set(["ag-c92e"])} />,
+    );
+    expect(
+      container.querySelector(".agent-chip-anchor.active-turn"),
+    ).not.toBeNull();
   });
 });
 
@@ -735,7 +975,7 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     expect(chip!.textContent).toContain("Old Agent");
   });
 
-  test("agent participant does NOT appear as a bare avatar in the right-side participants stack", () => {
+  test("agent participants render only as chips — never as bare .avatar.agent inside the participant strip", () => {
     const participants: Record<string, Participant> = {
       "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
       "ag-old-1": {
@@ -747,15 +987,16 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
     };
     resetStore({ participants, managedAgents: [] });
     const { container } = render(<TopBar />);
-    /* Right-side participants stack should only contain user avatars. */
-    const stack = container.querySelector(".participants");
-    expect(stack).not.toBeNull();
-    /* No agent avatars in the stack. */
-    const agentAvatars = stack!.querySelectorAll(".avatar.agent");
-    expect(agentAvatars.length).toBe(0);
-    /* User avatar still present. */
-    const userAvatars = stack!.querySelectorAll(".avatar.user");
-    expect(userAvatars.length).toBe(1);
+    /* The unified participant strip should hold the chip + user avatar
+       only — no orphan agent-kind avatar. */
+    const strip = container.querySelector(".participant-strip-scroll");
+    expect(strip).not.toBeNull();
+    expect(strip!.querySelectorAll(".avatar.agent").length).toBe(0);
+    expect(strip!.querySelectorAll(".avatar.user").length).toBe(1);
+    expect(
+      strip!.querySelectorAll('.agent-chip[data-participant-id="ag-old-1"]')
+        .length,
+    ).toBe(1);
   });
 
   test("clicking an un-managed agent chip opens the AgentActionMenu", async () => {
@@ -781,6 +1022,66 @@ describe("TopBar — agent participants render as AgentChips, not bare avatars",
       '.agent-action-menu[data-participant-id="ag-old-1"]',
     );
     expect(menu).not.toBeNull();
+  });
+
+  test("agent action menu flips above a chip near the viewport bottom", async () => {
+    const user = userEvent.setup();
+    const restoreWidth = window.innerWidth;
+    const restoreHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 900,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 500,
+    });
+
+    resetStore({ managedAgents: [AGENTS[0]!] });
+    const { container } = render(<TopBar />);
+    const chip = container.querySelector(
+      '.agent-chip[data-participant-id="ag-c92e"]',
+    ) as HTMLElement | null;
+    expect(chip).not.toBeNull();
+
+    const chipRectSpy = vi.spyOn(chip!, "getBoundingClientRect").mockReturnValue(
+      testRect({ top: 450, left: 760, width: 120, height: 30 }),
+    );
+    const originalRect = Element.prototype.getBoundingClientRect;
+    const menuRectSpy = vi
+      .spyOn(Element.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: Element): DOMRect {
+        if (this.classList.contains("agent-action-menu-popover")) {
+          return testRect({ top: 484, left: 640, width: 240, height: 360 });
+        }
+        return originalRect.call(this);
+      });
+
+    try {
+      await user.click(chip!);
+
+      await waitFor(() => {
+        const popover = document.body.querySelector(
+          ".agent-action-menu-popover",
+        ) as HTMLElement | null;
+        expect(popover).not.toBeNull();
+        expect(popover).toHaveAttribute("data-placement", "above");
+        expect(popover!.style.top).toBe("86px");
+        expect(popover!.style.left).toBe("640px");
+        expect(popover!.style.maxHeight).toBe("484px");
+      });
+    } finally {
+      chipRectSpy.mockRestore();
+      menuRectSpy.mockRestore();
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: restoreWidth,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: restoreHeight,
+      });
+    }
   });
 
   test("un-managed agent chip's action menu disables tmux-only actions (Send /compact + hides Say goodbye)", async () => {

@@ -3,6 +3,27 @@ import { useMemo } from "react";
 const SEQ_URL = "http://localhost:5455";
 const APP_NAME = "f-mark";
 
+/* Suppress in test environments so log fetches don't pollute fetch-mock
+   call counts. Vitest exposes process.env.VITEST; Vite sets MODE === "test"
+   when invoked through vitest. Either signal is sufficient. */
+function isTestEnvironment(): boolean {
+  try {
+    const env = (import.meta as unknown as { env?: { MODE?: string } }).env;
+    if (env?.MODE === "test") return true;
+  } catch {
+    /* ignore — import.meta may be unavailable in some bundling modes */
+  }
+  if (
+    typeof process !== "undefined" &&
+    typeof process.env?.VITEST === "string"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+const SUPPRESSED = isTestEnvironment();
+
 export enum LogLevel {
   Verbose = "Verbose",
   Debug = "Debug",
@@ -16,6 +37,7 @@ type LogProps = Record<string, unknown>;
 function sendSeq(message: string, props: LogProps, level: LogLevel) {
   const { $note, $hideWhen, ...rest } = props as LogProps & { $note?: string; $hideWhen?: boolean };
   if ($hideWhen) return;
+  if (SUPPRESSED) return;
   fetch(`${SEQ_URL}/api/events/raw`, {
     method: "POST",
     headers: { "Content-Type": "application/vnd.serilog.clef" },

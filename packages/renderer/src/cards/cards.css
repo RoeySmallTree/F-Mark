@@ -58,6 +58,12 @@
   font-size: 11.5px;
   white-space: nowrap;
 }
+/* When the timestamp is the last item in the head row (e.g. MessageCard,
+   which has no badge), push it to the end so it aligns to the row's right
+   edge rather than hugging the participant name. */
+.card-head .when:last-child {
+  margin-left: auto;
+}
 .card-head .badge {
   margin-left: auto;
   font-family: var(--mono);
@@ -260,6 +266,7 @@
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-4);
+  margin-left: auto;
 }
 .prose-body {
   padding: var(--prose-body-pad-y) var(--prose-body-pad-r)
@@ -387,6 +394,22 @@
 }
 .commentable-content {
   min-width: 0;
+  position: relative;
+  isolation: isolate;
+}
+.line-comment-highlight {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  background: color-mix(in srgb, var(--user) 10%, transparent);
+  border-left: 2px solid var(--user);
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.commentable-content > *:not(.line-comment-highlight) {
+  position: relative;
+  z-index: 1;
 }
 .line-comment-rail {
   position: absolute;
@@ -538,6 +561,18 @@
   gap: 8px;
   margin-bottom: 8px;
 }
+.line-comment-target-preview {
+  margin: -1px 0 8px;
+  padding: 6px 7px;
+  border-left: 2px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-3);
+  font-family: var(--serif);
+  font-size: 12px;
+  line-height: 1.35;
+  max-height: 54px;
+  overflow: hidden;
+}
 .line-comment-author {
   flex: 1;
   min-width: 0;
@@ -612,6 +647,27 @@
   background: transparent;
   color: var(--ink-3);
 }
+.line-comment-popover-actions .line-comment-mention {
+  border-color: var(--line);
+  background: var(--canvas);
+  color: var(--ink-2);
+}
+.line-comment-popover-actions .line-comment-mention.active {
+  background: color-mix(in srgb, var(--green) 18%, var(--canvas));
+  color: var(--ink);
+}
+/* Stacked avatars replace the generic Bot icon when one or more agents are
+   tagged. -4px overlap keeps the cluster compact even with 4-5 agents. */
+.line-comment-mention-avatars {
+  display: inline-flex;
+  align-items: center;
+}
+.line-comment-mention-avatars .avatar {
+  margin-left: -4px;
+}
+.line-comment-mention-avatars .avatar:first-child {
+  margin-left: 0;
+}
 .line-comment-popover-actions .line-comment-discard:hover:not(:disabled) {
   background: var(--panel);
   color: var(--ink);
@@ -619,6 +675,82 @@
 .line-comment-popover-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.comment-activity-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--user);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--user-tint) 42%, var(--canvas));
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition:
+    border-color 0.14s,
+    background 0.14s,
+    transform 0.14s;
+}
+.comment-activity-card:hover {
+  border-color: var(--user-tint-2);
+  background: color-mix(in srgb, var(--user-tint) 68%, var(--canvas));
+  transform: translateX(-1px);
+}
+.comment-activity-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--user);
+}
+.comment-activity-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.comment-activity-title {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.comment-activity-title b {
+  font-weight: 650;
+}
+.comment-activity-title span,
+.comment-activity-time {
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.comment-activity-preview {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.comment-activity-target {
+  color: var(--ink-3);
+  font-family: var(--serif);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.comment-activity-time {
+  padding-top: 2px;
+  white-space: nowrap;
 }
 
 /* === Choices card === */
@@ -761,6 +893,143 @@
   border: 0;
   font: inherit;
   padding: 0;
+}
+
+/* Visual alternatives — choices options rendered as an HTML preview grid
+   (one option = one selectable card with a live iframe preview + fullscreen). */
+.choices-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.choice-preview-card {
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--canvas);
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    opacity 0.15s;
+}
+.choice-preview-card.chosen {
+  border-color: var(--green);
+  background: var(--green-tint);
+}
+.choice-preview-card.faded {
+  opacity: 0.5;
+}
+.choice-preview-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-3);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+}
+.choice-preview-select:hover {
+  background: rgba(0, 0, 0, 0.012);
+}
+.choice-preview-select .choice-radio {
+  margin-top: 0;
+}
+.choice-preview-card.chosen .choice-radio {
+  border-color: var(--green);
+  background: var(--green);
+}
+.choice-preview-card.chosen .choice-radio::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--canvas);
+}
+.choice-preview-select .lbl {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.choice-preview-select .lbl .check {
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: var(--canvas);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--green);
+}
+.choice-preview-frame {
+  height: 220px;
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.choice-preview-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--canvas);
+}
+.choice-preview-frame .placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--canvas),
+    var(--canvas) 10px,
+    var(--line-3) 10px,
+    var(--line-3) 20px
+  );
+}
+.choice-preview-frame .placeholder .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.choice-preview-foot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--line-3);
+  background: rgba(0, 0, 0, 0.012);
+}
+.choice-preview-foot button {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.choice-preview-foot button:hover {
+  background: var(--panel);
+  color: var(--ink);
+}
+.choices-card-embedded .choice-preview-frame {
+  height: 180px;
 }
 
 /* === HTML Embed card === */
@@ -947,6 +1216,12 @@
   padding: var(--panel-list-pad-y) var(--panel-list-pad-x)
     calc(var(--panel-list-pad-y) + 12px);
 }
+.todo-current-list {
+  padding: 0 8px 8px;
+}
+.todo-current-group .group-label {
+  padding-top: 8px;
+}
 .todo-right-list {
   display: flex;
   flex-direction: column;
@@ -1079,6 +1354,22 @@
   flex: 1;
   min-width: 0;
 }
+.todo-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.todo-top-row .todo-title {
+  flex: 1;
+  min-width: 0;
+}
+.todo-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
 .todo-title {
   width: 100%;
   display: block;
@@ -1112,7 +1403,7 @@
   display: block;
   font-size: 13px;
   color: var(--ink-3);
-  margin-top: 2px;
+  margin-top: 4px;
   font-family: var(--serif);
   font-style: italic;
   line-height: 1.35;
@@ -1133,6 +1424,8 @@
 }
 .todo-assignee {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 .assign-badge {
   display: inline-flex;
@@ -1146,6 +1439,28 @@
   padding: 2px 8px 2px 4px;
   border-radius: 999px;
   cursor: pointer;
+}
+.assign-badge.icon-only {
+  padding: 2px;
+  width: 22px;
+  height: 22px;
+  justify-content: center;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+}
+.assign-badge.icon-only.unassigned {
+  color: var(--ink-4);
+  background: transparent;
+  padding: 2px;
+  outline: 1px dashed var(--line);
+  outline-offset: -1px;
+}
+.assign-badge.icon-only:hover,
+.assign-badge.icon-only[aria-expanded="true"] {
+  background: var(--line-2);
+  color: var(--ink);
+  outline: 0;
 }
 .assign-badge.unassigned {
   color: var(--ink-4);
@@ -1232,6 +1547,15 @@
 .todo-status-pill.wip {
   color: var(--agent);
   background: var(--agent-tint);
+}
+.todo-actions .todo-status-pill {
+  height: 14px;
+  width: 14px;
+  padding: 0;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  margin-right: 2px;
 }
 .todo-confirm {
   display: flex;
@@ -1361,6 +1685,43 @@
 }
 .turn-end.agent .label .dot {
   background: var(--agent);
+}
+
+/* === Fork-link card ===
+   Quiet inline system row. System-authored (sys-fork participant) so it
+   intentionally lives outside the agent/user visual language; closer in
+   weight to .turn-end than to a real event card. Whole row is a button
+   that navigates to the linked session. */
+.fork-link-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background var(--dur-instant) var(--ease-out-quart),
+              color var(--dur-instant) var(--ease-out-quart);
+}
+.fork-link-card:hover {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.fork-link-card:focus-visible {
+  outline: 2px solid var(--ink-3);
+  outline-offset: 2px;
+}
+.fork-link-card .fork-link-label {
+  color: var(--ink-2);
+}
+.fork-link-card .fork-link-slug {
+  color: var(--ink);
+  font-weight: 500;
 }
 
 /* === File card === */
@@ -1597,19 +1958,12 @@
   text-align: center;
 }
 
-/* === Card focus + dimming (used by Phase 14 overlay) === */
-.feed-scroll.dimmed .card:not(.focused),
-.feed-scroll.dimmed .prose-card:not(.focused),
-.feed-scroll.dimmed .embed-card:not(.focused),
-.feed-scroll.dimmed .choices-card:not(.focused),
-.feed-scroll.dimmed .todo-card:not(.focused),
-.feed-scroll.dimmed .file-card:not(.focused) {
-  opacity: 0.45;
-  transition: opacity 0.25s;
-}
-.feed-scroll.dimmed .turn-end {
-  opacity: 0.4;
-}
+/* === Card focus (used by Phase 14 overlay) ===
+   Dimming was previously applied to non-focused cards at 0.45 opacity, but
+   that washed out the surrounding context and made it hard to read other
+   parts of the feed while reviewing a comment. Now the focus is signaled
+   by the focused card's ring + the in-line `.line-comment-highlight` band
+   on the active range; everything else stays at full opacity. */
 .prose-card.focused {
   box-shadow:
     0 0 0 2px var(--user-tint-2),
@@ -1636,165 +1990,170 @@
   color: var(--ink-2);
 }
 
-/* === Tool-use card === */
-.tool-use-card {
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--canvas);
-  overflow: hidden;
-  font-size: 13px;
-  box-shadow: var(--shadow);
-}
-.tool-use-card.error {
-  border-color: color-mix(in oklch, var(--line-2) 50%, var(--agent) 50%);
-  background: color-mix(in oklch, var(--canvas) 90%, var(--agent) 6%);
-}
-.tool-use-head {
-  width: 100%;
+/* === Tool presentation — app-only parts ===
+   The tool-use card, code diff, sub-agent box and arbitrary group now render with
+   the reference agent-surface classes (.tool-call / .diff / .subagent / .toolbox)
+   defined in agent-components.css. The app-only presentation parts below
+   (.tool-meta, .tool-file-ref, .tool-excerpt, .tool-raw-details, .tool-error-notice)
+   are still used by toolPresentation/ToolPresentationParts and are kept. */
+.tool-meta {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--ink);
-  text-align: left;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.tool-meta span {
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--line-3);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink-3);
   font-family: var(--mono);
+  font-size: 10.5px;
+}
+.tool-meta b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.tool-file-list {
+  display: grid;
+  gap: 5px;
+}
+.tool-file-ref {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: 16px minmax(90px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line-3);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink-2);
+  padding: 5px 7px;
+  text-align: left;
+  cursor: pointer;
+}
+.tool-file-ref:hover {
+  border-color: var(--line-2);
+  background: color-mix(in oklch, var(--panel) 82%, var(--canvas) 18%);
+}
+.tool-file-ref:focus-visible {
+  outline: 2px solid var(--user);
+  outline-offset: 1px;
+}
+.tool-file-ref svg {
+  color: var(--ink-4);
+}
+.tool-file-ref-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
   font-size: 12px;
 }
-.tool-use-head:hover {
-  background: var(--panel);
-}
-.tool-use-head:focus-visible {
-  outline: 2px solid var(--user);
-  outline-offset: -2px;
-}
-.tool-use-chevron {
-  display: inline-flex;
-  align-items: center;
+.tool-file-ref-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink-4);
-  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
 }
-.tool-use-head svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-.tool-use-name {
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.tool-use-status {
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: color-mix(in oklch, var(--panel) 60%, var(--agent) 30%);
-  color: var(--ink);
+.tool-file-ref-line {
+  color: var(--ink-4);
   font-family: var(--mono);
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
 }
-.tool-use-duration {
-  margin-left: auto;
-  color: var(--ink-4);
+.tool-excerpt {
+  border: 1px solid var(--line-3);
+  border-radius: 6px;
+  background: var(--panel);
+  overflow: hidden;
   font-family: var(--mono);
   font-size: 11px;
+  line-height: 1.45;
 }
-.tool-use-body {
-  border-top: 1px dashed var(--line-3);
-  padding: 8px 10px 10px;
-  background: color-mix(in oklch, var(--canvas) 92%, var(--panel) 8%);
+.tool-excerpt-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  min-width: 0;
 }
-.tool-use-section + .tool-use-section {
-  margin-top: 8px;
+.tool-excerpt-row + .tool-excerpt-row {
+  border-top: 1px solid color-mix(in oklch, var(--line-3) 74%, transparent);
 }
-.tool-use-section h4 {
-  margin: 0 0 4px;
+.tool-excerpt-line {
+  padding: 2px 7px;
+  color: var(--ink-4);
+  text-align: right;
+  border-right: 1px solid var(--line-3);
+  user-select: none;
+}
+.tool-excerpt code {
+  min-width: 0;
+  padding: 2px 8px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tool-excerpt-more {
+  padding: 4px 8px;
+  color: var(--ink-4);
+  border-top: 1px solid var(--line-3);
   font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-3);
+  font-size: 10.5px;
 }
-.tool-use-section pre {
-  margin: 0;
+.tool-raw-details {
+  margin-top: 8px;
+  color: var(--tool-card-muted, var(--ink-4));
+}
+.tool-raw-details summary {
+  cursor: pointer;
+  color: var(--tool-card-muted, var(--ink-4));
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.tool-raw-details pre {
+  margin: 5px 0 0;
+  max-height: 240px;
+  overflow: auto;
   padding: 6px 8px;
-  background: var(--panel);
   border: 1px solid var(--line-3);
   border-radius: 4px;
+  background: var(--tool-card-pre-bg, var(--panel));
+  color: var(--tool-card-pre-fg, var(--ink-2));
   font-family: var(--mono);
   font-size: 11.5px;
   line-height: 1.5;
-  color: var(--ink-2);
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 240px;
-  overflow: auto;
 }
-
-/* === Arbitrary-group card ===
-   Bundles a contiguous mid-turn run of prose + tool-use events from a
-   single participant. Open by default while the turn is still streaming;
-   collapsed once the kernel emits a concluding prose or turn-end. */
-.arbitrary-group {
-  border: 1px solid var(--line-2);
+.tool-error-notice {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  border: 1px solid color-mix(in oklch, var(--rose) 34%, var(--line-2));
   border-radius: 6px;
-  background: var(--canvas);
-  overflow: hidden;
-  font-size: 13px;
-  box-shadow: var(--shadow);
+  background: color-mix(in oklch, var(--rose) 8%, var(--panel));
+  color: var(--ink-2);
+  padding: 7px;
 }
-.arbitrary-group--streaming {
-  border-color: color-mix(in oklch, var(--line-2) 60%, var(--agent) 40%);
+.tool-error-notice svg {
+  color: var(--rose);
 }
-.arbitrary-group-head {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--ink);
-  text-align: left;
-  font-family: var(--mono);
+.tool-error-notice b {
   font-size: 12px;
 }
-.arbitrary-group-head:hover {
-  background: var(--panel);
+.tool-error-notice p {
+  margin: 2px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
 }
-.arbitrary-group-head:focus-visible {
-  outline: 2px solid var(--user);
-  outline-offset: -2px;
-}
-.arbitrary-group-chevron {
-  display: inline-flex;
-  align-items: center;
-  color: var(--ink-4);
-  flex-shrink: 0;
-}
-.arbitrary-group-title {
-  color: var(--ink-2);
-  font-weight: 500;
-}
-.arbitrary-group-live {
-  color: var(--agent);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 10.5px;
-}
-.arbitrary-group-body {
-  border-top: 1px dashed var(--line-3);
-  padding: 8px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: color-mix(in oklch, var(--canvas) 92%, var(--panel) 8%);
-}
+
 
 /* === Flow card === */
 :root {

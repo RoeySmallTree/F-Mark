@@ -31,6 +31,7 @@ import type {
 import { getCommentTarget } from "@f-mark/shared";
 import { useStore } from "../state/store.js";
 import { createClient } from "../api/client.js";
+import { createManagedAgentsClient } from "../api/managedAgents.js";
 import { formatWhen, whoOf } from "../cards/format.js";
 import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
@@ -280,9 +281,10 @@ export function CommentThreadOverlay({
   ): Promise<void> {
     if (currentSessionId === null || currentUserId === null) return;
     const client = createClient({ baseUrl: "", token });
+    const managedClient = createManagedAgentsClient({ baseUrl: "", token });
     /* Composable-prose Phase 2: POST in the new shape (append_to + mode
        + lines?) instead of the legacy `target` wrapper. */
-    await client.postProse(currentSessionId, {
+    const response = await client.postProse(currentSessionId, {
       participant_id: currentUserId,
       content,
       in_reply_to: root.filename,
@@ -290,6 +292,16 @@ export function CommentThreadOverlay({
       mode: "comment",
       ...(lines === undefined ? {} : { lines }),
     });
+    if (
+      target?.participant_id !== undefined &&
+      participants[target.participant_id]?.kind === "agent"
+    ) {
+      await managedClient.wakeSession(currentSessionId, {
+        reason: "comment",
+        source_event: response.filename,
+        target_participant_ids: [target.participant_id],
+      });
+    }
     // Refresh events so the reply appears immediately.
     const fresh = await client.listEvents(currentSessionId, {});
     for (const e of fresh) upsertEvent(e);
@@ -298,7 +310,8 @@ export function CommentThreadOverlay({
   async function postResolve(root: AnyEventRecord): Promise<void> {
     if (currentSessionId === null || currentUserId === null) return;
     const client = createClient({ baseUrl: "", token });
-    await client.postProse(currentSessionId, {
+    const managedClient = createManagedAgentsClient({ baseUrl: "", token });
+    const response = await client.postProse(currentSessionId, {
       participant_id: currentUserId,
       content: "_resolved_",
       supersedes: root.filename,
@@ -306,6 +319,16 @@ export function CommentThreadOverlay({
       mode: "comment",
       ...(lines === undefined ? {} : { lines }),
     });
+    if (
+      target?.participant_id !== undefined &&
+      participants[target.participant_id]?.kind === "agent"
+    ) {
+      await managedClient.wakeSession(currentSessionId, {
+        reason: "comment",
+        source_event: response.filename,
+        target_participant_ids: [target.participant_id],
+      });
+    }
     const fresh = await client.listEvents(currentSessionId, {});
     for (const e of fresh) upsertEvent(e);
   }

@@ -10,6 +10,14 @@ describe("renderBanner — --allow-process-api-no-auth warning", () => {
     sshHint: false,
   };
 
+  it("prints the package-aligned version in the banner title", () => {
+    const out = renderBanner({
+      ...base,
+      token: "secret",
+    });
+    expect(out).toContain("F-Mark v0.4.0 running.");
+  });
+
   it("emits a warning when token is null AND allowProcessApiNoAuth is true", () => {
     const out = renderBanner({
       ...base,

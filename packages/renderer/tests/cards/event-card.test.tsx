@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { AnyEventRecord, ToolUseEventRecord } from "@f-mark/shared";
 import { EventCard } from "../../src/cards/EventCard.js";
+import { useStore } from "../../src/state/store.js";
 import {
   PARTICIPANTS,
   makeChoices,
@@ -59,21 +61,71 @@ describe("EventCard dispatcher", () => {
     );
   });
 
-  test("prose with target → null (consumed as pin on the ProseCard)", () => {
+  test("prose with target → compact comment activity", () => {
+    const anchor = makeProse(
+      "20260522T100100Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Spec", content: "line one\nline two" },
+    );
     const ev = makeProse(
       "20260522T100200Z_us-a7f3.prose.md",
       "us-a7f3",
-      { content: "comment", target: { file: "anchor.md" } },
+      {
+        content: "comment",
+        append_to: anchor.filename,
+        mode: "comment",
+        lines: [2, 2],
+      },
     );
     const { container } = render(
       <EventCard
         event={ev}
         participants={PARTICIPANTS}
         comments={[]}
-        allEvents={[ev]}
+        allEvents={[anchor, ev]}
       />,
     );
-    expect(container.children.length).toBe(0);
+    expect(container.querySelector(".comment-activity-card")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /you commented on spec/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Spec/)).toBeInTheDocument();
+    expect(screen.getByText(/line 2/i)).toBeInTheDocument();
+  });
+
+  test("clicking comment activity opens the right comments focus", async () => {
+    const user = userEvent.setup();
+    const anchor = makeProse(
+      "20260522T100100Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Spec", content: "line one\nline two" },
+    );
+    const ev = makeProse(
+      "20260522T100200Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "comment",
+        append_to: anchor.filename,
+        mode: "comment",
+        lines: [2, 2],
+      },
+    );
+    render(
+      <EventCard
+        event={ev}
+        participants={PARTICIPANTS}
+        comments={[]}
+        allEvents={[anchor, ev]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /you commented on spec/i }));
+    expect(useStore.getState().commentTarget).toEqual({
+      kind: "event",
+      file: anchor.filename,
+      lines: [2, 2],
+    });
+    expect(useStore.getState().focusedCommentId).toBe(ev.filename);
+    expect(useStore.getState().rightTab).toBe("comments");
   });
 
   test("choice → null (consumed inside ChoicesCard)", () => {
@@ -190,7 +242,13 @@ describe("EventCard dispatcher", () => {
       timestamp: "20260523T100000Z",
       participant_id: "ag-claude",
       kind: "tool-use",
-      payload: { tool_name: "Bash", tool_use_id: "tu_1", input: {}, success: true },
+      payload: {
+        tool_name: "Bash",
+        tool_use_id: "tu_1",
+        input: { command: "ls -la" },
+        result: "total 0\n",
+        success: true,
+      },
     };
     render(
       <EventCard
@@ -200,7 +258,7 @@ describe("EventCard dispatcher", () => {
         allEvents={[ev]}
       />,
     );
-    expect(screen.getByText("Bash")).toBeInTheDocument();
+    expect(screen.getByText("Bash", { selector: ".tool-type" })).toBeInTheDocument();
   });
 
   test("consumed-block early-out: event whose filename is in consumedFilenames returns null", () => {

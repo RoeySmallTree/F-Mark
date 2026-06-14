@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import type { ProsePayload } from "@f-mark/shared";
 import { aggregate } from "../state/aggregate.js";
+import { LoadingAnimation } from "../components/LoadingAnimation.js";
 import {
   basename,
   groupRecordsByPath,
@@ -39,9 +40,8 @@ export function Comments(): JSX.Element {
       </div>
       <div className="panel-list" style={{ padding: "0 12px 12px" }}>
         {error !== null ? <p className="panel-error">{error}</p> : null}
-        {loading ? <p className="panel-empty">Loading comments...</p> : null}
-        {!loading && pathGroups.length === 0 ? (
-          <p className="panel-empty">No comments yet.</p>
+        {loading || pathGroups.length === 0 ? (
+          <LoadingAnimation className="panel-loading" />
         ) : null}
         {pathGroups.map((pathGroup) => (
           <details key={pathGroup.path} className="repo-session-group" open>

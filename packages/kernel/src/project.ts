@@ -13,9 +13,10 @@ export interface ProjectConfig {
 }
 
 export interface Participant {
-  kind: "user" | "agent";
+  kind: "user" | "agent" | "sys";
   name: string;
   color: string;
+  avatar_data_url?: string;
   runtime_id?: string;
   model_override?: string;
   effort_override?: string;

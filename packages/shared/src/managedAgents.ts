@@ -42,6 +42,7 @@ export interface SpawnRequest {
   session_id?: string;
   name?: string;
   suggested_participant_id?: string;
+  access_mode?: string;
 }
 
 export interface RuntimeSessionInfo {
@@ -148,15 +149,25 @@ export interface RuntimeControlCapabilities {
   subagents: RuntimeSubagentCaptureCapability;
   reconnect_supported: boolean;
   access_modes: string[];
+  default_access_mode: string;
+  launch_access_modes: RuntimeAccessModeOption[];
   access_change_supported: boolean;
-  context_source: "unknown" | "claude-status-line";
+  access_change_reason?: string;
+  context_source:
+    | "unsupported"
+    | "not-reported"
+    | "claude-status-line"
+    | "codex-app-server"
+    | "opencode-db";
+  context_reason?: string;
 }
 
 export interface AgentContextStatus {
-  status: "unknown";
+  status: "reported" | "not-reported" | "unsupported";
   used_tokens: number | null;
   max_tokens: number | null;
-  source: "unknown" | "unsupported";
+  source: RuntimeControlCapabilities["context_source"];
+  reason?: string;
 }
 
 export interface AgentAccessStatus {
@@ -164,6 +175,121 @@ export interface AgentAccessStatus {
   supported_modes: string[];
   change_supported: boolean;
   reason?: string;
+}
+
+export interface RuntimeAccessModeOption {
+  id: string;
+  label: string;
+  description: string;
+  dangerous?: boolean;
+  deprecated?: boolean;
+}
+
+export const DEFAULT_RUNTIME_ACCESS_MODE = "default";
+
+export const RUNTIME_ACCESS_MODE_OPTIONS: Record<
+  string,
+  RuntimeAccessModeOption[]
+> = {
+  claude: [
+    {
+      id: "default",
+      label: "Default",
+      description: "Use the runtime's configured permission behavior.",
+    },
+    {
+      id: "acceptEdits",
+      label: "Accept edits",
+      description: "Start Claude with edit approvals accepted.",
+    },
+    {
+      id: "auto",
+      label: "Auto",
+      description: "Let Claude automatically approve low-risk actions.",
+    },
+    {
+      id: "dontAsk",
+      label: "Do not ask",
+      description: "Start Claude in its no-prompt permission mode.",
+      dangerous: true,
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      description: "Start Claude in planning mode.",
+    },
+    {
+      id: "bypassPermissions",
+      label: "Bypass permissions",
+      description: "Bypass Claude permission checks for this launch.",
+      dangerous: true,
+    },
+  ],
+  codex: [
+    {
+      id: "default",
+      label: "Default",
+      description: "Use the Codex profile or config approval policy.",
+    },
+    {
+      id: "untrusted",
+      label: "Untrusted",
+      description: "Ask before commands outside Codex's trusted set.",
+    },
+    {
+      id: "on-request",
+      label: "On request",
+      description: "Let the agent decide when to ask for approval.",
+    },
+    {
+      id: "never",
+      label: "Never ask",
+      description: "Return failures to the agent instead of prompting.",
+    },
+    {
+      id: "on-failure",
+      label: "On failure",
+      description: "Deprecated Codex approval behavior.",
+      deprecated: true,
+    },
+  ],
+  opencode: [
+    {
+      id: "default",
+      label: "Default",
+      description: "Opencode does not expose a verified launch permission flag.",
+    },
+  ],
+};
+
+export function runtimeAccessModeOptions(
+  runtimeId: string | null | undefined,
+): RuntimeAccessModeOption[] {
+  if (runtimeId === null || runtimeId === undefined) return [];
+  return RUNTIME_ACCESS_MODE_OPTIONS[runtimeId] ?? [];
+}
+
+export function defaultRuntimeAccessMode(
+  runtimeId: string | null | undefined,
+): string {
+  return runtimeAccessModeOptions(runtimeId)[0]?.id ?? DEFAULT_RUNTIME_ACCESS_MODE;
+}
+
+export function isRuntimeAccessMode(
+  runtimeId: string | null | undefined,
+  mode: string,
+): boolean {
+  return runtimeAccessModeOptions(runtimeId).some((option) => option.id === mode);
+}
+
+export function runtimeAccessModeLabel(
+  runtimeId: string | null | undefined,
+  mode: string,
+): string {
+  return (
+    runtimeAccessModeOptions(runtimeId).find((option) => option.id === mode)
+      ?.label ?? mode
+  );
 }
 
 export interface AgentStatusRow {

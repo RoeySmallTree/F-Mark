@@ -99,11 +99,12 @@ describe("ProseInlineBlock registry dispatcher", () => {
       },
       {
         kind: "tool-use",
-        cardClass: ".tool-use-card",
+        cardClass: ".tool-call",
         payload: {
           tool_name: "Bash",
           tool_use_id: "tu1",
-          input: {},
+          input: { command: "ls -la" },
+          result: "total 0\n",
           success: true,
           append_to: "anchor.md",
         },

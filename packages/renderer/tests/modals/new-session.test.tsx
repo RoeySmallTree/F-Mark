@@ -37,6 +37,11 @@ function resetStore(): void {
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",
+    activePath: null,
+    activePathId: null,
+    activeRevision: 0,
+    knownPaths: [],
+    favorites: [],
     activeModal: null,
     activePopover: { key: null, anchorRect: null },
   });
@@ -126,6 +131,34 @@ describe("NewSessionModal (v0.5)", () => {
     // Folder field populated from /fs/home asynchronously.
     await waitFor(() => {
       expect(screen.getByText("/home/me")).toBeInTheDocument();
+    });
+  });
+
+  test("defaults Folder to the active project path when one is selected", async () => {
+    const mock = stubFetch();
+    const user = userEvent.setup();
+    render(<ModalRoot />);
+    act(() => {
+      useStore.setState({ activePath: "/workspace/F-Mark" });
+      useStore.getState().openModal("new-session");
+    });
+
+    expect(screen.getByText("/workspace/F-Mark")).toBeInTheDocument();
+    expect(mock.mock.calls.some(([u]) => String(u).endsWith("/fs/home"))).toBe(false);
+
+    await user.type(screen.getByLabelText(/session name/i), "demo");
+    await user.click(screen.getByRole("button", { name: /create session/i }));
+
+    await waitFor(() => {
+      const createCall = mock.mock.calls.find(([u, init]) => {
+        return (
+          String(u).endsWith("/sessions") &&
+          (init as RequestInit | undefined)?.method === "POST"
+        );
+      });
+      expect(createCall).toBeDefined();
+      const body = JSON.parse((createCall![1] as RequestInit).body as string);
+      expect(body).toEqual({ slug: "demo", path: "/workspace/F-Mark" });
     });
   });
 

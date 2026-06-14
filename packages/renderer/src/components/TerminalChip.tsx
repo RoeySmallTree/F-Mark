@@ -6,7 +6,7 @@
    the menu that opens (separate component, not in scope for v0.4 here). */
 
 import type { JSX } from "react";
-import { avatarIconSrc } from "./ParticipantAvatar.js";
+import { iconMaskStyle } from "./ParticipantAvatar.js";
 import "./chips.css";
 
 export interface TerminalChipProps {
@@ -31,7 +31,7 @@ export function TerminalChip({
       aria-label={`Terminal ${label}`}
     >
       <span className="terminal-chip-icon" aria-hidden>
-        <img src={avatarIconSrc("terminal")} alt="" draggable={false} />
+        <span className="icon-mask" style={iconMaskStyle("terminal")} />
       </span>
       <span className="terminal-chip-label">{label}</span>
     </Tag>

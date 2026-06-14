@@ -11,9 +11,12 @@ import type {
 import { checkHookInstallStatus } from "../hooksInstall/index.js";
 import { applyAutomaticHookInstall } from "../hooksInstall/index.js";
 import { FMARK_HOOK_INSTALL_VERSION } from "../hooksInstall/command.js";
+import {
+  envWithExecutableSearchPath,
+  resolveExecutableForExec,
+} from "../runtimes/executableSearch.js";
 import { applyClaudeMcp, detectClaudeMcp } from "./claude.js";
 import { applyCodexMcp, detectCodexMcp } from "./codex.js";
-import { applyGeminiMcp, detectGeminiMcp } from "./gemini.js";
 import { applyOpencodeMcp, detectOpencodeMcp } from "./opencode.js";
 import {
   makeCheck,
@@ -23,27 +26,37 @@ import {
   type McpDetectInput,
 } from "./types.js";
 
-function executableFor(runtimeId: RuntimeId): string {
+function executableFor(runtimeId: RuntimeId, configuredExecutable?: string): string {
+  if (configuredExecutable !== undefined && configuredExecutable.length > 0) {
+    return configuredExecutable;
+  }
   return runtimeId === "claude" ||
     runtimeId === "codex" ||
-    runtimeId === "gemini" ||
     runtimeId === "opencode"
     ? runtimeId
     : String(runtimeId);
 }
 
-function execVersion(executable: string, env: NodeJS.ProcessEnv): Promise<string> {
+async function execVersion(
+  executable: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ executable: string; version: string }> {
+  const probeEnv = envWithExecutableSearchPath(env);
+  const resolvedExecutable = await resolveExecutableForExec(executable, probeEnv);
   return new Promise((resolve, reject) => {
     const child = execFile(
-      executable,
+      resolvedExecutable,
       ["--version"],
-      { env, timeout: 10_000, maxBuffer: 1024 * 1024 },
+      { env: probeEnv, timeout: 10_000, maxBuffer: 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
           reject(error);
           return;
         }
-        resolve((stdout || stderr).toString().trim());
+        resolve({
+          executable: resolvedExecutable,
+          version: (stdout || stderr).toString().trim(),
+        });
       },
     );
     child.stdin?.end();
@@ -53,13 +66,15 @@ function execVersion(executable: string, env: NodeJS.ProcessEnv): Promise<string
 async function probeRuntime(
   runtimeId: RuntimeId,
   env: NodeJS.ProcessEnv,
+  configuredExecutable?: string,
 ): Promise<RuntimeCapability> {
-  const executable = executableFor(runtimeId);
+  const executable = executableFor(runtimeId, configuredExecutable);
   try {
+    const result = await execVersion(executable, env);
     return {
       runtime_id: runtimeId,
-      executable,
-      version: await execVersion(executable, env),
+      executable: result.executable,
+      version: result.version,
       available: true,
     };
   } catch (err) {
@@ -74,7 +89,6 @@ async function probeRuntime(
 async function detectMcp(input: McpDetectInput): Promise<IntegrationCheck> {
   if (input.runtimeId === "claude") return detectClaudeMcp(input);
   if (input.runtimeId === "codex") return detectCodexMcp(input);
-  if (input.runtimeId === "gemini") return detectGeminiMcp(input);
   if (input.runtimeId === "opencode") return detectOpencodeMcp(input);
   return makeCheck([
     {
@@ -155,7 +169,6 @@ function shouldApplyHookLocation(location: IntegrationLocation | undefined): boo
 async function applyMcp(input: McpApplyInput) {
   if (input.runtimeId === "claude") return applyClaudeMcp(input);
   if (input.runtimeId === "codex") return applyCodexMcp(input);
-  if (input.runtimeId === "gemini") return applyGeminiMcp(input);
   if (input.runtimeId === "opencode") return applyOpencodeMcp(input);
   throw new Error(`unsupported runtime_id: ${input.runtimeId}`);
 }
@@ -169,7 +182,6 @@ async function detectHooks(input: {
   if (
     input.runtimeId !== "claude" &&
     input.runtimeId !== "codex" &&
-    input.runtimeId !== "gemini" &&
     input.runtimeId !== "opencode"
   ) {
     const locations: IntegrationLocation[] = [
@@ -259,6 +271,7 @@ async function detectHooks(input: {
 
 export async function preflightIntegration(input: {
   runtimeId: RuntimeId;
+  executable?: string;
   projectRoot: string;
   participantId?: string;
   userParticipantId?: string;
@@ -266,7 +279,7 @@ export async function preflightIntegration(input: {
 }): Promise<IntegrationPreflightResponse> {
   const env = input.env ?? process.env;
   const participantId = input.participantId ?? "ag-preflight";
-  const runtime = await probeRuntime(input.runtimeId, env);
+  const runtime = await probeRuntime(input.runtimeId, env, input.executable);
   const mcp = await detectMcp({
     runtimeId: input.runtimeId,
     projectRoot: input.projectRoot,
@@ -293,6 +306,7 @@ export async function preflightIntegration(input: {
 
 export async function applyIntegration(input: {
   runtimeId: RuntimeId;
+  executable?: string;
   scope?: IntegrationScope;
   projectRoot: string;
   participantId?: string;
@@ -300,7 +314,7 @@ export async function applyIntegration(input: {
   env?: NodeJS.ProcessEnv;
 }): Promise<IntegrationApplyResponse> {
   const env = input.env ?? process.env;
-  const runtime = await probeRuntime(input.runtimeId, env);
+  const runtime = await probeRuntime(input.runtimeId, env, input.executable);
   if (!runtime.available) {
     throw new Error(runtime.reason ?? `${runtime.executable} is not available`);
   }
@@ -334,6 +348,7 @@ export async function applyIntegration(input: {
   }
   const after = await preflightIntegration({
     runtimeId: input.runtimeId,
+    executable: input.executable,
     participantId: input.participantId,
     userParticipantId: input.userParticipantId,
     projectRoot: input.projectRoot,

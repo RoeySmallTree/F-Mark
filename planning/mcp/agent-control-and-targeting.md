@@ -22,6 +22,14 @@
    - The initial prompt tells the agent its display name.
    - Mentions use `@display-name`.
 
+## Integrated Research Inputs
+
+- `planning/mcp/research-mcp-kernel-architecture.md`: active-session state is currently split across participants, legacy link routes, managed-agent runtime files, and hooks. Agent controls must use one canonical `AgentStateStore` before pause/resume, fork handoff, MCP context, and wake targeting can be reliable.
+- `planning/mcp/research-fmark-ui-backend-integration.md`: `GET /managed-agents/status` must include active session, pause state, connection/activity state, display name, runtime session, context, access, and pending counts for the right-pane Agents tab.
+- `planning/mcp/research-claude-runtime.md`: Claude exposes runtime session ids through hooks, context through status-line JSON, access requests through `PermissionRequest`, and compact/clear through `/compact`/`/clear`.
+- `planning/mcp/research-codex-runtime.md`: Codex exposes runtime session/turn ids through hooks, access requests through `PermissionRequest`, compact/clear through `/compact`/`/clear`, but context usage needs app-server or transcript work.
+- `planning/mcp/research-gemini-runtime.md`: Gemini exposes runtime session ids through hooks, access prompts through `Notification` `ToolPermission`, compact through `/compress`, and `/clear` resets the runtime session id; context usage should be unknown/estimated.
+
 ## Backend Data Model
 
 ### Agent State
@@ -42,12 +50,22 @@ interface ManagedAgentState {
   display_name: string;
   runtime_id: string;
   active_session: string | null;
+  runtime_session?: RuntimeSessionIdentity;
   paused: boolean;
   connection_state: "connected" | "detached" | "launching" | "offline";
   activity_state: "idle" | "running" | "notified" | "turn-ended" | "access-pending";
   last_seen_cursor_by_session: Record<string, string>;
   context?: AgentContextStatus;
   access?: AgentAccessStatus;
+}
+
+interface RuntimeSessionIdentity {
+  id: string | null;
+  name: string | null;
+  desired_name: string | null;
+  transcript_path?: string | null;
+  source: "hook" | "mcp-handshake" | "spawn" | "unknown";
+  updated_at: string;
 }
 
 interface AgentContextStatus {
@@ -69,6 +87,15 @@ interface AgentAccessStatus {
 ```
 
 Participant config should continue to store the public participant identity. Managed-agent state stores operational controls.
+
+Current implementation note:
+
+- F-Mark already stores the F-Mark participant id, active F-Mark session id, runtime id, and tmux session name.
+- Hook auto-registration can map external runtime `session_id` values in `.f-mark/hooks/auto-stream-agents.json`, but managed tmux-spawned agents do not currently expose a vendor session identity in `GET /managed-agents`.
+- The new state file must normalize vendor/runtime identity as `runtime_session`, updated from hook payloads and, where available, MCP handshake/status.
+- On managed spawn, set `runtime_session.desired_name` to the active F-Mark `session_id`. If the vendor runtime supports a session title/name at creation time, pass that same `session_id` as the vendor-native session name/title.
+- Runtime session `name` is the actual confirmed vendor-native name/title. If Claude/Codex/Gemini expose only an id or do not allow setting names, keep `desired_name` as the F-Mark alias and show the F-Mark display name plus the desired session id/shortened vendor id.
+- Store and read `active_session` through a single `AgentStateStore`/resolver. Legacy files can be bridged during migration, but participants, hooks, MCP context, wake routing, and fork handoff must not each invent their own active-session lookup.
 
 ### Random Display Names
 
@@ -117,6 +144,7 @@ interface AgentStatusRow {
   display_name: string;
   runtime_id: string | null;
   active_session: string | null;
+  runtime_session: RuntimeSessionIdentity;
   managed: boolean;
   paused: boolean;
   connection_state: "connected" | "detached" | "launching" | "offline";
@@ -199,17 +227,17 @@ POST /managed-agents/:id/clear
 Implementation:
 
 - use runtime capability table to decide command:
-  - likely send `/compact` for compact,
-  - likely send `/clear` or runtime equivalent for clear,
-  - disable if unsupported.
+  - Claude: `/compact` and `/clear`; re-send compass after PreCompact/PostCompact or SessionStart/End signals.
+  - Codex: `/compact` and `/clear`; `/clear` starts a fresh thread, so rebind runtime session identity afterward.
+  - Gemini: `/compress` for compact; `/compact` is an alias to smoke-test; `/clear` resets chat and creates a new runtime session id.
 - disable compact/clear while the agent is `running`, `notified`, or waiting on an access request. Enable only when idle/ready/detached states make the operation safe for that runtime.
 - route through the existing per-pane input queue.
 
-Research required:
+Remaining smoke checks:
 
-- exact compact/clear command availability for Claude Code, Codex CLI, Gemini CLI.
-- whether commands can be sent safely while the runtime is running.
-- whether clear destroys context, chat transcript, terminal screen, or only visible UI.
+- Verify the exact idle-state signal before sending compact/clear to each runtime.
+- Verify post-clear runtime session id rebinding for Codex and Gemini.
+- Verify whether Gemini `/compact` alias is safe enough to expose or whether UI should label only `/compress`.
 
 ### Access Status And Change Access
 
@@ -232,12 +260,11 @@ Requirements:
 - allow changing when supported,
 - show unsupported/unknown when not reliably retrievable.
 
-Research required:
+Research-backed behavior:
 
-- Claude Code permission mode/config/readback APIs.
-- Codex approval/sandbox/access modes and readback APIs.
-- Gemini CLI trust/approval/access modes and readback APIs.
-- Whether access changes can be applied live or require restart.
+- Claude: expose launch/readback permission mode where available; create access-request cards from structured `PermissionRequest` hooks. Live mode change needs smoke before enabling.
+- Codex: expose approval policy and sandbox mode from launch/config; create access-request cards from structured `PermissionRequest` hooks. Prefer app-server or smoke-tested terminal path for live changes.
+- Gemini: expose launch-time `--approval-mode`, sandbox, and trust state. Treat live access changes as unsupported/restart-required unless future smoke proves otherwise; create access-request cards from `Notification` `ToolPermission` where available.
 
 ### Context Status
 
@@ -247,11 +274,11 @@ GET /managed-agents/:id/context
 
 Returns known context used/available.
 
-Research required:
+Research-backed behavior:
 
-- reliable context usage retrieval for Claude Code, Codex CLI, Gemini CLI.
-- whether hooks expose this in structured payloads.
-- whether terminal parsing is reliable enough or should be avoided.
+- Claude: prefer status-line JSON `context_window`; hooks alone are insufficient.
+- Codex: show `Unknown` unless app-server or transcript fixtures provide a stable token usage field.
+- Gemini: show estimated/unknown; no stable external context-used API has been found.
 
 If any vendor cannot reliably expose context usage, UI must show `Unknown` rather than inventing a number.
 
@@ -290,6 +317,19 @@ Wake targeting rules:
 - Manual wake from the Agents tab: wake the selected agent if active and unpaused; if paused, offer resume first.
 
 All wake target resolution must remove paused agents before delivery. If a tagged/assigned/comment-author agent is paused, the UI should show a resume affordance rather than silently waking it.
+
+### Session Fork Handoff
+
+Session forking is specified in `planning/mcp/session-forking.md`, but it must update the same managed-agent state described here.
+
+When `POST /sessions/:id/fork` moves active agents into the fork:
+
+- update `active_session` to the fork session id,
+- update `.f-mark/agents/<participant-id>/active-session`,
+- set `runtime_session.desired_name` to the fork session id,
+- preserve `display_name`, `paused`, access, and context state,
+- leave paused agents paused and skipped,
+- broadcast agent-state updates so the right-pane Agents tab and chips re-render against the fork.
 
 ## Agent Mentions / Tags
 
@@ -473,6 +513,7 @@ Turn-ended notification should appear on chip but should not look like an access
 - [ ] `changeAgentAccess(id, mode)`
 - [ ] `getAgentContext(id)`
 - [ ] `wakeSession(sessionId, targets, sourceEvent, reason)`
+- [ ] `forkSession(sessionId, body)`
 
 ### Components
 
@@ -484,6 +525,8 @@ Turn-ended notification should appear on chip but should not look like an access
 - [ ] `AgentMentionPopover`
 - [ ] `AgentMentionToken`
 - [ ] `AccessRequestCard`
+- [ ] `ForkSessionPopover`
+- [ ] `SubagentBox`
 
 ### Compose/comment integration
 
@@ -512,6 +555,8 @@ Turn-ended notification should appear on chip but should not look like an access
 - [ ] Comment mentions create metadata.
 - [ ] Access request card approve/deny actions.
 - [ ] Chip shows distinct access-pending vs turn-ended state.
+- [ ] Fork handoff updates agent rows to the forked session.
+- [ ] Sub-agent output renders as nested child of the invoking agent, not as a separate top-level agent.
 
 ## Backend Implementation Checklist
 
@@ -525,27 +570,36 @@ Turn-ended notification should appear on chip but should not look like an access
 - [ ] Access read/change routes.
 - [ ] Context read route.
 - [ ] Wake route with mention/target handling.
+- [ ] Session fork handoff updates active managed-agent state.
+- [ ] Sub-agent attribution stores parent participant/turn/tool-use and child name when available.
 - [ ] Mention metadata in prose/comment schemas.
 - [ ] Access request/response event routes.
 - [ ] WS broadcasts for agent state changes.
 - [ ] Tests for paused agents not receiving wake.
 - [ ] Tests for mention-targeted wake.
+- [ ] Tests for fork handoff changing agent active-session pointers.
+- [ ] Tests for sub-agent output attribution and nested rendering data.
 - [ ] Tests for random display name persistence.
 - [ ] Tests for access request state transitions.
 
-## Vendor Research Checklist
+## Runtime Capability Smoke Checklist
 
-Create a dedicated research pass before implementing context/access/compact/clear for all vendors:
+Research outcome docs answer the broad questions. These remaining checks decide whether a control is enabled in v1 or shown as unknown/unsupported:
 
-- [ ] Claude Code context used/available retrieval.
-- [ ] Codex CLI context used/available retrieval.
-- [ ] Gemini CLI context used/available retrieval.
-- [ ] Claude Code access/permission modes and live change support.
-- [ ] Codex CLI access/approval/sandbox modes and live change support.
-- [ ] Gemini CLI trust/access/approval modes and live change support.
-- [ ] Claude compact/clear commands and safe timing.
-- [ ] Codex compact/clear commands and safe timing.
-- [ ] Gemini compact/clear commands and safe timing.
-- [ ] Structured permission/access request detection for each runtime.
+- [ ] Claude status-line context installer/readback without clobbering user config.
+- [ ] Codex app-server or transcript path for context usage; otherwise keep `Unknown`.
+- [ ] Gemini context usage fixture; otherwise keep estimated/unknown.
+- [ ] Claude live permission-mode change; otherwise require restart.
+- [ ] Codex live approval/sandbox change; otherwise require restart or app-server.
+- [ ] Gemini live access/trust change; default to restart-required.
+- [ ] Idle-state safety for Claude `/compact` and `/clear`.
+- [ ] Idle-state safety for Codex `/compact` and `/clear`, plus post-clear runtime session rebinding.
+- [ ] Idle-state safety for Gemini `/compress` and `/clear`, plus post-clear runtime session rebinding.
+- [ ] Claude `/branch [name]` managed-pane behavior.
+- [ ] Codex `/fork` and `codex fork` managed-pane behavior.
+- [ ] Gemini checkpoint resume behavior, if considered for optional native branch.
+- [ ] Claude progressive sub-agent stream visibility.
+- [ ] Codex progressive sub-agent/app-server/transcript visibility.
+- [ ] Gemini progressive `invoke_agent`/`SubagentProgress` visibility.
 
-Until verified, UI should show unsupported/unknown states instead of pretending.
+Until a smoke item passes, the UI should show unsupported/unknown states instead of pretending.

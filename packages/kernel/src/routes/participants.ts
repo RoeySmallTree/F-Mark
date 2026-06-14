@@ -1,4 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import {
+  PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH,
+  type RegisterAgentRequest,
+  type UpdateParticipantPatch,
+} from "@f-mark/shared";
 import { paths as makePaths, type Paths } from "../paths.js";
 import type { PathContextRef } from "../paths/contextRef.js";
 import {
@@ -6,20 +11,10 @@ import {
   registerAgent,
   updateParticipant,
 } from "../participants.js";
-
-interface RegisterBody {
-  kind: "agent";
-  name?: string;
-  suggested_id?: string;
-}
+import { createAgentStateStore } from "../services/agentState.js";
 
 interface UpdateParams {
   id: string;
-}
-
-interface UpdateBody {
-  name?: string;
-  color?: string;
 }
 
 export interface ParticipantRouteDeps {
@@ -49,7 +44,11 @@ export function registerParticipantRoutes(
 
   app.get("/participants", async () => {
     try {
-      return { participants: await listParticipants(resolvePaths(deps)) };
+      return {
+        participants: await listParticipants(resolvePaths(deps), {
+          agentState: createAgentStateStore(deps),
+        }),
+      };
     } catch (err) {
       /* Active path may not have a .f-mark/ yet — e.g., user just picked a
          fresh folder via PathSwitcher but hasn't created a session. Show
@@ -61,7 +60,7 @@ export function registerParticipantRoutes(
     }
   });
 
-  app.post<{ Body: RegisterBody }>(
+  app.post<{ Body: RegisterAgentRequest }>(
     "/participants/register",
     {
       schema: {
@@ -91,7 +90,7 @@ export function registerParticipantRoutes(
     },
   );
 
-  app.patch<{ Params: UpdateParams; Body: UpdateBody }>(
+  app.patch<{ Params: UpdateParams; Body: UpdateParticipantPatch }>(
     "/participants/:id",
     {
       schema: {
@@ -106,6 +105,17 @@ export function registerParticipantRoutes(
           properties: {
             name: { type: "string", minLength: 1, maxLength: 60 },
             color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+            avatar_data_url: {
+              anyOf: [
+                {
+                  type: "string",
+                  maxLength: PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH,
+                  pattern:
+                    "^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$",
+                },
+                { type: "null" },
+              ],
+            },
           },
         },
       },
@@ -115,6 +125,7 @@ export function registerParticipantRoutes(
         const updated = await updateParticipant(resolvePaths(deps), req.params.id, {
           name: req.body.name,
           color: req.body.color,
+          avatar_data_url: req.body.avatar_data_url,
         });
         return updated;
       } catch (err) {

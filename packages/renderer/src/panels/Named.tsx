@@ -1,6 +1,7 @@
 import { ChevronDown, FileText } from "lucide-react";
 import type { ProsePayload } from "@f-mark/shared";
 import { aggregate } from "../state/aggregate.js";
+import { LoadingAnimation } from "../components/LoadingAnimation.js";
 import {
   basename,
   groupRecordsByPath,
@@ -40,19 +41,8 @@ export function Named(): JSX.Element {
       </div>
       <div className="panel-list" style={{ padding: "0 12px 12px" }}>
         {error !== null ? <p className="panel-error">{error}</p> : null}
-        {loading ? <p className="panel-empty">Loading named contributions...</p> : null}
-        {!loading && pathGroups.length === 0 ? (
-          <p
-            style={{
-              fontFamily: "var(--serif)",
-              fontStyle: "italic",
-              color: "var(--ink-3)",
-              fontSize: 13,
-              margin: "10px 4px",
-            }}
-          >
-            No named contributions yet.
-          </p>
+        {loading || pathGroups.length === 0 ? (
+          <LoadingAnimation className="panel-loading" />
         ) : (
           pathGroups.map((pathGroup) => (
             <details key={pathGroup.path} className="repo-session-group" open>

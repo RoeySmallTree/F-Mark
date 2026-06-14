@@ -60,20 +60,22 @@ function iconFor(skill: SkillRef): JSX.Element {
 const AGENT_BADGE: Record<NonNullable<AgentKey>, string> = {
   claude: "cla",
   codex: "cdx",
-  gemini: "gem",
+  opencode: "opc",
   generic: "any",
 };
 
 export function SkillsPaletteModal(): JSX.Element {
   const token = useStore((s) => s.token);
   const participants = useStore((s) => s.participants);
+  const currentSessionId = useStore((s) => s.currentSessionId);
   const setComposeDraft = useStore((s) => s.setComposeDraft);
   const closeModal = useStore((s) => s.closeModal);
 
-  /* The active agent — initialized from localStorage / derivation; updated
-     when the user picks a different option in the dropdown. */
+  /* The active agent — initialized from the agent bound to the current
+     session (its runtime), falling back to the persisted dropdown choice /
+     heuristic; updated when the user picks a different option. */
   const [activeAgent, setActiveAgent] = useState<AgentKey>(() =>
-    resolveActiveAgent(participants),
+    resolveActiveAgent(participants, currentSessionId),
   );
 
   const [skills, setSkills] = useState<SkillRef[]>([]);
@@ -260,7 +262,7 @@ export function SkillsPaletteModal(): JSX.Element {
             <div className="cmdk-empty">
               {query.trim().length > 0
                 ? `No skills match “${query.trim()}”.`
-                : "No skills found. Install agent-specific skills under .claude/skills/, .codex/skills/, .gemini/skills/, or .skills/."}
+                : "No skills found. Install agent-specific skills under .claude/skills/, .codex/skills/, .opencode/skills/, or .skills/."}
             </div>
           ) : (
             groups.map((g) => (

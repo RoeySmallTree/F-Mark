@@ -6,25 +6,24 @@
 import type { ProsePayload } from "@f-mark/shared";
 
 export interface ValidateInput {
-  /** Frontmatter+content fields the caller intends to write. The `target`
-      key is the legacy field — accepted only as an indicator that the
-      caller still uses it. Callers should normalise legacy `target` to
-      the new fields BEFORE calling this validator (see the write-body
-      normaliser in routes/events.ts), but we keep the rule explicit so
-      mis-wired callers fail loudly. */
+  /** Frontmatter+content fields the caller intends to write. */
   content?: string;
   name?: string;
   append_to?: unknown;
   mode?: unknown;
   lines?: unknown;
   removed?: unknown;
-  target?: unknown;
+  /** File/diff comment target. Mutually exclusive with `append_to`/`mode`. */
+  file_path?: unknown;
 }
 
 export type ValidateResult = { ok: true } | { ok: false; error: string };
 
+/* {2,16} segment — accommodates the longest runtime slug "opencode"
+   (ids like `ag-opencode-3a2f`). Lockstep with ID_PATTERN (participants.ts)
+   and FILENAME_REGEX (shared/filenames.ts). */
 export const EVENT_FILENAME_RE =
-  /^\d{8}T\d{6}(?:\.\d{3})?Z_(?:us|ag|sys|grp)-[a-z0-9-]{2,12}\.[a-z-]+(?:\.[a-z0-9]+)?$/;
+  /^\d{8}T\d{6}(?:\.\d{3})?Z_(?:us|ag|sys|grp)-[a-z0-9-]{2,16}\.[a-z-]+(?:\.[a-z0-9]+)?$/;
 
 /** Shared `append_to` shape check for non-prose routes. Non-prose
  *  payloads have no `mode`/`lines`/`target`/`name`-vs-append_to rules to
@@ -55,28 +54,21 @@ function isPositiveInt(value: unknown): value is number {
 /** Validate a prose payload's mutual-exclusion rules. Shape-only — does
     NOT look up the parent referenced by `append_to`. */
 export function validateProseFrontmatter(input: ValidateInput): ValidateResult {
-  /* Legacy `target` plus any new field — reject. The write-body normaliser
-     should translate legacy bodies BEFORE this validator runs; if the
-     caller didn't, treat the combination as ambiguous. */
-  const hasLegacyTarget = input.target !== undefined && input.target !== null;
-  const hasNewFields =
-    input.append_to !== undefined ||
-    input.mode !== undefined ||
-    input.lines !== undefined;
-  if (hasLegacyTarget && hasNewFields) {
-    return {
-      ok: false,
-      error: "both legacy `target` and new fields (append_to/mode/lines) present",
-    };
+  /* File/diff comment — keyed on `file_path`. A self-contained comment target
+     (a repo path), mutually exclusive with the event-anchored `append_to`/
+     `mode` shape. */
+  const hasFilePath =
+    typeof input.file_path === "string" && input.file_path.length > 0;
+  if (input.file_path !== undefined && typeof input.file_path !== "string") {
+    return { ok: false, error: "`file_path` must be a string" };
   }
-  /* Legacy `target` alone — the normaliser should have already mapped it.
-     If we still see it here, the caller bypassed normalisation. We accept
-     it for backwards-compat-on-read (parseProse handles it), but at the
-     write boundary we want the new shape only. Reject. */
-  if (hasLegacyTarget && !hasNewFields) {
+  if (
+    hasFilePath &&
+    (input.append_to !== undefined || input.mode !== undefined)
+  ) {
     return {
       ok: false,
-      error: "legacy `target` field must be normalised to `append_to`+`mode`+`lines` before write",
+      error: "`file_path` is mutually exclusive with `append_to`/`mode`",
     };
   }
 
@@ -118,9 +110,13 @@ export function validateProseFrontmatter(input: ValidateInput): ValidateResult {
     return { ok: false, error: "`mode` must be 'content' or 'comment'" };
   }
 
-  /* `lines` set with `mode !== "comment"` — reject. */
-  if (input.lines !== undefined && input.mode !== "comment") {
-    return { ok: false, error: "`lines` requires `mode: \"comment\"`" };
+  /* `lines` requires either `mode: "comment"` (event comment) or `file_path`
+     (file/diff comment). */
+  if (input.lines !== undefined && input.mode !== "comment" && !hasFilePath) {
+    return {
+      ok: false,
+      error: '`lines` requires `mode: "comment"` or `file_path`',
+    };
   }
 
   /* `lines` value sanity — array of two positive integers, start <= end. */

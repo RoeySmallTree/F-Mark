@@ -46,24 +46,156 @@ body.theme-cyber .rail-btn.active::before{ background:linear-gradient(180deg, va
 body.theme-cyber .topbar, body.theme-cyber .left-panel, body.theme-cyber .right-panel{ border-color:var(--line) }
 body.theme-cyber .prose-title{ background:linear-gradient(90deg, var(--ink), var(--user) 80%); -webkit-background-clip:text; background-clip:text; color:transparent }
 
-/* All dark themes — swap the rgba(0,0,0,.012) gradient overlay for a white-tint
-   one, but keep the opaque var(--canvas) base so the sticky prose-head doesn't
-   bleed body content through when it's pinned. */
-body.theme-terminal .prose-head, body.theme-ide .prose-head, body.theme-solarized .prose-head, body.theme-brutalist .prose-head, body.theme-cyber .prose-head,
-body.theme-terminal .prose-foot, body.theme-ide .prose-foot, body.theme-solarized .prose-foot, body.theme-brutalist .prose-foot, body.theme-cyber .prose-foot,
-body.theme-terminal .embed-foot, body.theme-ide .embed-foot, body.theme-solarized .embed-foot, body.theme-brutalist .embed-foot, body.theme-cyber .embed-foot,
-body.theme-terminal .modal-foot, body.theme-ide .modal-foot, body.theme-solarized .modal-foot, body.theme-brutalist .modal-foot, body.theme-cyber .modal-foot,
-body.theme-terminal .pop-foot, body.theme-ide .pop-foot, body.theme-solarized .pop-foot, body.theme-brutalist .pop-foot, body.theme-cyber .pop-foot,
-body.theme-terminal .cmdk-foot, body.theme-ide .cmdk-foot, body.theme-solarized .cmdk-foot, body.theme-brutalist .cmdk-foot, body.theme-cyber .cmdk-foot{
+/* Amber CRT — soft phosphor glow on key elements */
+body.theme-amber .prose-title, body.theme-amber .modal-title, body.theme-amber .settings-h, body.theme-amber .choices-q, body.theme-amber .embed-title{
+  text-shadow:0 0 8px rgba(255,176,0,.4); text-transform:uppercase; letter-spacing:.03em;
+}
+body.theme-amber .turn-pill .dot{ box-shadow:0 0 10px var(--ink) }
+body.theme-amber .avatar{ box-shadow:0 0 8px rgba(255,176,0,.25) }
+body.theme-amber .prose-pin{ box-shadow:0 0 8px rgba(255,208,96,.3) }
+body.theme-amber .feed-inner h2{ text-transform:uppercase; letter-spacing:.04em }
+body.theme-amber .prose-head, body.theme-amber .choices-head, body.theme-amber .embed-head{ border-bottom-style:double }
+body.theme-amber .topbar{ border-bottom-style:double }
+
+/* Dracula — purple highlight on prose accents */
+body.theme-dracula .prose-title{ background:linear-gradient(90deg, var(--ink), #bd93f9 90%); -webkit-background-clip:text; background-clip:text; color:transparent }
+body.theme-dracula .prose-content .num{ color:#ffb86c }
+body.theme-dracula .prose-content blockquote{ border-left-color:#bd93f9; color:#f1fa8c }
+
+/* Catppuccin Mocha — softer, more pillowy */
+body.theme-catppuccin .card, body.theme-catppuccin .prose-card, body.theme-catppuccin .embed-card, body.theme-catppuccin .choices-card{
+  border-radius:14px;
+}
+body.theme-catppuccin .modal{ border-radius:16px }
+body.theme-catppuccin .turn-pill, body.theme-catppuccin .badge, body.theme-catppuccin .prose-pin{ border-radius:999px }
+body.theme-catppuccin .prose-content .num{ color:#fab387 }
+body.theme-catppuccin .primary-action{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#1e1e2e; font-weight:600 }
+body.theme-catppuccin .btn-solid{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#1e1e2e }
+
+/* Tokyo Night — subtle blue glow on pins */
+body.theme-tokyo .prose-pin{ box-shadow:0 0 12px rgba(122,162,247,.25) }
+body.theme-tokyo .card.user .stripe{ box-shadow:0 0 6px rgba(122,162,247,.4) }
+body.theme-tokyo .prose-content .num{ color:#e0af68 }
+
+/* Gruvbox — vintage emphasis */
+body.theme-gruvbox .prose-content code{ background:#3c3836; color:#fabd2f; border:1px solid #504945 }
+body.theme-gruvbox .prose-content .num{ color:#fb4934 }
+body.theme-gruvbox .prose-title{ color:#fbf1c7 }
+body.theme-gruvbox .feed-inner h2{ color:#fabd2f }
+
+/* Nord — frosty aurora highlights */
+body.theme-nord .prose-content .num{ color:#ebcb8b }
+body.theme-nord .prose-content blockquote{ border-left-color:#88c0d0; color:#d8dee9 }
+body.theme-nord .prose-pin{ box-shadow:0 0 12px rgba(136,192,208,.18) }
+
+/* Monokai — punchy pink/green */
+body.theme-monokai .prose-content .num{ color:#fd971f }
+body.theme-monokai .prose-content code{ background:#3e3d32; color:#a6e22e }
+body.theme-monokai .prose-content blockquote{ border-left-color:#a6e22e; color:#e6db74 }
+body.theme-monokai .prose-title{ color:#f8f8f2 }
+
+/* Borland Blue — chunky TUI feel, double borders, uppercased */
+body.theme-borland .card, body.theme-borland .prose-card, body.theme-borland .embed-card, body.theme-borland .choices-card, body.theme-borland .todo-card{
+  border:1px double #ffff55; box-shadow:none; border-radius:0
+}
+body.theme-borland .modal, body.theme-borland .popover{ border:2px double #ffff55; border-radius:0; box-shadow:none }
+body.theme-borland .prose-head, body.theme-borland .choices-head, body.theme-borland .embed-head, body.theme-borland .prose-foot, body.theme-borland .embed-foot{
+  border-style:double; border-color:#ffff55
+}
+body.theme-borland .turn-pill, body.theme-borland .badge, body.theme-borland .pop-chip, body.theme-borland .status-pill,
+body.theme-borland .assign-badge, body.theme-borland .kbd-chip, body.theme-borland .prose-pin, body.theme-borland .cmdk-kind{
+  border-radius:0 !important; border-width:1px
+}
+body.theme-borland .prose-title, body.theme-borland .modal-title, body.theme-borland .settings-h, body.theme-borland .choices-q, body.theme-borland .embed-title{
+  text-transform:uppercase; letter-spacing:.05em; color:#ffff55
+}
+body.theme-borland .feed-inner h2{ text-transform:uppercase; letter-spacing:.05em; color:#55ffff }
+body.theme-borland .feed-inner h2::before{ content:"▌ "; color:#ffff55 }
+body.theme-borland .topbar, body.theme-borland .compose{ border-color:#ffff55; border-width:2px }
+body.theme-borland .left-panel, body.theme-borland .right-panel{ border-color:#ffff55; border-width:2px }
+body.theme-borland .avatar{ border-radius:0 }
+body.theme-borland .avatar::before, body.theme-borland .avatar.with-image img{ border-radius:0 }
+
+/* Sepia Paper — academic, all-serif, calm */
+body.theme-sepia .prose-title, body.theme-sepia .modal-title, body.theme-sepia .settings-h, body.theme-sepia .choices-q, body.theme-sepia .embed-title{
+  font-family:'Source Serif 4', Georgia, serif
+}
+body.theme-sepia .turn-pill, body.theme-sepia .badge, body.theme-sepia .pop-chip, body.theme-sepia .scope{
+  font-family:'Source Serif 4', Georgia, serif; font-style:italic
+}
+body.theme-sepia .prose-content blockquote{ border-left-color:#8c3a1a; color:#5e4b32; font-family:'Source Serif 4', Georgia, serif }
+body.theme-sepia .feed-inner h2::before{ content:"§ "; color:#8c3a1a }
+body.theme-sepia .compose-box, body.theme-sepia .form-input{ background:#fdf8e8 }
+body.theme-sepia .prose-card{ background:#fdf8e8 }
+
+/* High Contrast — hard edges, big borders, the a11y target */
+body.theme-contrast .card, body.theme-contrast .prose-card, body.theme-contrast .embed-card, body.theme-contrast .choices-card, body.theme-contrast .todo-card{
+  border:2px solid #fff; box-shadow:none; border-radius:0
+}
+body.theme-contrast .modal, body.theme-contrast .popover{ border:3px solid #fff; border-radius:0; box-shadow:none }
+body.theme-contrast .turn-pill, body.theme-contrast .badge, body.theme-contrast .pop-chip, body.theme-contrast .status-pill,
+body.theme-contrast .assign-badge, body.theme-contrast .kbd-chip, body.theme-contrast .prose-pin, body.theme-contrast .cmdk-kind{
+  border-radius:0 !important; border-width:2px
+}
+body.theme-contrast .avatar{ border-radius:0; border-width:2px }
+body.theme-contrast .avatar::before, body.theme-contrast .avatar.with-image img{ border-radius:0 }
+body.theme-contrast .card .stripe{ width:6px; background:var(--user) }
+body.theme-contrast .card.agent .stripe{ background:var(--agent) }
+body.theme-contrast .prose-title, body.theme-contrast .modal-title, body.theme-contrast .settings-h, body.theme-contrast .choices-q, body.theme-contrast .embed-title{
+  text-transform:uppercase; letter-spacing:.04em
+}
+body.theme-contrast .feed-inner h2{ text-transform:uppercase; letter-spacing:.04em }
+body.theme-contrast a, body.theme-contrast button:focus{ outline:2px solid #ffff00 }
+body.theme-contrast .topbar, body.theme-contrast .compose{ border-width:2px }
+body.theme-contrast .left-panel, body.theme-contrast .right-panel{ border-width:2px }
+
+/* Ember — coral glow ground, soft 14px cards, glossy red primary, red-tipped titles.
+   Reference paints the glow on <body>; the app's shell grid fully covers the body,
+   so we also carry the ambient glow on the central feed canvas where it shows. */
+body.theme-ember{
+  background:
+    radial-gradient(1000px 640px at 14% -10%, rgba(255,93,114,.10), transparent 60%),
+    radial-gradient(760px 520px at 92% 4%, rgba(255,140,120,.05), transparent 62%),
+    var(--bg);
+}
+body.theme-ember .feed-col{
+  background:
+    radial-gradient(1100px 700px at 30% -8%, rgba(255,93,114,.08), transparent 60%),
+    radial-gradient(700px 520px at 96% 2%, rgba(255,140,120,.05), transparent 62%),
+    var(--canvas);
+}
+body.theme-ember .prose-card, body.theme-ember .choices-card, body.theme-ember .embed-card,
+body.theme-ember .todo-card, body.theme-ember .file-card{ border-radius:14px }
+body.theme-ember .modal{ border-radius:16px }
+body.theme-ember .turn-pill, body.theme-ember .prose-pin{ box-shadow:0 0 14px rgba(255,93,114,.16) }
+body.theme-ember .card.user .stripe{ box-shadow:0 0 10px rgba(255,93,114,.5) }
+body.theme-ember .btn-solid, body.theme-ember .primary-action:not(.outline){
+  background:linear-gradient(180deg, #ff7d8e 0%, #ff5d72 100%); color:#fff;
+  box-shadow:0 0 0 1px rgba(255,255,255,.14) inset, 0 8px 22px rgba(255,93,114,.28);
+}
+body.theme-ember .prose-title{
+  background:linear-gradient(90deg, var(--ink), #ff5d72 96%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+body.theme-ember .prose-content .num{ color:#ff8a7a }
+body.theme-ember .prose-content blockquote{ border-left-color:#ff5d72; color:#d7b4ac }
+
+/* All dark themes — swap the rgba(0,0,0,.012) gradient overlay on sticky heads/
+   foots for a faint white-tint wash, but keep the opaque var(--canvas) base so a
+   pinned prose-head doesn't bleed body content through. Theme-agnostic selector:
+   matches every theme class except the light-paper ones, so newly added themes
+   inherit this automatically (no per-theme enumeration to maintain). */
+body[class*="theme-"]:not(.theme-light):not(.theme-sepia) .prose-head,
+body[class*="theme-"]:not(.theme-light):not(.theme-sepia) .prose-foot,
+body[class*="theme-"]:not(.theme-light):not(.theme-sepia) .embed-foot,
+body[class*="theme-"]:not(.theme-light):not(.theme-sepia) .modal-foot,
+body[class*="theme-"]:not(.theme-light):not(.theme-sepia) .pop-foot,
+body[class*="theme-"]:not(.theme-light):not(.theme-sepia) .cmdk-foot{
   background:linear-gradient(to bottom, rgba(255,255,255,.02), transparent), var(--canvas) !important;
 }
 /* Choice opt hover in dark themes */
-body.theme-terminal .choice-opt:hover, body.theme-ide .choice-opt:hover, body.theme-solarized .choice-opt:hover, body.theme-brutalist .choice-opt:hover, body.theme-cyber .choice-opt:hover{
+body[class*="theme-"]:not(.theme-light) .choice-opt:hover{
   background:rgba(255,255,255,.02);
 }
 /* feed-scroll dim mode in dark themes */
-body.theme-terminal .feed-scroll.dimmed .card:not(.focused),
-body.theme-ide .feed-scroll.dimmed .card:not(.focused),
-body.theme-solarized .feed-scroll.dimmed .card:not(.focused),
-body.theme-brutalist .feed-scroll.dimmed .card:not(.focused),
-body.theme-cyber .feed-scroll.dimmed .card:not(.focused){ opacity:.35 }
+body[class*="theme-"]:not(.theme-light) .feed-scroll.dimmed .card:not(.focused){ opacity:.35 }

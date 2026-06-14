@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { HookInstallQuery, HookInstallScope } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
 import {
   applyHookInstall,
@@ -12,7 +13,7 @@ export function registerHookInstallRoutes(
   pOrDeps: Paths | PathDeps,
 ): void {
   const deps = normaliseDeps(pOrDeps);
-  app.get<{ Querystring: { runtime_id?: string; participant_id?: string; user_participant_id?: string } }>(
+  app.get<{ Querystring: Partial<HookInstallQuery> }>(
     "/managed-agents/hook-install-status",
     async (req, reply) => {
       const { runtime_id, participant_id, user_participant_id } = req.query;
@@ -34,7 +35,7 @@ export function registerHookInstallRoutes(
       }
     },
   );
-  app.post<{ Querystring: { runtime_id?: string; participant_id?: string; user_participant_id?: string } }>(
+  app.post<{ Querystring: Partial<HookInstallQuery> }>(
     "/managed-agents/hook-install-instructions",
     async (req, reply) => {
       const { runtime_id, participant_id, user_participant_id } = req.query;
@@ -55,12 +56,8 @@ export function registerHookInstallRoutes(
     },
   );
   app.post<{
-    Querystring: {
-      runtime_id?: string;
-      participant_id?: string;
-      user_participant_id?: string;
-    };
-    Body: { scope?: "local" | "global" };
+    Querystring: Partial<HookInstallQuery>;
+    Body: { scope?: HookInstallScope };
   }>(
     "/managed-agents/hook-install-apply",
     async (req, reply) => {

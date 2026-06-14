@@ -32,7 +32,6 @@ export function HookInstallModal({
   const [applyBusy, setApplyBusy] = useState<"local" | "global" | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
-  const manualStreamMode = runtimeId === "gemini";
   const canAutoApply = runtimeId === "claude";
   const runtimeLabel =
     runtimeId === "claude"
@@ -109,7 +108,7 @@ export function HookInstallModal({
   }
 
   const promptSteps = data?.promptSteps ?? [];
-  const showModePicker = !manualStreamMode && promptSteps.length > 0;
+  const showModePicker = promptSteps.length > 0;
 
   return (
     <div
@@ -126,11 +125,9 @@ export function HookInstallModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <div className="modal-eyebrow">
-            {manualStreamMode ? "MANUAL STREAM" : "HOOK SETUP"}
-          </div>
+          <div className="modal-eyebrow">HOOK SETUP</div>
           <h2 className="modal-title" id="hook-install-title">
-            {manualStreamMode ? "Gemini manual stream" : `${runtimeLabel} hooks`}
+            {`${runtimeLabel} hooks`}
           </h2>
           <button
             type="button"
@@ -142,17 +139,15 @@ export function HookInstallModal({
           </button>
         </div>
         <div className="modal-body">
-          {!manualStreamMode ? (
-            <HookInstallStatusPanel
-              status={status}
-              error={statusError}
-              applyBusy={applyBusy}
-              canAutoApply={canAutoApply}
-              onApply={(scope) => {
-                void onApply(scope);
-              }}
-            />
-          ) : null}
+          <HookInstallStatusPanel
+            status={status}
+            error={statusError}
+            applyBusy={applyBusy}
+            canAutoApply={canAutoApply}
+            onApply={(scope) => {
+              void onApply(scope);
+            }}
+          />
           {applyError !== null ? (
             <div role="alert" className="form-error hook-apply-message">
               {applyError}
@@ -254,6 +249,14 @@ function HookInstallStatusPanel({
   onApply,
 }: HookInstallStatusPanelProps): JSX.Element {
   const locations = status?.locations ?? [];
+  const actionLabel = (scope: "local" | "global") => {
+    const location = locations.find((entry) => entry.scope === scope);
+    return location?.status === "stale" || status?.status === "stale"
+      ? "Update"
+      : "Apply";
+  };
+  const busyActionLabel = (scope: "local" | "global") =>
+    actionLabel(scope) === "Update" ? "Updating" : "Applying";
   return (
     <section className="hook-status-panel" aria-label="Hook status">
       <div className="hook-status-list">
@@ -277,7 +280,9 @@ function HookInstallStatusPanel({
             disabled={applyBusy !== null}
             onClick={() => onApply("local")}
           >
-            {applyBusy === "local" ? "Applying local" : "Apply local"}
+            {applyBusy === "local"
+              ? `${busyActionLabel("local")} local`
+              : `${actionLabel("local")} local`}
           </button>
           <button
             type="button"
@@ -285,7 +290,9 @@ function HookInstallStatusPanel({
             disabled={applyBusy !== null}
             onClick={() => onApply("global")}
           >
-            {applyBusy === "global" ? "Applying global" : "Apply global"}
+            {applyBusy === "global"
+              ? `${busyActionLabel("global")} global`
+              : `${actionLabel("global")} global`}
           </button>
         </div>
       ) : null}
@@ -298,15 +305,24 @@ function HookSingleStatusRow({
 }: {
   status: HookInstallStatus;
 }): JSX.Element {
+  const kind =
+    status.status ??
+    (status.installed
+      ? "installed"
+      : status.detectedEntries.length > 0
+        ? "stale"
+        : "missing");
+  const badge =
+    kind === "installed" ? "Embedded" : kind === "stale" ? "Update" : "Missing";
+  const badgeClass =
+    kind === "installed" ? "on" : kind === "stale" ? "warn" : "off";
   return (
     <div className="hook-status-row">
       <div className="hook-status-main">
         <span className="hook-status-scope">config</span>
         <span className="hook-status-path">{status.configPath}</span>
       </div>
-      <span className={`hook-status-badge ${status.installed ? "on" : "off"}`}>
-        {status.installed ? "Embedded" : "Missing"}
-      </span>
+      <span className={`hook-status-badge ${badgeClass}`}>{badge}</span>
     </div>
   );
 }
@@ -316,17 +332,28 @@ function HookLocationRow({
 }: {
   location: HookInstallLocationStatus;
 }): JSX.Element {
+  const kind =
+    location.status ??
+    (location.installed
+      ? "installed"
+      : location.detectedEntries.length > 0
+        ? "stale"
+        : "missing");
   const badge = location.error
     ? "Invalid JSON"
-    : location.installed
+    : kind === "installed"
       ? "Embedded"
+      : kind === "stale"
+        ? "Update"
       : location.exists
         ? "Missing"
         : "No file";
   const badgeClass = location.error
     ? "error"
-    : location.installed
+    : kind === "installed"
       ? "on"
+      : kind === "stale"
+        ? "warn"
       : "off";
 
   return (

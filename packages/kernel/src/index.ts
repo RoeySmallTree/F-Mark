@@ -2,9 +2,9 @@ import { hostname } from "node:os";
 import process from "node:process";
 import {
   deleteTokenFile,
-  ensureGitignoreEntry,
-  generateToken,
-  writeTokenFile,
+  ensureProjectAuth,
+  readExistingToken,
+  resolveBootToken,
 } from "./auth.js";
 import { renderBanner, type BannerMode } from "./banner.js";
 import { parseArgs, printUsage, runCli, type CliOptions } from "./cli.js";
@@ -48,7 +48,7 @@ const rawArgv = process.argv.slice(2);
 // Subcommand dispatch (e.g. `f-mark hook auto-stream <participant>`).
 // Subcommands are short-lived: they run runCli, then exit. They never
 // fall through into the kernel-startup flow below.
-if (rawArgv[0] === "hook") {
+if (rawArgv[0] === "hook" || rawArgv[0] === "mcp") {
   const code = await runCli(rawArgv);
   process.exit(code);
 }
@@ -98,15 +98,23 @@ const bootState = await updateState(gPaths, (s) =>
 await registerProjectPath(gPaths, projectRoot);
 pathContextRef.setRevision(bootState.activeRevision);
 
-let token: string | null = null;
+// The token is STABLE across restarts: resolveBootToken reuses an existing
+// .f-mark/.token rather than minting a new one each boot. This is what keeps
+// long-lived/reconciled agents authenticated after a kernel restart — they
+// read the same token file the kernel validates against, so a restart no
+// longer strands them with 401s. tokenGenerated tracks whether THIS boot
+// created the file, which gates the bind-failure cleanup below.
+const { token, generated: tokenGenerated } = await resolveBootToken(p, {
+  noAuth: options.noAuth,
+  password: options.password,
+});
 if (options.noAuth) {
   logger.warn(
     "Auth is disabled (--no-auth). Anyone with network access can use the API.",
   );
 } else {
-  token = options.password ?? generateToken();
-  await writeTokenFile(p, token);
-  await ensureGitignoreEntry(p);
+  // Re-assert file mode (0600) + .gitignore entry even when the token is reused.
+  await ensureProjectAuth(p, token);
 }
 
 const { app, getBus, getTracker } = createServer({
@@ -137,7 +145,13 @@ if (!bound) {
   logger.error(
     `Could not bind to any port in range ${requestedPort}..${port - 1}`,
   );
-  if (token !== null) await deleteTokenFile(p);
+  // Only clean up a token THIS boot generated, and only if the file still
+  // holds OUR token — never clobber a persisted token that predates this boot
+  // or one a concurrently-booting kernel may now own.
+  if (token !== null && tokenGenerated) {
+    const onDisk = await readExistingToken(p);
+    if (onDisk === token) await deleteTokenFile(p);
+  }
   process.exit(1);
 }
 
@@ -167,12 +181,12 @@ try {
     runner: realCommandRunner(),
     projectRoot: p.root(),
   });
-  const { agentsDirFor } = await import("./agents/locator.js");
+  const { createAgentStateStore } = await import("./services/agentState.js");
   await reconcile({
     paths: p,
     tmux: reconcileTmux,
     tracker: getTracker(),
-    agentsDir: agentsDirFor({ ref: pathContextRef, fallback: p }),
+    agentState: createAgentStateStore({ ref: pathContextRef, fallback: p }),
   });
 } catch (err) {
   const msg = err instanceof Error ? err.message : String(err);
@@ -203,7 +217,10 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   logger.info(`Received ${signal}. Shutting down...`);
   await app.close();
-  if (token !== null) await deleteTokenFile(p);
+  // Intentionally DO NOT delete the token file. It is a stable project
+  // credential reused across restarts (see resolveBootToken); deleting it
+  // here would strand long-lived agents that outlive the kernel and the
+  // agents re-adopted by the next boot's reconcile step (→ 401s).
   process.exit(0);
 }
 

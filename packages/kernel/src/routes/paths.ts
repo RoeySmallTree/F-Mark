@@ -2,6 +2,7 @@ import { access, constants } from "node:fs/promises";
 import { isAbsolute, resolve as resolvePath } from "node:path";
 import { realpathSync } from "node:fs";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { paths as makePaths, type Paths } from "../paths.js";
 import { activePaths } from "../paths/active.js";
 import type { PathContextRef } from "../paths/contextRef.js";
 import { registerProjectPath } from "../paths/registry.js";
@@ -14,6 +15,8 @@ import {
 } from "../state/store.js";
 import type { Bus } from "../ws/bus.js";
 import type { TmuxManager } from "../tmux/manager.js";
+import { ensureProjectAuth } from "../auth.js";
+import { initProject, readConfig } from "../project.js";
 
 interface PathErrorShape {
   code: string;
@@ -107,7 +110,29 @@ export function registerPathRoutes(
      scope to the new path. Pre-existing tmux sessions retain their old
      tag and stay visible only from the path they were spawned in. */
   tmuxGetter?: () => TmuxManager | null,
+  token?: string | null,
+  /* The boot/fallback paths — its config.json carries the kernel's actually
+     bound port (index.ts syncs it post-listen). Used to stamp a newly
+     initialized switched-to project with the right port instead of the
+     default, so hooks/MCP for agents in that path reach this kernel. */
+  fallbackPaths?: Paths,
 ): void {
+  /* Mirror sessions.ts initSessionProject: initialize a switched-to project
+     with the kernel's actual bound port (read from the boot config), falling
+     back to initProject's default only when that config is unavailable. */
+  async function initSwitchedProject(target: Paths): Promise<void> {
+    let port: number | undefined;
+    if (fallbackPaths !== undefined) {
+      try {
+        port = (await readConfig(fallbackPaths)).port;
+      } catch {
+        // boot config unreadable — let initProject use its default port
+      }
+    }
+    if (port === undefined) await initProject(target);
+    else await initProject(target, port);
+  }
+
   function broadcastSwitch(state: KernelState): void {
     if (!busGetter) return;
     const active = ref.get().active;
@@ -157,6 +182,14 @@ export function registerPathRoutes(
       return bumpRevision(promoted);
     });
     await registerProjectPath(g, validation.canonical);
+    // Make the target a usable F-Mark project before it goes active. Boot
+    // does this for the boot path (index.ts initProject); a path the user
+    // switches to for the first time was never initialized, so without this
+    // its .f-mark/config.json is missing and every route that reads config
+    // (e.g. GET /managed-agents) 500s with ENOENT. initProject is idempotent
+    // and is stamped with the kernel's actual bound port (not the default).
+    await initSwitchedProject(makePaths(validation.canonical));
+    await ensureProjectAuth(makePaths(validation.canonical), token ?? null);
     ref.setActive(activePaths(validation.canonical));
     ref.setRevision(next.activeRevision);
     // Rebind tmux so subsequent spawns + filtering scope to the new path.

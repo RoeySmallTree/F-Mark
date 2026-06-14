@@ -35,6 +35,27 @@ This starts the kernel on port 7777, generates a token, writes it to `.f-mark/.t
 - `--remote` — Print SSH port-forwarding instructions.
 - `--container` — Print docker port-mapping instructions.
 
+When running the monorepo dev script through npm, pass kernel flags after
+`--` so npm forwards them to F-Mark. Without that separator, npm treats the
+flags as npm config first: `npm run dev --remote` currently reaches F-Mark only
+through npm's deprecated `npm_config_remote` environment fallback, and
+`npm run dev --no-auth` fails earlier because npm parses `auth` as its own
+registry-auth config.
+
+```bash
+npm run dev -- --remote
+npm run dev -- --no-auth
+npm run dev -- --no-auth --allow-process-api-no-auth
+npm run dev -- --port=9090 --path=/abs/project
+npm run dev:remote
+npm run dev:no-auth
+npm run dev:no-auth:process-api
+```
+
+`--no-auth` disables the bearer token. It does not enable process-spawning
+routes by itself; add `--allow-process-api-no-auth` only for trusted local
+development where any client that can reach the port may spawn processes.
+
 ## How it works
 
 F-Mark stores everything in `.f-mark/`:
@@ -57,9 +78,9 @@ Each event is a timestamped file. There is no database. The folder is the entire
 
 Point your agent at the local API. The protocol lives at `.f-mark/AGENT.md` once the kernel runs. For Claude Code, the kernel ships a skill bundle in `node_modules/f-mark/assets/claude-skill/f-mark/` that you can install into your `.claude/skills/` directory.
 
-Agents stream output automatically once the auto-stream hook is installed. The skill bundle at `assets/<runtime>-skill/f-mark/SKILL.md` walks each runtime (Claude Code, Codex, Gemini) through registering, linking to a session via `POST /agents/:id/link`, and adding the hook entry. After install, the agent only calls the HTTP API for *structured* contributions (named documents, replies, comments, todos, choices).
+Agents stream output automatically once the runtime hook or plugin is installed. The skill bundle at `assets/<runtime>-skill/f-mark/SKILL.md` walks each runtime (Claude Code, Codex, Opencode) through registering, linking to a session via `POST /agents/:id/link`, and adding the integration entry. After install, the agent only calls the HTTP API for *structured* contributions (named documents, replies, comments, todos, choices).
 
-For Gemini (which doesn't yet have a transcript JSONL parser in F-Mark), the skill instructs the model to POST mid-turn events manually with `arbitrary: true` — the renderer renders the same grouped feed regardless.
+Opencode streams through its in-process plugin; Claude Code and Codex use lifecycle hooks. The renderer renders the same grouped feed regardless of which supported runtime produced the events.
 
 ## Status
 
@@ -67,12 +88,12 @@ v0.2.0 — redesigned UI shipped. See `planning/redesign/` for the design source
 
 ## What's new in v0.4
 
-- **Managed agents** — Click `+` in the top bar to spawn Claude Code, Codex, or Gemini directly into a tmux session F-Mark supervises.
+- **Managed agents** — Click `+` in the top bar to spawn Claude Code, Codex, or Opencode directly into a tmux session F-Mark supervises.
 - **Terminal panes** — `+ → Terminal` opens a free-form shell pane in the project root.
 - **Per-pane terminal overlay** — Click any agent or terminal chip → "Open terminal" to attach an in-browser xterm.js session to the tmux pane.
 - **Presence** — Top-bar chips show `online | stale | offline | hook-not-installed | pane-dead` state, derived from the auto-stream hook firing.
 - **Remote control** — Agent chip menus offer best-effort `/compact`, `interrupt`, and "Send a message" via tmux `send-keys`.
-- **Hook install detection** — F-Mark detects whether the auto-stream hook is installed in your `~/.claude/settings.json` / `~/.codex/config.toml` and shows manual install instructions per runtime.
+- **Hook/plugin install detection** — F-Mark detects whether the auto-stream hook or Opencode plugin is installed and shows manual install instructions per runtime.
 - **Tmux orchestration** — Sessions survive kernel restarts. On reconnect, the kernel reconciles surviving tmux sessions with `.f-mark/agents/*/` pointers.
 
 v0.4 is **additive** on v0.3.0's auto-stream backbone — existing hook installs keep working without changes.
@@ -81,7 +102,7 @@ v0.4 is **additive** on v0.3.0's auto-stream backbone — existing hook installs
 
 - **Command palette** (⌘K) — fuzzy search across sessions, named contributions, todos, and quick actions; opens new-session and settings modals; switches themes.
 - **Presets popover** (⌘P / ⚡ button) — pre-fills compose with built-in or project-local prompt templates.
-- **Skills palette** (⌘⇧K) — surfaces real skills scanned from `.claude/skills/`, `.codex/skills/`, `.gemini/skills/`, and `.skills/`; pick one to insert `/skill-name <args>` into compose.
+- **Skills palette** (⌘⇧K) — surfaces real skills scanned from `.claude/skills/`, `.codex/skills/`, `.opencode/skills/`, and `.skills/`; pick one to insert `/skill-name <args>` into compose.
 - **Settings modal** (gear icon) — Profile, Connected Agents, Appearance (theme + density), Keyboard Shortcuts, About.
 - **Six themes** — Default (light), Terminal, IDE, Solarized, Brutalist, Cyber. Persisted in localStorage; structural overrides per theme.
 - **View toggle** (Everything / Document / Conversation) — re-projects the feed; per-session persistence.

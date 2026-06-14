@@ -34,18 +34,29 @@ Key current findings:
 
 - MCP servers expose tools, resources, and prompts over JSON-RPC; tools are model-invoked actions.
 - Claude Code supports `claude mcp add` for HTTP and stdio, plus project/user/local scopes.
-- Codex supports `codex mcp add <name> --url <url>` and direct `~/.codex/config.toml` entries for MCP servers.
-- Gemini CLI supports `gemini mcp add`, `settings.json` `mcpServers`, stdio/http/sse transports, headers, scopes, and trust controls.
+- Codex supports `codex mcp add` for user/global config; project setup requires direct `.codex/config.toml` edits after trust checks.
+- Gemini CLI supports `gemini mcp add`, `.gemini/settings.json`/`~/.gemini/settings.json` `mcpServers`, stdio/http/sse transports, headers, project/user scopes, and trust controls.
 
 Companion planning docs:
 
+- `planning/mcp/phased-implementation-plan.md`
 - `planning/mcp/ux-flow.md`
 - `planning/mcp/compass-flow.md`
 - `planning/mcp/agent-control-and-targeting.md`
+- `planning/mcp/session-forking.md`
+- `planning/mcp/subagent-streaming.md`
 - `planning/mcp/findings-claude.md`
 - `planning/mcp/findings-codex.md`
 - `planning/mcp/findings-gemini.md`
 - `planning/mcp/findings-kernel-architecture.md`
+
+Research outcome docs integrated into this plan:
+
+- `planning/mcp/research-mcp-kernel-architecture.md`: use `@modelcontextprotocol/sdk@1.29.0`; ship `f-mark mcp` stdio first; defer `/mcp` HTTP until a Fastify Streamable HTTP spike passes; proxy mutating stdio tools through the running kernel at first so bus/WS behavior remains centralized.
+- `planning/mcp/research-fmark-ui-backend-integration.md`: session fork backend belongs in `routes/sessions.ts` plus a session fork service; sub-agent rendering should be hosted by `projectFeed.ts` and `ArbitraryGroupCard`; active-session storage is currently split and must be unified before fork/listener handoff is reliable.
+- `planning/mcp/research-claude-runtime.md`: Claude supports project/local/user MCP scopes, `--name`, status-line context/session-name readback, structured `PermissionRequest`, `/branch [name]`, and final-result sub-agent capture through `Agent` hooks; progressive TUI sub-agent streaming still needs smoke tests.
+- `planning/mcp/research-codex-runtime.md`: Codex global MCP install uses `codex mcp add`, project install requires direct `.codex/config.toml`; hooks expose session/turn/transcript/permission fields; native `/fork` exists but not `/branch`; context and richer sub-agent streaming require app-server or transcript work.
+- `planning/mcp/research-gemini-runtime.md`: Gemini project/user MCP config is `.gemini/settings.json`/`~/.gemini/settings.json`; use `trust:false`; hooks expose `session_id`/`transcript_path`; no title setter or `/fork`; `/clear` creates a new runtime session; sub-agent v1 should be final-result-only unless fixtures prove live progress.
 
 ## Non-Goals
 
@@ -168,9 +179,10 @@ Create:
 
 Likely dependency:
 
-- `@modelcontextprotocol/sdk`
+- `@modelcontextprotocol/sdk@1.29.0`
+- `zod`
 
-Investigation must confirm SDK package name, current API, transport support, and Node version compatibility before adding it.
+The MCP/kernel research outcome in `planning/mcp/research-mcp-kernel-architecture.md` found the stable SDK path to be `@modelcontextprotocol/sdk@1.29.0`. Avoid the v2 split alpha packages until a later explicit upgrade spike.
 
 ### Shared Event Services
 
@@ -188,6 +200,9 @@ Suggested new service files:
 - `packages/kernel/src/services/participants.ts`
 - `packages/kernel/src/services/todos.ts`
 - `packages/kernel/src/services/accessRequests.ts`
+- `packages/kernel/src/services/agentState.ts`
+- `packages/kernel/src/services/sessionForks.ts`
+- `packages/kernel/src/services/eventPublisher.ts`
 
 Add compass services for managed-agent context:
 
@@ -208,12 +223,12 @@ Add a Streamable HTTP MCP endpoint to the running kernel:
 - Local no-auth behavior: available under `--no-auth`, but do not grant process-spawning tools because those are out of scope
 - Origin/cookie handling: treat `/mcp` as API, not browser UI; use bearer where possible
 
-Research items:
+Research outcome and remaining spike:
 
-- Does the current TypeScript SDK provide a Fastify-compatible streamable HTTP transport?
-- Does the transport require `GET /mcp` for SSE/notifications, or only `POST /mcp`?
-- How does per-request auth context flow into tool handlers?
-- How should MCP session IDs map to F-Mark session IDs? They should not be conflated.
+- `planning/mcp/research-mcp-kernel-architecture.md` recommends shipping stdio first and deferring `/mcp` HTTP until a Fastify Streamable HTTP spike passes.
+- The HTTP spike must verify `request.raw`/`reply.raw`/`reply.hijack()`, `POST`/`GET`/`DELETE`, SSE, bearer auth failures, invalid or missing `Mcp-Session-Id`, and CORS headers for `Mcp-Session-Id`, `MCP-Protocol-Version`, and `Last-Event-ID`.
+- MCP protocol session ids must not be conflated with F-Mark collaboration session ids.
+- `/mcp` should use bearer auth only; do not rely on query tokens or cookies.
 
 ### Stdio MCP Command
 
@@ -234,6 +249,8 @@ Behavior:
 Recommended first implementation: stdio server calls local service functions when launched inside the project root. If this proves hard because server state/bus is process-local, proxy to the kernel HTTP API using the token.
 
 Rationale: stdio install avoids putting bearer tokens in MCP HTTP config files and works for local agent runtimes.
+
+Research-backed v1 choice: `planning/mcp/research-mcp-kernel-architecture.md` recommends proxying mutating stdio tools through the running kernel HTTP API at first, because the current event bus, websocket broadcasts, stale-path handling, and active server state are process-local.
 
 ## Runtime Installation Strategy
 
@@ -266,6 +283,10 @@ Backend must support:
 
 - pause/resume state,
 - random display names on creation,
+- runtime session identity capture (`session_id`, optional name/title, transcript path),
+- creation-time vendor session naming: use the active F-Mark `session_id` as the desired vendor-native session name/title wherever the runtime supports it,
+- F-Mark session forking: duplicate a session folder, switch into the fork, and rebind/relaunch active managed agents into it,
+- sub-agent output tracking: when an agent launches a sub-agent, capture its output as a named subentity of the invoking agent,
 - right-pane status aggregation,
 - rename,
 - reconnect,
@@ -286,20 +307,89 @@ Frontend must support:
 - context meter,
 - access permission selector,
 - compact/clear buttons,
+- session fork buttons in the session list and composer pane,
+- nested sub-agent output boxes inside parent agent turns,
 - add/rename/integration/terminal/interrupt/goodbye actions,
 - agent mention popover and `@` trigger in composer and comments.
 
 Detailed implementation contract: `planning/mcp/agent-control-and-targeting.md`.
 
+## Session Forking
+
+F-Mark should support user-driven session forks as a first-class collaboration action.
+
+Entry points:
+
+- session item row button in the Sessions panel,
+- compact fork button in the composer pane for the active session.
+
+Fork behavior:
+
+- ask for a small fork name in a popup,
+- duplicate `.f-mark/sessions/<source-session-id>/` to a new unique session folder,
+- write fork metadata and update path/session state needed for discovery,
+- switch the UI to the fork,
+- move active managed agents to the fork by updating active-session state,
+- rebind MCP context and stream listeners to the fork,
+- relaunch/rebind active agents where needed,
+- invoke the verified runtime-native `/fork`, `/branch`, or equivalent command only when that runtime's managed-pane smoke test has passed.
+
+Detailed implementation contract: `planning/mcp/session-forking.md`.
+
+## Sub-Agent Streaming
+
+When a managed agent launches a sub-agent, F-Mark should preserve that nested relationship in the chat.
+
+Behavior:
+
+- detect sub-agent invocation from structured hook/live-stream/transcript data where available,
+- capture the sub-agent name/title supplied by the runtime or parent agent,
+- associate the sub-agent with the parent F-Mark participant and parent turn/tool-use,
+- stream or record the sub-agent output,
+- render it inside a dedicated nested box within the parent agent's live output group,
+- keep final parent-agent output as the main answer.
+
+Fallback:
+
+- If the runtime exposes only a final sub-agent result, render a completed sub-agent box with that result.
+- If the runtime does not expose reliable sub-agent attribution, keep output as ordinary parent-agent arbitrary output and mark capability as unsupported/unknown.
+
+Detailed implementation contract: `planning/mcp/subagent-streaming.md`.
+
+## Research-Backed Runtime Capability Snapshot
+
+These findings are integrated from `planning/mcp/research-claude-runtime.md`, `planning/mcp/research-codex-runtime.md`, and `planning/mcp/research-gemini-runtime.md`. Treat them as the planning baseline; remaining work is smoke testing the exact managed launch/hook paths inside F-Mark.
+
+| Area | Claude Code | Codex | Gemini CLI |
+|---|---|---|---|
+| MCP install | `claude mcp add` supports `local`, `project`, and `user` scopes; precedence is local > project > user. Version marker can be `F_MARK_MCP_VERSION` for stdio. | `codex mcp add` is user/global only; project install requires direct `.codex/config.toml` edits after trust. Version marker can be env/header config. | `gemini mcp add --scope project|user`; project config is `.gemini/settings.json`; global maps to user config. Keep `trust:false` by default. |
+| Runtime session identity/name | Hook payload has `session_id`/`transcript_path`; status-line JSON can expose `session_name`; launch supports `--name`, so use F-Mark `session_id` as desired vendor name. | Hooks expose `session_id`, `turn_id`, `transcript_path`; no stable CLI session-name setter found. App-server can set thread name if adopted later. | Hooks expose `session_id`/`transcript_path`; no title setter found; `--session-id` accepts UUID but not a human-readable F-Mark name. |
+| Context status | Prefer Claude status-line `context_window`; hooks alone are insufficient. | Hooks do not expose token usage; app-server is the reliable path, otherwise show `Unknown`. | No stable external context-used API; show estimated/unknown unless smoke tests prove a field. |
+| Access status/request detection | Launch/readback via permission mode; structured `PermissionRequest` hooks can create access-request cards. Live access changes need smoke tests. | Launch/config approval and sandbox modes; structured `PermissionRequest` hooks exist. Live changes are better through app-server or smoke-tested terminal command. | Launch-time `--approval-mode`, sandbox, trust controls; `Notification` with `ToolPermission` is observable, but live grant/change is not stable. |
+| Compact/clear | `/compact`, `/clear`; PreCompact/PostCompact and SessionStart/End hooks help re-send compass. Idle only. | `/compact`, `/clear`; PreCompact/PostCompact hooks. `/clear` starts a fresh thread. Idle only. | `/compress` official, `/compact` alias likely; `/clear` fires SessionEnd(clear), resets chat, and creates a new runtime session. Idle only. |
+| Native fork | `/branch [name]` is the verified direction; `/fork` can be an alias in some contexts. CLI `--resume ... --fork-session --name` needs smoke. | `/fork` and `codex fork` exist; no branch/name support found in CLI. | No `/fork` or `/branch`; checkpoint `/resume save/resume` may approximate branch but needs smoke. F-Mark-owned fork is v1. |
+| Sub-agent visibility | `Agent` tool plus `SubagentStart`/`SubagentStop` and final result hooks; progressive TUI streaming needs smoke. | Native agents and `SubagentStart`/`SubagentStop`; final-result capture is viable, progressive output needs app-server/transcript research. | `invoke_agent` with `agent_name` and final result are visible in stream/hooks; v1 should be final-result-only. |
+
 ### Claude Code
 
-Research:
+Integrated research outcome:
 
-- Re-verify `claude mcp add` syntax and scopes.
-- Check whether project-scoped `.mcp.json` can safely use `npx -y f-mark mcp`.
-- Check whether `CLAUDE_PROJECT_DIR` is set for stdio MCP servers and whether F-Mark should rely on it.
-- Check approval behavior for project-scoped `.mcp.json`.
-- Check whether HTTP server headers are stored in `~/.claude.json`, `.mcp.json`, or both.
+- `planning/mcp/research-claude-runtime.md` verifies local Claude `2.1.128`, MCP scopes `local`, `project`, and `user`, and precedence `local > project > user > plugins/connectors`.
+- `claude mcp add` supports stdio, SSE, and HTTP transports, env vars, and HTTP headers. Prefer stdio project install for v1 to avoid bearer tokens in config.
+- Version marker: use stdio env `F_MARK_MCP_VERSION`; for future HTTP use a non-secret header such as `X-F-Mark-MCP-Version`.
+- Hook payloads expose `session_id`, `transcript_path`, `cwd`, and usually `permission_mode`; status-line JSON can expose `session_name`, `workspace.project_dir`, `context_window`, and version.
+- Launch supports `--name`/`-n`; set the vendor-native session name to the active F-Mark `session_id` when creating a managed Claude session.
+- Structured access cards should come from `PermissionRequest` hook payloads when available.
+- Compact/clear: `/compact` and `/clear`, with PreCompact/PostCompact and SessionStart/SessionEnd hooks. Only send while idle, then re-send a compass reminder after clear/compact.
+- Native fork: use `/branch [name]` after smoke tests; `/fork` is an alias in some contexts but not the canonical production assumption.
+- Sub-agents: Claude uses the `Agent` tool. Hooks expose `PreToolUse(Agent)`, `PostToolUse(Agent)`, `SubagentStart`, and `SubagentStop`, enough for final-result nested boxes in v1. Progressive TUI sub-agent streaming remains a smoke-test item.
+
+Remaining smoke checks:
+
+- Verify project-scoped `.mcp.json` approval behavior in a fresh repo.
+- Verify status-line collection can be installed without overwriting user status-line config.
+- Verify `claude --resume <source> --fork-session --name <new-name>` behavior before using it for session forks.
+- Verify progressive child output availability from Claude TUI/hook/transcript paths.
 
 Preferred install options to validate:
 
@@ -325,16 +415,29 @@ Status detection:
 - Check `.mcp.json` in project root.
 - Check `~/.claude.json` for project/user/local entries.
 - Optionally run `claude mcp list` only as manual smoke, not from the kernel in normal UI.
+- Verify exactly which Claude hook/MCP fields expose runtime session id, transcript path, and any human-readable session name/title.
 
 ### Codex
 
-Research:
+Integrated research outcome:
 
-- Re-verify `codex mcp add` syntax from official docs.
-- Find current direct TOML schema for stdio servers, HTTP servers, headers, env, and project-vs-user config.
-- Confirm whether project-local `.codex/config.toml` is supported for MCP client config or only `~/.codex/config.toml`.
-- Confirm whether Codex can use authenticated HTTP MCP servers with headers.
-- Confirm whether `codex mcp list/get` can be used for diagnostics.
+- `planning/mcp/research-codex-runtime.md` verifies local Codex `0.133.0` and `codex mcp add/list/get/remove/login/logout`.
+- `codex mcp add` writes user/global config; project-local install requires direct `.codex/config.toml` edits after trust. Config layers are user `$CODEX_HOME/config.toml`, project `.codex/config.toml`, and system `/etc/codex/config.toml`.
+- Stdio config supports `command`, `args`, `env`, `env_vars`, `cwd`, and timeouts. HTTP config supports `url`, `bearer_token_env_var`, `http_headers`, `env_http_headers`, timeouts, `enabled`, `required`, and tool allow/deny/approval settings.
+- CLI add supports `--env`, `--url`, and `--bearer-token-env-var`, but not arbitrary HTTP header flags; the local/global auto-apply path needs a TOML writer.
+- Hooks expose `session_id`, `transcript_path`, `cwd`, `model`, `permission_mode`, `turn_id`, and tool-use fields. Human-readable session/thread names are not available through hooks.
+- Creation-time vendor session naming cannot be done through the current CLI; store F-Mark `session_id` as `runtime_session.desired_name`, and only set native thread name later if an app-server integration is adopted.
+- Context usage is not reliable through hooks. Show `Unknown` unless app-server or transcript fixtures prove a stable field.
+- Access cards should come from structured `PermissionRequest` hooks; launch access modes come from approval/sandbox config.
+- Compact/clear: `/compact` and `/clear`; `/clear` starts a fresh thread. Send only while idle and re-send compass afterward.
+- Native fork: `/fork` and `codex fork [SESSION_ID] [PROMPT]` exist; no `/branch` or CLI name flag found. Treat native fork as best-effort after smoke tests; F-Mark folder fork is source of truth.
+- Sub-agents: Codex supports configured agents and `SubagentStart`/`SubagentStop` hooks. Final-result nested boxes are v1; progressive/nested tool visibility needs app-server or transcript fixtures.
+
+Remaining smoke checks:
+
+- Verify project `.codex/config.toml` merge/write behavior with trusted and untrusted folders.
+- Verify whether app-server can be used narrowly for context, naming, approvals, and progressive sub-agent data without replacing the tmux model.
+- Verify `codex fork` behavior from an active managed pane before enabling native fork commands.
 
 Preferred install options to validate:
 
@@ -375,13 +478,28 @@ Status detection:
 
 ### Gemini CLI
 
-Research:
+Integrated research outcome:
 
-- Re-verify `gemini mcp add` syntax, settings paths, and scope defaults.
-- Confirm whether `gemini mcp add -s project` writes `.gemini/settings.json`.
-- Confirm HTTP header behavior and whether tokens end up in project config.
-- Confirm trust behavior for stdio servers and how it interacts with project folders.
-- Check Gemini schema sanitization constraints against F-Mark tool schemas.
+- `planning/mcp/research-gemini-runtime.md` verifies local Gemini `0.43.0` and upstream source `630ecc2`.
+- `gemini mcp add` supports `--scope user|project`; project is the default. There is no `global` scope, so F-Mark "Globally" maps to Gemini user config at `~/.gemini/settings.json`.
+- Project config is `.gemini/settings.json`; current source shape for HTTP is `url` plus `type: "http"`, while older docs mention deprecated `httpUrl`.
+- Stdio/SSE/HTTP are available. Config supports env, headers, timeout, description, include/exclude tools, and `trust`.
+- Keep `trust:false` by default; folder trust can cause project MCP/hooks/settings to be ignored, so preflight must detect and explain trust blockers.
+- Version marker can live in `description`, stdio env `F_MARK_MCP_VERSION`, or command args. Do not rely on JSON comments.
+- Hooks expose `session_id`, `transcript_path`, `cwd`, `timestamp`, and env such as `GEMINI_SESSION_ID`; no human-readable session title/name setter exists.
+- Creation-time native naming is not supported; use F-Mark `session_id` as `runtime_session.desired_name` only.
+- Context usage is not exposed through a stable external API; show estimated/unknown unless smoke tests prove a field.
+- Access observability can use `Notification` hooks with `notification_type: "ToolPermission"`, but live approve/change is not stable. Treat access modes as launch-time/restart-required.
+- Compact/clear: `/compress` is official, `/summarize` and `/compact` are aliases; `/clear` fires `SessionEnd(clear)`, resets chat, and creates a new runtime session id. Rebind runtime session identity after clear.
+- Native fork: no `/fork` or `/branch`; checkpoint `/resume save <name>` and `/resume resume <name>` may approximate branch but needs smoke. F-Mark-owned fork is v1.
+- Sub-agents: Gemini uses `invoke_agent` with `agent_name`; final result capture is viable. Progressive sub-agent output is not proven and should remain unsupported until fixtures prove it.
+
+Remaining smoke checks:
+
+- Verify Gemini schema sanitization against the final F-Mark tool schemas.
+- Verify folder trust preflight behavior and the safest user-facing remediation.
+- Verify whether checkpoint resume can be used for optional native branch handoff.
+- Verify whether stream JSON or transcripts expose progressive sub-agent progress beyond final `invoke_agent` result.
 
 Preferred install options to validate:
 
@@ -600,36 +718,42 @@ Runtime-specific install snippets belong in the setup UI and `/guide-rest-varian
 
 ### Phase 0: Research Spike
 
-- [ ] Re-read current MCP spec docs for tools/resources/prompts and Streamable HTTP.
-- [ ] Build a tiny throwaway MCP server with the selected SDK.
-- [ ] Confirm it works over stdio with at least one of Claude/Codex/Gemini.
-- [ ] Confirm Streamable HTTP can run inside Fastify or document why stdio ships first.
-- [ ] Verify Claude install paths and project `.mcp.json` behavior.
-- [ ] Verify Codex HTTP/stdout config syntax, header handling, and config path support.
-- [ ] Verify Gemini `gemini mcp add` and `.gemini/settings.json` behavior.
-- [ ] Verify context used/available retrieval for Claude, Codex, Gemini.
-- [ ] Verify access/permission modes and live-change support for Claude, Codex, Gemini.
-- [ ] Verify compact/clear commands and safe timing for Claude, Codex, Gemini.
-- [ ] Verify structured access/permission prompt detection for Claude, Codex, Gemini.
-- [ ] Decide whether v1 ships HTTP + stdio or stdio only.
+- [x] Create research outcome docs for MCP/kernel, local UI/backend integration, Claude, Codex, and Gemini.
+- [x] Select SDK direction: `@modelcontextprotocol/sdk@1.29.0` plus `zod`.
+- [x] Decide v1 transport direction: stdio first; HTTP only after a Fastify Streamable HTTP spike.
+- [x] Identify active-session storage split as a blocking prerequisite for fork/listener/MCP context reliability.
+- [ ] Build a tiny throwaway MCP server with the selected SDK and keep stdout protocol-clean.
+- [ ] Confirm stdio works with at least one runtime through the managed setup flow.
+- [ ] Fastify Streamable HTTP spike for `/mcp`: raw request/reply compatibility, SSE, auth failures, invalid/missing `Mcp-Session-Id`, CORS headers, and transport lifecycle.
+- [ ] Claude smoke: project `.mcp.json`, status-line context, `PermissionRequest`, `/branch`, and `Agent` sub-agent fixtures.
+- [ ] Codex smoke: project `.codex/config.toml`, trusted/untrusted folders, `PermissionRequest`, `/fork`/`codex fork`, app-server feasibility, and sub-agent fixtures.
+- [ ] Gemini smoke: `.gemini/settings.json`, folder trust, schema sanitization, `ToolPermission` notification, `/compress`/`/clear`, checkpoint resume, and `invoke_agent` fixtures.
 
-Exit: write `planning/mcp/research.md` with exact tested commands, config files touched, and screenshots/log snippets if useful.
+Exit: append smoke-test results to the relevant `planning/mcp/research-*.md` docs, or add `planning/mcp/research-smoke-tests.md` if the results cut across runtimes.
 
 ### Phase 1: Service Extraction
 
 - [ ] Extract event write/read helpers from route handlers.
 - [ ] Add tests proving REST behavior is unchanged.
 - [ ] Extract participant/session helper functions needed by MCP tools.
+- [ ] Extract event publisher/bus helpers so REST and MCP mutations publish identical websocket updates.
+- [ ] Extract todo helpers used by REST routes and future MCP tools.
+- [ ] Extract session fork helper boundary, even if fork route ships in Phase 3.7.
+- [ ] Add a canonical `AgentStateStore`/active-session resolver and migrate callers that currently read or write divergent `.f-mark/agents` paths.
 - [ ] Keep all existing route tests green.
 
 Exit: no MCP behavior yet; pure refactor with identical REST output.
 
 ### Phase 2: Stdio MCP Server
 
-- [ ] Add MCP SDK dependency.
+- [ ] Add `@modelcontextprotocol/sdk@1.29.0` and `zod`.
 - [ ] Implement `f-mark mcp` stdio command.
+- [ ] Ensure stdout is reserved for MCP JSON-RPC and diagnostics go to stderr.
+- [ ] Resolve project context from `F_MARK_PATH`, `--path`, or cwd upward search.
+- [ ] Resolve participant/session defaults through the canonical managed-agent active-session resolver.
 - [ ] Register minimal tools: `fmark_read_events`, `fmark_post_prose`, `fmark_end_turn`.
 - [ ] Register `fmark://guide` resource.
+- [ ] Proxy mutating stdio tools through the running kernel HTTP API for v1 so bus/WS/stale-path behavior remains centralized.
 - [ ] Add MCP unit tests using SDK client or JSON-RPC harness.
 - [ ] Manual smoke one runtime with stdio install.
 
@@ -662,6 +786,12 @@ Exit: managed agents know what changed without blindly querying or receiving eve
 
 ### Phase 3.6: Agent State Backend
 
+- [ ] Add canonical `AgentStateStore` and active-session resolver shared by participants, link route, managed status, hooks, fork handoff, MCP context, and wake routing.
+- [ ] Migrate or bridge existing split storage:
+  - participant reads under `agents` in project fmark dir,
+  - legacy `.f-mark/agents` writes from `/agents/:id/link`,
+  - managed-agent runtime state from current `agentsDirFor(...)`,
+  - hook auto-stream active-session lookups.
 - [ ] Add managed-agent state file with paused/display/activity/connection/context/access fields.
 - [ ] Add random display-name picker and collision handling.
 - [ ] Add `GET /managed-agents/status`.
@@ -679,9 +809,33 @@ Exit: managed agents know what changed without blindly querying or receiving eve
 - [ ] Implement wake matrix: todo/task creation/edit wakes assigned agents for dirty items.
 - [ ] If a tagged target is paused, surface resume offer instead of waking.
 - [ ] Add mention metadata to prose/comment schemas.
-- [ ] Add WS broadcasts for agent-state changes.
+- [ ] Add `managed-agent.updated` WS broadcasts for agent-state changes.
 
 Exit: backend can drive a complete Agents right-pane and reliable wake targeting.
+
+### Phase 3.7: Session Forking Backend
+
+- [ ] Depend on Phase 3.6 active-session store unification before enabling fork handoff.
+- [ ] Add session fork service.
+- [ ] Add `POST /sessions/:id/fork`.
+- [ ] Duplicate source session folder into a new unique session folder.
+- [ ] Write `.fork.json` metadata in the forked session.
+- [ ] Register the fork through current folder-based discovery plus path registry/MRU/active path state.
+- [ ] Resolve active managed agents linked to the source session.
+- [ ] Skip paused, detached, and offline agents by default.
+- [ ] Update active-session pointers and managed-agent state to the fork.
+- [ ] Set `runtime_session.desired_name` to the fork session id.
+- [ ] Rebind MCP context and stream listener targets to the fork.
+- [ ] Add runtime fork capability table using research outcomes:
+  - Claude: `/branch [name]` after smoke; CLI resume/fork/name path optional after smoke.
+  - Codex: `/fork` or `codex fork` best-effort after smoke; no CLI name flag found.
+  - Gemini: no native `/fork` or `/branch`; F-Mark handoff prompt is v1.
+- [ ] Send verified runtime-native fork/branch command through tmux input queue when supported.
+- [ ] Relaunch/rebind active agents according to runtime capability.
+- [ ] Send compact fork handoff prompt.
+- [ ] Publish `session.forked` and `managed-agent.updated` WS state updates for sessions and agents.
+
+Exit: backend can fork a session, switch active agent context to the fork, and keep the source immutable.
 
 ### Phase 4: HTTP MCP Endpoint
 
@@ -749,6 +903,22 @@ Exit: user can click a runtime, resolve setup in one sheet, and launch only afte
 
 Exit: users can inspect, control, and target agents from the right pane and composer/comment mention flows.
 
+### Phase 6.6: Session Forking UI
+
+- [ ] Add session row fork icon button.
+- [ ] Ensure session row fork button does not select the source row.
+- [ ] Add composer fork icon button for the active session.
+- [ ] Build shared fork-name popup.
+- [ ] Default fork name from source session slug.
+- [ ] Add busy/disabled states for fork in progress.
+- [ ] Call `POST /sessions/:id/fork`.
+- [ ] Refresh session list and switch to fork on success.
+- [ ] Preserve composer draft after successful fork.
+- [ ] Refresh participants and managed-agent status after fork.
+- [ ] Show agent handoff warnings for skipped/failed agents.
+
+Exit: users can fork from a session row or the composer, land in the fork, and see active agents attached to it.
+
 ### Phase 7: Guide And Skill Updates
 
 - [ ] Update `/guide` to be MCP-only.
@@ -777,6 +947,26 @@ Exit: newly spawned agents receive clean MCP-only guidance, while REST documenta
 - [ ] Dedupe hook/MCP turn-end and final-prose events.
 
 Exit: MCP and hooks cooperate without confusing duplicate cards.
+
+### Phase 8.5: Sub-Agent Streaming
+
+- [ ] Add runtime capability flags for sub-agent visibility.
+- [ ] Add sub-agent stream parser abstraction.
+- [ ] Add explicit event kinds `subagent-run` and `subagent-output`.
+- [ ] Capture parent participant id, parent runtime id, parent turn/tool-use id, sub-agent name, sub-agent id, source, source confidence, correlation id, sequence, and status when available.
+- [ ] Store sub-agent output in the session feed under the parent participant with sub-agent identity in structured payloads.
+- [ ] Add Claude adapter for `Agent` tool hooks, `SubagentStart`, `SubagentStop`, and final-result boxes.
+- [ ] Add Codex adapter for `SubagentStart`/`SubagentStop` and final-result boxes; keep progressive/app-server path behind capability flag.
+- [ ] Add Gemini adapter for `invoke_agent`/`agent_name` final-result boxes; mark progressive output unsupported until fixtures prove it.
+- [ ] Support final-result-only sub-agent capture.
+- [ ] Support progressive sub-agent output capture where runtime data allows it.
+- [ ] Attribute nested tool calls to the sub-agent when reliable.
+- [ ] Add `SubagentBox` renderer component nested inside parent agent live output.
+- [ ] Collapse completed sub-agent boxes after parent turn end.
+- [ ] Keep failed/cancelled sub-agent boxes visible.
+- [ ] Mark unsupported/unknown capability without fabricating sub-agent structure.
+
+Exit: sub-agent work appears in chat as a named subentity of the invoking agent whenever the runtime exposes enough data.
 
 ### Phase 9: End-To-End Verification
 
@@ -811,11 +1001,16 @@ Kernel:
 - Per-agent cursors advance only when expected.
 - `fmark_get_inbox` marks returned items as seen automatically.
 - `/mcp` auth tests.
+- `/mcp` Streamable HTTP tests for invalid/missing `Mcp-Session-Id`, GET/SSE, DELETE, bearer failures, and required CORS headers if HTTP ships.
 - `f-mark mcp` stdio smoke harness.
 - Install detection tests per runtime.
+- Claude install detection tests for project/local/user precedence and stale `F_MARK_MCP_VERSION`.
+- Codex config parser/writer tests for user config, project `.codex/config.toml`, env, HTTP headers, allow/deny tools, and invalid TOML.
+- Gemini config parser/writer tests for project/user settings, `trust:false`, HTTP `url` + `type`, and invalid JSON.
 - Setup route tests.
 - Access request/response event tests.
 - Wake packet tests with existing sessions and large histories.
+- Canonical active-session resolver tests covering participants, link route, managed state, hooks, fork handoff, and MCP context.
 - Pause/resume route tests.
 - Paused agents are excluded from wake targets.
 - Mention-targeted wake tests.
@@ -825,6 +1020,18 @@ Kernel:
 - Agent status aggregation tests.
 - Compact/clear route capability tests.
 - Access/context status fallback tests for unsupported vendors.
+- Session fork route copies source folder and leaves source immutable.
+- Session fork writes metadata and appears in session list.
+- Session fork publishes `session.forked` and refreshes path registry/MRU/active path state.
+- Session fork updates active managed-agent session pointers.
+- Session fork makes MCP context default to the fork after handoff.
+- Session fork makes hook/listener output land in the fork after handoff.
+- Session fork skips paused/detached agents by default.
+- Sub-agent parser captures final-result-only output when runtime fixtures expose it.
+- Sub-agent parser captures progressive output when runtime fixtures expose it.
+- Runtime sub-agent adapter fixtures for Claude `Agent`, Codex `SubagentStart`/`SubagentStop`, and Gemini `invoke_agent`.
+- Sub-agent attribution links child output to parent participant and parent turn/tool-use.
+- Unattributable output remains parent arbitrary output instead of becoming a fake sub-agent.
 - Existing REST route regression tests.
 
 Renderer:
@@ -853,6 +1060,13 @@ Renderer:
 - Selecting a paused mention target offers resume.
 - Compact/clear buttons are disabled while running/notified/access-pending.
 - Chip access-pending color is distinct from turn-ended color.
+- Session row fork button opens name popup without selecting source row.
+- Composer fork button opens name popup for current session.
+- Fork success switches to the new session and preserves composer draft.
+- Fork warnings render skipped/failed agent handoff states.
+- Sub-agent output renders as a nested box inside the parent agent's turn.
+- Sub-agent box shows runtime-provided name/title and parent relationship.
+- Completed sub-agent boxes collapse after parent turn end; failed boxes stay visible.
 
 Manual:
 
@@ -874,31 +1088,52 @@ Manual:
 - Comment on agent-authored content and confirm the author wakes, plus tagged agents when present.
 - Create/edit todos and confirm dirty assignees wake.
 - Rename an agent and confirm old event mention metadata still routes by participant id.
+- Fork a session from the session list and confirm copied events/assets appear in the fork.
+- Fork a session from the composer and confirm active managed agents write future output to the fork.
+- Verify runtime-native fork/branch command only runs for runtimes with verified capability.
+- Launch an agent flow that invokes a sub-agent and confirm the sub-agent output is nested under the parent agent with the given name when runtime data supports it.
 
 ## Open Questions
 
-- Should v1 ship HTTP MCP, stdio MCP, or both?
-- Should the stdio MCP server proxy to the running kernel HTTP API, or call local services directly?
+- After the Fastify spike, should `/mcp` HTTP ship in the same release as stdio or remain a later transport?
+- When can stdio mutating tools safely call local services directly instead of proxying to the running kernel HTTP API?
 - How should MCP connection status be surfaced if the runtime does not expose it to F-Mark?
 - Should F-Mark expose resources for attachments in v1?
 - Should MCP tools be allowed under `--no-auth`, or should stdio rely on local token reads even when kernel auth is enabled?
 - Should we include `path` in MCP tool envelopes for stale-path protection?
 - Do we need a distinct `mcp_status` presence state, or is install status enough?
-- What integration version value should be written into config: package version, schema version, or both?
-- Which local/global auto-apply paths are safe enough for v1 per runtime?
-- Which vendor context/access fields are reliable enough to show as first-class controls versus "unknown"?
+- Should the integration version marker include package version, schema version, or both?
+- Which auto-apply paths are safe enough for v1 after smoke tests: Claude project/user, Codex user/project TOML, Gemini project/user settings?
+- Should Codex app-server be adopted narrowly for context/name/approval/sub-agent data, or stay out of v1?
+- Can Claude status-line collection be enabled without clobbering user status-line configuration?
+- What exact Gemini trust remediation should the setup sheet offer when project config is ignored?
+- Which vendor context/access fields pass smoke tests strongly enough to show as first-class controls versus "unknown"?
 - Should global setup ever become sticky/preferred after the user chooses it once, or should setup remain local-first every time?
+- Should native runtime fork be enabled in v1 for Claude `/branch` and Codex `/fork`, or should v1 use only F-Mark-owned fork handoff prompts?
+- Should fork v1 move active agents to the fork, or also support cloned agents so source and fork can both keep live panes?
+- Should fork metadata remain hidden in `.fork.json`, or should the fork feed include a visible system event?
+- Do progressive sub-agent streams pass smoke tests for Claude or Codex, or should v1 stay final-result-only across all runtimes?
+- Should sub-agents ever become durable F-Mark participants, or remain nested subentities of their invoking agent?
 
 ## First Implementation Slice
 
 The smallest useful slice:
 
-1. Add `f-mark mcp` stdio.
-2. Expose `fmark_post_prose`, `fmark_read_events`, and `fmark_end_turn`.
-3. Add Claude project-scoped stdio auto-apply with a version marker.
-4. Add preflight for Claude MCP status before spawn.
-5. Add `/guide` MCP-only and `/guide-rest-variant`.
-6. Inject `/guide` as the first managed-agent prompt.
-7. Manual smoke with one Claude agent.
+1. Add canonical `AgentStateStore` active-session resolver.
+2. Add `f-mark mcp` stdio on `@modelcontextprotocol/sdk@1.29.0`.
+3. Proxy mutating stdio MCP tools through the running kernel HTTP API.
+4. Expose `fmark_post_prose`, `fmark_read_events`, and `fmark_end_turn`.
+5. Add Claude project-scoped stdio auto-apply with `F_MARK_MCP_VERSION`.
+6. Add preflight for Claude MCP status before spawn.
+7. Add `/guide` MCP-only and `/guide-rest-variant`.
+8. Inject `/guide` as the first managed-agent prompt.
+9. Manual smoke with one Claude agent.
 
-After that works, expand to Claude hook setup, Codex/Gemini local/global install support, stale-version update flows, and HTTP MCP.
+After that works, expand to:
+
+- Claude hook setup, status-line context, access request cards, and `/branch` fork smoke.
+- Codex/Gemini local/global install support and stale-version update flows.
+- Compass inbox/cursor tools.
+- Session forking backend/UI.
+- Final-result-only sub-agent boxes for fixtures we can verify.
+- HTTP MCP after the Fastify transport spike passes.

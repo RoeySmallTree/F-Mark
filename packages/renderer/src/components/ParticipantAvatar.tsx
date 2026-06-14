@@ -1,7 +1,21 @@
 import type { CSSProperties, JSX } from "react";
 import type { Participant } from "@f-mark/shared";
 
-export type AvatarKind = "human" | "claude" | "gemini" | "gpt" | "terminal";
+export type AvatarKind =
+  | "human"
+  | "claude"
+  | "gpt"
+  | "opencode"
+  | "terminal";
+
+/* Inline CSS custom property that carries the icon URL into a mask-based
+   span. Using a mask lets the icon shape adopt the parent's `color` so it
+   stays legible against any theme background — the source PNGs are
+   white-on-transparent and were invisible against the default light
+   canvas. */
+export function iconMaskStyle(kind: AvatarKind): CSSProperties {
+  return { "--icon-url": `url(${ICON_BY_KIND[kind]})` } as CSSProperties;
+}
 
 export interface ParticipantAvatarInput {
   participantId?: string;
@@ -23,8 +37,8 @@ interface ParticipantAvatarProps extends ParticipantAvatarInput {
 const ICON_BY_KIND: Record<AvatarKind, string> = {
   human: "/agent-icons/human-icon.png",
   claude: "/agent-icons/claude-icon.png",
-  gemini: "/agent-icons/gemini-icon.png",
   gpt: "/agent-icons/gpt-icon.png",
+  opencode: "/agent-icons/opencode-icon.svg",
   terminal: "/agent-icons/terminal-icon.png",
 };
 
@@ -46,7 +60,7 @@ export function avatarKind(input: ParticipantAvatarInput): AvatarKind {
     .toLowerCase()
     .trim();
   if (runtimeId.includes("claude")) return "claude";
-  if (runtimeId.includes("gemini")) return "gemini";
+  if (runtimeId.includes("opencode")) return "opencode";
   if (
     runtimeId.includes("codex") ||
     runtimeId.includes("gpt") ||
@@ -59,7 +73,7 @@ export function avatarKind(input: ParticipantAvatarInput): AvatarKind {
 
   const name = normalizedName(input);
   if (name.includes("claude")) return "claude";
-  if (name.includes("gemini")) return "gemini";
+  if (name.includes("opencode")) return "opencode";
   if (
     name.includes("codex") ||
     name.includes("gpt") ||
@@ -77,6 +91,14 @@ export function avatarIconSrc(kind: AvatarKind): string {
 
 function borderColor(input: ParticipantAvatarInput): string | undefined {
   return input.color ?? input.participant?.color;
+}
+
+function avatarImageUrl(
+  input: ParticipantAvatarInput,
+  resolvedKind: AvatarKind,
+): string | undefined {
+  if (resolvedKind !== "human") return undefined;
+  return input.participant?.avatar_data_url;
 }
 
 export function ParticipantAvatar({
@@ -100,12 +122,24 @@ export function ParticipantAvatar({
     color,
     runtimeId,
   });
+  const imageUrl = avatarImageUrl(
+    {
+      participantId,
+      participant,
+      kind,
+      name,
+      color,
+      runtimeId,
+    },
+    resolvedKind,
+  );
   const classes = [
     "avatar",
     resolvedKind === "human" ? "user" : "agent",
     size !== "md" ? size : "",
     active ? "active" : "",
     "with-image",
+    imageUrl !== undefined ? "with-custom-image" : "",
     className ?? "",
   ]
     .filter(Boolean)
@@ -126,7 +160,11 @@ export function ParticipantAvatar({
       aria-hidden={ariaHidden}
       aria-label={ariaHidden ? undefined : label}
     >
-      <img src={ICON_BY_KIND[resolvedKind]} alt="" draggable={false} />
+      {imageUrl !== undefined ? (
+        <img className="avatar-img" src={imageUrl} alt="" draggable={false} />
+      ) : (
+        <span className="icon-mask" style={iconMaskStyle(resolvedKind)} />
+      )}
     </span>
   );
 }

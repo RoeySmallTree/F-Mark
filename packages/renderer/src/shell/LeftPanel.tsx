@@ -4,21 +4,39 @@ import { Named } from "../panels/Named.js";
 import { Todos } from "../panels/Todos.js";
 import { Comments } from "../panels/Comments.js";
 import { Search } from "../panels/Search.js";
+import { PaneResizer } from "../components/PaneResizer.js";
 
 export function LeftPanel(): JSX.Element {
   const leftRail = useStore((s) => s.leftRail);
+
+  /* `.left-panel-host` fills its `leftPanel` grid area; the cell size comes
+     from the `--pane-w-leftPanel` / `--pane-h-leftPanel` vars on `.main`. The
+     resizer's edge + axis are derived from the active placement. */
+  let child: JSX.Element;
   switch (leftRail) {
     case "sessions":
-      return <Sessions />;
+      child = <Sessions />;
+      break;
     case "named":
-      return <Named />;
+      child = <Named />;
+      break;
     case "todos":
-      return <Todos />;
+      child = <Todos />;
+      break;
     case "comments":
-      return <Comments />;
+      child = <Comments />;
+      break;
     case "search":
-      return <Search />;
+      child = <Search />;
+      break;
     default:
-      return <Sessions />;
+      child = <Sessions />;
   }
+
+  return (
+    <div className="left-panel-host">
+      {child}
+      <PaneResizer pane="leftPanel" />
+    </div>
+  );
 }

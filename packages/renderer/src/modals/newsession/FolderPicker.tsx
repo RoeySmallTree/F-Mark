@@ -24,10 +24,19 @@ import { useStore } from "../../state/store.js";
 export interface FolderPickerProps {
   /** Starting absolute path. If null/empty, fetches /fs/home and starts there. */
   initialPath: string | null;
-  /** Called with the absolute path of the folder the user accepted. */
-  onPick(path: string): void;
+  /** Called with the absolute path of the folder the user accepted (the
+      "Use this folder" action). Omitted when `hideActions` is set. */
+  onPick?(path: string): void;
   /** Cancel back to the parent UI without picking. */
-  onCancel(): void;
+  onCancel?(): void;
+  /** Hide the Cancel / "Use this folder" footer actions while keeping the
+      current-path readout. The shown directory becomes the live selection,
+      reported via `onPathChange` — used by the onboarding wizard, whose own
+      Back/Next footer drives navigation. */
+  hideActions?: boolean;
+  /** Fired whenever the shown directory changes (including the first load) so a
+      parent can treat the current dir as the selection without a button. */
+  onPathChange?(path: string): void;
 }
 
 interface ListState {
@@ -85,6 +94,10 @@ export function FolderPicker(props: FolderPickerProps): JSX.Element {
           truncated: data.truncated,
         });
         setFocusedIdx(data.entries.length > 0 ? 0 : -1);
+        // Report the now-shown directory so a footerless parent can treat it as
+        // the live selection. Parents must pass a stable callback (the picker's
+        // loader is memoized and captures it once).
+        props.onPathChange?.(data.path);
       } catch (err) {
         setState({
           status: "error",
@@ -130,7 +143,7 @@ export function FolderPicker(props: FolderPickerProps): JSX.Element {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (e.metaKey || e.ctrlKey) {
-        props.onPick(state.path);
+        props.onPick?.(state.path);
       } else if (focusedIdx >= 0 && focusedIdx < state.entries.length) {
         const target = `${state.path === "/" ? "" : state.path}/${state.entries[focusedIdx]!.name}`;
         void load(target);
@@ -333,8 +346,8 @@ export function FolderPicker(props: FolderPickerProps): JSX.Element {
               aria-selected={i === focusedIdx}
               data-row-idx={i}
               className={`folder-picker-row${i === focusedIdx ? " on" : ""}`}
-              onClick={() => setFocusedIdx(i)}
-              onDoubleClick={() => {
+              onClick={() => {
+                setFocusedIdx(i);
                 const target = `${state.path === "/" ? "" : state.path}/${e.name}`;
                 void load(target);
               }}
@@ -352,19 +365,21 @@ export function FolderPicker(props: FolderPickerProps): JSX.Element {
         <div className="folder-picker-current" title={state.path}>
           {state.path || "—"}
         </div>
-        <div className="folder-picker-actions">
-          <button type="button" className="btn-ghost" onClick={props.onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-solid"
-            disabled={state.status !== "ready"}
-            onClick={() => props.onPick(state.path)}
-          >
-            Use this folder
-          </button>
-        </div>
+        {props.hideActions !== true ? (
+          <div className="folder-picker-actions">
+            <button type="button" className="btn-ghost" onClick={props.onCancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-solid"
+              disabled={state.status !== "ready"}
+              onClick={() => props.onPick?.(state.path)}
+            >
+              Use this folder
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -11,6 +11,9 @@
      todo                           → TodoCard
      file                           → FileCard
      tool-use                       → ToolUseCard
+     subagent-run/output            → SubagentCard
+     access-request                 → AccessRequestCard
+     access-response                → null (consumed by AccessRequestCard)
      turn-end                       → TurnEndDivider
      flow                           → FlowCard
 */
@@ -18,9 +21,12 @@
 import { type JSX, lazy, Suspense } from "react";
 import type {
   AnyEventRecord,
+  ForkLinkEventRecord,
   Participant,
   ProsePayload,
   ToolUseEventRecord,
+  SubagentOutputEventRecord,
+  SubagentRunEventRecord,
 } from "@f-mark/shared";
 import { getProseRole } from "@f-mark/shared";
 import { MessageCard } from "./MessageCard.js";
@@ -30,7 +36,12 @@ import { EmbedCard } from "./EmbedCard.js";
 import { TodoCard } from "./TodoCard.js";
 import { FileCard } from "./FileCard.js";
 import { ToolUseCard } from "./ToolUseCard.js";
+import { SubagentCard } from "./SubagentCard.js";
+import { AccessRequestCard } from "./AccessRequestCard.js";
 import { TurnEndDivider } from "./TurnEndDivider.js";
+import { ForkLinkCard } from "./ForkLinkCard.js";
+import { CommentActivityCard } from "./CommentActivityCard.js";
+import { FileCommentCard } from "./FileCommentCard.js";
 /* FlowCard pulls @xyflow/react (~250 KB) + dagre (~150 KB). Lazy-load so
    the main bundle stays slim — flow events are uncommon and the feed
    already renders incrementally. */
@@ -84,9 +95,24 @@ export function EventCard({
 
   if (event.kind === "prose") {
     const role = getProseRole(event.payload as ProsePayload);
-    /* Comments are rendered inside the target card / right panel, not as
-       top-level cards. */
-    if (role.kind === "comment") return null;
+    if (role.kind === "comment") {
+      return (
+        <CommentActivityCard
+          event={event}
+          participants={participants}
+          allEvents={allEvents}
+        />
+      );
+    }
+    if (role.kind === "file-comment") {
+      return (
+        <FileCommentCard
+          event={event}
+          participants={participants}
+          allEvents={allEvents}
+        />
+      );
+    }
     if (role.kind === "anchor") {
       return (
         <ProseCard
@@ -146,6 +172,23 @@ export function EventCard({
   if (event.kind === "tool-use") {
     return <ToolUseCard event={event as ToolUseEventRecord} />;
   }
+  if (event.kind === "subagent-run" || event.kind === "subagent-output") {
+    return (
+      <SubagentCard
+        event={event as SubagentRunEventRecord | SubagentOutputEventRecord}
+      />
+    );
+  }
+  if (event.kind === "access-request") {
+    return (
+      <AccessRequestCard
+        event={event}
+        participants={participants}
+        allEvents={allEvents}
+      />
+    );
+  }
+  if (event.kind === "access-response") return null;
   if (event.kind === "turn-end") {
     return <TurnEndDivider event={event} participants={participants} />;
   }
@@ -155,6 +198,9 @@ export function EventCard({
         <FlowCard event={event} participants={participants} />
       </Suspense>
     );
+  }
+  if (event.kind === "fork-link") {
+    return <ForkLinkCard event={event as ForkLinkEventRecord} />;
   }
   return null;
 }

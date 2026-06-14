@@ -1,20 +1,11 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type {
-  EventKind,
-  FlowEdge,
-  FlowNode,
-  FlowPayload,
-} from "@f-mark/shared";
+import type { PostFlowBody } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
-import { writeEventFile } from "../events/writer.js";
-import { validateNonProseAppendTo } from "../events/proseValidate.js";
-import type { Bus, BusMessage } from "../ws/bus.js";
+import type { Bus } from "../ws/bus.js";
 import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
-
-interface FlowBody extends FlowPayload {
-  participant_id: string;
-}
+import { writeFlowEvent } from "../services/events.js";
+import { publishEventWrites } from "../services/eventPublisher.js";
 
 async function ensureSession(
   p: Paths,
@@ -28,24 +19,6 @@ async function ensureSession(
   return true;
 }
 
-function validateGraph(nodes: FlowNode[], edges: FlowEdge[]): void {
-  const ids = new Set<string>();
-  for (const n of nodes) {
-    if (ids.has(n.id)) {
-      throw new Error(`duplicate node id: ${n.id}`);
-    }
-    ids.add(n.id);
-  }
-  for (const e of edges) {
-    if (!ids.has(e.source)) {
-      throw new Error(`edge ${e.id} references missing node: ${e.source}`);
-    }
-    if (!ids.has(e.target)) {
-      throw new Error(`edge ${e.id} references missing node: ${e.target}`);
-    }
-  }
-}
-
 export function registerFlowRoutes(
   app: FastifyInstance,
   pOrDeps: Paths | PathDeps,
@@ -53,33 +26,7 @@ export function registerFlowRoutes(
 ): void {
   const deps = normaliseDeps(pOrDeps);
 
-  function publish(
-    sessionId: string,
-    filename: string,
-    kind: EventKind,
-    participantId: string,
-    supersedes?: string,
-  ): void {
-    const bus = getBus();
-    const added: BusMessage = {
-      type: "event_added",
-      session_id: sessionId,
-      filename,
-      kind,
-      participant_id: participantId,
-    };
-    bus.publish(added);
-    if (typeof supersedes === "string") {
-      bus.publish({
-        type: "event_superseded",
-        session_id: sessionId,
-        filename: supersedes,
-        supersedes: filename,
-      });
-    }
-  }
-
-  app.post<{ Params: { id: string }; Body: FlowBody }>(
+  app.post<{ Params: { id: string }; Body: PostFlowBody }>(
     "/sessions/:id/events/flow",
     {
       schema: {
@@ -165,28 +112,9 @@ export function registerFlowRoutes(
       const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
-        const { participant_id, supersedes, ...rest } = req.body;
-        const payload: FlowPayload =
-          supersedes !== undefined ? { ...rest, supersedes } : rest;
-        const apCheck = validateNonProseAppendTo(payload.append_to);
-        if (!apCheck.ok) {
-          reply.code(400);
-          return { error: apCheck.error };
-        }
-        validateGraph(payload.nodes, payload.edges);
-        const filename = await writeEventFile(p, req.params.id, {
-          participant_id,
-          kind: "flow",
-          ext: "json",
-          contents: JSON.stringify(payload, null, 2),
-        });
-        publish(req.params.id, filename, "flow", participant_id, supersedes);
-        return {
-          filename,
-          timestamp: filename.split("_")[0]!,
-          participant_id,
-          kind: "flow" as const,
-        };
+        const written = await writeFlowEvent(p, req.params.id, req.body);
+        publishEventWrites(getBus(), req.params.id, written.publish);
+        return written.response;
       } catch (err) {
         reply.code(400);
         return { error: err instanceof Error ? err.message : String(err) };

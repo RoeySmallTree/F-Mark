@@ -19,7 +19,6 @@ describe("getAdapter", () => {
   });
 
   it("returns null for an unknown runtime", () => {
-    expect(getAdapter("gemini")).toBeNull();
     expect(getAdapter("custom-runtime")).toBeNull();
   });
 

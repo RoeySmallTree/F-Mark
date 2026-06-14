@@ -32,7 +32,11 @@ interface ResolveError {
   body: FsErrorShape;
 }
 
-async function resolveBrowsePath(raw: unknown): Promise<ResolvedPath | ResolveError> {
+export type { ResolvedPath, ResolveError, FsErrorShape };
+
+export async function resolveBrowsePath(
+  raw: unknown,
+): Promise<ResolvedPath | ResolveError> {
   if (typeof raw !== "string" || raw.length === 0) {
     return {
       ok: false,

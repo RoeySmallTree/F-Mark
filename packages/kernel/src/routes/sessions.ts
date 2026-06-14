@@ -1,12 +1,32 @@
 import type { FastifyInstance } from "fastify";
-import type { AnyEventRecord, EventKind } from "@f-mark/shared";
+import type {
+  AnyEventRecord,
+  CreateSessionRequest,
+  EventKind,
+  ForkedAgentResult,
+  ForkSessionRequest,
+  ForkSessionResponse,
+  SessionEventGroup,
+  SessionWithPath,
+  UpdateSessionRequest,
+} from "@f-mark/shared";
 import { paths as makePaths, type Paths } from "../paths.js";
-import { createSession, listSessions } from "../sessions.js";
+import {
+  createSession,
+  deleteSession,
+  forkSessionFolder,
+  listSessions,
+  renameSession,
+} from "../sessions.js";
 import {
   ensureDefaultUserParticipant,
+  ensureSystemForkParticipant,
   listParticipants,
   type ParticipantWithSession,
 } from "../participants.js";
+import { writeForkLinkPair } from "../services/forkLinkWriter.js";
+import { isoTimestamp } from "@f-mark/shared";
+import { initProject, readConfig } from "../project.js";
 import type { PathContextRef } from "../paths/contextRef.js";
 import { activePaths } from "../paths/active.js";
 import { computePathId } from "../paths/identity.js";
@@ -22,15 +42,10 @@ import {
   updateState,
 } from "../state/store.js";
 import { readEvents } from "../events/reader.js";
-
-interface CreateBody {
-  slug?: string;
-  /** Absolute path to the parent folder. When present, the session is created
-      under <path>/.f-mark/sessions/<id>/ and activePath is set to <path>.
-      When absent, falls back to the active path (or the injected fallback
-      paths for tests that don't wire the multi-path context). */
-  path?: string;
-}
+import type { TmuxManager } from "../tmux/manager.js";
+import { createAgentStateStore } from "../services/agentState.js";
+import type { Bus } from "../ws/bus.js";
+import { ensureProjectAuth } from "../auth.js";
 
 interface ListQuery {
   scope?: string;
@@ -41,17 +56,8 @@ interface EventsQuery {
   kinds?: string;
 }
 
-type SessionWithPath = Awaited<ReturnType<typeof listSessions>>[number] & {
-  path: string;
-  path_id: string;
-};
-
-interface SessionEventsGroup {
-  path: string;
-  path_id: string;
-  session: SessionWithPath;
-  events: AnyEventRecord[];
-  participants: Record<string, ParticipantWithSession>;
+interface PathQuery {
+  path?: string;
 }
 
 export interface SessionRouteDeps {
@@ -62,6 +68,11 @@ export interface SessionRouteDeps {
       (or `fallback` if active is null), and POST /sessions can accept a
       `path` body field to create + activate. */
   ref?: PathContextRef;
+  /** Optional tmux manager getter. POST /sessions with a `path` activates
+      that path; when process spawning is enabled, new managed spawns must
+      bind to the same freshly-active root. */
+  getTmuxManager?: () => TmuxManager | null;
+  token?: string | null;
 }
 
 function resolveListPaths(deps: SessionRouteDeps): Paths {
@@ -73,6 +84,21 @@ function resolveListPaths(deps: SessionRouteDeps): Paths {
     }
   }
   return deps.fallback;
+}
+
+async function initSessionProject(deps: SessionRouteDeps, p: Paths): Promise<void> {
+  let port: number | undefined;
+  try {
+    port = (await readConfig(deps.fallback)).port;
+  } catch {
+    // Keep initProject's default when the fallback config is unavailable.
+  }
+  if (port === undefined) {
+    await initProject(p);
+  } else {
+    await initProject(p, port);
+  }
+  await ensureProjectAuth(p, deps.token ?? null);
 }
 
 function pushUnique(
@@ -133,6 +159,7 @@ async function listSessionsAcrossPaths(
 export function registerSessionRoutes(
   app: FastifyInstance,
   pOrDeps: Paths | SessionRouteDeps,
+  getBus?: () => Bus,
 ): void {
   const deps: SessionRouteDeps =
     "fallback" in pOrDeps ? pOrDeps : { fallback: pOrDeps };
@@ -166,7 +193,7 @@ export function registerSessionRoutes(
       string,
       Record<string, ParticipantWithSession>
     >();
-    const groups: SessionEventsGroup[] = [];
+    const groups: SessionEventGroup[] = [];
     for (const session of sessions) {
       const p = makePaths(session.path);
       let participants = participantsByPath.get(session.path);
@@ -195,7 +222,7 @@ export function registerSessionRoutes(
     return { groups };
   });
 
-  app.post<{ Body: CreateBody }>(
+  app.post<{ Body: CreateSessionRequest }>(
     "/sessions",
     {
       schema: {
@@ -234,12 +261,16 @@ export function registerSessionRoutes(
           await registerProjectPath(deps.ref.global(), validated.canonical);
           deps.ref.setActive(activePaths(validated.canonical));
           deps.ref.setRevision(next.activeRevision);
+          deps.getTmuxManager?.()?.rebind({
+            projectRoot: validated.canonical,
+          });
         }
       } else {
         p = resolveListPaths(deps);
       }
 
       try {
+        await initSessionProject(deps, p);
         await ensureDefaultUserParticipant(p);
         const session = await createSession(p, { slug: body.slug });
         if (
@@ -263,4 +294,321 @@ export function registerSessionRoutes(
       }
     },
   );
+
+  app.patch<{
+    Params: { id: string };
+    Body: UpdateSessionRequest;
+  }>(
+    "/sessions/:id",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string", minLength: 1 } },
+        },
+        body: {
+          type: "object",
+          required: ["slug"],
+          additionalProperties: false,
+          properties: {
+            slug: { type: "string", minLength: 1 },
+            path: { type: "string" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const body = req.body;
+      const p =
+        typeof body.path === "string" && body.path.length > 0
+          ? makePaths(body.path)
+          : resolveListPaths(deps);
+      try {
+        const session = await renameSession(
+          p,
+          decodeURIComponent(req.params.id),
+          { slug: body.slug },
+        );
+        return {
+          ...session,
+          path: p.root(),
+          path_id: computePathId(p.root()),
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        reply.code(/not found/i.test(message) ? 404 : 400);
+        return { error: message };
+      }
+    },
+  );
+
+  app.delete<{
+    Params: { id: string };
+    Querystring: PathQuery;
+  }>("/sessions/:id", async (req, reply) => {
+    const p =
+      typeof req.query.path === "string" && req.query.path.length > 0
+        ? makePaths(req.query.path)
+        : resolveListPaths(deps);
+    try {
+      await deleteSession(p, decodeURIComponent(req.params.id));
+      reply.code(204);
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      reply.code(/not found/i.test(message) ? 404 : 400);
+      return { error: message };
+    }
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: ForkSessionRequest;
+  }>(
+    "/sessions/:id/fork",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string", minLength: 1 } },
+        },
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            path: { type: "string" },
+            name: { type: "string" },
+            relaunch_agents: { type: "boolean" },
+            agent_ids: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    },
+    async (req, reply): Promise<ForkSessionResponse | { error: string }> => {
+      const sourceSessionId = decodeURIComponent(req.params.id);
+      const body = req.body ?? {};
+      let p: Paths;
+
+      if (typeof body.path === "string" && body.path.length > 0) {
+        const validated = await validateWritableDirectory(body.path);
+        if (!validated.ok) {
+          reply.code(validated.status);
+          return { error: validated.body.message };
+        }
+        p = makePaths(validated.canonical);
+        if (deps.ref) {
+          const next = await updateState(deps.ref.global(), (s) =>
+            bumpRevision(
+              mruPush(
+                { ...s, activePath: validated.canonical },
+                validated.canonical,
+              ),
+            ),
+          );
+          await registerProjectPath(deps.ref.global(), validated.canonical);
+          deps.ref.setActive(activePaths(validated.canonical));
+          deps.ref.setRevision(next.activeRevision);
+          deps.getTmuxManager?.()?.rebind({
+            projectRoot: validated.canonical,
+          });
+        }
+      } else {
+        p = resolveListPaths(deps);
+      }
+
+      const agentState = createAgentStateStore(deps);
+      let participants: Record<string, ParticipantWithSession>;
+      try {
+        participants = await listParticipants(p, { agentState });
+      } catch {
+        participants = {};
+      }
+      const requestedAgentIds =
+        Array.isArray(body.agent_ids) && body.agent_ids.length > 0
+          ? body.agent_ids
+          : Object.entries(participants)
+              .filter(([, participant]) => participant.active_session === sourceSessionId)
+              .map(([id]) => id);
+      const shouldRelaunch = body.relaunch_agents !== false;
+
+      try {
+        // Preflight: ensure the system "Fork" participant exists before the
+        // fork-link writes so the most likely avoidable failure mode is gone.
+        await ensureSystemForkParticipant(p);
+        const forkInstantTs = isoTimestamp();
+        const fork = await forkSessionFolder(p, {
+          sourceSessionId,
+          name: body.name,
+          agentParticipantIds: requestedAgentIds,
+        });
+        if (deps.ref) {
+          await updateState(deps.ref.global(), (s) => mruPush(s, p.root()));
+          await registerProjectPath(deps.ref.global(), p.root());
+        }
+
+        // Derive source slug the same way forkSessionFolder does.
+        const sourceSlug = sourceSessionId.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+        const linkResults = await writeForkLinkPair({
+          p,
+          sourceSessionId,
+          forkSessionId: fork.session.id,
+          sourceSlug,
+          forkSlug: fork.session.slug,
+          timestamp: forkInstantTs,
+          bus: getBus?.() ?? null,
+        });
+        const linkWarnings: string[] = [];
+        if ("error" in linkResults.source) {
+          linkWarnings.push(
+            `source fork-link write failed: ${linkResults.source.error}`,
+          );
+        }
+        if ("error" in linkResults.fork) {
+          linkWarnings.push(
+            `fork fork-link write failed: ${linkResults.fork.error}`,
+          );
+        }
+
+        const agents = shouldRelaunch
+          ? await describeForkAgentDuplication({
+              p,
+              sourceSessionId,
+              forkSessionId: fork.session.id,
+              participantIds: requestedAgentIds,
+              participants,
+              agentState,
+              tmux: deps.getTmuxManager?.() ?? null,
+            })
+          : requestedAgentIds.map((participantId): ForkedAgentResult => {
+              const participant = participants[participantId];
+              return {
+                participant_id: participantId,
+                runtime_id: participant?.runtime_id ?? null,
+                display_name: participant?.name ?? participantId,
+                status: "skipped-detached",
+                warning: "agent relaunch disabled for this fork request",
+              };
+            });
+        const warnings = [
+          ...agents
+            .map((agent) => agent.warning)
+            .filter((warning): warning is string => warning !== undefined),
+          ...linkWarnings,
+        ];
+        const session = {
+          ...fork.session,
+          path: p.root(),
+          path_id: computePathId(p.root()),
+        };
+        const bus = getBus?.();
+        bus?.publish({
+          type: "session.forked",
+          source_session_id: sourceSessionId,
+          session,
+          agents,
+          warnings,
+        });
+        return {
+          source_session_id: sourceSessionId,
+          session,
+          copied_entries: fork.copied_entries,
+          agents,
+          warnings,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        reply.code(/not found/i.test(message) ? 404 : 400);
+        return { error: message };
+      }
+    },
+  );
+}
+
+async function describeForkAgentDuplication(input: {
+  p: Paths;
+  sourceSessionId: string;
+  forkSessionId: string;
+  participantIds: string[];
+  participants: Record<string, ParticipantWithSession>;
+  agentState: ReturnType<typeof createAgentStateStore>;
+  tmux: TmuxManager | null;
+}): Promise<ForkedAgentResult[]> {
+  const managedIds = new Set(await input.agentState.listManagedAgentIds());
+  const liveSessions = new Set(
+    input.tmux !== null
+      ? (await input.tmux.listFmarkSessions()).map((session) => session.sessionName)
+      : [],
+  );
+  const out: ForkedAgentResult[] = [];
+  for (const participantId of input.participantIds) {
+    const participant = input.participants[participantId];
+    if (participant === undefined || participant.kind !== "agent") {
+      out.push({
+        participant_id: participantId,
+        runtime_id: null,
+        display_name: participantId,
+        status: "failed",
+        warning: "agent participant not found",
+      });
+      continue;
+    }
+    const runtimeId =
+      participant.runtime_id ?? (await input.agentState.readRuntime(participantId));
+    const tmuxSession = await input.agentState.readTmuxSession(participantId);
+    const control = await input.agentState.readControlState(participantId);
+    if (participant.active_session !== input.sourceSessionId) {
+      out.push({
+        participant_id: participantId,
+        runtime_id: runtimeId,
+        display_name: participant.name,
+        status: "skipped-detached",
+        tmux_session: tmuxSession,
+        warning: "agent is not linked to the source session",
+      });
+      continue;
+    }
+    if (control.paused) {
+      out.push({
+        participant_id: participantId,
+        runtime_id: runtimeId,
+        display_name: participant.name,
+        status: "skipped-paused",
+        tmux_session: tmuxSession,
+      });
+      continue;
+    }
+    if (
+      !managedIds.has(participantId) ||
+      tmuxSession === null ||
+      !liveSessions.has(tmuxSession)
+    ) {
+      out.push({
+        participant_id: participantId,
+        runtime_id: runtimeId,
+        display_name: participant.name,
+        status: "skipped-detached",
+        tmux_session: tmuxSession,
+        warning: "agent pane is not connected",
+      });
+      continue;
+    }
+    await input.agentState.appendLog(participantId, {
+      event: "fork-duplicate-skipped",
+      source_session: input.sourceSessionId,
+      fork_session: input.forkSessionId,
+    });
+    out.push({
+      participant_id: participantId,
+      runtime_id: runtimeId,
+      display_name: participant.name,
+      status: "skipped-unsupported",
+      tmux_session: tmuxSession,
+      native_command: null,
+      warning:
+        "agent duplication for forked sessions is not implemented; source agent was left attached to the source session",
+    });
+  }
+  return out;
 }

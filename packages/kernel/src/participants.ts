@@ -1,6 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH,
+  PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES,
+  PARTICIPANT_AVATAR_IMAGE_MAX_BYTES,
+} from "@f-mark/shared";
 import { readConfig, writeConfig, type Participant } from "./project.js";
 import type { Paths } from "./paths.js";
 import { loadRuntimes } from "./runtimes/registry.js";
@@ -49,7 +54,12 @@ const AGENT_COLORS = [
 
 const USER_COLOR = "#3b82f6";
 
-const ID_PATTERN = /^(us|ag|sys|grp)-[a-z0-9-]{2,12}$/;
+/* Segment after the kind prefix allows up to 16 chars. The longest builtin
+   runtime slug is "opencode" (8) → spawned ids look like `ag-opencode-3a2f`
+   (13 chars after `ag-`); the old {2,12} cap rejected exactly opencode. Keep
+   in lockstep with the filename parsers (shared/filenames.ts,
+   events/proseValidate.ts). */
+const ID_PATTERN = /^(us|ag|sys|grp)-[a-z0-9-]{2,16}$/;
 
 export interface RegisterAgentInput {
   name: string;
@@ -67,13 +77,47 @@ export interface RegisteredAgent {
 export interface UpdateParticipantInput {
   name?: string;
   color?: string;
+  avatar_data_url?: string | null;
 }
 
 export interface UpdatedParticipant {
   id: string;
-  kind: "user" | "agent";
+  kind: "user" | "agent" | "sys";
   name: string;
   color: string;
+  avatar_data_url?: string;
+}
+
+export const SYS_FORK_PARTICIPANT_ID = "sys-fork";
+export const SYS_FORK_NAME = "Fork";
+export const SYS_FORK_COLOR = "#71717a";
+
+export async function ensureSystemForkParticipant(p: Paths): Promise<void> {
+  let participants: Record<string, Participant>;
+  try {
+    participants = await readParticipants(p);
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+    participants = defaultParticipants();
+  }
+  const existing = participants[SYS_FORK_PARTICIPANT_ID];
+  if (
+    existing !== undefined &&
+    existing.kind === "sys" &&
+    existing.name === SYS_FORK_NAME &&
+    existing.color === SYS_FORK_COLOR
+  ) {
+    return;
+  }
+  const next: Record<string, Participant> = {
+    ...participants,
+    [SYS_FORK_PARTICIPANT_ID]: {
+      kind: "sys",
+      name: SYS_FORK_NAME,
+      color: SYS_FORK_COLOR,
+    },
+  };
+  await writeParticipants(p, next);
 }
 
 /* Wire shape: the persisted Participant from project.ts plus active_session
@@ -285,6 +329,50 @@ export function isValidHexColor(value: string): boolean {
   return HEX_COLOR_PATTERN.test(value);
 }
 
+const AVATAR_DATA_URL_PATTERN =
+  /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/i;
+const AVATAR_MIME_TYPES = new Set<string>(
+  PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES,
+);
+
+export function validateAvatarDataUrl(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw new Error("avatar image cannot be empty");
+  }
+  if (trimmed.length > PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH) {
+    throw new Error(
+      `avatar image too large (max ${PARTICIPANT_AVATAR_IMAGE_MAX_BYTES} bytes)`,
+    );
+  }
+  const match = AVATAR_DATA_URL_PATTERN.exec(trimmed);
+  if (match === null) {
+    throw new Error(
+      "avatar image must be a PNG, JPEG, WebP, or GIF data URL",
+    );
+  }
+  const mimeType = match[1]!.toLowerCase();
+  if (!AVATAR_MIME_TYPES.has(mimeType)) {
+    throw new Error(
+      "avatar image must be a PNG, JPEG, WebP, or GIF data URL",
+    );
+  }
+  const base64 = match[2]!;
+  if (base64.length % 4 === 1) {
+    throw new Error("avatar image data is not valid base64");
+  }
+  const byteLength = Buffer.from(base64, "base64").byteLength;
+  if (byteLength === 0) {
+    throw new Error("avatar image cannot be empty");
+  }
+  if (byteLength > PARTICIPANT_AVATAR_IMAGE_MAX_BYTES) {
+    throw new Error(
+      `avatar image too large (max ${PARTICIPANT_AVATAR_IMAGE_MAX_BYTES} bytes)`,
+    );
+  }
+  return `data:${mimeType};base64,${base64}`;
+}
+
 export async function updateParticipant(
   p: Paths,
   id: string,
@@ -307,14 +395,28 @@ export async function updateParticipant(
     }
     current.color = input.color;
   }
+  if (input.avatar_data_url !== undefined) {
+    if (current.kind !== "user") {
+      throw new Error("avatar image is only supported for user participants");
+    }
+    if (input.avatar_data_url === null) {
+      delete current.avatar_data_url;
+    } else {
+      current.avatar_data_url = validateAvatarDataUrl(input.avatar_data_url);
+    }
+  }
   participants[id] = current;
   await writeParticipants(p, participants);
-  return {
+  const updated: UpdatedParticipant = {
     id,
     kind: current.kind,
     name: current.name,
     color: current.color,
   };
+  if (current.avatar_data_url !== undefined) {
+    updated.avatar_data_url = current.avatar_data_url;
+  }
+  return updated;
 }
 
 export async function setParticipantOverrides(

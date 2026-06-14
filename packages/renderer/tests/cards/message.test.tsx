@@ -31,7 +31,7 @@ describe("MessageCard", () => {
     expect(strong!.textContent).toBe("world");
   });
 
-  test("agent participant produces .card.agent and an image avatar", () => {
+  test("agent participant produces .card.agent and a masked avatar icon", () => {
     const ev = makeProse(
       "20260522T101100Z_ag-c92e.prose.md",
       "ag-c92e",
@@ -42,7 +42,9 @@ describe("MessageCard", () => {
     );
     const card = container.querySelector(".card.msg-card");
     expect(card!.classList.contains("agent")).toBe(true);
-    expect(card!.querySelector(".avatar img")?.getAttribute("src")).toContain(
+    const mask = card!.querySelector(".avatar .icon-mask") as HTMLElement | null;
+    expect(mask).not.toBeNull();
+    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
       "claude-icon.png",
     );
   });

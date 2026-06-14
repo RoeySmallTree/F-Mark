@@ -5,7 +5,7 @@ import {
   expect,
   test,
 } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import { TopBar } from "../../src/shell/TopBar.js";
@@ -17,6 +17,7 @@ import {
   type ViewMode,
 } from "../../src/state/store.js";
 import type { SessionMeta } from "../../src/api/client.js";
+import { renderWithAgentSpawn } from "../agentSpawnProvider.js";
 
 const SESSION_A: SessionMeta = {
   id: "2026-05-22-launch-planning",
@@ -122,7 +123,7 @@ describe("View toggle — clicking each TopBar button updates store.viewMode", (
 
   test("clicking Document → setViewMode('document') in store", async () => {
     const user = userEvent.setup();
-    render(<TopBar />);
+    renderWithAgentSpawn(<TopBar />);
     expect(useStore.getState().viewMode).toBe("everything");
     const tablist = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(tablist).getAllByRole("tab");
@@ -132,7 +133,7 @@ describe("View toggle — clicking each TopBar button updates store.viewMode", (
 
   test("clicking Conversation → setViewMode('conversation') in store", async () => {
     const user = userEvent.setup();
-    render(<TopBar />);
+    renderWithAgentSpawn(<TopBar />);
     const tablist = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(tablist).getAllByRole("tab");
     await user.click(buttons[2]!);
@@ -142,7 +143,7 @@ describe("View toggle — clicking each TopBar button updates store.viewMode", (
   test("clicking Everything → setViewMode('everything') in store", async () => {
     const user = userEvent.setup();
     resetStore({ viewMode: "document" });
-    render(<TopBar />);
+    renderWithAgentSpawn(<TopBar />);
     const tablist = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(tablist).getAllByRole("tab");
     await user.click(buttons[0]!);
@@ -160,23 +161,23 @@ describe("View toggle — Feed renders the right slice for each mode", () => {
     globalThis.localStorage?.clear();
   });
 
-  test("Everything: feed shows unnamed prose, named prose, choices, turn-end (not comments)", () => {
+  test("Everything: feed shows prose, comment activity, choices, and turn-end", () => {
     resetStore({ viewMode: "everything" });
-    const { container } = render(<Feed />);
+    const { container } = renderWithAgentSpawn(<Feed />);
     const cards = container.querySelectorAll("[data-event-filename]");
     const filenames = Array.from(cards).map((el) =>
       el.getAttribute("data-event-filename"),
     );
     expect(filenames).toContain(NAMED.filename);
     expect(filenames).toContain(UNNAMED.filename);
+    expect(filenames).toContain(COMMENT.filename);
     expect(filenames).toContain(CHOICES.filename);
     expect(filenames).toContain(TURN.filename);
-    expect(filenames).not.toContain(COMMENT.filename);
   });
 
   test("Document: feed shows named prose only", () => {
     resetStore({ viewMode: "document" });
-    const { container } = render(<Feed />);
+    const { container } = renderWithAgentSpawn(<Feed />);
     const cards = container.querySelectorAll("[data-event-filename]");
     const filenames = Array.from(cards).map((el) =>
       el.getAttribute("data-event-filename"),
@@ -188,9 +189,9 @@ describe("View toggle — Feed renders the right slice for each mode", () => {
     expect(filenames).not.toContain(TURN.filename);
   });
 
-  test("Conversation: feed shows unnamed prose + choices + turn-end only", () => {
+  test("Conversation: feed shows unnamed prose, comments, choices, and turn-end", () => {
     resetStore({ viewMode: "conversation" });
-    const { container } = render(<Feed />);
+    const { container } = renderWithAgentSpawn(<Feed />);
     const cards = container.querySelectorAll("[data-event-filename]");
     const filenames = Array.from(cards).map((el) =>
       el.getAttribute("data-event-filename"),
@@ -198,12 +199,12 @@ describe("View toggle — Feed renders the right slice for each mode", () => {
     expect(filenames).toEqual(
       expect.arrayContaining([
         UNNAMED.filename,
+        COMMENT.filename,
         CHOICES.filename,
         TURN.filename,
       ]),
     );
     expect(filenames).not.toContain(NAMED.filename);
-    expect(filenames).not.toContain(COMMENT.filename);
   });
 });
 
@@ -217,19 +218,28 @@ describe("View toggle — empty-state messages match the active view", () => {
     globalThis.localStorage?.clear();
   });
 
-  test("Everything: shows the /guide empty state", () => {
+  test("Everything: shows the shared pixel loading animation", () => {
     resetStore({ events: [], viewMode: "everything" });
-    render(<Feed />);
-    const empty = screen.getByText(/start with/i);
-    expect(empty.closest(".empty-state")).not.toBeNull();
-    expect(empty.closest(".empty-state")?.getAttribute("data-view")).toBe(
+    renderWithAgentSpawn(<Feed />);
+    expect(screen.queryByText(/start with/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/paste an invite/i)).not.toBeInTheDocument();
+
+    const loading = screen.getByRole("status", { name: /loading/i });
+    expect(loading).toHaveClass("loading-animation");
+    expect(loading).toHaveClass("feed-empty-pixel-loading");
+    const emptyState = loading.closest(".empty-state");
+    expect(emptyState).toHaveClass("feed-empty-loading");
+    expect(emptyState?.getAttribute("data-view")).toBe(
       "everything",
     );
+    expect(
+      emptyState?.querySelectorAll(".feed-empty-skeleton-card"),
+    ).toHaveLength(0);
   });
 
   test("Document: shows the Named compose hint", () => {
     resetStore({ events: [], viewMode: "document" });
-    render(<Feed />);
+    renderWithAgentSpawn(<Feed />);
     const empty = screen.getByText(/no named contributions yet/i);
     expect(empty.closest(".empty-state")?.getAttribute("data-view")).toBe(
       "document",
@@ -238,7 +248,7 @@ describe("View toggle — empty-state messages match the active view", () => {
 
   test("Conversation: shows the quick-prompt hint", () => {
     resetStore({ events: [], viewMode: "conversation" });
-    render(<Feed />);
+    renderWithAgentSpawn(<Feed />);
     const empty = screen.getByText(/no messages yet/i);
     expect(empty.closest(".empty-state")?.getAttribute("data-view")).toBe(
       "conversation",

@@ -144,11 +144,11 @@ describe("deriveActiveAgent (pure helper)", () => {
     expect(deriveActiveAgent(p)).toBe("codex");
   });
 
-  test("recognizes gemini agents", () => {
+  test("recognizes opencode agents", () => {
     const p: Record<string, Participant> = {
-      "ag-gemini-zzz": { kind: "agent", name: "Gemini", color: "#33c" },
+      "ag-opencode-zzz": { kind: "agent", name: "Opencode", color: "#33c" },
     };
-    expect(deriveActiveAgent(p)).toBe("gemini");
+    expect(deriveActiveAgent(p)).toBe("opencode");
   });
 });
 
@@ -343,21 +343,21 @@ describe("SkillsPaletteModal — agent dropdown switching", () => {
     render(<SkillsPaletteModal />);
     await screen.findByText(/\/review-pr/);
     const select = screen.getByLabelText(/^Active agent$/i);
-    await user.selectOptions(select, "gemini");
+    await user.selectOptions(select, "opencode");
     expect(
       globalThis.localStorage?.getItem(ACTIVE_AGENT_STORAGE_KEY),
-    ).toBe("gemini");
+    ).toBe("opencode");
   });
 
   test("preloaded localStorage drives the initial fetch", async () => {
-    globalThis.localStorage?.setItem(ACTIVE_AGENT_STORAGE_KEY, "gemini");
+    globalThis.localStorage?.setItem(ACTIVE_AGENT_STORAGE_KEY, "opencode");
     const fetchMock = stubFetch([]);
     render(<SkillsPaletteModal />);
     await act(async () => {
       await Promise.resolve();
     });
     const firstUrl = String(fetchMock.mock.calls[0]![0]);
-    expect(firstUrl).toBe("/skills?agent=gemini");
+    expect(firstUrl).toBe("/skills?agent=opencode");
   });
 });
 

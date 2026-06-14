@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const booleanEnvFlags = [
   ["--remote", "npm_config_remote"],
@@ -14,19 +15,98 @@ const valueEnvFlags = [
   ["--password", "npm_config_password"],
 ];
 
-function truthy(value) {
+const booleanFlags = new Set(booleanEnvFlags.map(([flag]) => flag));
+const valueFlags = new Set(valueEnvFlags.map(([flag]) => flag));
+
+export function truthy(value) {
   return value === "true" || value === "1" || value === "";
 }
 
-function normalizeArgs(argv, env) {
-  const args = argv.filter((arg) => arg !== "--");
-  const hasFlag = (flag) => args.includes(flag) || args.some((arg) => arg.startsWith(`${flag}=`));
+function falsey(value) {
+  return value === "false" || value === "0";
+}
+
+function normalizeBooleanValue(flag, value) {
+  if (truthy(value)) return [flag];
+  if (falsey(value)) return [];
+  return [`${flag}=${value}`];
+}
+
+function normalizeAuthValue(value, fallback) {
+  if (falsey(value)) return { args: ["--no-auth"], explicitAuth: "false" };
+  if (truthy(value)) return { args: [], explicitAuth: "true" };
+  return { args: [fallback], explicitAuth: null };
+}
+
+function normalizeExplicitArgs(argv) {
+  const args = [];
+  const seen = new Set();
+  let explicitAuth = null;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--") continue;
+
+    if (arg === "--auth") {
+      const value = argv[i + 1];
+      if (typeof value === "string" && !value.startsWith("--")) {
+        const normalized = normalizeAuthValue(value, arg);
+        args.push(...normalized.args);
+        explicitAuth = normalized.explicitAuth ?? explicitAuth;
+        if (normalized.explicitAuth !== null) {
+          seen.add("--no-auth");
+          i++;
+        }
+        continue;
+      }
+      args.push(arg);
+      continue;
+    }
+
+    if (arg.startsWith("--auth=")) {
+      const value = arg.slice("--auth=".length);
+      const normalized = normalizeAuthValue(value, arg);
+      args.push(...normalized.args);
+      explicitAuth = normalized.explicitAuth ?? explicitAuth;
+      if (normalized.explicitAuth !== null) seen.add("--no-auth");
+      continue;
+    }
+
+    const equalsIndex = arg.indexOf("=");
+    if (equalsIndex > 0) {
+      const flag = arg.slice(0, equalsIndex);
+      const value = arg.slice(equalsIndex + 1);
+      if (booleanFlags.has(flag)) {
+        args.push(...normalizeBooleanValue(flag, value));
+        seen.add(flag);
+        continue;
+      }
+      if (valueFlags.has(flag)) {
+        args.push(flag, value);
+        seen.add(flag);
+        continue;
+      }
+    }
+
+    args.push(arg);
+    if (booleanFlags.has(arg) || valueFlags.has(arg) || arg === "--no-auth") {
+      seen.add(arg);
+    }
+  }
+
+  return { args, seen, explicitAuth };
+}
+
+export function normalizeArgs(argv, env) {
+  const normalized = normalizeExplicitArgs(argv);
+  const args = [...normalized.args];
+  const hasFlag = (flag) => normalized.seen.has(flag);
 
   for (const [flag, envName] of booleanEnvFlags) {
     if (!hasFlag(flag) && truthy(env[envName])) args.push(flag);
   }
 
-  if (!hasFlag("--no-auth")) {
+  if (!hasFlag("--no-auth") && normalized.explicitAuth !== "true") {
     if (truthy(env.npm_config_no_auth) || env.npm_config_auth === "false") {
       args.push("--no-auth");
     }
@@ -113,7 +193,12 @@ async function main() {
   process.exit(result.code ?? (result.signal === null ? 0 : 1));
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.stack : String(err));
-  process.exit(1);
-});
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.stack : String(err));
+    process.exit(1);
+  });
+}

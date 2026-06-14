@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { initProject } from "../src/project.js";
 import { paths } from "../src/paths.js";
-import { listParticipants, registerAgent } from "../src/participants.js";
+import {
+  listParticipants,
+  registerAgent,
+  updateParticipant,
+} from "../src/participants.js";
 import { writeActiveSession } from "../src/agents/activeSession.js";
 import { withTempProject } from "./helpers/tempdir.js";
 
@@ -83,6 +87,39 @@ describe("participants", () => {
       await expect(
         registerAgent(p, { name: "x", suggested_id: "agent-x" }),
       ).rejects.toThrow(/format/);
+    });
+  });
+
+  it("updateParticipant persists a user avatar data URL", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const list = await listParticipants(p);
+      const userId = Object.entries(list).find(
+        ([, v]) => v.kind === "user",
+      )![0];
+      const avatar = "data:image/png;base64,aGVsbG8=";
+
+      const updated = await updateParticipant(p, userId, {
+        avatar_data_url: avatar,
+      });
+      expect(updated.avatar_data_url).toBe(avatar);
+
+      const refetched = await listParticipants(p);
+      expect(refetched[userId]?.avatar_data_url).toBe(avatar);
+    });
+  });
+
+  it("updateParticipant rejects avatar images for agents", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const agent = await registerAgent(p, { name: "Claude" });
+      await expect(
+        updateParticipant(p, agent.id, {
+          avatar_data_url: "data:image/png;base64,aGVsbG8=",
+        }),
+      ).rejects.toThrow(/only supported for user/);
     });
   });
 });

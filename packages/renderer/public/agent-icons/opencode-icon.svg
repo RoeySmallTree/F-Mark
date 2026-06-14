@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff">
+  <!-- "</>" code mark — white-on-transparent so it works as a CSS mask and
+       adopts the avatar's themed color, matching the other agent icons. -->
+  <path d="M7.7 5.6a1.2 1.2 0 0 1 1.7 1.7L4.9 11.8a.3.3 0 0 0 0 .4l4.5 4.5a1.2 1.2 0 0 1-1.7 1.7L1.8 12.4a.6.6 0 0 1 0-.8z"/>
+  <path d="M16.3 5.6a1.2 1.2 0 0 0-1.7 1.7l4.5 4.5a.3.3 0 0 1 0 .4l-4.5 4.5a1.2 1.2 0 0 0 1.7 1.7l5.9-5.9a.6.6 0 0 0 0-.8z"/>
+  <path d="M13.6 3.7a1.2 1.2 0 0 1 .9 1.45l-3 13.1a1.2 1.2 0 0 1-2.35-.55l3-13.1a1.2 1.2 0 0 1 1.45-.9z"/>
+</svg>

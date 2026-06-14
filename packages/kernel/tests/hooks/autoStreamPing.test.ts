@@ -32,7 +32,9 @@ describe("runAutoStream pings presence", () => {
         cwd: root,
         hook_event_name: "Stop",
       });
-      await runAutoStream("ag-claude", "assistant", stdin);
+      await runAutoStream("ag-claude", "assistant", stdin, {
+        env: { ...process.env, F_MARK_AGENT_ID: "ag-claude" },
+      });
 
       const pingCalls = calls.filter((u) => u.includes("/agents/ag-claude/ping"));
       expect(pingCalls.length).toBeGreaterThanOrEqual(1);

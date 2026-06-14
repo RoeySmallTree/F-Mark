@@ -3,7 +3,13 @@
    user can flip between versions inline. */
 
 import { useMemo, useState, type JSX } from "react";
-import { Image as ImageIcon, MoreHorizontal } from "lucide-react";
+import {
+  Code,
+  Image as ImageIcon,
+  Maximize2,
+  MoreHorizontal,
+  RotateCw,
+} from "lucide-react";
 import type {
   AnyEventRecord,
   HtmlManifest,
@@ -11,6 +17,8 @@ import type {
 } from "@f-mark/shared";
 import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
+import { htmlBundleUrl } from "../render/htmlBundle.js";
+import { HtmlPreviewFrame } from "../components/HtmlPreviewFrame.js";
 import { formatWhen, whoOf } from "./format.js";
 import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
 
@@ -33,6 +41,8 @@ export function EmbedCard({
   const who = whoOf(event.participant_id, participants);
   const sessionId = useStore((s) => s.currentSessionId);
   const token = useStore((s) => s.token);
+  const openHtmlPreview = useStore((s) => s.openHtmlPreview);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const variants = useMemo(
     () =>
@@ -50,14 +60,11 @@ export function EmbedCard({
   const activeFilename =
     variants.find((v) => v.filename === active)?.filename ?? event.filename;
 
-  const src =
-    sessionId !== null
-      ? `/sessions/${sessionId}/raw/${activeFilename}/index.html${
-          token !== null && token.length > 0
-            ? `?token=${encodeURIComponent(token)}`
-            : ""
-        }`
-      : "";
+  const title =
+    typeof payload.title === "string" && payload.title.length > 0
+      ? payload.title
+      : payload.id;
+  const src = htmlBundleUrl(sessionId, activeFilename, token);
 
   const isEmbedded = variant === "embedded";
   return (
@@ -99,11 +106,7 @@ export function EmbedCard({
           </button>
         </div>
       )}
-      <div className="embed-title">
-        {typeof payload.title === "string" && payload.title.length > 0
-          ? payload.title
-          : payload.id}
-      </div>
+      <div className="embed-title">{title}</div>
       {variants.length > 1 && (
         <div className="variants">
           <span className="lbl">Compare:</span>
@@ -122,23 +125,53 @@ export function EmbedCard({
           })}
         </div>
       )}
-      <div className="embed-frame">
-        {src.length > 0 ? (
-          <iframe
-            title={
-              typeof payload.title === "string" && payload.title.length > 0
-                ? payload.title
-                : payload.id
+      <HtmlPreviewFrame
+        sessionId={sessionId}
+        filename={activeFilename}
+        title={title}
+        frameClassName="embed-frame"
+        reloadKey={reloadKey}
+      />
+      <div className="embed-foot">
+        <button
+          type="button"
+          disabled={src.length === 0}
+          onClick={() => {
+            if (sessionId !== null) {
+              openHtmlPreview({
+                sessionId,
+                filename: activeFilename,
+                title,
+                mode: "preview",
+              });
             }
-            src={src}
-            sandbox="allow-scripts"
-          />
-        ) : (
-          <div className="placeholder">
-            <ImageIcon size={20} aria-hidden />
-            <div className="label">no preview</div>
-          </div>
-        )}
+          }}
+        >
+          <Maximize2 size={11} aria-hidden /> Fullscreen
+        </button>
+        <button
+          type="button"
+          disabled={src.length === 0}
+          onClick={() => setReloadKey((n) => n + 1)}
+        >
+          <RotateCw size={11} aria-hidden /> Reload
+        </button>
+        <button
+          type="button"
+          disabled={src.length === 0}
+          onClick={() => {
+            if (sessionId !== null) {
+              openHtmlPreview({
+                sessionId,
+                filename: activeFilename,
+                title,
+                mode: "source",
+              });
+            }
+          }}
+        >
+          <Code size={11} aria-hidden /> View source
+        </button>
       </div>
     </div>
   );

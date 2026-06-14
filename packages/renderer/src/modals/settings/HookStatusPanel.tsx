@@ -1,6 +1,6 @@
 /* HookStatusPanel — Settings → Hooks.
    For each registered runtime, show whether its Stop hook is wired up to
-   ping back into f-mark. The status is fetched via
+   ping back into f-mark or expose live access prompts. The status is fetched via
    `apiClient.hookInstallStatus(...)`. Claude hooks are generic and can be
    checked without a representative participant; Codex still needs an
    agent/user id pair because its hook command is instance-specific.
@@ -15,6 +15,7 @@ import type {
   RuntimeEntry,
 } from "@f-mark/shared";
 import type { ManagedAgentsClient } from "../../api/managedAgents.js";
+import { runtimeDisplayName } from "../../runtimes.js";
 
 export interface HookStatusPanelProps {
   runtimes: Record<string, RuntimeEntry>;
@@ -32,6 +33,7 @@ type RowStatus =
   | { kind: "loading" }
   | { kind: "installed"; configPath: string }
   | { kind: "not-required"; configPath: string }
+  | { kind: "stale"; configPath: string }
   | { kind: "partial"; configPath: string }
   | { kind: "missing"; configPath: string }
   | { kind: "error"; message: string };
@@ -44,11 +46,14 @@ function classify(runtimeId: string, status: HookInstallStatus): RowStatus {
   ) {
     return { kind: "error", message: "Malformed status response" };
   }
-  if (runtimeId === "gemini" || status.expectedEntries.length === 0) {
+  if (status.expectedEntries.length === 0) {
     return { kind: "not-required", configPath: status.configPath };
   }
   if (status.installed) {
     return { kind: "installed", configPath: status.configPath };
+  }
+  if (status.status === "stale") {
+    return { kind: "stale", configPath: status.configPath };
   }
   if (status.detectedEntries.length > 0) {
     return { kind: "partial", configPath: status.configPath };
@@ -79,6 +84,10 @@ function StatusPill({ status }: { status: RowStatus }): JSX.Element {
     case "not-required":
       label = "not required";
       tone = "var(--green, var(--ink))";
+      break;
+    case "stale":
+      label = "update";
+      tone = "var(--amber, var(--ink-2))";
       break;
     case "partial":
       label = "partial";
@@ -177,8 +186,8 @@ export function HookStatusPanel({
     <>
       <h3 className="settings-h">Hook status</h3>
       <div className="settings-sub">
-        Claude and Codex need Stop hooks so F-Mark can hear turn-ends.
-        Gemini uses manual-stream mode in v0.4, so it has no hook to install.
+        Claude and Codex need hooks for turn-end and access prompts. Opencode
+        streams via an in-process plugin instead of hooks.
       </div>
 
       <div
@@ -212,7 +221,6 @@ export function HookStatusPanel({
               participant !== undefined && participant.length > 0;
             const participantRequired = requiresParticipant(id);
             const canShowInstructions = !participantRequired || hasParticipant;
-            const manualStreamMode = id === "gemini";
             return (
               <div
                 key={id}
@@ -248,7 +256,7 @@ export function HookStatusPanel({
                         fontSize: 11.5,
                       }}
                     >
-                      Generic hook, any Claude session
+                      Generic hook, any {runtimeDisplayName(id)} session
                     </div>
                   ) : hasParticipant ? (
                     <div
@@ -280,9 +288,7 @@ export function HookStatusPanel({
                   disabled={!canShowInstructions}
                   title={
                     canShowInstructions
-                      ? manualStreamMode
-                        ? "Show manual-stream note"
-                        : "Show manual install steps"
+                      ? "Show manual install steps"
                       : "Register a participant for this runtime first"
                   }
                   onClick={() => {
@@ -291,9 +297,7 @@ export function HookStatusPanel({
                     }
                   }}
                 >
-                  {manualStreamMode
-                    ? "Show manual-stream note"
-                    : "Show install instructions"}
+                  Show install instructions
                 </button>
               </div>
             );

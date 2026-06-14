@@ -6,6 +6,7 @@
      - Appearance: clicking a theme card calls applyTheme(name);
      - Profile: clicking Save calls updateParticipant via the client (fetch
        is stubbed);
+     - Profile: custom non-preset hex colors get a live preview swatch;
      - About: the ASCII logo is in the DOM;
      - Shortcuts: every registered combo shows up as a row. */
 
@@ -164,7 +165,7 @@ describe("SettingsModal — side nav", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText("Claude Code")).toBeInTheDocument();
     expect(within(table).getByText("Codex")).toBeInTheDocument();
-    expect(within(table).getByText("Gemini")).toBeInTheDocument();
+    expect(within(table).getByText("Opencode")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /add runtime/i }),
     ).toBeInTheDocument();
@@ -218,6 +219,54 @@ describe("SettingsModal — side nav", () => {
         /mybot-bin/i,
       );
     });
+  });
+
+  test("Runtimes section filters retired runtimes from registry and env probe", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/runtimes") {
+        return new Response(
+          JSON.stringify({
+            version: "1.0",
+            runtimes: {
+              gemini: {
+                displayName: "Gemini",
+                executable: "gemini",
+                args: [],
+              },
+              mybot: {
+                displayName: "My Bot",
+                executable: "mybot-bin",
+                args: [],
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("{}", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useStore.setState({
+      settingsSection: "runtimes",
+      envProbe: {
+        tmux: true,
+        tmuxVersion: "3.4",
+        runtimes: { gemini: true, mybot: true },
+        installer: "apt",
+        os: "linux",
+      },
+    });
+
+    render(<SettingsModal />);
+
+    expect(await screen.findByTestId("runtime-row-mybot")).toHaveTextContent(
+      /mybot-bin/i,
+    );
+    expect(screen.queryByTestId("runtime-row-gemini")).toBeNull();
+    expect(screen.queryByText(/^gemini$/i)).toBeNull();
   });
 
   test("close button calls store.closeModal", async () => {
@@ -289,15 +338,19 @@ describe("SettingsModal — Profile save", () => {
     cleanup();
   });
 
-  test("Save → PATCH /participants/:id with name + color", async () => {
+  test("Save → PATCH /participants/:id with name, color, and avatar", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (typeof url === "string" && url.startsWith("/participants/")) {
+        const reqBody = JSON.parse(
+          String(init?.body ?? "{}"),
+        ) as Partial<Participant>;
         return new Response(
           JSON.stringify({
             id: "us-a7f3",
             kind: "user",
-            name: "Roey Updated",
-            color: "#3d7a4f",
+            name: reqBody.name ?? "Roey Updated",
+            color: reqBody.color ?? "#3d7a4f",
+            avatar_data_url: reqBody.avatar_data_url,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -318,6 +371,16 @@ describe("SettingsModal — Profile save", () => {
 
     const greenSwatch = screen.getByLabelText(/color #3d7a4f/i);
     await user.click(greenSwatch);
+
+    const file = new File(["avatar"], "avatar.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText(/upload profile image/i), file);
+
+    await vi.waitFor(() => {
+      const preview = document.querySelector(
+        ".profile-photo-control .avatar-img",
+      ) as HTMLImageElement | null;
+      expect(preview?.getAttribute("src")).toMatch(/^data:image\/png;base64,/);
+    });
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -341,9 +404,77 @@ describe("SettingsModal — Profile save", () => {
     )!;
     const body = JSON.parse(
       (patchCall[1] as RequestInit).body as string,
-    ) as { name: string; color: string };
+    ) as { name: string; color: string; avatar_data_url?: string };
     expect(body.name).toBe("Roey Updated");
     expect(body.color.toLowerCase()).toBe("#3d7a4f");
+    expect(body.avatar_data_url).toMatch(/^data:image\/png;base64,/);
+  });
+
+  test("shows a live preview swatch for a valid non-preset custom color", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    render(<SettingsModal />);
+
+    const hexInput = screen.getByLabelText(
+      /custom hex color/i,
+    ) as HTMLInputElement;
+    await user.clear(hexInput);
+    await user.type(hexInput, "#00ffaa");
+
+    const preview = screen.getByRole("img", {
+      name: /custom color preview #00ffaa/i,
+    });
+    expect(preview).toHaveClass("swatch-custom-preview");
+    expect(preview).toHaveClass("active");
+    expect(preview).toHaveAttribute("title", "#00ffaa");
+    expect(screen.queryByText(/invalid hex/i)).toBeNull();
+  });
+
+  test("does not show a custom preview for invalid or preset values", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    render(<SettingsModal />);
+
+    const hexInput = screen.getByLabelText(
+      /custom hex color/i,
+    ) as HTMLInputElement;
+    await user.clear(hexInput);
+    await user.type(hexInput, "#12zzzz");
+
+    expect(
+      screen.queryByRole("img", { name: /custom color preview/i }),
+    ).toBeNull();
+    expect(screen.getByText(/invalid hex/i)).toBeInTheDocument();
+
+    await user.clear(hexInput);
+    await user.type(hexInput, "#3d7a4f");
+
+    expect(
+      screen.queryByRole("img", { name: /custom color preview/i }),
+    ).toBeNull();
+    expect(screen.queryByText(/invalid hex/i)).toBeNull();
+    expect(screen.getByLabelText(/color #3d7a4f/i)).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });
 
@@ -403,6 +534,7 @@ describe("SettingsModal — Agents", () => {
     resetStore();
   });
   afterEach(() => {
+    delete (navigator as unknown as { clipboard?: unknown }).clipboard;
     cleanup();
   });
 
@@ -423,5 +555,34 @@ describe("SettingsModal — Agents", () => {
       within(list).getByRole("button", { name: /\+ add agent/i }),
     );
     expect(screen.getByLabelText(/new agent name/i)).toBeInTheDocument();
+  });
+
+  test("per-agent copy includes that agent id while project copy stays generic", async () => {
+    useStore.setState({ settingsSection: "agents", token: "tok" });
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<SettingsModal />);
+
+    await user.click(screen.getByRole("button", { name: /copy snippet/i }));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const perAgent = writeText.mock.calls[0]![0] as string;
+    expect(perAgent).toContain("/guide?token=tok&agent_id=ag-c92e");
+    expect(perAgent).toContain("MCP tool guide");
+    expect(perAgent).toContain("first action");
+    expect(perAgent).toContain("fmark MCP tools instead of raw HTTP calls");
+    expect(perAgent.toLowerCase()).not.toContain("bearer token");
+    expect(perAgent.toLowerCase()).not.toContain("event schema");
+    expect(perAgent.toLowerCase()).not.toContain("full protocol");
+
+    await user.click(screen.getByRole("button", { name: /^copy$/i }));
+    expect(writeText).toHaveBeenCalledTimes(2);
+    const projectLevel = writeText.mock.calls[1]![0] as string;
+    expect(projectLevel).toContain("/guide?token=tok");
+    expect(projectLevel).not.toContain("agent_id=");
   });
 });

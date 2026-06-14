@@ -33,6 +33,14 @@ const ALL_SESSIONS: SessionMeta[] = [
   },
 ];
 
+const CREATED_IN_REPO_B: SessionMeta = {
+  id: "2026-05-24-new-work",
+  slug: "new-work",
+  created_at: "2026-05-24T11:00:00Z",
+  path: REPO_B,
+  path_id: "repo-b-id",
+};
+
 class MockWebSocket {
   addEventListener(): void {}
   close(): void {}
@@ -56,6 +64,9 @@ function stubFetch(): ReturnType<typeof vi.fn> {
       const u = String(url);
       if (u === "/sessions?scope=all") {
         return Promise.resolve(jsonResponse({ sessions: ALL_SESSIONS }));
+      }
+      if (u === "/sessions" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse(CREATED_IN_REPO_B));
       }
       if (u === "/sessions") {
         return Promise.resolve(
@@ -133,6 +144,34 @@ describe("Sessions panel", () => {
     });
     expect(switchCall).toBeDefined();
     expect(JSON.parse((switchCall![1] as RequestInit).body as string)).toEqual({
+      path: REPO_B,
+    });
+  });
+
+  test("inline creator focuses the returned session id", async () => {
+    const fetchMock = stubFetch();
+    const user = userEvent.setup();
+    render(<Sessions />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /new session in repo-b/i }),
+    );
+    await user.type(screen.getByLabelText(/new session name in repo-b/i), "new-work");
+    await user.click(screen.getByRole("button", { name: /^start$/i }));
+
+    await waitFor(() => {
+      expect(useStore.getState().activePath).toBe(REPO_B);
+      expect(useStore.getState().currentSessionId).toBe(CREATED_IN_REPO_B.id);
+    });
+    const createCall = fetchMock.mock.calls.find(([url, init]) => {
+      return (
+        String(url) === "/sessions" &&
+        (init as RequestInit | undefined)?.method === "POST"
+      );
+    });
+    expect(createCall).toBeDefined();
+    expect(JSON.parse((createCall![1] as RequestInit).body as string)).toEqual({
+      slug: "new-work",
       path: REPO_B,
     });
   });

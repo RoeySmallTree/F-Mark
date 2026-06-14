@@ -8,11 +8,22 @@
 
 export type ThemeName =
   | "light"
+  | "ember"
   | "terminal"
   | "ide"
   | "solarized"
   | "brutalist"
-  | "cyber";
+  | "cyber"
+  | "amber"
+  | "dracula"
+  | "catppuccin"
+  | "tokyo"
+  | "gruvbox"
+  | "nord"
+  | "monokai"
+  | "borland"
+  | "sepia"
+  | "contrast";
 
 export const STORAGE_KEY = "fmark.theme";
 
@@ -21,7 +32,13 @@ export const THEMES: { name: ThemeName; label: string; description: string }[] =
     {
       name: "light",
       label: "Light",
-      description: "Warm paper canvas with soft ink — the default daytime look.",
+      description: "Warm paper canvas with soft ink, the default daytime look.",
+    },
+    {
+      name: "ember",
+      label: "Ember",
+      description:
+        "Plum-black with bright coral-red and warm amber, soft corners and a gentle glow. Matches the landing page.",
     },
     {
       name: "terminal",
@@ -36,7 +53,7 @@ export const THEMES: { name: ThemeName; label: string; description: string }[] =
     {
       name: "solarized",
       label: "Solarized",
-      description: "Classic Solarized Dark — teal base, warm accents.",
+      description: "Classic Solarized Dark with a teal base and warm accents.",
     },
     {
       name: "brutalist",
@@ -49,6 +66,63 @@ export const THEMES: { name: ThemeName; label: string; description: string }[] =
       label: "Cyberpunk",
       description:
         "Deep purple base with cyan/magenta neon gradients and glow.",
+    },
+    {
+      name: "amber",
+      label: "Amber CRT",
+      description:
+        "Monochrome amber phosphor on black, glow text and double-rule borders.",
+    },
+    {
+      name: "dracula",
+      label: "Dracula",
+      description: "Muted purple base with cyan, pink and green accents.",
+    },
+    {
+      name: "catppuccin",
+      label: "Catppuccin Mocha",
+      description:
+        "Pastel mocha palette with soft lavender and pillowy rounded corners.",
+    },
+    {
+      name: "tokyo",
+      label: "Tokyo Night",
+      description: "Inky blue-violet base with calm blue and purple roles.",
+    },
+    {
+      name: "gruvbox",
+      label: "Gruvbox",
+      description: "Retro warm browns with mustard and orange, vintage contrast.",
+    },
+    {
+      name: "nord",
+      label: "Nord",
+      description:
+        "Arctic blue-grey polar night with frost cyan and aurora accents.",
+    },
+    {
+      name: "monokai",
+      label: "Monokai",
+      description:
+        "Olive-charcoal base with punchy pink, green and cyan. The Sublime classic.",
+    },
+    {
+      name: "borland",
+      label: "Borland Blue",
+      description:
+        "Turbo Pascal blue with yellow text, double borders and zero radius.",
+    },
+    {
+      name: "sepia",
+      label: "Sepia Paper",
+      description:
+        "Light parchment, all-serif and academic calm. The light alternative.",
+    },
+    {
+      name: "contrast",
+      label: "High Contrast",
+      description:
+        "Pure black with white, cyan and yellow, thick borders. The accessibility target.",
     },
   ];
 

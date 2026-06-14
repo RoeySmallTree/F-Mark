@@ -5,29 +5,24 @@ import { join, resolve, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { EventKind, FilePreviewKind, FileRefPayload } from "@f-mark/shared";
+import type {
+  FilePreviewKind,
+  FileRefPayload,
+  PostFileBody,
+  UploadAttachmentResponse,
+} from "@f-mark/shared";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { readEvents } from "../events/reader.js";
-import { writeEventFile } from "../events/writer.js";
-import { validateNonProseAppendTo } from "../events/proseValidate.js";
-import type { Bus, BusMessage } from "../ws/bus.js";
+import type { Bus } from "../ws/bus.js";
 import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
+import { writeFileRefEvent } from "../services/events.js";
+import { publishEventWrites } from "../services/eventPublisher.js";
 
-/** Upload size cap for the fastify-multipart plugin (consumed by
- *  server.ts at register time). 64 MiB is a conservative default; the
- *  user's WIP attachment feature can override per-route. Defined here
- *  so server.ts's import resolves cleanly. */
-export const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
-
-interface FileBody {
-  participant_id: string;
-  id: string;
-  path: string;
-  mime_type: string;
-  description?: string;
-  append_to?: string;
-}
+/** Local-first upload cap for fastify-multipart (consumed by server.ts at
+ *  register time). The files live on the user's machine, so keep this high
+ *  enough for large media without accepting accidental multi-GB drops. */
+export const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 
 interface AttachmentUpload {
   id: string;
@@ -214,24 +209,7 @@ export function registerFileRoutes(
 ): void {
   const deps = normaliseDeps(pOrDeps);
 
-  function publish(
-    sessionId: string,
-    filename: string,
-    kind: EventKind,
-    participantId: string,
-  ): void {
-    const bus = getBus();
-    const added: BusMessage = {
-      type: "event_added",
-      session_id: sessionId,
-      filename,
-      kind,
-      participant_id: participantId,
-    };
-    bus.publish(added);
-  }
-
-  app.post<{ Params: { id: string }; Body: FileBody }>(
+  app.post<{ Params: { id: string }; Body: PostFileBody }>(
     "/sessions/:id/events/file",
     {
       schema: {
@@ -249,6 +227,21 @@ export function registerFileRoutes(
             id: { type: "string", minLength: 1 },
             path: { type: "string", minLength: 1 },
             mime_type: { type: "string", minLength: 1 },
+            display_name: { type: "string", minLength: 1 },
+            size_bytes: { type: "integer", minimum: 0 },
+            preview_kind: {
+              type: "string",
+              enum: [
+                "image",
+                "text",
+                "pdf",
+                "csv",
+                "docx",
+                "xlsx",
+                "pptx",
+                "file",
+              ],
+            },
             description: { type: "string" },
             append_to: { type: "string", minLength: 1 },
           },
@@ -259,32 +252,9 @@ export function registerFileRoutes(
       const p = resolvePaths(deps);
       if (!(await ensureSession(p, req.params.id, reply))) return;
       try {
-        const apCheck = validateNonProseAppendTo(req.body.append_to);
-        if (!apCheck.ok) {
-          reply.code(400);
-          return { error: apCheck.error };
-        }
-        const { participant_id, ...rest } = req.body;
-        const payload: FileRefPayload = {
-          id: rest.id,
-          path: rest.path,
-          mime_type: rest.mime_type,
-        };
-        if (rest.description !== undefined) payload.description = rest.description;
-        if (rest.append_to !== undefined) payload.append_to = rest.append_to;
-        const filename = await writeEventFile(p, req.params.id, {
-          participant_id,
-          kind: "file",
-          ext: "json",
-          contents: JSON.stringify(payload, null, 2),
-        });
-        publish(req.params.id, filename, "file", participant_id);
-        return {
-          filename,
-          timestamp: filename.split("_")[0]!,
-          participant_id,
-          kind: "file" as const,
-        };
+        const written = await writeFileRefEvent(p, req.params.id, req.body);
+        publishEventWrites(getBus(), req.params.id, written.publish);
+        return written.response;
       } catch (err) {
         reply.code(400);
         return { error: err instanceof Error ? err.message : String(err) };
@@ -292,6 +262,10 @@ export function registerFileRoutes(
     },
   );
 
+  /* Upload-only: stages a file on disk under <session>/attachments/<id>/
+     and returns its metadata. The caller (compose) commits the
+     attachment by POSTing /sessions/:id/events/file with this metadata
+     (plus optional append_to) when the user hits Send. */
   app.post<{ Params: { id: string } }>(
     "/sessions/:id/attachments",
     async (req, reply) => {
@@ -323,15 +297,10 @@ export function registerFileRoutes(
           upload = await saveAttachmentFile(p, req.params.id, part);
         }
 
-        const participantId = fields.participant_id?.trim();
-        if (participantId === undefined || participantId.length === 0) {
-          throw new Error("participant_id is required");
-        }
         if (upload === null) throw new Error("file is required");
 
         const displayName = fields.display_name?.trim() || upload.displayName;
-        const payload: FileRefPayload = {
-          schema: "fmark.file.v1",
+        const response: UploadAttachmentResponse = {
           id: upload.id,
           display_name: displayName,
           path: upload.path,
@@ -339,25 +308,7 @@ export function registerFileRoutes(
           size_bytes: upload.sizeBytes,
           preview_kind: previewKindFor(upload.mimeType, displayName),
         };
-        const description = fields.description?.trim();
-        if (description !== undefined && description.length > 0) {
-          payload.description = description;
-        }
-
-        const filename = await writeEventFile(p, req.params.id, {
-          participant_id: participantId,
-          kind: "file",
-          ext: "json",
-          contents: JSON.stringify(payload, null, 2),
-        });
-        publish(req.params.id, filename, "file", participantId);
-        return {
-          filename,
-          timestamp: filename.split("_")[0]!,
-          participant_id: participantId,
-          kind: "file" as const,
-          payload,
-        };
+        return response;
       } catch (err) {
         if (upload !== null) {
           await rm(upload.uploadDir, { recursive: true, force: true }).catch(
@@ -367,6 +318,37 @@ export function registerFileRoutes(
         reply.code(400);
         return { error: err instanceof Error ? err.message : String(err) };
       }
+    },
+  );
+
+  /* Remove a staged attachment that has not yet been committed via a
+     file event. Refuses (409) if any file event in this session already
+     references the file_id — those events would break if we deleted the
+     bytes from disk. */
+  app.delete<{ Params: { id: string; file_id: string } }>(
+    "/sessions/:id/attachments/:file_id",
+    async (req, reply) => {
+      const p = resolvePaths(deps);
+      if (!(await ensureSession(p, req.params.id, reply))) return;
+      const fileId = req.params.file_id;
+      if (!/^att_[a-f0-9]{12}$/.test(fileId)) {
+        reply.code(400);
+        return { error: "invalid attachment id" };
+      }
+      const referenced = await findAttachment(p, req.params.id, fileId);
+      if (referenced !== null) {
+        reply.code(409);
+        return { error: "attachment is already committed to a file event" };
+      }
+      const dir = join(p.sessionDir(req.params.id), "attachments", fileId);
+      try {
+        await rm(dir, { recursive: true, force: true });
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+      reply.code(204);
+      return reply.send();
     },
   );
 

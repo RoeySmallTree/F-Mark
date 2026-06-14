@@ -1,5 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
+import type {
+  AgentStatusRow,
+  ForkedAgentResult,
+  SessionWithPath,
+} from "@f-mark/shared";
 import type { PresenceState } from "../presence/tracker.js";
 
 /* Every BusMessage carries an optional `pathId` + `revision` envelope.
@@ -51,6 +56,11 @@ export interface ManagedAgentKilledMessage extends BusEnvelope {
   participant_id: string;
 }
 
+export interface ManagedAgentUpdatedMessage extends BusEnvelope {
+  type: "managed-agent.updated";
+  agent: AgentStatusRow;
+}
+
 export interface ManagedAgentTerminalSpawnedMessage extends BusEnvelope {
   type: "managed-agent.terminal-spawned";
   tmux_session: string;
@@ -60,6 +70,19 @@ export interface ManagedAgentTerminalSpawnedMessage extends BusEnvelope {
 export interface EnvProbeUpdatedMessage extends BusEnvelope {
   type: "env-probe.updated";
   result: unknown;
+}
+
+export interface SessionForkedMessage extends BusEnvelope {
+  type: "session.forked";
+  source_session_id: string;
+  session: SessionWithPath;
+  agents: ForkedAgentResult[];
+  warnings: string[];
+}
+
+export interface FilesChangedMessage extends BusEnvelope {
+  type: "files.changed";
+  root: string;
 }
 
 /* path-switched — broadcast on every successful /paths/active or
@@ -80,8 +103,11 @@ export type BusMessage =
   | PresenceMessage
   | ManagedAgentSpawnedMessage
   | ManagedAgentKilledMessage
+  | ManagedAgentUpdatedMessage
   | ManagedAgentTerminalSpawnedMessage
   | EnvProbeUpdatedMessage
+  | SessionForkedMessage
+  | FilesChangedMessage
   | PathSwitchedMessage;
 
 export interface Bus {

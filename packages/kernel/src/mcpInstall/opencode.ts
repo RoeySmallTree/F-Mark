@@ -44,6 +44,7 @@ async function detectAt(
   scope: "project" | "user",
   candidates: string[],
   safeAutoApply: boolean,
+  expected: { command: string; args: string[] },
 ): Promise<IntegrationLocation> {
   const path = (await firstExisting(candidates)) ?? candidates[0]!;
   const loaded = await readJsonConfig(path);
@@ -60,7 +61,7 @@ async function detectAt(
     return { scope, path, status: "missing", safe_auto_apply: safeAutoApply };
   }
   const servers = getObject(loaded.value, "mcp");
-  const current = statusFromOpencodeServer(servers?.fmark);
+  const current = statusFromOpencodeServer(servers?.fmark, expected);
   return {
     scope,
     path,
@@ -72,9 +73,10 @@ async function detectAt(
 }
 
 export async function detectOpencodeMcp(input: McpDetectInput) {
+  const expected = fmarkMcpCommandSpec(input.projectRoot, input.env);
   return makeCheck([
-    await detectAt("project", projectCandidates(input.projectRoot), true),
-    await detectAt("user", userCandidates(input.env), true),
+    await detectAt("project", projectCandidates(input.projectRoot), true, expected),
+    await detectAt("user", userCandidates(input.env), true, expected),
   ]);
 }
 

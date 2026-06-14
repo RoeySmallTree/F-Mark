@@ -22,6 +22,26 @@ function tool(participant: string, name: string, ts = "20260523T100001Z"): AnyEv
   };
 }
 
+function accessRequest(participant: string, ts = "20260523T100002Z"): AnyEventRecord {
+  return {
+    filename: `${ts}_${participant}.access-request.json`,
+    timestamp: ts,
+    participant_id: participant,
+    kind: "access-request",
+    payload: {
+      schema: "fmark.access-request.v1",
+      request_id: "req_1",
+      status: "open",
+      request_type: "permission",
+      runtime_id: "claude",
+      hook_event_name: "PermissionRequest",
+      title: "Approve tool use",
+      response_channel: "hook",
+      created_at: "2026-06-09T10:00:00Z",
+    },
+  };
+}
+
 function turnEnd(participant: string, ts = "20260523T100005Z"): AnyEventRecord {
   return {
     filename: `${ts}_${participant}.turn-end.json`,
@@ -90,6 +110,26 @@ describe("projectFeed", () => {
     const out = projectFeed(ev);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ type: "group", status: "ended" });
+  });
+
+  it("keeps access requests inside same-participant mid-turn groups", () => {
+    const ev = [
+      prose("ag-claude", "Thinking", true, "20260523T100000Z"),
+      tool("ag-claude", "Bash", "20260523T100001Z"),
+      accessRequest("ag-claude", "20260523T100002Z"),
+      turnEnd("ag-claude", "20260523T100003Z"),
+    ];
+    const out = projectFeed(ev);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.type).toBe("group");
+    if (out[0]!.type !== "group") return;
+    expect(out[0]!.items.map((event) => event.kind)).toEqual([
+      "prose",
+      "tool-use",
+      "access-request",
+    ]);
+    expect(out[0]!.accessRequestCount).toBe(1);
+    expect(out[0]!.status).toBe("ended");
   });
 
   it("two separate groups when participant emits two distinct turns", () => {

@@ -1,4 +1,8 @@
-import type { RuntimeControlCapabilities } from "@f-mark/shared";
+import {
+  defaultRuntimeAccessMode,
+  runtimeAccessModeOptions,
+  type RuntimeControlCapabilities,
+} from "@f-mark/shared";
 
 export type RuntimeControlAction = "compact" | "clear";
 
@@ -22,9 +26,13 @@ const DEFAULT_CAPABILITY: RuntimeControlCapabilities = {
     notes: "No sub-agent capture verified for this runtime.",
   },
   reconnect_supported: false,
-  access_modes: ["unknown"],
+  access_modes: [],
+  default_access_mode: defaultRuntimeAccessMode(null),
+  launch_access_modes: [],
   access_change_supported: false,
-  context_source: "unknown",
+  access_change_reason: "No verified live permission control for this runtime.",
+  context_source: "unsupported",
+  context_reason: "No verified context usage source for this runtime.",
 };
 
 export const RUNTIME_CONTROL_CAPABILITIES: Record<string, RuntimeControlCapabilities> = {
@@ -50,9 +58,15 @@ export const RUNTIME_CONTROL_CAPABILITIES: Record<string, RuntimeControlCapabili
         "Final-result capture is implemented; real-runtime verification is recorded per hot report.",
     },
     reconnect_supported: true,
-    access_modes: ["unknown"],
+    access_modes: runtimeAccessModeOptions("claude").map((mode) => mode.id),
+    default_access_mode: defaultRuntimeAccessMode("claude"),
+    launch_access_modes: runtimeAccessModeOptions("claude"),
     access_change_supported: false,
-    context_source: "unknown",
+    access_change_reason:
+      "Claude permission mode can be selected at launch; live changes are not verified for managed panes.",
+    context_source: "not-reported",
+    context_reason:
+      "Claude context metrics require the optional F-Mark status-line collector; it is not installed for this agent.",
   },
   codex: {
     runtime_id: "codex",
@@ -76,35 +90,15 @@ export const RUNTIME_CONTROL_CAPABILITIES: Record<string, RuntimeControlCapabili
         "Codex multi_agent_v1 transcript capture is implemented; structured hook capture is also supported when surfaced by the runtime.",
     },
     reconnect_supported: true,
-    access_modes: ["unknown"],
+    access_modes: runtimeAccessModeOptions("codex").map((mode) => mode.id),
+    default_access_mode: defaultRuntimeAccessMode("codex"),
+    launch_access_modes: runtimeAccessModeOptions("codex"),
     access_change_supported: false,
-    context_source: "unknown",
-  },
-  gemini: {
-    runtime_id: "gemini",
-    compact_command: "/compress",
-    clear_command: "/clear",
-    fork: {
-      native_supported: false,
-      verified: false,
-      command: null,
-      command_accepts_name: false,
-      cli_command: null,
-      notes:
-        "No Gemini fork command verified; use F-Mark-owned fork handoff in v1.",
-    },
-    subagents: {
-      final_result_supported: true,
-      progressive_supported: false,
-      verified: false,
-      sources: ["invoke_agent transcript/tool record"],
-      notes:
-        "Final-result capture is implemented for invoke_agent-shaped records; real-runtime verification is recorded per hot report.",
-    },
-    reconnect_supported: true,
-    access_modes: ["unknown"],
-    access_change_supported: false,
-    context_source: "unknown",
+    access_change_reason:
+      "Codex approval policy is a launch flag; live changes are not verified for the interactive TUI.",
+    context_source: "not-reported",
+    context_reason:
+      "Codex context usage requires app-server token-usage events or a verified /status parser; neither is active for this agent.",
   },
   opencode: {
     runtime_id: "opencode",
@@ -128,9 +122,14 @@ export const RUNTIME_CONTROL_CAPABILITIES: Record<string, RuntimeControlCapabili
         "Opencode v1.15 has no first-class sub-agent dispatch; track via tool.execute hooks if needed.",
     },
     reconnect_supported: true,
-    access_modes: ["unknown"],
+    access_modes: runtimeAccessModeOptions("opencode").map((mode) => mode.id),
+    default_access_mode: defaultRuntimeAccessMode("opencode"),
+    launch_access_modes: runtimeAccessModeOptions("opencode"),
     access_change_supported: false,
-    context_source: "unknown",
+    access_change_reason:
+      "Opencode does not expose a verified live permission-mode control.",
+    context_source: "unsupported",
+    context_reason: "Opencode does not expose verified context-window metrics.",
   },
 };
 

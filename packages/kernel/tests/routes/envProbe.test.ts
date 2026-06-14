@@ -14,7 +14,7 @@ describe("GET /env-probe", () => {
       probe: async () => ({
         tmux: true,
         tmuxVersion: "3.4",
-        runtimes: { claude: true, codex: false, gemini: false },
+        runtimes: { claude: true, codex: false, opencode: false },
         installer: "apt",
         os: "linux",
       }),
@@ -24,7 +24,7 @@ describe("GET /env-probe", () => {
     expect(res.json()).toEqual({
       tmux: true,
       tmuxVersion: "3.4",
-      runtimes: { claude: true, codex: false, gemini: false },
+      runtimes: { claude: true, codex: false, opencode: false },
       installer: "apt",
       os: "linux",
     });

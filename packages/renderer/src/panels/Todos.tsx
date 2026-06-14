@@ -3,9 +3,13 @@ import type { TodoPayload } from "@f-mark/shared";
 import {
   basename,
   groupRecordsByPath,
+  sessionLabel,
   scopeLabel,
   useAllSessionEvents,
 } from "./allSessions.js";
+import { TodoTreeList } from "./TodoTreeList.js";
+import { LoadingAnimation } from "../components/LoadingAnimation.js";
+import { useStore } from "../state/store.js";
 
 type TodoStatus = "open" | "wip" | "done";
 
@@ -53,9 +57,27 @@ function latestTodos(
 
 export function Todos(): JSX.Element {
   const { groups, loading, error } = useAllSessionEvents(["todo"]);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const sessions = useStore((s) => s.sessions);
+  const activePath = useStore((s) => s.activePath);
+  const activePathId = useStore((s) => s.activePathId);
+  const currentSession =
+    currentSessionId === null
+      ? null
+      : (sessions.find((session) => session.id === currentSessionId) ?? null);
+  const currentPath =
+    activePath ??
+    currentSession?.path ??
+    (currentSession === null ? "" : "Current repo");
+  const shouldRenderEditor = currentSession !== null || currentSessionId === null;
   const visibleGroups = groups
     .map((group) => ({ group, todos: latestTodos(group.events) }))
-    .filter(({ todos }) => todos.length > 0);
+    .filter(({ group, todos }) => {
+      if (todos.length === 0) return false;
+      if (currentSessionId === null) return true;
+      if (group.session.id !== currentSessionId) return true;
+      return activePathId !== null && group.path_id !== activePathId;
+    });
   const pathGroups = groupRecordsByPath(visibleGroups);
 
   return (
@@ -64,13 +86,46 @@ export function Todos(): JSX.Element {
         <h3>TODOS</h3>
         <div className="scope">
           across <b>all sessions</b>
+          {currentSession !== null ? (
+            <>
+              {" "}
+              · editing <b>{sessionLabel(currentSession)}</b>
+            </>
+          ) : null}
         </div>
       </div>
       <div className="panel-list todo-panel-list">
+        {shouldRenderEditor ? (
+          <details className="repo-session-group active-repo todo-current-group" open>
+            <summary className="repo-session-summary">
+              <ChevronDown
+                size={13}
+                aria-hidden="true"
+                className="repo-session-chevron"
+              />
+              <span className="repo-session-title">
+                {currentSession === null
+                  ? "No active session"
+                  : basename(currentPath)}
+              </span>
+              <span className="repo-session-count">edit</span>
+              <span className="repo-session-path" title={currentPath}>
+                {currentPath}
+              </span>
+            </summary>
+            <div className="repo-session-body">
+              <div className="group-label">
+                {currentSession === null
+                  ? "NO ACTIVE SESSION"
+                  : scopeLabel(currentPath, currentSession).toUpperCase()}
+              </div>
+              <TodoTreeList className="todo-current-list" />
+            </div>
+          </details>
+        ) : null}
         {error !== null ? <p className="panel-error">{error}</p> : null}
-        {loading ? <p className="panel-empty">Loading todos...</p> : null}
-        {!loading && pathGroups.length === 0 ? (
-          <p className="panel-empty">No todos yet.</p>
+        {!shouldRenderEditor && (loading || pathGroups.length === 0) ? (
+          <LoadingAnimation className="panel-loading" />
         ) : null}
         {pathGroups.map((pathGroup) => (
           <details key={pathGroup.path} className="repo-session-group" open>

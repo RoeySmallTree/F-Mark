@@ -10,6 +10,7 @@ import {
 import type { TodoPayload, TodoTreeNode } from "@f-mark/shared";
 import { Plus } from "lucide-react";
 import { createClient, type PostTodoBody } from "../api/client.js";
+import { createManagedAgentsClient } from "../api/managedAgents.js";
 import {
   TodoItem,
   type TodoInputField,
@@ -23,18 +24,17 @@ import {
   fieldValue,
   flattenTree,
   generateTodoId,
-  getAgentIds,
+  getSessionAgentIds,
   latestTodoFilenames,
   nextIndentParentId,
   nextOutdentParentId,
   normalizeTodos,
   pickRandomAgentId,
-  releaseAutoFirstTodo,
-  reserveAutoFirstTodo,
   titleForPost,
 } from "./todoPanelUtils.js";
 import type { TodoListResponse } from "../api/client.js";
 import { whoOf } from "../cards/format.js";
+import { LogLevel, useSeqLog } from "../hooks/useSeqLog.js";
 
 interface TodoTreeListProps {
   className?: string;
@@ -186,10 +186,10 @@ export function TodoTreeList({
     wip: true,
     done: true,
   });
-  const [autoFirstTodoId, setAutoFirstTodoId] = useState<string | null>(null);
   const [latestOverrides, setLatestOverrides] = useState<Record<string, string>>(
     {},
   );
+  const log = useSeqLog("TodoTreeList");
   const inputRefs = useRef<Map<string, TodoInputRefs>>(new Map());
   const addRowRef = useRef<HTMLButtonElement | null>(null);
   const pendingFocusRef = useRef<PendingFocus | null>(null);
@@ -200,13 +200,15 @@ export function TodoTreeList({
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
     setDraft(null);
-    setAutoFirstTodoId(null);
     setLatestOverrides({});
     inputRefs.current.clear();
     pendingFocusRef.current = null;
   }, [currentSessionId]);
 
-  const agentIds = useMemo(() => getAgentIds(participants), [participants]);
+  const agentIds = useMemo(
+    () => getSessionAgentIds(participants, currentSessionId),
+    [participants, currentSessionId],
+  );
   const allNodeById = useMemo(() => collectNodeMap(todos.tree), [todos.tree]);
   const visibleTree = useMemo(
     () => visibleOrderedTree(todos.tree, statusFilters, participants),
@@ -294,12 +296,23 @@ export function TodoTreeList({
       const sessionId = currentSessionId;
       if (sessionId === null) return;
       const client = createClient({ baseUrl: "", token });
+      const managedClient = createManagedAgentsClient({ baseUrl: "", token });
       const result = await client.postTodo(sessionId, body);
+      if (
+        body.assigned_to !== undefined &&
+        agentIds.includes(body.assigned_to)
+      ) {
+        await managedClient.wakeSession(sessionId, {
+          reason: "todo",
+          source_event: result.filename,
+          target_participant_ids: [body.assigned_to],
+        });
+      }
       if (currentSessionIdRef.current !== sessionId) return;
       rememberLatest(body.id, result.filename);
       await loadTodos();
     },
-    [currentSessionId, token, rememberLatest, loadTodos],
+    [currentSessionId, token, agentIds, rememberLatest, loadTodos],
   );
 
   const registerInputs = useCallback(
@@ -402,6 +415,10 @@ export function TodoTreeList({
     [actorId, latestById],
   );
 
+  /* Empty session: auto-open a draft so the user lands in a typing-ready
+     state. We deliberately do NOT POST an empty-titled todo here — the
+     draft is UI-only until the user types a title and commits, matching
+     the rule that empty-title todos must not be persisted. */
   useEffect(() => {
     if (currentSessionId === null || actorId === null) return;
     if (loadedSessionId !== currentSessionId) return;
@@ -409,34 +426,17 @@ export function TodoTreeList({
     const bucketCount =
       todos.open.length + todos.wip.length + todos.done.length;
     if (todos.tree.length > 0 || bucketCount > 0 || draft !== null) return;
-    if (!reserveAutoFirstTodo(currentSessionId)) return;
-
-    const id = generateTodoId();
-    const body = makeCreateBody(id, { title: "" });
-    if (body === null) {
-      releaseAutoFirstTodo(currentSessionId);
-      return;
-    }
-    setAutoFirstTodoId(id);
-    void (async () => {
-      try {
-        await postTodo(body);
-        releaseAutoFirstTodo(currentSessionId);
-        setActionError(null);
-      } catch (err) {
-        releaseAutoFirstTodo(currentSessionId);
-        setAutoFirstTodoId(null);
-        setActionError(err instanceof Error ? err.message : String(err));
-      }
-    })();
+    setDraft({
+      id: generateTodoId(),
+      assignedTo: pickRandomAgentId(agentIds),
+    });
   }, [
     actorId,
+    agentIds,
     currentSessionId,
     draft,
     loadedSessionId,
     loadError,
-    makeCreateBody,
-    postTodo,
     todos.tree.length,
     todos.open.length,
     todos.wip.length,
@@ -453,15 +453,22 @@ export function TodoTreeList({
       setActionError("No active session or user.");
       return false;
     }
+    if (titleForPost(body.title).trim().length === 0) {
+      log(
+        "TodoTreeList updateExisting skipped — empty title",
+        {
+          todoId: node.id,
+          existingTitle: fieldValue(node.title),
+          patchTitle: patch.title ?? null,
+          $note:
+            "Empty-title updates must not be persisted — title is required for a todo to be accounted for",
+        },
+        LogLevel.Warning,
+      );
+      return false;
+    }
     try {
       await postTodo(body);
-      if (
-        autoFirstTodoId === node.id &&
-        patch.title !== undefined &&
-        patch.title.trim().length > 0
-      ) {
-        setAutoFirstTodoId(null);
-      }
       setActionError(null);
       return true;
     } catch (err) {
@@ -485,11 +492,19 @@ export function TodoTreeList({
     currentDraft: DraftTodo,
     patch: Partial<TodoPayload>,
   ): Promise<boolean> {
-    if (
-      patch.title !== undefined &&
-      patch.title.trim().length === 0 &&
-      patch.body === undefined
-    ) {
+    const titleCandidate = String(patch.title ?? "").trim();
+    if (titleCandidate.length === 0) {
+      log(
+        "TodoTreeList createDraft skipped — empty title",
+        {
+          draftId: currentDraft.id,
+          hasBody:
+            typeof patch.body === "string" && patch.body.length > 0,
+          $note:
+            "Drafts without a title must not be persisted — the user has to type a title for the todo to be accounted for",
+        },
+        LogLevel.Info,
+      );
       return false;
     }
     const body = makeCreateBody(currentDraft.id, patch, currentDraft.parentId);
@@ -786,8 +801,6 @@ export function TodoTreeList({
     const sourceNode = allNodeById.get(node.id) ?? node;
     const done = sourceNode.status === "done";
     const wip = sourceNode.status === "wip";
-    const titlePlaceholder =
-      autoFirstTodoId === node.id ? "First task title" : "Task title";
     return (
       <div key={node.id} className="todo-branch">
         <TodoItem
@@ -796,8 +809,6 @@ export function TodoTreeList({
           participants={participants}
           agentIds={agentIds}
           compact={compact}
-          titlePlaceholder={titlePlaceholder}
-          autoFocusTitle={autoFirstTodoId === node.id}
           registerInputs={registerInputs}
           onUpdate={async (patch) => {
             await updateExisting(sourceNode, patch);

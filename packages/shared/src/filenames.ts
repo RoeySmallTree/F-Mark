@@ -7,8 +7,12 @@ export interface FilenameParts {
   ext?: string;
 }
 
+/* Segment after the kind prefix allows up to 16 chars: the longest builtin
+   runtime slug is "opencode" (8) which yields ids like `ag-opencode-3a2f`
+   (13 chars after `ag-`). Keep this in lockstep with ID_PATTERN
+   (kernel participants.ts) and EVENT_FILENAME_RE (kernel proseValidate.ts). */
 const FILENAME_REGEX =
-  /^(\d{8}T\d{6}(?:\.\d{3})?Z)_((?:us|ag|sys|grp)-[a-z0-9-]{2,12})\.([a-z-]+)(?:\.([a-z0-9]+))?$/;
+  /^(\d{8}T\d{6}(?:\.\d{3})?Z)_((?:us|ag|sys|grp)-[a-z0-9-]{2,16})\.([a-z-]+)(?:\.([a-z0-9]+))?$/;
 
 const KINDS_WITHOUT_EXT = new Set<EventKind>(["html"]);
 

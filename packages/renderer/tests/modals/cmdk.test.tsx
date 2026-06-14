@@ -28,6 +28,7 @@ import type {
   SessionEventGroup,
   SessionMeta,
 } from "../../src/api/client.js";
+import { renderWithAgentSpawn } from "../agentSpawnProvider.js";
 
 // $mod resolves to ⌘ on macOS / Ctrl elsewhere. Match what useHotkeys expects.
 const MOD_OPEN = _isMacPlatform() ? "{Meta>}" : "{Control>}";
@@ -179,7 +180,7 @@ describe("CmdKModal — opening", () => {
     const { TopBar } = await import("../../src/shell/TopBar.js");
     const user = userEvent.setup();
     resetStore();
-    render(<TopBar />);
+    renderWithAgentSpawn(<TopBar />);
     const btn = screen.getByRole("button", { name: /open command palette/i });
     expect(btn).not.toBeDisabled();
     await user.click(btn);

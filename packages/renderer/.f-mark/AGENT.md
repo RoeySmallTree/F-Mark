@@ -129,7 +129,7 @@ The kernel exposes a CLI command (`npx -y f-mark hook auto-stream <participant_i
 - the final text block as `prose` with `arbitrary: false`
 - `turn-end` after the concluding prose
 
-Runtime-specific install instructions live in each runtime's skill bundle (Claude Code: `.claude/skills/f-mark/`, Codex: `.codex/skills/f-mark/`, Gemini: `.gemini/skills/f-mark/`).
+Runtime-specific install instructions live in each runtime's skill bundle (Claude Code: `.claude/skills/f-mark/`, Codex: `.codex/skills/f-mark/`, Opencode: `.opencode/skills/f-mark/`).
 
 To stream output from a runtime that lacks lifecycle hooks, post mid-turn narration manually with `arbitrary: true` — the renderer treats both paths identically.
 

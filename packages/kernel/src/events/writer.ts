@@ -11,6 +11,11 @@ export interface WriteEventInput {
   kind: EventKind;
   ext: string;
   contents: string;
+  /** When set, the writer starts the collision-bump loop at this timestamp
+   *  instead of calling isoTimestamp(). Used for synchronized cross-session
+   *  writes (fork-link pair). On EEXIST inside the session, the loop bumps
+   *  by +1ms exactly as it would for the auto-stamped path. */
+  timestamp?: string;
 }
 
 function assertWithinSession(p: Paths, sessionId: string, target: string): void {
@@ -52,7 +57,7 @@ export async function writeEventFile(
 
   await mkdir(p.sessionDir(sessionId), { recursive: true });
 
-  let stamped = isoTimestamp();
+  let stamped = input.timestamp ?? isoTimestamp();
   for (let attempt = 0; attempt < 256; attempt++) {
     const filename = composeFilename({
       timestamp: stamped,

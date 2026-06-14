@@ -1,6 +1,6 @@
 /* sources.ts — pure helpers for the Skills palette (P9).
    - groupByAgent: takes a flat SkillRef[] from the backend and groups by
-     agent, preserving a deterministic order (claude / codex / gemini /
+     agent, preserving a deterministic order (claude / codex / opencode /
      generic / other) and alphabetical ordering of names within each group.
    - insertionFor: build the `/<name> <args>` string we feed into the
      compose textarea via store.setComposeDraft. */
@@ -8,13 +8,13 @@
 import type { SkillRef } from "@f-mark/shared";
 import { fuzzyScore } from "../cmdk/fuzzy.js";
 
-/* Deterministic agent order — claude first, codex, gemini, generic last.
+/* Deterministic agent order — claude first, codex, opencode, generic last.
    Any unrecognized agent key gets sorted between generic and the end,
    ordered alphabetically. */
 const AGENT_ORDER: readonly string[] = [
   "claude",
   "codex",
-  "gemini",
+  "opencode",
   "generic",
 ];
 
@@ -27,7 +27,7 @@ export interface SkillGroup {
 const AGENT_LABEL_OVERRIDES: Record<string, string> = {
   claude: "Claude skills",
   codex: "Codex skills",
-  gemini: "Gemini skills",
+  opencode: "Opencode skills",
   generic: "Project skills",
 };
 

@@ -18,4 +18,23 @@ export interface PathSwitchedBusMessage {
   revision: number;
 }
 
-export type BusMessage = EventBusMessage | PathSwitchedBusMessage;
+export interface SessionForkedBusMessage {
+  type: "session.forked";
+  source_session_id: string;
+  session: unknown;
+  pathId?: string | null;
+  revision?: number;
+}
+
+export interface FilesChangedBusMessage {
+  type: "files.changed";
+  root: string;
+  pathId?: string | null;
+  revision?: number;
+}
+
+export type BusMessage =
+  | EventBusMessage
+  | PathSwitchedBusMessage
+  | SessionForkedBusMessage
+  | FilesChangedBusMessage;

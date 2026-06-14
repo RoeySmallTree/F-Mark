@@ -83,7 +83,9 @@ describe("RightLog — base rendering", () => {
     /* The grid children, in document order: identity, time, kind-tag,
        summary, jump chevron. */
     expect(cells[0]!.classList.contains("log-who")).toBe(true);
-    expect(cells[0]!.querySelector(".avatar img")?.getAttribute("src")).toContain(
+    const mask = cells[0]!.querySelector(".avatar .icon-mask") as HTMLElement | null;
+    expect(mask).not.toBeNull();
+    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
       "human-icon.png",
     );
     expect(cells[1]!.classList.contains("ts")).toBe(true);
