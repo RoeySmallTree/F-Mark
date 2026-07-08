@@ -11,5 +11,6 @@ export * from "./compass.js";
 export * from "./proseRoles.js";
 export * from "./blocks.js";
 export * from "./themeTokens.js";
+export * from "./fontTokens.js";
 export * from "./git.js";
 export * from "./avatarPresets.js";

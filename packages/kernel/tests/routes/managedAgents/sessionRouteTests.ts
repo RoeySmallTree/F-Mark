@@ -45,6 +45,157 @@ export function registerAccessResponseTests(): void {
     "writes a response into a scoped background root",
     writesAccessResponseIntoScopedBackgroundRoot,
   );
+  it(
+    "expires a terminal access request when the agent terminal is gone",
+    expiresTerminalAccessRequestWhenPaneGone,
+  );
+  it(
+    "expires (never mis-delivers) when the live pane no longer shows the prompt",
+    expiresTerminalAccessRequestWhenPromptGone,
+  );
+}
+
+async function expiresTerminalAccessRequestWhenPromptGone(): Promise<void> {
+  const bus = fakeBus();
+  const { app, runner, root, p, cleanup } = await makeApp({ bus });
+  const session = await createSession(p, { slug: "prompt-gone" });
+  const userId = await userParticipantId(p);
+  const participantId = "ag-claude-stale";
+  /* Agent HAS a live tmux pane (non-null tmux_session), but that pane is no
+     longer showing the prompt this request was captured from — e.g. the pane
+     was answered directly, or the agent relaunched onto a same-named pane.
+     Typing the decision in now would inject into the wrong context, so the
+     request must expire, not deliver. */
+  const { tmuxSession } = await writeManagedAgentFixture({
+    p,
+    root,
+    participantId,
+    runtimeId: "claude",
+    sessionId: session.id,
+  });
+  await writeAccessRequestEvent(p, session.id, {
+    participant_id: participantId,
+    schema: "fmark.access-request.v1",
+    request_id: "ar-terminal-stale-1",
+    status: "open",
+    request_type: "command",
+    runtime_id: "claude",
+    runtime_session_id: tmuxSession,
+    hook_event_name: "TerminalPermissionPrompt",
+    title: "Bash command",
+    command: "echo hi",
+    suggestions: [
+      { id: "terminal:1", label: "Yes", decision: "approve", terminal_input: "1" },
+    ],
+    response_channel: "terminal",
+    raw: { terminal_fingerprint: "fp-original", tmux_session: tmuxSession },
+    created_at: "2026-07-08T10:00:00.000Z",
+  });
+
+  expectManagedAgentsListSessions(runner, root, tmuxSession); // buildStatusRow
+  // Re-verify: the pane no longer shows the captured prompt.
+  runner.expect(["tmux", "capture-pane"], {
+    stdout: "some unrelated shell output\n$ ",
+    stderr: "",
+    exitCode: 0,
+  });
+  expectManagedAgentsListSessions(runner, root, tmuxSession); // publishAgentUpdated
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/managed-agents/${participantId}/access-requests/ar-terminal-stale-1/respond`,
+    payload: {
+      session_id: session.id,
+      participant_id: userId,
+      decision: "approve",
+      option_id: "terminal:1",
+    },
+  });
+
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toMatchObject({
+    delivered: false,
+    delivery: "terminal",
+    status: "expired",
+  });
+  expectNoTmuxSendKeys(runner);
+  runner.verifyExpectationsConsumed();
+  await app.close();
+  await cleanup();
+}
+
+async function expiresTerminalAccessRequestWhenPaneGone(): Promise<void> {
+  const bus = fakeBus();
+  const { app, runner, p, cleanup } = await makeApp({ bus });
+  const session = await createSession(p, { slug: "terminal-gone" });
+  const userId = await userParticipantId(p);
+  const participantId = "ag-claude-term-gone";
+  /* Registered agent with NO tmux-session file → the status row resolves with
+     tmux_session === null, reproducing a pane that went away while a native
+     terminal permission prompt was still open. */
+  await registerAgent(p, {
+    name: "Claude",
+    suggested_id: participantId,
+    runtime_id: "claude",
+    knownRuntimeIds: new Set(["claude"]),
+  });
+  await writeAccessRequestEvent(p, session.id, {
+    participant_id: participantId,
+    schema: "fmark.access-request.v1",
+    request_id: "ar-terminal-gone-1",
+    status: "open",
+    request_type: "command",
+    runtime_id: "claude",
+    hook_event_name: "TerminalPermissionPrompt",
+    title: "Bash command",
+    command: "echo hi",
+    suggestions: [
+      { id: "terminal:1", label: "Yes", decision: "approve", terminal_input: "1" },
+    ],
+    response_channel: "terminal",
+    created_at: "2026-07-08T10:00:00.000Z",
+  });
+
+  /* buildStatusRow (respond) + publishAgentUpdated (after writing the response)
+     each list live tmux sessions; there are none. */
+  expectTmuxSessionsGone(runner);
+  expectTmuxSessionsGone(runner);
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/managed-agents/${participantId}/access-requests/ar-terminal-gone-1/respond`,
+    payload: {
+      session_id: session.id,
+      participant_id: userId,
+      decision: "approve",
+      option_id: "terminal:1",
+    },
+  });
+
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toMatchObject({
+    delivered: false,
+    delivery: "terminal",
+    status: "expired",
+  });
+  const responses = await readEvents(p, session.id, {
+    kinds: ["access-response"],
+  });
+  expect(
+    responses.some((event) => {
+      if (event.kind !== "access-response") return false;
+      const payload = event.payload as { request_id: string; status: string };
+      return (
+        payload.request_id === "ar-terminal-gone-1" &&
+        payload.status === "expired"
+      );
+    }),
+    "an expired access-response should retire the orphaned terminal request",
+  ).toBe(true);
+  expectNoTmuxSendKeys(runner);
+  runner.verifyExpectationsConsumed();
+  await app.close();
+  await cleanup();
 }
 
 export function registerWakeTests(): void {
@@ -270,7 +421,8 @@ async function expectScopedAccessResponseEvent(
   expect(
     (await readEvents(p, sessionId, { kinds: ["access-response"] })).some(
       (event) =>
-        event.kind === "access-response" && event.payload.request_id === "ar-bg-1",
+        event.kind === "access-response" &&
+        (event.payload as { request_id: string }).request_id === "ar-bg-1",
     ),
   ).toBe(true);
 }

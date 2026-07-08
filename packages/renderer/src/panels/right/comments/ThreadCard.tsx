@@ -61,6 +61,35 @@ const avatarSizes = {
   small: "sm",
 } as const;
 
+const MAX_PARTICIPANT_STACK = 4;
+
+type Who = ReturnType<typeof whoOf>;
+
+/** Same total order the thread model uses (timestamp, then filename), so the
+    folded preview and participant order never disagree with the expanded view
+    on tied timestamps. */
+function compareByTimeThenName(a: AnyEventRecord, b: AnyEventRecord): number {
+  const byTime = a.timestamp.localeCompare(b.timestamp);
+  return byTime !== 0 ? byTime : a.filename.localeCompare(b.filename);
+}
+
+/** Distinct participants across the thread, in first-appearance (chronological)
+    order. */
+function threadParticipants(
+  messages: AnyEventRecord[],
+  participants: Record<string, Participant>,
+): Who[] {
+  const seen = new Set<string>();
+  const out: Who[] = [];
+  for (const message of messages) {
+    const who = whoOf(message.participant_id, participants);
+    if (seen.has(who.id)) continue;
+    seen.add(who.id);
+    out.push(who);
+  }
+  return out;
+}
+
 interface ThreadCardProps {
   group: CommentGroup;
   participants: Record<string, Participant>;
@@ -86,19 +115,15 @@ export function ThreadCard({
   busyKey,
   actions,
 }: ThreadCardProps): JSX.Element {
-  const messageCount = group.roots.reduce(
-    (sum, root) => sum + 1 + root.replies.length,
-    0,
-  );
-  const replyCount = group.roots.reduce(
-    (sum, root) => sum + root.replies.length,
-    0,
-  );
-  const first = group.roots[0]?.event;
-  const firstWho =
-    first === undefined
-      ? null
-      : whoOf(first.participant_id, participants);
+  const ordered = group.roots
+    .flatMap((root) => [root.event, ...root.replies])
+    .sort(compareByTimeThenName);
+  const messageCount = ordered.length;
+  const replyCount = messageCount - group.roots.length;
+  const people = threadParticipants(ordered, participants);
+  const latest = ordered[ordered.length - 1];
+  const latestWho =
+    latest === undefined ? null : whoOf(latest.participant_id, participants);
 
   return (
     <article
@@ -149,22 +174,44 @@ export function ThreadCard({
       {group.quote !== null ? (
         <blockquote className="right-comments-quote">{group.quote}</blockquote>
       ) : null}
-      {!active && first !== undefined && firstWho !== null ? (
-        <div className="right-comment-preview">
-          <ParticipantAvatar
-            participantId={firstWho.id}
-            kind={
-              firstWho.isUser
-                ? PARTICIPANT_KINDS.user
-                : PARTICIPANT_KINDS.agent
-            }
-            name={firstWho.name}
-            color={firstWho.color}
-            runtimeId={firstWho.runtimeId}
-            size={avatarSizes.small}
-          />
-          <p>
-            <b>{firstWho.name}</b> {shortPreview(contentOf(first), 96)}
+      {!active && latest !== undefined && latestWho !== null ? (
+        <div className="right-comment-fold">
+          {people.length > 0 ? (
+            <div
+              className="right-comment-people"
+              role="img"
+              aria-label={`Participants: ${people
+                .map((who) => who.name)
+                .join(", ")}`}
+            >
+              {people.slice(0, MAX_PARTICIPANT_STACK).map((who) => (
+                <span className="right-comment-people-avatar" key={who.id}>
+                  <ParticipantAvatar
+                    participantId={who.id}
+                    kind={
+                      who.isUser
+                        ? PARTICIPANT_KINDS.user
+                        : PARTICIPANT_KINDS.agent
+                    }
+                    name={who.name}
+                    color={who.color}
+                    runtimeId={who.runtimeId}
+                    size={avatarSizes.small}
+                  />
+                </span>
+              ))}
+              {people.length > MAX_PARTICIPANT_STACK ? (
+                <span className="right-comment-people-more">
+                  +{people.length - MAX_PARTICIPANT_STACK}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <p className="right-comment-fold-latest">
+            {replyCount > 0 ? (
+              <span className="right-comment-fold-latest-label">Latest</span>
+            ) : null}
+            <b>{latestWho.name}</b> {shortPreview(contentOf(latest), 88)}
           </p>
         </div>
       ) : null}

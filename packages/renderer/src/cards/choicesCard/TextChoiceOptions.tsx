@@ -1,5 +1,10 @@
 import { type JSX } from "react";
-import type { ChoiceOption, ChoicesCardModel } from "./types.js";
+import { ChoiceOptionComments } from "./ChoiceOptionComments.js";
+import type {
+  ChoiceCommentTarget,
+  ChoiceOption,
+  ChoicesCardModel,
+} from "./types.js";
 
 const NO_LOOSE_STRING_VALUES = {
   choiceOpt: "choice-opt",
@@ -19,13 +24,27 @@ export function TextChoiceOptions({
       {model.payload.options.map((option) => (
         <TextChoiceOption key={option.id} model={model} option={option} />
       ))}
+      <TextCustomChoiceOptions model={model} />
     </>
+  );
+}
+
+export function TextCustomChoiceOptions({
+  model,
+}: TextChoiceOptionsProps): JSX.Element | null {
+  if (model.customOptions.length === 0) return null;
+  return (
+    <div className="choice-custom-selected" aria-label="Custom selected options">
+      {model.customOptions.map((option) => (
+        <TextChoiceOption key={option.id} model={model} option={option} />
+      ))}
+    </div>
   );
 }
 
 interface TextChoiceOptionProps {
   model: ChoicesCardModel;
-  option: ChoiceOption;
+  option: ChoiceOption | ChoiceCommentTarget;
 }
 
 function TextChoiceOption({
@@ -38,19 +57,22 @@ function TextChoiceOption({
     .filter(Boolean)
     .join(" ");
   return (
-    <button
-      type="button"
-      className={classes}
-      aria-pressed={chosen}
-      onClick={() => void model.pick(option.id)}
-    >
-      <span className="choice-radio" aria-hidden />
-      <span style={{ flex: 1 }}>
-        <span className="lbl">
-          {option.label}
-          {chosen ? <span className="check">Chose</span> : null}
+    <div className="choice-option-shell">
+      <button
+        type="button"
+        className={classes}
+        aria-pressed={chosen}
+        onClick={() => void model.pick(option.id)}
+      >
+        <span className="choice-radio" aria-hidden />
+        <span style={{ flex: 1 }}>
+          <span className="lbl">
+            {option.label}
+            {chosen ? <span className="check">Chose</span> : null}
+          </span>
         </span>
-      </span>
-    </button>
+      </button>
+      <ChoiceOptionComments model={model} option={option} />
+    </div>
   );
 }

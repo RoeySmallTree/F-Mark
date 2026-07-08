@@ -22,6 +22,7 @@ import type {
 } from "@f-mark/shared";
 import type { SessionMeta } from "../../api/client.js";
 import { aggregate } from "../../state/aggregate.js";
+import { FONT_PRESETS, type FontName } from "../../themes/fonts.js";
 import { THEMES, type ThemeName } from "../../themes/index.js";
 import { fuzzyFilter } from "./fuzzy.js";
 
@@ -192,6 +193,21 @@ const THEME_ACTIONS: QuickAction[] = THEMES.map((t) => ({
   icon: THEME_ICONS[t.name] ?? cmdkIcons.palette,
 }));
 
+const MONO_FONT_NAMES = new Set<FontName>([
+  "terminal",
+  "fira-code",
+  "ibm-plex-mono",
+  "source-code-pro",
+  "space-mono",
+]);
+
+const FONT_ACTIONS: QuickAction[] = FONT_PRESETS.map((f) => ({
+  id: `font-${f.name}`,
+  label: `Font: ${f.label}`,
+  sub: f.description,
+  icon: MONO_FONT_NAMES.has(f.name) ? "Terminal" : cmdkIcons.palette,
+}));
+
 const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "new-session",
@@ -206,6 +222,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     icon: cmdkIcons.settings,
   },
   ...THEME_ACTIONS,
+  ...FONT_ACTIONS,
 ];
 
 /** Truncate a string to a maximum length, appending an ellipsis if cut. */

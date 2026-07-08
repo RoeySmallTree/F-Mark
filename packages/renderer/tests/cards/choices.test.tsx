@@ -13,10 +13,27 @@ import {
 } from "./_helpers.js";
 
 const CHOICE_ENDS_TURN_KEY = "fmark:settings:choice-ends-turn";
+const COMMENT_ENDS_TURN_KEY = "fmark:settings:comment-ends-turn";
 
 function removeChoiceEndsTurnSetting(): void {
   try {
     globalThis.localStorage?.removeItem(CHOICE_ENDS_TURN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function setChoiceEndsTurnSetting(value: boolean): void {
+  setBoolSetting(CHOICE_ENDS_TURN_KEY, value);
+}
+
+function setCommentEndsTurnSetting(value: boolean): void {
+  setBoolSetting(COMMENT_ENDS_TURN_KEY, value);
+}
+
+function setBoolSetting(key: string, value: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(key, value ? "true" : "false");
   } catch {
     /* ignore */
   }
@@ -29,11 +46,13 @@ describe("ChoicesCard", () => {
   });
   afterEach(() => {
     removeChoiceEndsTurnSetting();
+    globalThis.localStorage?.removeItem(COMMENT_ENDS_TURN_KEY);
     vi.unstubAllGlobals();
     cleanup();
   });
 
   test("renders question + options; clicking an option POSTs a choice", async () => {
+    setChoiceEndsTurnSetting(false);
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ filename: "20260522T101000Z_us-a7f3.choice.json" }),
     );
@@ -56,7 +75,7 @@ describe("ChoicesCard", () => {
       <ChoicesCard event={ev} participants={PARTICIPANTS} allEvents={[ev]} />,
     );
     expect(screen.getByText("Which approach?")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Approach A/ }));
+    await user.click(screen.getByRole("button", { name: /^Approach A$/ }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toMatch(/\/events\/choice$/);
@@ -67,8 +86,7 @@ describe("ChoicesCard", () => {
     expect(body.participant_id).toBe("us-a7f3");
   });
 
-  test("selecting an option ends turn when the setting is enabled", async () => {
-    globalThis.localStorage?.setItem(CHOICE_ENDS_TURN_KEY, "true");
+  test("selecting a multi-option choice ends turn and wakes agents by default", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -76,6 +94,15 @@ describe("ChoicesCard", () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({ filename: "20260522T101001Z_us-a7f3.turn-end.json" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "2026-05-22-launch-review",
+          notified: ["ag-c92e"],
+          delivered: [],
+          skipped: [],
+          event_count: 2,
+        }),
       );
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -89,16 +116,16 @@ describe("ChoicesCard", () => {
           { id: "a", label: "Approach A" },
           { id: "b", label: "Approach B" },
         ],
-        multi: false,
+        multi: true,
       },
     );
     render(
       <ChoicesCard event={ev} participants={PARTICIPANTS} allEvents={[ev]} />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Approach A/ }));
+    await user.click(screen.getByRole("button", { name: /^Approach A$/ }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     const [choiceUrl] = fetchMock.mock.calls[0]!;
     expect(choiceUrl).toMatch(/\/events\/choice$/);
     const [turnUrl, turnInit] = fetchMock.mock.calls[1]!;
@@ -106,6 +133,118 @@ describe("ChoicesCard", () => {
     const turnBody = JSON.parse(turnInit.body as string);
     expect(turnBody).toMatchObject({
       participant_id: "us-a7f3",
+      path_id: "project-id",
+    });
+    const [wakeUrl, wakeInit] = fetchMock.mock.calls[2]!;
+    expect(wakeUrl).toMatch(/\/sessions\/2026-05-22-launch-review\/wake$/);
+    const wakeBody = JSON.parse(wakeInit.body as string);
+    expect(wakeBody).toMatchObject({
+      reason: "user-message",
+      source_event: "20260522T101000Z_us-a7f3.choice.json",
+      path_id: "project-id",
+    });
+  });
+
+  test("adds a free-text custom option to a multi-choice response", async () => {
+    setChoiceEndsTurnSetting(false);
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ filename: "20260522T101010Z_us-a7f3.choice.json" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const ev = makeChoices(
+      "20260522T101000Z_ag-c92e.choices.json",
+      "ag-c92e",
+      {
+        id: "approach",
+        question: "Which approaches should we combine?",
+        options: [
+          { id: "a", label: "Approach A" },
+          { id: "b", label: "Approach B" },
+        ],
+        multi: true,
+      },
+    );
+    render(
+      <ChoicesCard event={ev} participants={PARTICIPANTS} allEvents={[ev]} />,
+    );
+
+    await user.type(screen.getByLabelText(/add a custom option/i), "Use both plus a rollout plan");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toMatch(/\/events\/choice$/);
+    const body = JSON.parse(init.body as string);
+    expect(body.selected).toHaveLength(1);
+    expect(body.selected[0]).toMatch(/^custom:/);
+    expect(body.custom_options).toEqual([
+      { id: body.selected[0], label: "Use both plus a rollout plan" },
+    ]);
+  });
+
+  test("posts an option comment as prose targeted at that option", async () => {
+    setCommentEndsTurnSetting(false);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ filename: "20260522T101020Z_us-a7f3.prose.md" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "2026-05-22-launch-review",
+          notified: ["ag-c92e"],
+          delivered: [],
+          skipped: [],
+          event_count: 1,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const ev = makeChoices(
+      "20260522T101000Z_ag-c92e.choices.json",
+      "ag-c92e",
+      {
+        id: "approach",
+        question: "Which approach?",
+        options: [
+          { id: "a", label: "Approach A" },
+          { id: "b", label: "Approach B" },
+        ],
+        multi: true,
+      },
+    );
+    render(
+      <ChoicesCard event={ev} participants={PARTICIPANTS} allEvents={[ev]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Comment on Approach A" }));
+    await user.type(
+      screen.getByLabelText("Comment on option Approach A"),
+      "This needs a migration note.",
+    );
+    await user.click(screen.getByRole("button", { name: "Post comment" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [proseUrl, proseInit] = fetchMock.mock.calls[0]!;
+    expect(proseUrl).toMatch(/\/events\/prose$/);
+    const proseBody = JSON.parse(proseInit.body as string);
+    expect(proseBody).toMatchObject({
+      participant_id: "us-a7f3",
+      append_to: ev.filename,
+      mode: "comment",
+      path_id: "project-id",
+    });
+    expect(proseBody.content).toBe(
+      "Commented on option a — Approach A:\n\nThis needs a migration note.",
+    );
+    const [wakeUrl, wakeInit] = fetchMock.mock.calls[1]!;
+    expect(wakeUrl).toMatch(/\/sessions\/2026-05-22-launch-review\/wake$/);
+    const wakeBody = JSON.parse(wakeInit.body as string);
+    expect(wakeBody).toMatchObject({
+      reason: "comment",
+      source_event: "20260522T101020Z_us-a7f3.prose.md",
+      target_participant_ids: ["ag-c92e"],
       path_id: "project-id",
     });
   });
@@ -226,6 +365,7 @@ describe("ChoicesCard — visual alternatives (options with html)", () => {
   });
   afterEach(() => {
     removeChoiceEndsTurnSetting();
+    globalThis.localStorage?.removeItem(COMMENT_ENDS_TURN_KEY);
     vi.unstubAllGlobals();
     cleanup();
   });
@@ -262,6 +402,7 @@ describe("ChoicesCard — visual alternatives (options with html)", () => {
   });
 
   test("selecting an option POSTs a choice with the same payload as text options", async () => {
+    setChoiceEndsTurnSetting(false);
     const fetchMock = vi
       .fn()
       .mockResolvedValue(jsonResponse({ filename: "x_us-a7f3.choice.json" }));
@@ -271,7 +412,7 @@ describe("ChoicesCard — visual alternatives (options with html)", () => {
     render(
       <ChoicesCard event={ev} participants={PARTICIPANTS} allEvents={[ev]} />,
     );
-    await user.click(screen.getByRole("button", { name: /Hero/ }));
+    await user.click(screen.getByRole("button", { name: /^Hero$/ }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toMatch(/\/events\/choice$/);

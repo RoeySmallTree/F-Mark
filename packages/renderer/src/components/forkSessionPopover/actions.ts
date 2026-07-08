@@ -95,7 +95,9 @@ async function refreshForkSessionState(
   bridge.setSessions(sessions);
   bridge.setParticipants(participants);
   if (status !== null) bridge.setManagedAgents(statusToManagedAgents(status));
-  bridge.setCurrentSession(response.session.id);
+  /* Pass the fork's root so a cross-root fork selects under its own project
+     rather than falling back to the stale active path (spawn 404 otherwise). */
+  bridge.setCurrentSession(response.session.id, response.session);
 }
 
 function statusToManagedAgents(

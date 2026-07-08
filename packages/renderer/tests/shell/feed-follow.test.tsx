@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup } from "@testing-library/react";
+import { act, cleanup, fireEvent } from "@testing-library/react";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import { Feed } from "../../src/shell/Feed.js";
 import { LAST_SEEN_STORAGE_KEY, useStore } from "../../src/state/store.js";
@@ -81,6 +81,26 @@ function resetWithEvents(events: AnyEventRecord[]): void {
   });
 }
 
+function installFeedScrollSpy(container: HTMLElement): {
+  root: HTMLDivElement;
+  scrollTo: ReturnType<typeof vi.fn>;
+} {
+  const root = container.querySelector(".feed-scroll") as
+    | HTMLDivElement
+    | null;
+  expect(root).not.toBeNull();
+  const scrollTo = vi.fn();
+  Object.defineProperty(root!, "scrollTo", {
+    configurable: true,
+    value: scrollTo,
+  });
+  Object.defineProperty(root!, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  return { root: root!, scrollTo };
+}
+
 describe("Feed follow mode", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
@@ -97,29 +117,69 @@ describe("Feed follow mode", () => {
       await Promise.resolve();
     });
 
-    const root = container.querySelector(".feed-scroll") as
-      | (HTMLDivElement & { scrollTo: ReturnType<typeof vi.fn> })
-      | null;
-    expect(root).not.toBeNull();
-    const scrollTo = vi.fn();
-    Object.defineProperty(root!, "scrollTo", {
-      configurable: true,
-      value: scrollTo,
-    });
-    Object.defineProperty(root!, "scrollHeight", {
-      configurable: true,
-      value: 2400,
-    });
+    const { root, scrollTo } = installFeedScrollSpy(container);
 
     await act(async () => {
       useStore.setState({ events: [STREAM_START, STREAM_TOOL] });
       await Promise.resolve();
     });
 
+    expect(root).not.toBeNull();
     expect(container.querySelectorAll("[data-event-filename]")).toHaveLength(1);
     expect(scrollTo).toHaveBeenCalledWith({
       top: 2400,
       behavior: "smooth",
     });
+  });
+
+  test("does not follow new tail content after the follow toggle is turned off", async () => {
+    const { container } = renderWithAgentSpawn(<Feed />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const follow = container.querySelector<HTMLButtonElement>(".feed-nav-follow");
+    expect(follow).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(follow!);
+      await Promise.resolve();
+    });
+    expect(useStore.getState().followMode).toBe(false);
+
+    const { scrollTo } = installFeedScrollSpy(container);
+
+    await act(async () => {
+      useStore.setState({ events: [STREAM_START, STREAM_TOOL] });
+      await Promise.resolve();
+    });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(useStore.getState().followMode).toBe(false);
+  });
+
+  test("compose scroll requests are ignored while follow is toggled off", async () => {
+    const { container } = renderWithAgentSpawn(<Feed />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const follow = container.querySelector<HTMLButtonElement>(".feed-nav-follow");
+    expect(follow).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(follow!);
+      await Promise.resolve();
+    });
+
+    const { scrollTo } = installFeedScrollSpy(container);
+
+    await act(async () => {
+      useStore.setState((state) => ({
+        scrollToBottomTick: state.scrollToBottomTick + 1,
+      }));
+      await Promise.resolve();
+    });
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(useStore.getState().followMode).toBe(false);
   });
 });

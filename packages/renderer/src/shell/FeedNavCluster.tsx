@@ -64,7 +64,6 @@ export function FeedNavCluster({
         }
       >
         <LocateFixed size={14} aria-hidden />
-        {followMode && <span className="feed-nav-follow-dot" aria-hidden />}
       </button>
       <button
         type="button"

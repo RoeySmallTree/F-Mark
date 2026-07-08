@@ -326,6 +326,13 @@ function expectTerminalResponseTmuxSend(
   root: string,
 ): void {
   expectManagedAgentsListSessions(runner, root, tmuxSession);
+  /* Respond re-captures the pane and confirms the same prompt is still on
+     screen before delivering; the fingerprint matches, so delivery proceeds. */
+  runner.expect(["tmux", "capture-pane"], {
+    stdout: terminalPrompt(),
+    stderr: "",
+    exitCode: 0,
+  });
   runner.expect(["tmux", "send-keys", "-t", tmuxSession, "-l"], {
     stdout: "",
     stderr: "",

@@ -97,5 +97,8 @@ function optionLabels(
   const labels = new Map(
     choices?.options.map((option) => [option.id, option.label] as const) ?? [],
   );
+  for (const option of payload.custom_options ?? []) {
+    labels.set(option.id, option.label);
+  }
   return payload.selected.map((id) => labels.get(id) ?? id);
 }

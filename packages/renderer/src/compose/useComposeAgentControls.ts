@@ -26,6 +26,21 @@ const NO_LOOSE_STRING_VALUES = {
   accessRequestCardHighlight: "access-request-card-highlight",
 } as const;
 
+/* Scroll the request's feed card into view and flash it. Shared by the
+   "show request" affordance and the respond-failure path so a dropped
+   composer approval surfaces where the full error UI lives. */
+function revealAccessRequestCard(requestId: string): void {
+  const target = document.querySelector<HTMLElement>(
+    `[data-access-request-id="${cssEscape(requestId)}"]`,
+  );
+  if (target === null) return;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.classList.add(NO_LOOSE_STRING_VALUES.accessRequestCardHighlight);
+  window.setTimeout(() => {
+    target.classList.remove(NO_LOOSE_STRING_VALUES.accessRequestCardHighlight);
+  }, 1200);
+}
+
 interface UseComposeAgentControlsOptions {
   token: string | null;
   sessionId: string | null;
@@ -120,13 +135,21 @@ export function useComposeAgentControls({
       if (first === undefined || sessionId === null || userId === null) return;
       const request = first.payload as AccessRequestPayload;
       const managed = createManagedAgentsClient({ baseUrl: "", token });
-      void managed.respondAccessRequest(first.participant_id, request.request_id, {
-        session_id: sessionId,
-        participant_id: userId,
-        decision,
-        ...(optionId !== undefined ? { option_id: optionId } : {}),
-        ...(currentScope !== null ? scopeToBody(currentScope) : {}),
-      });
+      void managed
+        .respondAccessRequest(first.participant_id, request.request_id, {
+          session_id: sessionId,
+          participant_id: userId,
+          decision,
+          ...(optionId !== undefined ? { option_id: optionId } : {}),
+          ...(currentScope !== null ? scopeToBody(currentScope) : {}),
+        })
+        .catch(() => {
+          /* The decision could not be delivered (e.g. the agent's terminal
+             went away). Never leave this as an unhandled rejection — reveal
+             the request card so the failure is visible where the user can
+             retry and read the full error. */
+          revealAccessRequestCard(request.request_id);
+        });
     },
     [currentScope, pendingAccessRequests, sessionId, token, userId],
   );
@@ -135,15 +158,7 @@ export function useComposeAgentControls({
     const first = pendingAccessRequests[0];
     if (first === undefined) return;
     const request = first.payload as AccessRequestPayload;
-    const target = document.querySelector<HTMLElement>(
-      `[data-access-request-id="${cssEscape(request.request_id)}"]`,
-    );
-    if (target === null) return;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-    target.classList.add(NO_LOOSE_STRING_VALUES.accessRequestCardHighlight);
-    window.setTimeout(() => {
-      target.classList.remove(NO_LOOSE_STRING_VALUES.accessRequestCardHighlight);
-    }, 1200);
+    revealAccessRequestCard(request.request_id);
   }, [pendingAccessRequests]);
 
   const pendingApprovalAction = useMemo(() => {

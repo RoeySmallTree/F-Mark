@@ -17,6 +17,7 @@ import type {
   GitRevertHunkResponse,
   ListSessionEventsResponse,
   Participant,
+  PostChoiceBody,
   PostFileBody,
   PostFlowBody,
   PostHtmlBody,
@@ -66,6 +67,7 @@ export type {
   EventListParams,
   ForkSessionRequest,
   ForkSessionResponse,
+  PostChoiceBody,
   PostFileBody,
   PostFlowBody,
   PostHtmlBody,
@@ -333,7 +335,7 @@ export interface Client {
   ): Promise<{ filename: string }>;
   postChoice(
     sessionId: string,
-    body: { participant_id: string; choices_id: string; selected: string[] },
+    body: PostChoiceBody,
     scope: RootScope,
   ): Promise<{ filename: string }>;
   postTodo(

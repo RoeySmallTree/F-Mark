@@ -38,10 +38,12 @@ describe("launch prompt session-naming nudge", () => {
 });
 
 describe("launch prompt design-target policy", () => {
-  it("pins the renamed renderer-theme fields and the session-artifact Amber default", () => {
+  it("pins the renamed renderer-appearance fields and the session-artifact Amber default", () => {
     const text = prompt(undefined);
     expect(text).toContain('"renderer_current_theme"');
     expect(text).toContain('"renderer_theme_source"');
+    expect(text).toContain('"renderer_current_font"');
+    expect(text).toContain('"renderer_font_source"');
     expect(text).toContain('"design_target_policy"');
     expect(text).toContain('"session_artifact_theme_default": "amber"');
     /* the policy value states F-Mark is delivery chrome, not design authority */

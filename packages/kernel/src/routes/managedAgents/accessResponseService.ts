@@ -7,6 +7,7 @@ import type {
   ManagedAccessResponseResponse,
 } from "@f-mark/shared";
 import { readEvents } from "../../events/reader.js";
+import { extractTerminalAccessPrompt } from "../../terminalAccess.js";
 import type { InputQueue } from "../../tmux/inputQueue.js";
 import type { TmuxManager } from "../../tmux/manager.js";
 import { publishEventWrites } from "../../services/eventPublisher.js";
@@ -19,6 +20,7 @@ import {
   responseOption,
   responseStatus,
   statusFromExpired,
+  terminalPromptFingerprint,
 } from "./accessEvents.js";
 import type { ManagedAgentRootBinding } from "./types.js";
 
@@ -138,8 +140,34 @@ export class ManagedAgentAccessResponseService {
     request: AccessRequestPayload;
     agent: AgentStatusRow;
   }): Promise<RouteResult<ManagedAccessResponseResponse>> {
-    if (input.agent.tmux_session === null) {
-      return { status: 409, body: { error: "agent terminal is not connected" } };
+    if (
+      !(await this.terminalPromptStillLive(
+        input.participantId,
+        input.agent.tmux_session,
+        input.request,
+      ))
+    ) {
+      /* The pane that raised this native prompt is gone, was replaced (tmux
+         session names are deterministic, so a relaunch reuses the name), or
+         is simply no longer showing this prompt. Delivering now would type
+         the decision into the wrong context — or, if the pane is gone, 409
+         forever. Retire the request as expired instead. Mirrors the
+         send-failure path below. */
+      return {
+        status: 200,
+        body: await this.writeManagedAccessResponse({
+          binding: input.binding,
+          sessionId: input.body.session_id,
+          participantId: input.participantId,
+          body: input.body,
+          request: input.request,
+          delivered: false,
+          delivery: "terminal",
+          status: "expired",
+          decision: "expired",
+          error: "agent terminal is not connected",
+        }),
+      };
     }
     const option = responseOption(input.request, input.body);
     if (option.decision !== input.body.decision) {
@@ -152,13 +180,14 @@ export class ManagedAgentAccessResponseService {
       return { status: 400, body: { error: "selected option has no terminal input" } };
     }
 
+    /* terminalPromptStillLive confirmed a live pane above (it returns false for
+       a null session), so this pointer is safe to deliver into. */
+    const tmuxSession = input.agent.tmux_session as string;
+    const terminalInput = option.terminalInput;
     try {
-      await this.deps.inputQueue.enqueue(input.agent.tmux_session, async () => {
-        await this.deps.tmux.sendLiteralText(
-          input.agent.tmux_session!,
-          option.terminalInput!,
-        );
-        await this.deps.tmux.sendKey(input.agent.tmux_session!, "C-m");
+      await this.deps.inputQueue.enqueue(tmuxSession, async () => {
+        await this.deps.tmux.sendLiteralText(tmuxSession, terminalInput);
+        await this.deps.tmux.sendKey(tmuxSession, "C-m");
       });
     } catch (err) {
       return {
@@ -198,6 +227,44 @@ export class ManagedAgentAccessResponseService {
         scope: option.scope,
       }),
     };
+  }
+
+  /* Re-verify, at respond time, that the pane is STILL displaying the exact
+     prompt this request was captured from — by re-capturing and recomputing
+     the same fingerprint used when the request was published. `tmux_session`
+     alone is not enough: it can be non-null yet point at a replaced/relaunched
+     pane (session names are deterministic) or a pane that has moved past the
+     prompt. Only a live fingerprint match is safe to deliver into.
+
+     The fingerprint is CONTENT identity (participant + session name + prompt
+     text/command/suggestions), not pane-INSTANCE identity — intentionally. For
+     an approval that is the right boundary: if the identical action is being
+     prompted on this pane right now, typing the decision answers it correctly;
+     a different or absent prompt, or a differently-named pane, expires. */
+  private async terminalPromptStillLive(
+    participantId: string,
+    tmuxSession: string | null,
+    request: AccessRequestPayload,
+  ): Promise<boolean> {
+    if (tmuxSession === null) return false;
+    const expected = terminalFingerprintOf(request);
+    if (expected === undefined) return false;
+    let snapshot: string;
+    try {
+      snapshot = await this.deps.tmux.captureSnapshot(tmuxSession);
+    } catch {
+      return false;
+    }
+    const prompt = extractTerminalAccessPrompt(snapshot);
+    if (prompt === null) return false;
+    const current = terminalPromptFingerprint({
+      participantId,
+      tmuxSession,
+      message: prompt.message,
+      command: prompt.command,
+      suggestions: prompt.suggestions,
+    });
+    return current === expected;
   }
 
   private async findOpenAccessRequest(input: {
@@ -289,4 +356,15 @@ export class ManagedAgentAccessResponseService {
       ...(input.error !== undefined ? { error: input.error } : {}),
     };
   }
+}
+
+/* The pane fingerprint stashed on the request at capture time
+   (terminalAccessService), used to confirm the same prompt is still on
+   screen before delivering a terminal decision. */
+function terminalFingerprintOf(request: AccessRequestPayload): string | undefined {
+  const raw = request.raw;
+  if (raw === null || typeof raw !== "object") return undefined;
+  const fingerprint = (raw as { terminal_fingerprint?: unknown })
+    .terminal_fingerprint;
+  return typeof fingerprint === "string" ? fingerprint : undefined;
 }

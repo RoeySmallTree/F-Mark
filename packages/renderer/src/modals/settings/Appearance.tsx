@@ -1,7 +1,7 @@
 /* Appearance section — Settings → Appearance.
-   Theme (shared <ThemePicker>: list + live preview), density, and pane
-   arrangement. All three apply instantly and persist to localStorage via the
-   theme / density / layout modules so reloading keeps the choice. */
+   Theme (shared <ThemePicker>: list + live preview), font set, density, and
+   pane arrangement. All four apply instantly and persist to localStorage via
+   the theme / font / density / layout modules so reloading keeps the choice. */
 
 import { useEffect, useState, type JSX } from "react";
 import {
@@ -11,6 +11,7 @@ import {
   subscribeDensity,
   type DensityName,
 } from "../../themes/density.js";
+import { FontPicker } from "../../components/FontPicker.js";
 import { ThemePicker } from "../../components/ThemePicker.js";
 import { PaneArrangementEditor } from "./PaneArrangementEditor.js";
 
@@ -33,13 +34,14 @@ export function Appearance(): JSX.Element {
     <>
       <h3 className="settings-h">Appearance</h3>
       <div className="settings-sub">
-        Theme, density, and pane arrangement apply instantly and persist across
-        reloads.
+        Theme, font set, density, and pane arrangement apply instantly and
+        persist across reloads.
       </div>
 
       <section className="settings-stack-row">
         <div className="settings-l">Theme</div>
         <ThemePicker />
+        <FontPicker />
       </section>
 
       <section className="settings-stack-row">

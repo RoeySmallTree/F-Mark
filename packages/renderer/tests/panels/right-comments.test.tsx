@@ -98,6 +98,39 @@ describe("RightComments", () => {
     expect(document.querySelector(".right-comments.list")).not.toBeNull();
   });
 
+  test("folded thread card surfaces its participants and latest activity", () => {
+    const target = makeProse("20260522T121000Z_ag-c92e.prose.md", "ag-c92e", {
+      name: "Anchor",
+      content: "Line 1",
+    });
+    const root = makeProse("20260522T121100Z_us-a7f3.prose.md", "us-a7f3", {
+      content: "why",
+      append_to: target.filename,
+      mode: "comment",
+      lines: [1, 1],
+    });
+    const reply = makeProse("20260522T121200Z_ag-c92e.prose.md", "ag-c92e", {
+      content: "the latest answer",
+      append_to: target.filename,
+      mode: "comment",
+      lines: [1, 1],
+      in_reply_to: root.filename,
+    });
+    useStore.setState({ events: [target, root, reply] });
+
+    render(<RightComments />);
+
+    // The participant stack names both people (a11y), not just a count.
+    const stack = screen.getByLabelText(/^participants:/i);
+    const label = stack.getAttribute("aria-label") ?? "";
+    expect(label).toMatch(/claude/i);
+    expect(label.split(",")).toHaveLength(2);
+    // The preview reflects the *latest* message, flagged as a reply.
+    const latest = document.querySelector(".right-comment-fold-latest");
+    expect(latest).toHaveTextContent("the latest answer");
+    expect(latest).toHaveTextContent(/latest/i);
+  });
+
   test("renders selected comment body as markdown", async () => {
     const user = userEvent.setup();
     const target = makeProse(

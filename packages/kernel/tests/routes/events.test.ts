@@ -420,6 +420,32 @@ describe("POST /sessions/:id/events/choice", () => {
       await app.close();
     });
   });
+
+  it("writes custom free-text options on a choice answer", async () => {
+    await withTempProject(async (root) => {
+      const { app, p, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/choice`,
+        payload: {
+          root,
+          participant_id: pid,
+          choices_id: "ch_1",
+          selected: ["custom:one"],
+          custom_options: [{ id: "custom:one", label: "Something else" }],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const filename = res.json().filename;
+      const onDisk = await readFile(join(p.sessionDir(sessionId), filename), "utf8");
+      expect(JSON.parse(onDisk)).toMatchObject({
+        choices_id: "ch_1",
+        selected: ["custom:one"],
+        custom_options: [{ id: "custom:one", label: "Something else" }],
+      });
+      await app.close();
+    });
+  });
 });
 
 describe("POST /sessions/:id/events/turn-end", () => {

@@ -131,11 +131,13 @@ describe("MCP tool schemas", () => {
     });
 
     const schema = schemaFor(tools, "fmark_get_theme");
-    expect(Object.keys(schema)).toEqual(["theme"]);
+    expect(Object.keys(schema)).toEqual(["theme", "font"]);
     /* Optional + treats empty string as absent (opencode populates optionals). */
     expect(schema.theme.safeParse(undefined).success).toBe(true);
     expect(schema.theme.safeParse("ember").success).toBe(true);
     expect(schema.theme.parse("")).toBeUndefined();
+    expect(schema.font.safeParse(undefined).success).toBe(true);
+    expect(schema.font.parse("")).toBeUndefined();
   });
 
   it("documents visual alternatives multi-select semantics in the tool schema", () => {

@@ -47,6 +47,17 @@ vi.mock("../../src/themes/index.js", async () => {
   };
 });
 
+vi.mock("../../src/themes/fonts.js", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../src/themes/fonts.js")>(
+      "../../src/themes/fonts.js",
+    );
+  return {
+    ...actual,
+    applyFont: vi.fn(),
+  };
+});
+
 const PARTICIPANTS: Record<string, Participant> = {
   "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
   "ag-c92e": { kind: "agent", name: "Claude", color: "#b86a1f" },
@@ -412,9 +423,23 @@ describe("CmdKModal — activation (Enter)", () => {
     const user = userEvent.setup();
     render(<CmdKModal />);
     const input = screen.getByLabelText(/command palette query/i);
-    await user.type(input, "terminal");
+    await user.type(input, "theme terminal");
     await user.keyboard("{Enter}");
     expect(applyTheme).toHaveBeenCalledWith("terminal");
+    expect(useStore.getState().activeModal).toBeNull();
+  });
+
+  test("Enter on a font action calls applyFont and closes", async () => {
+    const fontsModule = await import("../../src/themes/fonts.js");
+    const applyFont = fontsModule.applyFont as ReturnType<typeof vi.fn>;
+    applyFont.mockClear();
+
+    const user = userEvent.setup();
+    render(<CmdKModal />);
+    const input = screen.getByLabelText(/command palette query/i);
+    await user.type(input, "space grotesk");
+    await user.keyboard("{Enter}");
+    expect(applyFont).toHaveBeenCalledWith("space-grotesk");
     expect(useStore.getState().activeModal).toBeNull();
   });
 

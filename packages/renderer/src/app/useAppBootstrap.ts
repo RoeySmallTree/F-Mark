@@ -3,8 +3,6 @@ import { createClient, type Client } from "../api/client.js";
 import { rootScopeForSession } from "../api/rootScope.js";
 import {
   createManagedAgentsClient,
-  isProcessApiDisabledError,
-  PROCESS_API_DISABLED_MESSAGE,
   type ManagedAgentsClient,
 } from "../api/managedAgents.js";
 import { useStore } from "../state/store.js";
@@ -29,17 +27,12 @@ interface ManagedAgentRefreshInput {
   setDevKernelRestartEnabled(enabled: boolean): void;
   setManagedAgents: ReturnType<typeof useStore.getState>["setManagedAgents"];
   setManagedTerminals: ReturnType<typeof useStore.getState>["setManagedTerminals"];
-  setManagedAgentsDisabledReason: ReturnType<
-    typeof useStore.getState
-  >["setManagedAgentsDisabledReason"];
 }
 
 interface ManagedAgentListInput {
   managedClient: ManagedAgentsClient;
-  processApiEnabled: boolean | null;
   setManagedAgents: ManagedAgentRefreshInput["setManagedAgents"];
   setManagedTerminals: ManagedAgentRefreshInput["setManagedTerminals"];
-  setManagedAgentsDisabledReason: ManagedAgentRefreshInput["setManagedAgentsDisabledReason"];
 }
 
 async function readBootstrapPathState(
@@ -107,65 +100,48 @@ async function bootstrapSessionsAndParticipants(
   }
 }
 
-async function readProcessApiState(
+async function readHealthState(
   input: Pick<
     ManagedAgentRefreshInput,
     "client" | "setDevKernelRestartEnabled"
   >,
-): Promise<boolean | null> {
+): Promise<void> {
   try {
     const health = await input.client.health();
     input.setDevKernelRestartEnabled(health.devKernelRestartEnabled === true);
-    return health.processApiEnabled ?? null;
   } catch {
-    /* Older kernels still support the managed-agent probe below. */
     input.setDevKernelRestartEnabled(false);
-    return null;
   }
 }
 
 function applyManagedAgentList(
-  input: Omit<ManagedAgentListInput, "managedClient" | "processApiEnabled">,
+  input: Omit<ManagedAgentListInput, "managedClient">,
   result: Awaited<ReturnType<ManagedAgentsClient["list"]>>,
 ): void {
   if (Array.isArray(result?.agents)) input.setManagedAgents(result.agents);
   if (Array.isArray(result?.terminals)) {
     input.setManagedTerminals(result.terminals);
   }
-  input.setManagedAgentsDisabledReason(null);
-}
-
-function handleManagedAgentListError(
-  input: Pick<ManagedAgentListInput, "setManagedAgentsDisabledReason">,
-  err: unknown,
-): void {
-  if (isProcessApiDisabledError(err)) {
-    input.setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
-  }
 }
 
 async function refreshManagedAgentList(
   input: ManagedAgentListInput,
 ): Promise<void> {
-  if (input.processApiEnabled === false) {
-    input.setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
-    return;
-  }
   try {
     applyManagedAgentList(input, await input.managedClient.list());
-  } catch (err) {
-    handleManagedAgentListError(input, err);
+  } catch {
+    /* Best-effort: legacy kernel or transient failure — leave chip/banner
+       state untouched. */
   }
 }
 
 async function refreshManagedAgentState(
   input: ManagedAgentRefreshInput,
 ): Promise<void> {
-  /* Fetch managed-agent state in a best-effort pass. If the endpoint or
-     process API is unavailable, the renderer continues without chip/banner
-     data and records a disabled reason only when the kernel says so. */
-  const processApiEnabled = await readProcessApiState(input);
-  await refreshManagedAgentList({ ...input, processApiEnabled });
+  /* Fetch managed-agent state in a best-effort pass. If the endpoint is
+     unavailable, the renderer continues without chip/banner data. */
+  await readHealthState(input);
+  await refreshManagedAgentList(input);
 }
 
 function hasEnvProbeRuntimes(value: unknown): boolean {
@@ -198,9 +174,6 @@ export function useAppBootstrap({
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const setManagedAgents = useStore((s) => s.setManagedAgents);
   const setManagedTerminals = useStore((s) => s.setManagedTerminals);
-  const setManagedAgentsDisabledReason = useStore(
-    (s) => s.setManagedAgentsDisabledReason,
-  );
   const setEnvProbe = useStore((s) => s.setEnvProbe);
   const setPathsState = useStore((s) => s.setPathsState);
 
@@ -223,7 +196,6 @@ export function useAppBootstrap({
       setDevKernelRestartEnabled,
       setManagedAgents,
       setManagedTerminals,
-      setManagedAgentsDisabledReason,
     });
     void refreshEnvProbe({ managedClient, setEnvProbe });
   }, [
@@ -234,7 +206,6 @@ export function useAppBootstrap({
     setCurrentSession,
     setManagedAgents,
     setManagedTerminals,
-    setManagedAgentsDisabledReason,
     setEnvProbe,
     setPathsState,
   ]);

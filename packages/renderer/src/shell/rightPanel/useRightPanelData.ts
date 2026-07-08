@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { RightTabKey } from "../../state/store.js";
 import { useStore } from "../../state/store.js";
 import { aggregate } from "../../state/aggregate.js";
+import { buildCommentGroups } from "../../panels/right/comments/commentModel.js";
 import type { State } from "../../state/storeTypes.js";
 
 const NO_LOOSE_STRING_VALUES = {
@@ -32,7 +33,7 @@ export function useRightPanelData(): {
   namedCount: number;
   rightTab: ReturnType<typeof useStore.getState>["rightTab"];
   scrollMap: Record<string, number>;
-  setRightScroll: (scrollTop: number) => void;
+  setRightScroll: (pane: string, scrollTop: number) => void;
   setRightTab: (value: ReturnType<typeof useStore.getState>["rightTab"]) => void;
   slug: string;
   tabCounts: Partial<Record<RightTabKey, number>>;
@@ -44,12 +45,12 @@ export function useRightPanelData(): {
     [state.sessions, state.currentSessionId],
   );
   const agg = useMemo(() => aggregate(state.events), [state.events]);
-  const commentsCount = useMemo(() => {
-    let total = 0;
-    for (const list of agg.commentsByTarget.values()) total += list.length;
-    for (const list of agg.fileCommentsByPath.values()) total += list.length;
-    return total;
-  }, [agg]);
+  // The Comments badge counts threads (one per rendered thread card), not
+  // individual comments — same grouping the panel renders with.
+  const commentsCount = useMemo(
+    () => buildCommentGroups(state.events).length,
+    [state.events],
+  );
   const namedCount = agg.named.length;
   const agentsCount = useMemo(
     () => activeSessionAgentCount(state.participants, state.currentSessionId),

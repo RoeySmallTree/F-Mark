@@ -1,6 +1,6 @@
 /* ThemeStep — onboarding wrapper around the shared <ThemePicker> (theme list +
-   live preview), plus a density control. The picker owns hover-preview /
-   commit / persistence; this step only adds density. */
+   live preview), font selector, plus a density control. The picker owns theme
+   commit / persistence; this step adds font and density choices. */
 
 import { useEffect, useState, type JSX } from "react";
 import {
@@ -10,6 +10,7 @@ import {
   subscribeDensity,
   type DensityName,
 } from "../../themes/density.js";
+import { FontPicker } from "../../components/FontPicker.js";
 import { ThemePicker } from "../../components/ThemePicker.js";
 
 export function ThemeStep(): JSX.Element {
@@ -22,6 +23,7 @@ export function ThemeStep(): JSX.Element {
   return (
     <div className="ob-theme-step">
       <ThemePicker />
+      <FontPicker />
       <div className="ob-density">
         <span className="ob-density-label">Density</span>
         <div className="seg-control" role="radiogroup" aria-label="Density">

@@ -135,9 +135,17 @@ export interface ChoicesPayload {
   append_to?: string;
 }
 
+export interface ChoiceCustomOption {
+  id: string;
+  label: string;
+}
+
 export interface ChoicePayload {
   choices_id: string;
   selected: string[];
+  /** User-authored options added from a multi-select widget. The ids are
+   *  included in `selected`; labels carry the free-text answer. */
+  custom_options?: ChoiceCustomOption[];
 }
 
 export interface TurnEndPayload {

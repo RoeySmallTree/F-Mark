@@ -1,0 +1,146 @@
+/* Optional font presets layered after theme tokens. `theme` = no class, so
+   the current color theme owns --sans/--serif/--mono. */
+
+body.font-preset-studio {
+  --sans: 'DM Sans', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-editorial {
+  --sans: 'Source Serif 4', Georgia, serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-terminal {
+  --sans: 'JetBrains Mono', ui-monospace, monospace;
+  --serif: 'JetBrains Mono', ui-monospace, monospace;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-system {
+  --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+body.font-preset-geist {
+  --sans: 'Geist', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-plus-jakarta {
+  --sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-space-grotesk {
+  --sans: 'Space Grotesk', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-manrope {
+  --sans: 'Manrope', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-sora {
+  --sans: 'Sora', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-outfit {
+  --sans: 'Outfit', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-work-sans {
+  --sans: 'Work Sans', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-ibm-plex-sans {
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-instrument-sans {
+  --sans: 'Instrument Sans', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-bricolage {
+  --sans: 'Bricolage Grotesque', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-fraunces {
+  --sans: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  --serif: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-lora {
+  --sans: 'Lora', 'Source Serif 4', Georgia, serif;
+  --serif: 'Lora', 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-cormorant {
+  --sans: 'Cormorant Garamond', 'Source Serif 4', Georgia, serif;
+  --serif: 'Cormorant Garamond', 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-libre-baskerville {
+  --sans: 'Libre Baskerville', 'Source Serif 4', Georgia, serif;
+  --serif: 'Libre Baskerville', 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-merriweather {
+  --sans: 'Merriweather', 'Source Serif 4', Georgia, serif;
+  --serif: 'Merriweather', 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-ibm-plex-serif {
+  --sans: 'IBM Plex Serif', 'Source Serif 4', Georgia, serif;
+  --serif: 'IBM Plex Serif', 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-fira-code {
+  --sans: 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+  --serif: 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+  --mono: 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-ibm-plex-mono {
+  --sans: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --serif: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-source-code-pro {
+  --sans: 'Source Code Pro', 'JetBrains Mono', ui-monospace, monospace;
+  --serif: 'Source Code Pro', 'JetBrains Mono', ui-monospace, monospace;
+  --mono: 'Source Code Pro', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body.font-preset-space-mono {
+  --sans: 'Space Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --serif: 'Space Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --mono: 'Space Mono', 'JetBrains Mono', ui-monospace, monospace;
+}

@@ -38,6 +38,16 @@ export class ManagedAgentTerminalPolling {
           tmuxSession === null ||
           !(await this.deps.tmux.paneAlive(tmuxSession))
         ) {
+          /* The pane is gone. Retire any terminal prompt it left open so it
+             stops showing as an answerable approval, then stop polling. */
+          try {
+            await this.deps.terminalAccessService.expireOpenTerminalPrompts({
+              participantId: input.participantId,
+              binding: input.binding,
+            });
+          } catch {
+            /* best-effort courtesy cleanup; never keep the poller alive for it */
+          }
           this.pollers.delete(pollerKey);
           return;
         }

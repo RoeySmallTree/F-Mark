@@ -439,8 +439,14 @@
    sections, haptic controls, compact context telemetry, and a proper action. */
 .agent-runtime-pop {
   position: relative;
-  overflow: hidden;
   display: grid;
+  max-height: min(620px, calc(100dvh - 32px));
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 18%, transparent) transparent;
   background:
     radial-gradient(
       circle at 16% -14%,
@@ -453,6 +459,19 @@
       transparent 42%
     ),
     var(--canvas);
+}
+
+.agent-runtime-pop::-webkit-scrollbar {
+  width: 6px;
+}
+
+.agent-runtime-pop::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-runtime-pop::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
 }
 
 .agent-runtime-pop-glow {
@@ -472,8 +491,8 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 14px 15px 13px;
+  gap: 10px;
+  padding: 12px 13px 11px;
   border-bottom: 1px solid var(--line);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
 }
@@ -481,14 +500,14 @@
 .agent-runtime-pop-avatar {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: calc(var(--radius-lg) + 2px);
   border: 1px solid color-mix(in srgb, var(--user) 30%, var(--line-2));
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--user) 34%, var(--canvas)), var(--panel));
   color: var(--ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 850;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 14%, transparent),
@@ -556,8 +575,8 @@
   z-index: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px;
-  padding: 13px 14px;
+  gap: 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -606,7 +625,7 @@
 
 .agent-runtime-field select {
   width: 100%;
-  height: 37px;
+  height: 34px;
   min-width: 0;
   border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--ink) 8%, var(--line-2));
@@ -742,8 +761,8 @@
   display: grid;
   place-items: center;
   gap: 6px;
-  min-height: 64px;
-  padding: 8px 6px;
+  min-height: 54px;
+  padding: 7px 5px;
   border-radius: var(--radius-lg);
   border: 1px solid color-mix(in srgb, var(--ink) 7%, var(--line-2));
   background: color-mix(in srgb, var(--panel) 72%, var(--canvas));
@@ -803,8 +822,8 @@
   align-items: center;
   gap: 9px;
   width: 100%;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--panel) 72%, var(--canvas));

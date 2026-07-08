@@ -2,6 +2,7 @@ import type {
   AccessRequestPayload,
   AccessResponseDecision,
   AccessResponsePayload,
+  ChoiceCustomOption,
   ChoicesOption,
   DiffBase,
   EventKind,
@@ -113,6 +114,7 @@ export interface PostChoiceBody {
   participant_id: string;
   choices_id: string;
   selected: string[];
+  custom_options?: ChoiceCustomOption[];
 }
 
 export interface PostTurnEndBody {

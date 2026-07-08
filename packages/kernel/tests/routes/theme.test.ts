@@ -8,8 +8,10 @@ import { paths } from "../../src/paths.js";
 import { withTempProject } from "../helpers/tempdir.js";
 import {
   setReportedTheme,
+  setReportedFont,
   resetReportedTheme,
   resolveActiveTheme,
+  resolveActiveFont,
   buildActiveThemeDoc,
 } from "../../src/services/theme.js";
 import {
@@ -38,9 +40,11 @@ beforeEach(() => {
 
 describe("theme service", () => {
   it("builds a design doc with palette, button and radius sections for the default theme", () => {
-    const { theme, source, markdown } = buildActiveThemeDoc();
+    const { theme, source, font, fontSource, markdown } = buildActiveThemeDoc();
     expect(theme).toBe("light");
     expect(source).toBe("default");
+    expect(font).toBe("theme");
+    expect(fontSource).toBe("default");
 
     /* Required sections. */
     expect(markdown).toContain("# F-Mark Theme: Light");
@@ -78,18 +82,26 @@ describe("theme service", () => {
     expect(resolveActiveTheme().name).toBe("light");
   });
 
-  it("prefers the reported theme over the default", () => {
+  it("prefers the reported theme and font over the defaults", () => {
     setReportedTheme("terminal");
-    const { theme, source } = buildActiveThemeDoc();
+    setReportedFont("geist");
+    const { theme, source, font, fontSource, markdown } = buildActiveThemeDoc();
     expect(theme).toBe("terminal");
     expect(source).toBe("reported");
+    expect(font).toBe("geist");
+    expect(fontSource).toBe("reported");
+    expect(markdown).toContain("'Geist', system-ui, sans-serif");
   });
 
-  it("ignores unknown reported theme names and rejects unknown overrides", () => {
+  it("ignores unknown reported names and rejects unknown overrides", () => {
     expect(setReportedTheme("not-a-theme")).toBe(false);
+    expect(setReportedFont("not-a-font")).toBe(false);
     expect(resolveActiveTheme().name).toBe("light");
+    expect(resolveActiveFont().name).toBe("theme");
     setReportedTheme("nord");
+    setReportedFont("manrope");
     expect(() => resolveActiveTheme("bogus")).toThrow(/unknown theme/);
+    expect(() => resolveActiveFont("bogus")).toThrow(/unknown font/);
   });
 });
 
@@ -194,7 +206,10 @@ describe("GET/PATCH /theme route", () => {
         payload: { theme: "dracula" },
       });
       expect(patch.statusCode).toBe(200);
-      expect(JSON.parse(patch.body)).toEqual({ theme: "dracula" });
+      expect(JSON.parse(patch.body)).toEqual({
+        theme: "dracula",
+        font: "theme",
+      });
 
       const res = await app.inject({ method: "GET", url: "/theme" });
       expect(res.body).toContain("# F-Mark Theme: Dracula");
@@ -219,7 +234,46 @@ describe("GET/PATCH /theme route", () => {
     });
   });
 
-  it("GET /theme?theme=nord overrides the reported theme; format=json returns metadata", async () => {
+  it("PATCH /theme records font and GET reflects it", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: null, paths: p });
+      const patch = await app.inject({
+        method: "PATCH",
+        url: "/theme",
+        payload: { theme: "dracula", font: "space-grotesk" },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(JSON.parse(patch.body)).toEqual({
+        theme: "dracula",
+        font: "space-grotesk",
+      });
+
+      const res = await app.inject({ method: "GET", url: "/theme" });
+      expect(res.body).toContain("Typography is **Space Grotesk**");
+      expect(res.body).toContain("'Space Grotesk', system-ui, sans-serif");
+      await app.close();
+    });
+  });
+
+  it("PATCH /theme rejects an unknown font with 400", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const { app } = createServer({ token: null, paths: p });
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/theme",
+        payload: { theme: "dracula", font: "not-real" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toMatch(/unknown font/);
+      await app.close();
+    });
+  });
+
+  it("GET /theme?theme=nord&font=lora overrides reported appearance; format=json returns metadata", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -227,17 +281,20 @@ describe("GET/PATCH /theme route", () => {
       await app.inject({
         method: "PATCH",
         url: "/theme",
-        payload: { theme: "ember" },
+        payload: { theme: "ember", font: "geist" },
       });
       const res = await app.inject({
         method: "GET",
-        url: "/theme?theme=nord&format=json",
+        url: "/theme?theme=nord&font=lora&format=json",
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.theme).toBe("nord");
       expect(body.source).toBe("override");
+      expect(body.font).toBe("lora");
+      expect(body.font_source).toBe("override");
       expect(body.markdown).toContain("# F-Mark Theme: Nord");
+      expect(body.markdown).toContain("Typography is **Lora**");
       await app.close();
     });
   });
@@ -247,12 +304,19 @@ describe("GET/PATCH /theme route", () => {
       const p = paths(root);
       await initProject(p);
       const { app } = createServer({ token: null, paths: p });
-      const res = await app.inject({
+      const themeRes = await app.inject({
         method: "GET",
         url: "/theme?theme=not-real",
       });
-      expect(res.statusCode).toBe(400);
-      expect(JSON.parse(res.body).error).toMatch(/unknown theme/);
+      expect(themeRes.statusCode).toBe(400);
+      expect(JSON.parse(themeRes.body).error).toMatch(/unknown theme/);
+
+      const fontRes = await app.inject({
+        method: "GET",
+        url: "/theme?font=not-real",
+      });
+      expect(fontRes.statusCode).toBe(400);
+      expect(JSON.parse(fontRes.body).error).toMatch(/unknown font/);
       await app.close();
     });
   });

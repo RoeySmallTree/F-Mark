@@ -96,9 +96,6 @@ export function useProviderSetupController({
           runtime_id: runtimeId,
           participant_id: identity.participantId,
         });
-        if (!scopeTouched.current) {
-          setScope(scopeFromPreflight(runtimeId, preflight.chosen_scope));
-        }
         setStatuses((s) => ({
           ...s,
           [runtimeId]: {
@@ -163,19 +160,41 @@ export function useProviderSetupController({
     [client, scope, ensureIdentity],
   );
 
+  // Default the toggle to the *chosen* runtime's natural scope until the user
+  // overrides it. Only the chosen runtime drives this: preflight is
+  // scope-independent and each runtime reports its own default (claude→project,
+  // codex→user), so letting every runtime write the single shared `scope` makes
+  // them fight over the toggle (last preflight to resolve wins — nondeterministic
+  // and, on a fresh machine, the source of the Global/Local flip). ScopeToggle is
+  // already scoped to chosenRuntimeId, so the toggle and its default stay aligned.
+  const chosenPreflightScope =
+    chosenRuntimeId !== null
+      ? statuses[chosenRuntimeId]?.preflight?.chosen_scope ?? null
+      : null;
   useEffect(() => {
+    if (chosenRuntimeId === null) return;
+    // Codex is global-only (CODEX_HOME): force "user" even after a manual toggle.
     if (chosenRuntimeId === NO_LOOSE_STRING_VALUES.codex) {
       setScope(NO_LOOSE_STRING_VALUES.user);
+      return;
     }
-  }, [chosenRuntimeId]);
+    if (scopeTouched.current) return;
+    if (chosenPreflightScope === null) return;
+    setScope(scopeFromPreflight(chosenRuntimeId, chosenPreflightScope));
+  }, [chosenRuntimeId, chosenPreflightScope]);
 
+  // Preflight is scope-independent: the request carries no scope and the kernel
+  // derives chosen_scope from the stored preference / runtime default. `scope`
+  // must NOT be a dependency here — the scope default is adopted from the chosen
+  // runtime's preflight (the effect above), so keying this effect on `scope`
+  // would make every adoption re-run all preflights and, on a fresh machine
+  // where claude defaults to "project" and codex to "user", loop forever.
   useEffect(() => {
     if (disabledReason !== null) return;
     for (const r of runtimes) {
       if (r.available) void runPreflight(r.id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtimes, scope, disabledReason]);
+  }, [runtimes, disabledReason, runPreflight]);
 
   useEffect(() => {
     if (chosenRuntimeId !== null || disabledReason !== null) return;

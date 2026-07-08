@@ -4,6 +4,7 @@
      - clicking each item swaps the main content (asserted via the section's
        <h3 className="settings-h"> heading);
      - Appearance: clicking a theme card calls applyTheme(name);
+     - Appearance: clicking a font card calls applyFont(name);
      - Profile: clicking Save calls updateUserProfile via the client (fetch
        is stubbed);
      - Profile: custom non-preset hex colors get a live preview swatch;
@@ -47,6 +48,18 @@ vi.mock("../../src/themes/density.js", async () => {
     applyDensity: vi.fn(),
     getCurrentDensity: () => "comfortable",
     subscribeDensity: () => () => {},
+  };
+});
+
+vi.mock("../../src/themes/fonts.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/themes/fonts.js")>(
+    "../../src/themes/fonts.js",
+  );
+  return {
+    ...actual,
+    applyFont: vi.fn(),
+    getCurrentFont: () => "theme",
+    subscribeFont: () => () => {},
   };
 });
 
@@ -303,13 +316,44 @@ describe("SettingsModal — Appearance", () => {
     render(<SettingsModal />);
     await user.click(screen.getByRole("tab", { name: /appearance/i }));
 
-    const terminalCard = screen.getByRole("radio", { name: /terminal/i });
+    const themeGroup = screen.getByRole("radiogroup", {
+      name: /color theme/i,
+    });
+    const terminalCard = within(themeGroup).getByRole("radio", {
+      name: /terminal/i,
+    });
     await user.click(terminalCard);
     expect(applyTheme).toHaveBeenCalledWith("terminal");
 
-    const cyberCard = screen.getByRole("radio", { name: /cyberpunk/i });
+    const cyberCard = within(themeGroup).getByRole("radio", {
+      name: /cyberpunk/i,
+    });
     await user.click(cyberCard);
     expect(applyTheme).toHaveBeenCalledWith("cyber");
+  });
+
+  test("clicking a font option calls applyFont(name)", async () => {
+    const fontsModule = await import("../../src/themes/fonts.js");
+    const applyFont = fontsModule.applyFont as ReturnType<typeof vi.fn>;
+
+    const user = userEvent.setup();
+    render(<SettingsModal />);
+    await user.click(screen.getByRole("tab", { name: /appearance/i }));
+
+    const fontGroup = screen.getByRole("radiogroup", {
+      name: /font style/i,
+    });
+    const terminalBtn = within(fontGroup).getByRole("radio", {
+      name: /terminal mono/i,
+    });
+    await user.click(terminalBtn);
+    expect(applyFont).toHaveBeenCalledWith("terminal");
+
+    const systemBtn = within(fontGroup).getByRole("radio", {
+      name: /system native/i,
+    });
+    await user.click(systemBtn);
+    expect(applyFont).toHaveBeenCalledWith("system");
   });
 
   test("clicking a density option calls applyDensity(name)", async () => {

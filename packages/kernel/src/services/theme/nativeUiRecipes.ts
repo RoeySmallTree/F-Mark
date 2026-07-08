@@ -14,7 +14,7 @@ export function addNativeUiRecipes(doc: MarkdownDocument, t: ThemeTokens): void 
   doc.line("## F-Mark native UI recipes");
   doc.line();
   doc.line(
-    `Use these **only** when mocking up a change to F-Mark's own product UI (a new panel, a redesigned list, a settings screen — anything that would ship in the F-Mark app). Locate the real component under \`packages/renderer/src/\` (start from \`panels/sessions/SessionsPanelView.tsx\`, \`shell/shell.css\`, \`themes/tokens.css\`), reuse its class names and structural CSS verbatim, and resolve tokens against the active theme documented above. Treat this document as a token reference only — never as a layout or typography guide. (An analysis, comparison table, or explainer diagram *about* F-Mark's UI is still a native session artifact; use the component recipes above for those.)`,
+    `Use these **only** when mocking up a change to F-Mark's own product UI (a new panel, a redesigned list, a settings screen — anything that would ship in the F-Mark app). Locate the real component under \`packages/renderer/src/\` (start from \`panels/sessions/SessionsPanelView.tsx\`, \`shell/shell.css\`, \`themes/tokens.css\`), reuse its class names and structural CSS verbatim, and resolve tokens against the active theme/font documented above. Treat this document as a token reference only — never as a layout or typography guide. (An analysis, comparison table, or explainer diagram *about* F-Mark's UI is still a native session artifact; use the component recipes above for those.)`,
   );
   doc.line();
   doc.line("### Left session panel");

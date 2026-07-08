@@ -5,6 +5,7 @@ import {
   loadPanelSizeBySession,
   loadRightScrollBySession,
   loadRightTabBySession,
+  rightScrollKey,
   savePanelSizeBySession,
   saveRightScrollBySession,
   saveRightTabBySession,
@@ -137,12 +138,15 @@ export function createUiSlice(set: StoreSet, get: StoreGet): UiSlice {
       savePanelSizeBySession(next);
       set({ panelSizeBySession: next });
     },
-    setRightScroll: (scrollTop) => {
+    setRightScroll: (pane, scrollTop) => {
       const state = get();
       if (state.currentSessionId === null) return;
       const next = {
         ...state.rightScrollBySession,
-        [state.currentSessionId]: Math.max(0, Math.round(scrollTop)),
+        [rightScrollKey(state.currentSessionId, pane)]: Math.max(
+          0,
+          Math.round(scrollTop),
+        ),
       };
       saveRightScrollBySession(next);
       set({ rightScrollBySession: next });

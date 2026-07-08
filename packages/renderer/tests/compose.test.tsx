@@ -635,6 +635,44 @@ describe("Compose — pending approval actions", () => {
     target.remove();
   });
 
+  test("reveals the request card when a composer approval fails instead of leaving the rejection uncaught", async () => {
+    const user = userEvent.setup();
+    /* The agent's terminal went away, so the kernel rejects the composer's
+       fire-and-forget respond. The failure must be caught (never an unhandled
+       promise rejection) and surfaced by revealing the request card. */
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: "agent terminal is not connected" }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const target = createAccessRequestTarget();
+    resetStore({
+      events: [
+        makeAccessRequestEvent({
+          suggestions: [
+            {
+              id: "allow-session",
+              label: "Yes, and allow for this session",
+              decision: "approve",
+              scope: "session",
+            },
+            { id: "no", label: "No", decision: "deny" },
+          ],
+        }),
+      ],
+    });
+
+    renderCompose();
+
+    await user.click(screen.getByRole("button", { name: /^Allow/i }));
+
+    await waitForFetchCalls(fetchMock, 1);
+    await waitFor(() => expectAccessRequestFocused(target));
+    target.remove();
+  });
+
   test("falls back to direct Approve and Deny buttons when provider options are absent", async () => {
     const user = userEvent.setup();
     const fetchMock = installJsonFetch({ ok: true });

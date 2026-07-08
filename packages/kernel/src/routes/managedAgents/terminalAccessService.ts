@@ -1,7 +1,10 @@
 import type { AccessRequestPayload } from "@f-mark/shared";
 import { readEvents } from "../../events/reader.js";
 import { publishEventWrites } from "../../services/eventPublisher.js";
-import { writeAccessRequestEvent } from "../../services/events.js";
+import {
+  writeAccessRequestEvent,
+  writeAccessResponseEvent,
+} from "../../services/events.js";
 import { sessionExists } from "../../sessions.js";
 import { extractTerminalAccessPrompt } from "../../terminalAccess.js";
 import type { TmuxManager } from "../../tmux/manager.js";
@@ -121,6 +124,74 @@ export class ManagedAgentTerminalAccessService {
     });
     await this.deps.publishAgentUpdated(input.participantId, input.binding);
     return true;
+  }
+
+  /* When a pane dies, any native terminal prompt it raised can no longer be
+     answered (the decision is delivered by typing into that pane). Retire the
+     still-open terminal requests as expired so they stop being presented as
+     actionable — otherwise they linger forever and every response attempt
+     409s. Hook-channel requests self-heal via the hook bridge timeout; only
+     terminal-channel requests need this. */
+  async expireOpenTerminalPrompts(input: {
+    participantId: string;
+    binding?: ManagedAgentRootBinding | null;
+  }): Promise<number> {
+    const bound = this.deps.bindingFor(input.binding);
+    const p = bound.paths;
+    const state = bound.state;
+    const sessionId = await state.readActiveSession(input.participantId);
+    if (sessionId === null || sessionId.length === 0) return 0;
+
+    const events = await readEvents(p, sessionId, {
+      kinds: ["access-request", "access-response"],
+    });
+    const responded = new Set<string>();
+    for (const event of events) {
+      if (isAccessResponse(event)) responded.add(event.payload.request_id);
+    }
+    const orphaned = events.filter(
+      (event) =>
+        isOpenAccessRequest(event) &&
+        event.participant_id === input.participantId &&
+        event.payload.response_channel === "terminal" &&
+        !responded.has(event.payload.request_id),
+    );
+    if (orphaned.length === 0) return 0;
+
+    for (const event of orphaned) {
+      if (!isOpenAccessRequest(event)) continue;
+      const written = await writeAccessResponseEvent(p, sessionId, {
+        participant_id: input.participantId,
+        schema: "fmark.access-response.v1",
+        request_id: event.payload.request_id,
+        decision: "expired",
+        status: "expired",
+        delivered: false,
+        delivery: "terminal",
+        error: "agent terminal disconnected before the prompt was answered",
+        responded_at: new Date().toISOString(),
+      });
+      publishEventWrites(
+        this.deps.bus,
+        sessionId,
+        written.publish,
+        bound.pathId !== undefined
+          ? {
+              pathId: bound.pathId,
+              ...(bound.revision !== undefined
+                ? { revision: bound.revision }
+                : {}),
+            }
+          : undefined,
+      );
+    }
+
+    await state.updateControlState(input.participantId, {
+      activity_state: "idle",
+      last_activity_at: new Date().toISOString(),
+    });
+    await this.deps.publishAgentUpdated(input.participantId, input.binding);
+    return orphaned.length;
   }
 
   private async alreadyOpen(input: {

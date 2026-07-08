@@ -6,13 +6,14 @@ import {
   type RefObject,
   type UIEvent,
 } from "react";
+import { rightScrollKey } from "../../state/panePersistence.js";
 import type { RightPanelActivePane } from "./useRightPanelDockController.js";
 
 export function useRightPanelScroll(
   currentSessionId: string | null,
   activePane: RightPanelActivePane,
   scrollMap: Record<string, number>,
-  setRightScroll: (scrollTop: number) => void,
+  setRightScroll: (pane: string, scrollTop: number) => void,
 ): {
   onPanelScroll(event: UIEvent<HTMLDivElement>): void;
   scrollRef: RefObject<HTMLDivElement>;
@@ -20,10 +21,12 @@ export function useRightPanelScroll(
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollSaveTimerRef = useRef<number | null>(null);
 
+  // Restore this pane's own saved scroll. The effect re-runs on pane change, so
+  // every pane keeps its position instead of sharing one per-session slot.
   useLayoutEffect(() => {
     const root = scrollRef.current;
     if (root === null || currentSessionId === null) return;
-    root.scrollTop = scrollMap[currentSessionId] ?? 0;
+    root.scrollTop = scrollMap[rightScrollKey(currentSessionId, activePane)] ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSessionId, activePane]);
 
@@ -35,10 +38,10 @@ export function useRightPanelScroll(
       }
       scrollSaveTimerRef.current = window.setTimeout(() => {
         scrollSaveTimerRef.current = null;
-        setRightScroll(top);
+        setRightScroll(activePane, top);
       }, 200);
     },
-    [setRightScroll],
+    [setRightScroll, activePane],
   );
 
   useEffect(

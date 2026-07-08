@@ -84,6 +84,42 @@ export function createChainRootResolver(
   };
 }
 
+function inReplyToOf(event: AnyEventRecord): string | undefined {
+  const payload = prosePayload(event);
+  if (payload === null) return undefined;
+  const inReplyTo = payload.in_reply_to;
+  return typeof inReplyTo === "string" && inReplyTo.length > 0
+    ? inReplyTo
+    : undefined;
+}
+
+/** Resolve a comment to its **thread root** by walking the `in_reply_to` chain
+ *  (each hop normalized through the edit `chainRoot`) up to the top-level
+ *  comment. Agents reply to the specific message they answer, so replies nest
+ *  (reply → reply → root); grouping by the direct parent would orphan the deeper
+ *  reply. Built from the bucket-scoped `byFilename`, so a reply whose parent
+ *  lives on another target — or is missing/cyclic — resolves to a non-matching
+ *  sentinel and stays orphaned instead of grafting onto the wrong thread. */
+export function createThreadRootResolver(
+  byFilename: Map<string, AnyEventRecord>,
+  chainRoot: (filename: string) => string,
+): (filename: string) => string {
+  return (filename: string): string => {
+    const seen = new Set<string>();
+    let current = chainRoot(filename);
+    for (let i = 0; i < 64; i++) {
+      if (seen.has(current)) return current;
+      seen.add(current);
+      const event = byFilename.get(current);
+      if (event === undefined || isMarkerEvent(event)) return current;
+      const parent = inReplyToOf(event);
+      if (parent === undefined) return current;
+      current = chainRoot(parent);
+    }
+    return current;
+  };
+}
+
 /** Whether a thread root is resolved after applying resolve/unresolve markers
  *  (last marker wins, keyed on the superseded filename / root). */
 export function isThreadResolved(

@@ -68,12 +68,9 @@
   overflow: auto;
 }
 .popover.agent-chip-editor-pop {
-  width: min(480px, calc(100vw - 20px));
-  max-height: calc(100dvh - 20px);
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  width: min(420px, calc(100vw - 20px));
+  max-height: min(620px, calc(100dvh - 32px));
+  overflow: hidden;
 }
 .popover.compose-settings-pop {
   width: min(292px, calc(100vw - 20px));

@@ -64,7 +64,11 @@ export function useNewSessionController(): NewSessionController {
       await refreshPathState(client, setPathsState);
       setSessions(await client.listSessions());
       await refreshParticipants(client, setParticipants);
-      setCurrentSession(session.id);
+      /* Pass the session's root: creating a session does NOT change the
+         server's active path, so without it the selection falls back to the
+         stale active project and every scoped call (agent spawn, events)
+         targets the wrong root -> "spawn 404: session not found". */
+      setCurrentSession(session.id, session);
       closeModal();
     } catch (caught) {
       setError(

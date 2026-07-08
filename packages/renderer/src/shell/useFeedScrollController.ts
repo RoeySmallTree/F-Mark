@@ -91,6 +91,7 @@ export function useFeedScrollController({
     lastFollowSessionRef: refs.lastFollowSessionRef,
     lastFollowTargetRef: refs.lastFollowTargetRef,
     lastScrollToBottomTickRef: refs.lastScrollToBottomTickRef,
+    manualFollowPauseRef: refs.manualFollowPauseRef,
   });
   const navigation = useFeedStepNavigation({
     items,
@@ -124,6 +125,9 @@ interface FeedScrollRefs {
   lastFollowSessionRef: MutableRefObject<string | null>;
   lastFollowTargetRef: MutableRefObject<string | null>;
   lastScrollToBottomTickRef: MutableRefObject<number>;
+  /* True only when the user explicitly toggles follow off. Scroll-position
+     auto-resume should not undo that manual pause. */
+  manualFollowPauseRef: MutableRefObject<boolean>;
 }
 
 function useFeedScrollRefs(
@@ -138,7 +142,9 @@ function useFeedScrollRefs(
   const lastFollowSessionRef = useRef<string | null>(null);
   const lastFollowTargetRef = useRef<string | null>(null);
   const lastScrollToBottomTickRef = useRef<number>(scrollToBottomTick);
+  const manualFollowPauseRef = useRef<boolean>(!followMode);
   followModeRef.current = followMode;
+  if (followMode) manualFollowPauseRef.current = false;
   return {
     scrollRef,
     dockRef,
@@ -148,6 +154,7 @@ function useFeedScrollRefs(
     lastFollowSessionRef,
     lastFollowTargetRef,
     lastScrollToBottomTickRef,
+    manualFollowPauseRef,
   };
 }
 
@@ -257,6 +264,7 @@ function useFeedFollowActions({
   lastFollowSessionRef,
   lastFollowTargetRef,
   lastScrollToBottomTickRef,
+  manualFollowPauseRef,
 }: {
   currentSessionId: string | null;
   items: FeedItem[];
@@ -271,6 +279,7 @@ function useFeedFollowActions({
   lastFollowSessionRef: MutableRefObject<string | null>;
   lastFollowTargetRef: MutableRefObject<string | null>;
   lastScrollToBottomTickRef: MutableRefObject<number>;
+  manualFollowPauseRef: MutableRefObject<boolean>;
 }): FeedFollowActions {
   const followTargetKey = useMemo(
     () =>
@@ -294,35 +303,54 @@ function useFeedFollowActions({
     followModeRef,
     programmaticUntilRef,
     lastScrollToBottomTickRef,
-    setFollowMode,
   });
   useFollowModeScrollTracking({
     scrollRef,
     followModeRef,
+    manualFollowPauseRef,
     programmaticUntilRef,
     setFollowMode,
   });
   const onToggleFollow = useCallback((): void => {
     if (followModeRef.current) {
+      followModeRef.current = false;
+      manualFollowPauseRef.current = true;
       setFollowMode(false);
       return;
     }
+    manualFollowPauseRef.current = false;
     const root = scrollRef.current;
     if (root === null) {
+      followModeRef.current = true;
       setFollowMode(true);
       return;
     }
+    followModeRef.current = true;
     markProgrammaticScroll(programmaticUntilRef);
     root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
     setFollowMode(true);
-  }, [followModeRef, programmaticUntilRef, scrollRef, setFollowMode]);
+  }, [
+    followModeRef,
+    manualFollowPauseRef,
+    programmaticUntilRef,
+    scrollRef,
+    setFollowMode,
+  ]);
   const onScrollToBottom = useCallback((): void => {
     const root = scrollRef.current;
     if (root === null) return;
+    followModeRef.current = true;
+    manualFollowPauseRef.current = false;
     markProgrammaticScroll(programmaticUntilRef);
     root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
     setFollowMode(true);
-  }, [programmaticUntilRef, scrollRef, setFollowMode]);
+  }, [
+    followModeRef,
+    manualFollowPauseRef,
+    programmaticUntilRef,
+    scrollRef,
+    setFollowMode,
+  ]);
 
   return {
     onToggleFollow,
@@ -575,41 +603,40 @@ function useComposeScrollToBottom({
   followModeRef,
   programmaticUntilRef,
   lastScrollToBottomTickRef,
-  setFollowMode,
 }: {
   scrollToBottomTick: number;
   scrollRef: RefObject<HTMLDivElement>;
   followModeRef: MutableRefObject<boolean>;
   programmaticUntilRef: MutableRefObject<number>;
   lastScrollToBottomTickRef: MutableRefObject<number>;
-  setFollowMode(followMode: boolean): void;
 }): void {
   useEffect(() => {
     if (scrollToBottomTick === lastScrollToBottomTickRef.current) return;
     lastScrollToBottomTickRef.current = scrollToBottomTick;
+    if (!followModeRef.current) return;
     const root = scrollRef.current;
     if (root === null) return;
     markProgrammaticScroll(programmaticUntilRef);
     root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
-    if (!followModeRef.current) setFollowMode(true);
   }, [
     scrollToBottomTick,
     scrollRef,
     followModeRef,
     programmaticUntilRef,
     lastScrollToBottomTickRef,
-    setFollowMode,
   ]);
 }
 
 function useFollowModeScrollTracking({
   scrollRef,
   followModeRef,
+  manualFollowPauseRef,
   programmaticUntilRef,
   setFollowMode,
 }: {
   scrollRef: RefObject<HTMLDivElement>;
   followModeRef: MutableRefObject<boolean>;
+  manualFollowPauseRef: MutableRefObject<boolean>;
   programmaticUntilRef: MutableRefObject<number>;
   setFollowMode(followMode: boolean): void;
 }): void {
@@ -621,12 +648,24 @@ function useFollowModeScrollTracking({
       const atBottom =
         root.scrollHeight - root.scrollTop - root.clientHeight <=
         BOTTOM_SLACK_PX;
-      if (atBottom && !followModeRef.current) setFollowMode(true);
-      else if (!atBottom && followModeRef.current) setFollowMode(false);
+      if (atBottom && !followModeRef.current && !manualFollowPauseRef.current) {
+        followModeRef.current = true;
+        setFollowMode(true);
+      } else if (!atBottom && followModeRef.current) {
+        followModeRef.current = false;
+        manualFollowPauseRef.current = false;
+        setFollowMode(false);
+      }
     };
     root.addEventListener("scroll", handler, { passive: true });
     return () => root.removeEventListener("scroll", handler);
-  }, [scrollRef, followModeRef, programmaticUntilRef, setFollowMode]);
+  }, [
+    scrollRef,
+    followModeRef,
+    manualFollowPauseRef,
+    programmaticUntilRef,
+    setFollowMode,
+  ]);
 }
 
 function useFindAnchorIndex(

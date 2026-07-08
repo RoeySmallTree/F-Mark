@@ -16,8 +16,11 @@
  */
 
 import {
+  DEFAULT_FONT,
   DEFAULT_THEME,
+  isFontName,
   isThemeName,
+  type FontTokenName,
   type ThemeTokenName,
 } from "@f-mark/shared";
 import {
@@ -25,8 +28,9 @@ import {
   type ThemeSource,
 } from "./theme/designDoc.js";
 
-/** In-memory record of the theme last reported by the renderer (per process). */
+/** In-memory record of the appearance last reported by the renderer (per process). */
 let reportedTheme: ThemeTokenName = DEFAULT_THEME;
+let reportedFont: FontTokenName = DEFAULT_FONT;
 
 /**
  * Whether a renderer has reported a theme this process. Tracked separately from
@@ -35,6 +39,7 @@ let reportedTheme: ThemeTokenName = DEFAULT_THEME;
  * the loud fallback fires and the launch packet flags the theme as unconfirmed.
  */
 let themeReported = false;
+let fontReported = false;
 
 /** Record the active theme reported by the renderer. Unknown names are ignored. */
 export function setReportedTheme(name: string): boolean {
@@ -44,15 +49,48 @@ export function setReportedTheme(name: string): boolean {
   return true;
 }
 
+/** Record the active font set reported by the renderer. Unknown names are ignored. */
+export function setReportedFont(name: string): boolean {
+  if (!isFontName(name)) return false;
+  reportedFont = name;
+  fontReported = true;
+  return true;
+}
+
+/** Record a renderer appearance report atomically. */
+export function setReportedAppearance(
+  theme: string,
+  font?: string,
+): { ok: true } | { ok: false; error: string } {
+  if (!isThemeName(theme)) return { ok: false, error: `unknown theme: ${theme}` };
+  if (font !== undefined && !isFontName(font)) {
+    return { ok: false, error: `unknown font: ${font}` };
+  }
+  reportedTheme = theme;
+  themeReported = true;
+  if (font !== undefined) {
+    reportedFont = font;
+    fontReported = true;
+  }
+  return { ok: true };
+}
+
 /** Reset report state (renderer disconnect / test isolation). */
 export function resetReportedTheme(): void {
   reportedTheme = DEFAULT_THEME;
+  reportedFont = DEFAULT_FONT;
   themeReported = false;
+  fontReported = false;
 }
 
 /** The theme the renderer last reported as applied (defaults to `light`). */
 export function getReportedTheme(): ThemeTokenName {
   return reportedTheme;
+}
+
+/** The font set the renderer last reported as applied (defaults to theme). */
+export function getReportedFont(): FontTokenName {
+  return reportedFont;
 }
 
 /**
@@ -78,20 +116,52 @@ export function resolveActiveTheme(override?: string): {
   return { name: DEFAULT_THEME, source: "default" };
 }
 
-/** Build the design-document markdown for a resolved theme. */
+/** Resolve which font set to document. `theme` means the resolved theme's stacks. */
+export function resolveActiveFont(override?: string): {
+  name: FontTokenName;
+  source: ThemeSource;
+} {
+  const trimmed = override?.trim();
+  if (trimmed !== undefined && trimmed.length > 0) {
+    if (!isFontName(trimmed)) {
+      throw new Error(`unknown font: ${trimmed}`);
+    }
+    return { name: trimmed, source: "override" };
+  }
+  if (fontReported) {
+    return { name: reportedFont, source: "reported" };
+  }
+  return { name: DEFAULT_FONT, source: "default" };
+}
+
+/** Build the design-document markdown for a resolved theme + font set. */
 function buildThemeDesignDoc(
   name: ThemeTokenName,
   source: ThemeSource,
+  font: FontTokenName,
+  fontSource: ThemeSource,
 ): string {
-  return renderThemeDesignDoc(name, source);
+  return renderThemeDesignDoc(name, source, font, fontSource);
 }
 
 /** Convenience: resolve + format in one call. */
-export function buildActiveThemeDoc(override?: string): {
+export function buildActiveThemeDoc(
+  override?: string,
+  fontOverride?: string,
+): {
   theme: ThemeTokenName;
   source: ThemeSource;
+  font: FontTokenName;
+  fontSource: ThemeSource;
   markdown: string;
 } {
   const { name, source } = resolveActiveTheme(override);
-  return { theme: name, source, markdown: buildThemeDesignDoc(name, source) };
+  const { name: font, source: fontSource } = resolveActiveFont(fontOverride);
+  return {
+    theme: name,
+    source,
+    font,
+    fontSource,
+    markdown: buildThemeDesignDoc(name, source, font, fontSource),
+  };
 }

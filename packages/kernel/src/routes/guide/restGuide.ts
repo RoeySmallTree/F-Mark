@@ -53,7 +53,7 @@ specific repo or product (the current project or another) → read that
 repo's own styles first and match them, not F-Mark's applied theme.
 **fmark-ui** — UI that ships in F-Mark itself → read the real renderer
 source under \`packages/renderer/src\` and reuse its class names, resolving
-colors via \`GET /theme\`. **session-artifact** — an unbound chart,
+colors and active font stacks via \`GET /theme\`. **session-artifact** — an unbound chart,
 analysis, or standalone visual → default to the Amber house theme
 (\`GET /theme?theme=amber\`). Markdown prose, tables, and lists are fine
 for ordinary text.

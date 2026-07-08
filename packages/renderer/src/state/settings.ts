@@ -63,7 +63,7 @@ export function writeCommentEndsTurn(value: boolean): void {
 }
 
 export function readChoiceEndsTurn(): boolean {
-  return readBool(KEY_CHOICE_ENDS_TURN, false);
+  return readBool(KEY_CHOICE_ENDS_TURN, true);
 }
 
 export function writeChoiceEndsTurn(value: boolean): void {
@@ -71,7 +71,7 @@ export function writeChoiceEndsTurn(value: boolean): void {
 }
 
 export function readEnterToSend(): boolean {
-  return readBool(KEY_ENTER_TO_SEND, false);
+  return readBool(KEY_ENTER_TO_SEND, true);
 }
 
 export function writeEnterToSend(value: boolean): void {

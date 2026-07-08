@@ -8,6 +8,7 @@ import { getCommentTarget, getFileCommentTarget } from "@f-mark/shared";
 import { extractFileQuote, quoteFromEventTarget } from "../../../comments/commentQuote.js";
 import {
   createChainRootResolver,
+  createThreadRootResolver,
   isMarkerEvent,
   isRemovedMarker,
   resolvedChainRootsFromComments,
@@ -245,6 +246,7 @@ function extractQuote(
 function buildThreads(comments: AnyEventRecord[]): CommentNode[] {
   const byFilename = new Map(comments.map((comment) => [comment.filename, comment]));
   const chainRoot = createChainRootResolver(byFilename);
+  const threadRoot = createThreadRootResolver(byFilename, chainRoot);
   const nonMarkers = comments.filter((comment) => !isMarkerEvent(comment));
   const state = collectThreadState(comments, nonMarkers, chainRoot);
   const current = nonMarkers.filter((comment) =>
@@ -257,7 +259,7 @@ function buildThreads(comments: AnyEventRecord[]): CommentNode[] {
     .map((root) => ({
       event: root,
       replies: replies
-        .filter((reply) => belongsToRoot(reply, root, chainRoot))
+        .filter((reply) => belongsToRoot(reply, root, threadRoot, chainRoot))
         .sort(compareEvents),
       resolved: state.resolvedChainRoots.has(chainRoot(root.filename)),
     }))
@@ -302,10 +304,12 @@ function isCurrentComment(
 function belongsToRoot(
   reply: AnyEventRecord,
   root: AnyEventRecord,
+  threadRoot: (filename: string) => string,
   chainRoot: (filename: string) => string,
 ): boolean {
-  const inReplyTo = inReplyToOf(reply);
-  return inReplyTo !== undefined && chainRoot(inReplyTo) === chainRoot(root.filename);
+  // Resolve the reply up its full in_reply_to chain (nested replies included)
+  // to the thread root, then match against this root's edit-canonical filename.
+  return threadRoot(reply.filename) === chainRoot(root.filename);
 }
 
 function compareEvents(a: AnyEventRecord, b: AnyEventRecord): number {

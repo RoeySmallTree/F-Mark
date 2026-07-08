@@ -329,6 +329,172 @@
   background: var(--user);
 }
 
+/* ---- FontPicker ------------------------------------------------------ */
+.font-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 86%, var(--canvas)),
+      color-mix(in srgb, var(--panel) 96%, var(--bg))
+    );
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.font-picker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.font-picker-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.font-picker-kicker {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.font-picker-head strong {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.font-picker-current {
+  flex: 0 0 auto;
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--agent);
+  background: var(--agent-tint);
+  border: var(--border-w) solid color-mix(in srgb, var(--agent) 26%, var(--line));
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+}
+.font-picker-grid {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 1px 8px;
+  scroll-snap-type: x proximity;
+  scrollbar-color: color-mix(in srgb, var(--agent) 34%, var(--line)) transparent;
+}
+.font-picker-card {
+  flex: 0 0 166px;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+  scroll-snap-align: start;
+  text-align: left;
+  color: var(--ink);
+  background: var(--canvas);
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 9px;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    background-color var(--dur-fast) var(--ease-out-quart),
+    box-shadow var(--dur-fast) var(--ease-out-quart);
+}
+.font-picker-card:hover {
+  border-color: color-mix(in srgb, var(--agent) 36%, var(--line));
+  transform: translate3d(0, -1px, 0);
+}
+.font-picker-card.active {
+  background: var(--agent-tint);
+  border-color: var(--agent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--agent) 34%, transparent),
+    0 8px 22px color-mix(in srgb, var(--agent) 10%, transparent);
+}
+.font-picker-card:active {
+  transform: scale(0.98);
+}
+.font-picker-card:focus-visible {
+  outline: 0;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--agent) 30%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--agent) 22%, transparent);
+}
+.font-picker-sample {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: var(--border-w) solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+.font-picker-sample-main {
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--font-card-sans);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+.font-picker-sample-code {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+  font-family: var(--font-card-mono);
+  font-size: 10px;
+  line-height: 1;
+}
+.font-picker-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.font-picker-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-card-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.font-picker-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 30px;
+  font-family: var(--font-card-serif);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+.font-picker-help {
+  font-family: var(--serif);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
 @media (max-width: 760px) {
   .theme-picker {
     grid-template-columns: minmax(0, 1fr);
@@ -337,5 +503,11 @@
   .theme-picker-list,
   .tp-preview {
     max-height: 320px;
+  }
+  .font-picker-card {
+    flex-basis: min(78vw, 176px);
+  }
+  .font-picker-current {
+    max-width: 52%;
   }
 }

@@ -1,5 +1,6 @@
 @import "./themes/tokens.css";
 @import "./themes/structural.css";
+@import "./themes/fonts.css";
 @import "./themes/density.css";
 @import "./render/render.css";
 @import "./shell/shell.css";
@@ -28,13 +29,7 @@ body,
 }
 
 body {
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font-family: var(--sans);
 }
 
 /* Shared list-row stagger utility — applied to row elements in panels and

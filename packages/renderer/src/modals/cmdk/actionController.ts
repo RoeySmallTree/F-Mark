@@ -5,6 +5,7 @@ import {
   type SessionMeta,
 } from "../../api/client.js";
 import type { ModalKey } from "../../state/storeTypes.js";
+import { applyFont, FONT_PRESETS, type FontName } from "../../themes/fonts.js";
 import { applyTheme, THEMES, type ThemeName } from "../../themes/index.js";
 import type { CmdkRow } from "./sources.js";
 
@@ -22,6 +23,10 @@ const NO_LOOSE_STRING_VALUES = {
  * newly registered themes are dispatchable without editing this map. */
 const THEME_FROM_ACTION: Record<string, ThemeName> = Object.fromEntries(
   THEMES.map((t) => [`theme-${t.name}`, t.name]),
+);
+
+const FONT_FROM_ACTION: Record<string, FontName> = Object.fromEntries(
+  FONT_PRESETS.map((f) => [`font-${f.name}`, f.name]),
 );
 
 interface CmdKActionControllerDeps {
@@ -85,6 +90,13 @@ function activateAction(
   const themeName = THEME_FROM_ACTION[actionId];
   if (themeName !== undefined) {
     applyTheme(themeName);
+    deps.closeModal();
+    return;
+  }
+
+  const fontName = FONT_FROM_ACTION[actionId];
+  if (fontName !== undefined) {
+    applyFont(fontName);
   }
   deps.closeModal();
 }

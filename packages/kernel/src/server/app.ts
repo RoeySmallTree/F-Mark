@@ -16,8 +16,12 @@ export function createKernelApp(deps: ServerDeps): KernelAppBootstrap {
     logger: false,
     bodyLimit: MAX_ATTACHMENT_BYTES + 128 * 1024,
   });
-  const processApiEnabled =
-    deps.token !== null || deps.allowProcessApiNoAuth === true;
+  // Process-spawning routes are always enabled: under bearer auth the token
+  // gates them, and under --no-auth the operator has declared the port trusted
+  // (that's what --no-auth means), so they stay live there too. The historical
+  // --allow-process-api-no-auth flag is retained only to drive the extra banner
+  // warning; it no longer gates the API.
+  const processApiEnabled = true;
   const initialProjectRoot = getInitialProjectRoot(deps);
 
   registerLocalCors(app);

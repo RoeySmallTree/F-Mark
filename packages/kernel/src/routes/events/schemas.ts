@@ -339,6 +339,18 @@ export const choiceSchema = {
         type: "array",
         items: { type: "string" },
       },
+      custom_options: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["id", "label"],
+          additionalProperties: false,
+          properties: {
+            id: { type: "string" },
+            label: { type: "string" },
+          },
+        },
+      },
       ...ROOT_SCOPE_PROPS,
     },
   },

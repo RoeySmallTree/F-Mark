@@ -85,7 +85,7 @@ describe("security", () => {
     });
   });
 
-  it("/health reports when process-spawning routes are disabled under --no-auth", async () => {
+  it("/health reports process-spawning routes enabled under --no-auth (port is trusted)", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -96,7 +96,7 @@ describe("security", () => {
       });
       const health = await app.inject({ method: "GET", url: "/health" });
       expect(health.statusCode).toBe(200);
-      expect(health.json().processApiEnabled).toBe(false);
+      expect(health.json().processApiEnabled).toBe(true);
       await app.close();
     });
   });
@@ -190,7 +190,7 @@ describe("security", () => {
     });
   });
 
-  it("--no-auth without --allow-process-api-no-auth disables /managed-agents/spawn (404)", async () => {
+  it("--no-auth trusts the port: /managed-agents/* stays enabled without --allow-process-api-no-auth", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -199,13 +199,14 @@ describe("security", () => {
         paths: p,
         allowProcessApiNoAuth: false,
       });
+      // The route is live under --no-auth, so an unknown runtime yields a 400
+      // rather than the old 404 "disabled" response.
       const res = await app.inject({
         method: "POST",
         url: "/managed-agents/spawn",
-        payload: { runtime_id: "claude" },
+        payload: { runtime_id: "unknown" },
       });
-      expect(res.statusCode).toBe(404);
-      expect(res.json().error).toMatch(/process-spawning API disabled/);
+      expect(res.statusCode).toBe(400);
       await app.close();
     });
   });

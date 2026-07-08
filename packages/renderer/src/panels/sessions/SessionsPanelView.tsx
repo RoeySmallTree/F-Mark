@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { ForkSessionPopover } from "../../components/ForkSessionPopover.js";
 import { SessionContextMenu } from "./SessionContextMenu.js";
 import { SessionRepoList } from "./SessionRepoList.js";
@@ -28,8 +28,10 @@ export function SessionsPanelView(
           onClick={controller.openNewSessionModal}
           aria-label="Start a new session"
         >
-          <Plus size={10} style={{ marginRight: 3, verticalAlign: -1 }} />
-          NEW
+          <span className="new-btn-core">
+            <span className="new-btn-label">New</span>
+            <span className="new-btn-icon" aria-hidden="true" />
+          </span>
         </button>
       </div>
       <div className="panel-search">

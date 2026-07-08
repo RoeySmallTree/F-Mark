@@ -1165,6 +1165,9 @@
   margin: 0 0 14px;
   letter-spacing: -0.01em;
 }
+.choice-option-shell {
+  margin-bottom: var(--choice-opt-mb);
+}
 .choice-opt {
   display: flex;
   gap: 12px;
@@ -1174,13 +1177,17 @@
   cursor: pointer;
   margin-bottom: var(--choice-opt-mb);
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    background 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    transform 220ms var(--ease-out-quint);
   background: none;
   text-align: left;
   width: 100%;
   font-family: inherit;
   color: inherit;
+}
+.choice-option-shell > .choice-opt {
+  margin-bottom: 0;
 }
 .choice-opt:hover {
   border-color: var(--ink-4);
@@ -1239,6 +1246,160 @@
   margin-top: 2px;
   font-family: var(--serif);
   line-height: 1.5;
+}
+.choice-custom-selected {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-3);
+}
+.choice-custom-form {
+  margin-top: 12px;
+}
+.choice-custom-shell {
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--user) 18%, var(--line-2));
+  border-radius: 12px;
+  background:
+    radial-gradient(
+      circle at 92% 12%,
+      color-mix(in srgb, var(--user-tint) 75%, transparent),
+      transparent 42%
+    ),
+    var(--panel);
+}
+.choice-custom-label {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.choice-custom-row {
+  display: flex;
+  gap: 8px;
+}
+.choice-custom-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  padding: 8px 10px;
+  outline: none;
+  transition:
+    border-color 180ms var(--ease-out-quint),
+    box-shadow 180ms var(--ease-out-quint);
+}
+.choice-custom-row input:focus {
+  border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--user-tint) 70%, transparent);
+}
+.choice-custom-row button,
+.choice-comment-submit,
+.choice-comment-cancel,
+.choice-comment-trigger {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  background: var(--canvas);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 11px;
+  transition:
+    background 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint),
+    transform 220ms var(--ease-out-quint);
+}
+.choice-custom-row button:hover,
+.choice-comment-submit:hover,
+.choice-comment-cancel:hover,
+.choice-comment-trigger:hover {
+  border-color: color-mix(in srgb, var(--ink) 18%, var(--line-2));
+  color: var(--ink);
+  transform: translate3d(0, -1px, 0);
+}
+.choice-custom-row button:disabled,
+.choice-comment-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+.choice-comment-suite {
+  padding: 7px 2px 0 30px;
+}
+.choice-comment-trigger {
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--ink-4);
+}
+.choice-comment-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.choice-comment {
+  padding: 8px 10px;
+  border: 1px solid var(--line-3);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 74%, transparent);
+}
+.choice-comment-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.choice-comment-body {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.choice-comment-form {
+  display: grid;
+  gap: 7px;
+}
+.choice-comment-form textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.45;
+  min-height: 66px;
+  outline: none;
+  padding: 8px 10px;
+  transition:
+    border-color 180ms var(--ease-out-quint),
+    box-shadow 180ms var(--ease-out-quint);
+}
+.choice-comment-form textarea:focus {
+  border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--user-tint) 70%, transparent);
+}
+.choice-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.choice-comment-submit {
+  border-color: color-mix(in srgb, var(--user) 32%, var(--line-2));
+  background: color-mix(in srgb, var(--user-tint) 82%, var(--canvas));
+  color: var(--user);
 }
 .choices-foot {
   display: flex;
@@ -1423,6 +1584,10 @@
 .choice-preview-foot button:hover {
   background: var(--panel);
   color: var(--ink);
+}
+.choice-preview-card .choice-comment-suite {
+  padding: 8px;
+  border-top: 1px solid var(--line-3);
 }
 .choices-card-embedded .choice-preview-frame {
   height: 180px;

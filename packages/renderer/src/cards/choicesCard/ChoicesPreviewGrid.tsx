@@ -1,6 +1,7 @@
 import { type JSX } from "react";
 import { Maximize2 } from "lucide-react";
 import { HtmlPreviewFrame } from "../../components/HtmlPreviewFrame.js";
+import { ChoiceOptionComments } from "./ChoiceOptionComments.js";
 import type { ChoiceOption, ChoicesCardModel } from "./types.js";
 
 const NO_LOOSE_STRING_VALUES = {
@@ -65,6 +66,7 @@ function ChoicePreviewCard({
       ) : (
         <ChoiceTextPlaceholder />
       )}
+      <ChoiceOptionComments model={model} option={option} />
     </div>
   );
 }

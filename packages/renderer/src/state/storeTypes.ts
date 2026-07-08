@@ -131,6 +131,7 @@ export interface State extends PresenceSlice {
   scrollToBottomTick: number;
   panelSizeBySession: Record<string, SessionPaneSizes>;
   rightTabBySession: Record<string, RightTabKey>;
+  /* Keyed per (session, pane) via `rightScrollKey` — see panePersistence. */
   rightScrollBySession: Record<string, number>;
   activeModal: ModalKey;
   settingsSection: SettingsSectionKey;
@@ -197,7 +198,7 @@ export interface State extends PresenceSlice {
   clearRightTabsConfigForSessionOverride(): void;
   setViewMode(value: ViewMode): void;
   setPaneSize(pane: PanelId, axis: "width" | "height", px: number): void;
-  setRightScroll(scrollTop: number): void;
+  setRightScroll(pane: string, scrollTop: number): void;
   markSeen(filename: string): void;
   setFollowMode(value: boolean): void;
   requestScrollToBottom(): void;

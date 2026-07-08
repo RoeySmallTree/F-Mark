@@ -14,6 +14,13 @@ import {
   STORAGE_KEY as DENSITY_KEY,
 } from "./density.js";
 import {
+  applyFont,
+  getCurrentFont,
+  startFontStorageSync,
+  subscribeFont,
+  STORAGE_KEY as FONT_KEY,
+} from "./fonts.js";
+import {
   applyPlacement,
   getCurrentPlacement,
   startPlacementStorageSync,
@@ -39,6 +46,7 @@ describe("X6 cross-tab appearance sync (storage events)", () => {
     document.body.className = "";
     // Reset to a known baseline.
     applyTheme("light");
+    applyFont("theme");
     applyDensity("comfortable");
     applyPlacement(DEFAULT_PLACEMENT);
   });
@@ -80,6 +88,32 @@ describe("X6 cross-tab appearance sync (storage events)", () => {
       new StorageEvent("storage", { key: "fmark.unrelated", newValue: "x" }),
     );
     expect(document.body.classList.contains("theme-nord")).toBe(true);
+    start();
+  });
+
+  it("font: a storage event re-applies the font-preset-* class + notifies", () => {
+    const start = startFontStorageSync();
+    let notified: string | null = null;
+    const unsub = subscribeFont((n) => {
+      notified = n;
+    });
+
+    crossTabWrite(FONT_KEY, "editorial");
+
+    expect(document.body.classList.contains("font-preset-editorial")).toBe(
+      true,
+    );
+    expect(getCurrentFont()).toBe("editorial");
+    expect(notified).toBe("editorial");
+
+    crossTabWrite(FONT_KEY, "theme");
+    expect(
+      Array.from(document.body.classList).some((c) =>
+        c.startsWith("font-preset-"),
+      ),
+    ).toBe(false);
+
+    unsub();
     start();
   });
 

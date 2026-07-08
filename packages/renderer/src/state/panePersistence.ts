@@ -150,6 +150,15 @@ export function saveRightScrollBySession(map: Record<string, number>): void {
   saveJson(RIGHT_SCROLL_STORAGE_KEY, map);
 }
 
+/* The right panel has one shared scroll container across every dock pane, so
+   scroll is keyed per (session, pane). Keying by session alone lets whichever
+   pane you visit last overwrite the single saved value, so returning to a pane
+   (e.g. comments) jumps it to top. Both the store writer and the restore effect
+   must build the key the same way — hence this shared helper. */
+export function rightScrollKey(sessionId: string, pane: string): string {
+  return `${sessionId}::${pane}`;
+}
+
 export function clampPaneSize(
   axis: "width" | "height",
   value: number,

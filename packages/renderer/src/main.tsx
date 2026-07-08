@@ -11,6 +11,11 @@ import {
   startDensityStorageSync,
 } from "./themes/density.js";
 import {
+  applyFont,
+  getCurrentFont,
+  startFontStorageSync,
+} from "./themes/fonts.js";
+import {
   applyPlacement,
   getCurrentPlacement,
   startPlacementStorageSync,
@@ -34,20 +39,22 @@ import "./styles.css";
 // renderer rebuild) before anything can trigger one. Must run first.
 installStaleChunkReload();
 
-// Apply the persisted theme + density + pane arrangement (or defaults) BEFORE
-// first render so the initial paint already reflects the user's choice — no
-// FOUC. applyPlacement injects the keyed grid rule that `.main` references.
+// Apply the persisted theme + font + density + pane arrangement (or defaults)
+// BEFORE first render so the initial paint already reflects the user's choice —
+// no FOUC. applyPlacement injects the keyed grid rule that `.main` references.
 // (These theme modules do NOT import the store, so they are safe to import
 // statically above the namespace gate.)
 applyTheme(getCurrentTheme());
+applyFont(getCurrentFont());
 applyDensity(getCurrentDensity());
 applyPlacement(getCurrentPlacement());
 
-// X6 cross-tab sync: live-apply theme/density/pane-arrangement changes made in
-// OTHER browser tabs (the `storage` event only fires in non-writing tabs). This
-// runs for both the main App and the standalone /file-tree page so every tab's
-// appearance stays coherent.
+// X6 cross-tab sync: live-apply theme/font/density/pane-arrangement changes made
+// in OTHER browser tabs (the `storage` event only fires in non-writing tabs).
+// This runs for both the main App and the standalone /file-tree page so every
+// tab's appearance stays coherent.
 startThemeStorageSync();
+startFontStorageSync();
 startDensityStorageSync();
 startPlacementStorageSync();
 

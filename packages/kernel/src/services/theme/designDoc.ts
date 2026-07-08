@@ -1,7 +1,10 @@
 import {
+  FONT_META,
   resolveThemeTokens,
+  resolveThemeWithFontTokens,
   THEME_META,
   THEME_NAMES,
+  type FontTokenName,
   type ThemeTokenName,
   type ThemeTokens,
 } from "@f-mark/shared";
@@ -23,8 +26,10 @@ class ThemeDesignDocBuilder {
   constructor(
     private readonly name: ThemeTokenName,
     private readonly source: ThemeSource,
+    private readonly fontName: FontTokenName,
+    private readonly fontSource: ThemeSource,
   ) {
-    this.tokens = resolveThemeTokens(name);
+    this.tokens = resolveThemeWithFontTokens(resolveThemeTokens(name), fontName);
   }
 
   build(): string {
@@ -42,7 +47,8 @@ class ThemeDesignDocBuilder {
 
   private addIntro(): void {
     const meta = THEME_META[this.name];
-    const { source } = this;
+    const fontMeta = FONT_META[this.fontName];
+    const { source, fontSource } = this;
 
     this.doc.line(`# F-Mark Theme: ${meta.label}`);
     this.doc.line();
@@ -58,6 +64,19 @@ class ThemeDesignDocBuilder {
         `This is the **${meta.label}** theme (\`${this.name}\`), ${themeSourceNote(source)}.`,
       );
     }
+    if (fontSource === "default") {
+      this.doc.line(
+        `Typography is **${fontMeta.label}** (\`${this.fontName}\`), the code-level default because no renderer has reported a font set yet.`,
+      );
+    } else if (fontSource === "override") {
+      this.doc.line(
+        `Typography is **${fontMeta.label}** (\`${this.fontName}\`), explicitly requested via the \`font\` parameter.`,
+      );
+    } else {
+      this.doc.line(
+        `Typography is **${fontMeta.label}** (\`${this.fontName}\`), currently applied in the app (reported by the renderer).`,
+      );
+    }
     this.doc.line();
     this.doc.line(
       `Use the tokens and recipes below for the two F-Mark-resident visual targets. (1) **session-artifact** — charts, analyses, standalone previews with no product destination: the house default is the Amber theme, so if you did not request one, fetch \`GET /theme?theme=amber\` (\`fmark_get_theme\` with \`theme: "amber"\`) and build with its palette. (2) **fmark-ui** — mockups of F-Mark's own product UI: use these tokens via the *F-Mark native UI recipes* as a token reference only, and take layout/structure from the real renderer source. If you're instead building **target-repo-ui** — UI to ship in the current repo or another product — match that target system's own design language rather than these tokens; F-Mark is only the delivery surface, not the design authority. All values are already resolved — drop them straight into inline styles or a \`<style>\` block. The sandbox does not load the app stylesheet, so keep the HTML self-contained: copy the snippets here (and, when mocking F-Mark's own UI, the structural CSS you reuse) rather than relying on app class names like \`.prose-card\` being styled for you.`,
@@ -69,6 +88,13 @@ class ThemeDesignDocBuilder {
 export function renderThemeDesignDoc(
   name: ThemeTokenName,
   source: ThemeSource,
+  fontName: FontTokenName,
+  fontSource: ThemeSource,
 ): string {
-  return new ThemeDesignDocBuilder(name, source).build();
+  return new ThemeDesignDocBuilder(
+    name,
+    source,
+    fontName,
+    fontSource,
+  ).build();
 }
