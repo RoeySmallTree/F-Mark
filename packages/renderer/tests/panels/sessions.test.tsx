@@ -165,9 +165,9 @@ describe("Sessions panel", () => {
     render(<Sessions />);
 
     expect(await screen.findByText("repo-a")).toBeInTheDocument();
-    expect(screen.getByText("repo-b")).toBeInTheDocument();
-    expect(screen.getByText("alpha-session")).toBeInTheDocument();
-    expect(screen.getByText("beta-session")).toBeInTheDocument();
+    expect(await screen.findByText("repo-b")).toBeInTheDocument();
+    expect(await screen.findByText("alpha-session")).toBeInTheDocument();
+    expect(await screen.findByText("beta-session")).toBeInTheDocument();
   });
 
   test("selecting a session from another repo does not switch kernel active path", async () => {
