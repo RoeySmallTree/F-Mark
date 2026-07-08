@@ -6,7 +6,10 @@
      prose with target              → null (rendered as pin inside ProseCard /
                                             as bubble inside RightComments)
      choices                        → ChoicesCard
-     choice                         → null (consumed as state inside ChoicesCard)
+     choice                         → ChoiceCard (answer summary; reached only via the
+                                       conversation feed — the main feed filters
+                                       choices out by kind, and ChoicesCard also
+                                       reflects the selection as state)
      html                           → EmbedCard
      todo                           → TodoCard
      file                           → FileCard

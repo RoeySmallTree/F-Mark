@@ -128,7 +128,7 @@ describe("EventCard dispatcher", () => {
     expect(useStore.getState().rightTab).toBe("comments");
   });
 
-  test("choice → null (consumed inside ChoicesCard)", () => {
+  test("choice → ChoiceCard (answer summary; reached via the conversation feed)", () => {
     const ev = {
       filename: "20260522T100300Z_us-a7f3.choice.json",
       timestamp: "20260522T100300Z",
@@ -144,7 +144,8 @@ describe("EventCard dispatcher", () => {
         allEvents={[ev]}
       />,
     );
-    expect(container.children.length).toBe(0);
+    expect(container.querySelector('[data-event-kind="choice"]')).not.toBeNull();
+    expect(container.textContent).toContain("Chose");
   });
 
   test("choices → ChoicesCard", () => {
