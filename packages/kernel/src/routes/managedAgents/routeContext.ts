@@ -405,6 +405,7 @@ function createRuntimeAccessContextParts(
       pathContextRef: base.pathContextRef,
       tmux: base.tmux,
       tracker: base.tracker,
+      integrationEnv: base.integrationEnv,
       routePaths: base.routePaths,
       agentState: base.agentState,
       firstUserParticipantId: integration.firstUserParticipantId,

@@ -105,6 +105,14 @@ export class StartupReconciler {
     const runtimeId = await this.agentState.readRuntime(agentId);
     if (runtimeId === null) return;
 
+    if (runtimeId === "codex") {
+      // Codex hooks are injected into the managed launch argv, not detected
+      // from `~/.codex/hooks.json`, so a surviving codex pane always has them.
+      // Surface as "stale" until the next ping flips it back to "online".
+      this.tracker.markReconciledStale(agentId, { paneAlive: () => true });
+      return;
+    }
+
     try {
       const status = await checkHookInstallStatus({
         runtimeId,

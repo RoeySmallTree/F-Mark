@@ -5,7 +5,7 @@ import type {
   RuntimeOverridePatch,
   RuntimeSessionInfo,
 } from "@f-mark/shared";
-import { codexFmarkMcpApprovalConfigArgs } from "../../mcpInstall/codex.js";
+import { codexFmarkLaunchArgs } from "./codexLaunchInjection.js";
 import { getAdapter } from "../../runtimes/adapters/index.js";
 import {
   codexSessionsRoot,
@@ -124,9 +124,19 @@ function applyRuntimeAccessMode(
   return base;
 }
 
-function applyRuntimeOwnedMcpApprovals(runtimeId: string, args: string[]): string[] {
+/* Codex owns its `fmark` MCP server and autostream hooks per managed launch via
+   `-c` overrides + `--dangerously-bypass-hook-trust`, injected after the user/
+   runtime args so F-Mark owns that server name and the hook events. This
+   replaces the old machine-global `~/.codex` install so manually-launched codex
+   sessions carry no fmark MCP or hooks. */
+function applyCodexOwnedLaunchInjection(
+  runtimeId: string,
+  args: string[],
+  projectRoot: string,
+  env: NodeJS.ProcessEnv,
+): string[] {
   if (runtimeId === "codex") {
-    return [...args, ...codexFmarkMcpApprovalConfigArgs()];
+    return [...args, ...codexFmarkLaunchArgs({ projectRoot, env })];
   }
   return args;
 }
@@ -138,6 +148,8 @@ export function spawnArgsForRuntime(input: {
   launchPrompt: string;
   override?: RuntimeOverridePatch;
   accessMode: string;
+  projectRoot: string;
+  env?: NodeJS.ProcessEnv;
 }): {
   args: string[];
   nativeNameApplied: boolean;
@@ -145,7 +157,12 @@ export function spawnArgsForRuntime(input: {
 } {
   let args = applyRuntimeOverride(input.runtimeId, input.args, input.override);
   args = applyRuntimeAccessMode(input.runtimeId, args, input.accessMode);
-  args = applyRuntimeOwnedMcpApprovals(input.runtimeId, args);
+  args = applyCodexOwnedLaunchInjection(
+    input.runtimeId,
+    args,
+    input.projectRoot,
+    input.env ?? process.env,
+  );
   let nativeNameApplied = false;
   if (
     input.desiredName !== null &&
@@ -263,6 +280,8 @@ export async function buildResumeArgs(input: {
     args: input.runtime.args,
     override: input.override,
     accessMode: input.accessMode,
+    projectRoot: input.projectRoot,
+    env: input.env ?? process.env,
   });
 
   if (input.runtimeId === "claude") {
@@ -286,6 +305,8 @@ function providerBaseArgs(input: {
   args: string[];
   override?: RuntimeOverridePatch;
   accessMode: string;
+  projectRoot: string;
+  env: NodeJS.ProcessEnv;
 }): string[] {
   let args = applyRuntimeOverride(
     input.runtimeId,
@@ -293,7 +314,12 @@ function providerBaseArgs(input: {
     input.override,
   );
   args = applyRuntimeAccessMode(input.runtimeId, args, input.accessMode);
-  return applyRuntimeOwnedMcpApprovals(input.runtimeId, args);
+  return applyCodexOwnedLaunchInjection(
+    input.runtimeId,
+    args,
+    input.projectRoot,
+    input.env,
+  );
 }
 
 function buildClaudeResumeArgs(

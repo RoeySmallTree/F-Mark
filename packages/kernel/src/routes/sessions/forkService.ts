@@ -11,6 +11,7 @@ import type {
 import { isoTimestamp } from "@f-mark/shared";
 import type { Paths } from "../../paths.js";
 import { paths as makePaths } from "../../paths.js";
+import { codexForkArgs } from "../managedAgents/codexLaunchInjection.js";
 import { forkSessionFolder } from "../../sessions.js";
 import {
   ensureSystemForkParticipant,
@@ -514,7 +515,12 @@ class ForkRuntimeCommandBuilder {
           "Codex native source session id is unknown; cannot launch `codex fork` without a provider session id",
       };
     }
-    const args = [...input.runtime.args, "fork", sourceHandle];
+    // A forked codex pane is a managed launch: inject the fmark MCP server +
+    // autostream hooks (env resolves the command/args from the kernel argv).
+    const args = codexForkArgs(input.runtime.args, sourceHandle, {
+      projectRoot: input.p.root(),
+      env: process.env,
+    });
     return {
       args,
       nativeCommand: nativeCommand(input.runtime, args),

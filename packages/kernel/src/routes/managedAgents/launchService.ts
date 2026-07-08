@@ -15,6 +15,7 @@ import type {
 } from "@f-mark/shared";
 import { isPlaceholderSessionSlug } from "@f-mark/shared";
 import { buildCompassPacket, sessionRenameNudge } from "../../compass/packet.js";
+import { cleanupCodexGlobalFmarkInstall } from "../../codexGlobalCleanup.js";
 import { readEvents } from "../../events/reader.js";
 import type { checkHookInstallStatus } from "../../hooksInstall/index.js";
 import { markFmarkLaunchPrompt } from "../../launchPrompt.js";
@@ -43,7 +44,7 @@ import {
 } from "../../runtimes/modelValidation.js";
 import { loadRuntimeRegistry } from "../../runtimes/store.js";
 import type { AgentStateStore } from "../../services/agentState.js";
-import { resolveActiveTheme } from "../../services/theme.js";
+import { resolveActiveFont, resolveActiveTheme } from "../../services/theme.js";
 import { readSessionSlug, sessionExists } from "../../sessions.js";
 import type { InputQueue } from "../../tmux/inputQueue.js";
 import type { TmuxManager } from "../../tmux/manager.js";
@@ -238,6 +239,7 @@ export function buildLaunchPrompt(input: {
       input.sessionId !== undefined && (input.recentEvents?.length ?? 0) > 0,
   }).trim();
   const { name: activeTheme, source: activeThemeSource } = resolveActiveTheme();
+  const { name: activeFont, source: activeFontSource } = resolveActiveFont();
   const packet = {
     type: "fmark.launch",
     project_path: input.projectRoot,
@@ -250,15 +252,17 @@ export function buildLaunchPrompt(input: {
     default_participant_id: input.participantId,
     default_session_id: input.sessionId ?? null,
     // The posting surface is not the design target: this is the renderer's
-    // current *delivery* theme, not the design authority for repo-bound UI.
-    // renderer_theme_source is "reported" only when a client has reported a
-    // non-default theme; "default" means none reported yet — an unconfirmed
-    // fallback (tokenize via var(--…), don't hardcode).
+    // current *delivery* appearance, not the design authority for repo-bound UI.
+    // *_source is "reported" only when a client has reported that setting;
+    // "default" means none reported yet — an unconfirmed fallback (tokenize via
+    // var(--…), don't hardcode).
     renderer_current_theme: activeTheme,
     renderer_theme_source: activeThemeSource,
+    renderer_current_font: activeFont,
+    renderer_font_source: activeFontSource,
     design_target_policy:
       "The target repo/product's own styles are the design authority; " +
-      "F-Mark's current renderer theme is the delivery surface only, not the palette. " +
+      "F-Mark's current renderer theme/font are the delivery surface only, not the target product palette. " +
       "target-repo-ui → read that repo's design source; fmark-ui → read packages/renderer/src; " +
       "session-artifact (unbound) → default to the Amber house theme.",
     session_artifact_theme_default: "amber",
@@ -344,7 +348,7 @@ export async function materializeLaunchPacket(input: {
       "# F-Mark launch",
       identity,
       "",
-      `FIRST ACTION — before anything else: read the file \`${packetPath}\` with your file-read tool and follow it completely. It is your full onboarding: the F-Mark MCP contract, your identity and defaults, the active theme, and the session brief. Do not act on the session before reading it.`,
+      `FIRST ACTION — before anything else: read the file \`${packetPath}\` with your file-read tool and follow it completely. It is your full onboarding: the F-Mark MCP contract, your identity and defaults, the active theme/font, and the session brief. Do not act on the session before reading it.`,
       "",
       "Fallback contract if that file is unreadable: communicate only through the `fmark` MCP tools — `fmark_post_prose` to speak, `fmark_end_turn` as the very last action of your turn — and say the launch packet could not be read.",
     ].join("\n"),
@@ -465,6 +469,8 @@ export class ManagedAgentLaunchService {
       launchPrompt: pointerPrompt,
       override: await this.runtimeOverride(input.participantId, input.binding),
       accessMode: current.access.mode,
+      projectRoot: p.root(),
+      env: this.deps.integrationEnv,
     });
 
     if (current.connection_state === "connected" && current.tmux_session !== null) {
@@ -614,6 +620,8 @@ export class ManagedAgentLaunchService {
       launchPrompt: pointerPrompt,
       override: await this.runtimeOverride(participantId, input.binding),
       accessMode: access.accessMode,
+      projectRoot: p.root(),
+      env: this.deps.integrationEnv,
     });
     runtimeSession.native_name_applied = spawnArgs.nativeNameApplied;
 
@@ -724,6 +732,17 @@ export class ManagedAgentLaunchService {
   private async ensureRuntimeSetup(
     input: RuntimeSetupInput,
   ): Promise<{ mcpStatus: SpawnSetupStatus; hooksStatus: SpawnSetupStatus }> {
+    if (input.runtimeId === "codex") {
+      // Codex owns its `fmark` MCP server and autostream hooks per managed
+      // launch via `-c` injection (see runtimeArgs / codexLaunchInjection), so
+      // it is always "installed" for the managed invocation and must never
+      // write the machine-global `~/.codex` install. Remove any legacy global
+      // install so manually-launched codex sessions stop latching it.
+      await cleanupCodexGlobalFmarkInstall(this.deps.integrationEnv).catch(
+        () => undefined,
+      );
+      return { mcpStatus: "installed", hooksStatus: "installed" };
+    }
     let mcpStatus: SpawnSetupStatus = "unknown";
     let hooksStatus: SpawnSetupStatus = "unknown";
     const chosen = await resolveChosenScope(
@@ -1042,6 +1061,12 @@ export class ManagedAgentLaunchService {
     projectRoot: string;
     currentStatus: SpawnSetupStatus;
   }): Promise<SpawnSetupStatus> {
+    if (input.runtimeId === "codex") {
+      // Hooks are injected into the managed codex launch argv, not detected
+      // from a persisted file, so they are always present for this pane.
+      this.deps.tracker.setManagedHookStatus(input.participantId, true);
+      return "installed";
+    }
     try {
       const detect = await this.deps.hookStatusCheck({
         runtimeId: input.runtimeId,

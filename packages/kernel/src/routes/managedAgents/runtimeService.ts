@@ -46,6 +46,10 @@ interface ManagedAgentRuntimeServiceDeps {
   pathContextRef?: PathContextRef;
   tmux: TmuxManager;
   tracker: PresenceTracker;
+  /** Managed integration env (respects a test-isolated HOME/CODEX_HOME). Passed
+      to the codex launch injection so an override-restart resolves the same
+      MCP command as spawn/reconnect/resume. */
+  integrationEnv?: NodeJS.ProcessEnv;
   routePaths(): Paths;
   agentState(): AgentStateStore;
   firstUserParticipantId(p: Paths): Promise<string | undefined>;
@@ -395,6 +399,8 @@ export class ManagedAgentRuntimeService {
           runtimeId,
           (await state.readControlState(participantId)).access_mode,
         ),
+        projectRoot: p.root(),
+        env: this.deps.integrationEnv,
       });
       await this.deps.ensureLaunchProjectConnection(p);
       const { sessionName } = await this.deps.tmux.spawnAgent({

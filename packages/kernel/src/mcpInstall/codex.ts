@@ -369,6 +369,20 @@ function removeTomlTables(
   return { text: out.join("\n").replace(/\n{3,}$/g, "\n\n"), changed };
 }
 
+/** Remove the `[mcp_servers.fmark]` table and all its child tables
+    (`.env`, `.tools.*`) from a codex config.toml, preserving every other
+    server and setting. Used by the codex global-install migration once MCP is
+    injected per managed launch instead of written machine-global. */
+export function stripCodexFmarkMcpTables(text: string): {
+  text: string;
+  changed: boolean;
+} {
+  return removeTomlTables(text, (table) => {
+    const mcpTable = codexMcpTable(table);
+    return mcpTable !== null && mcpTable.name === CODEX_FMARK_MCP_SERVER_NAME;
+  });
+}
+
 function renderCodexMcpBlock(spec: { command: string; args: string[] }): string {
   return [
     "[mcp_servers.fmark]",

@@ -321,6 +321,26 @@ if (!singletonDisabled) {
 }
 await releaseStartupLock();
 
+// One-time cleanup of any legacy machine-global codex `fmark` install. Codex
+// now injects its MCP server + autostream hooks per managed launch, so a
+// lingering global `~/.codex` install would make manually-launched (non-F-Mark)
+// codex sessions latch the fmark MCP server and fire the hooks. Best-effort and
+// idempotent; only F-Mark-owned entries are removed.
+try {
+  const { cleanupCodexGlobalFmarkInstall } = await import(
+    "./codexGlobalCleanup.js"
+  );
+  const cleaned = await cleanupCodexGlobalFmarkInstall();
+  if (cleaned.changed) {
+    logger.info(
+      "Removed legacy machine-global codex fmark MCP/hooks install; codex is now injected per managed launch.",
+    );
+  }
+} catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  logger.warn(`Could not clean legacy codex fmark install: ${msg}`);
+}
+
 // Reconcile surviving tmux sessions. Best-effort: failures must not crash
 // startup. We construct a dedicated tmux manager here since createServer
 // doesn't expose its own — tmux is stateless server-side, so a duplicate

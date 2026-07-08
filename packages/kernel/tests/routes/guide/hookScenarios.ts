@@ -39,7 +39,9 @@ export async function codexHookSnippetIsGenericForParticipants(): Promise<void> 
       query: { runtime_id: "codex", agent_id: "ag-codex-2" },
     });
     expectStatus(res, 200);
-    expectHookSectionContains(res, "hook auto-stream", "--kind user");
+    // Codex hooks + MCP are injected per managed launch (no manual install), so
+    // the guide describes injection and never leaks participant ids.
+    expectHookSectionContains(res, "injects", "managed Codex launch");
     expectHookSectionExcludes(
       res,
       "ag-codex-2",

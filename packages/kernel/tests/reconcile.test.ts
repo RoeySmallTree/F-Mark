@@ -202,6 +202,39 @@ describe("reconcile", () => {
     expect(s?.state).toBe("stale");
   });
 
+  it("CASE A (codex): surviving codex agent → 'stale' without any ~/.codex/hooks.json (hooks are injected per launch)", async () => {
+    const { paths: p } = await makeFixture();
+
+    await writeTmuxSession(
+      join(p.fmarkDir(), "agents"),
+      "ag-codex",
+      "fmark-x-12345678-ag-ag-codex",
+    );
+    await writeRuntime(join(p.fmarkDir(), "agents"), "ag-codex", "codex");
+
+    // Empty fake HOME: no ~/.codex/hooks.json at all. A codex pane carries its
+    // hooks in the launch argv, so reconcile must not report hook-not-installed.
+    const fakeHome = await mkdtemp(join(tmpdir(), "fmark-home-codex-"));
+    process.env.HOME = fakeHome;
+
+    const tmux = fakeTmux({
+      sessions: [
+        {
+          sessionName: "fmark-x-12345678-ag-ag-codex",
+          kind: "agent",
+          participantId: "ag-codex",
+        },
+      ],
+    });
+    const tracker = createPresenceTracker({ broadcast: () => {} });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await reconcile({ paths: p, tmux: tmux as any, tracker });
+
+    const s = tracker.snapshot().get("ag-codex");
+    expect(s).toBeDefined();
+    expect(s?.state).toBe("stale");
+  });
+
   it("CASE B: agent dir without live tmux session → preserve resume state + mark pane dead", async () => {
     const { paths: p } = await makeFixture();
     const state = createAgentStateStore({ fallback: p });

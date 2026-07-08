@@ -21,7 +21,11 @@ import {
 import { applyClaudeMcp, detectClaudeMcp } from "./claude.js";
 import { applyCodexMcp, detectCodexMcp } from "./codex.js";
 import { applyOpencodeMcp, detectOpencodeMcp } from "./opencode.js";
+import { join } from "node:path";
+import { cleanupCodexGlobalFmarkInstall } from "../codexGlobalCleanup.js";
 import {
+  codexHome,
+  FMARK_MCP_INSTALL_VERSION,
   makeCheck,
   runtimeUnavailable,
   summarizeStatus,
@@ -337,6 +341,47 @@ async function detectHooks(input: {
   }
 }
 
+/* Codex owns its `fmark` MCP server and autostream hooks per managed launch via
+   `-c` injection (routes/managedAgents/codexLaunchInjection.ts). There is no
+   machine-global codex install to detect or write, so preflight/apply report a
+   fixed "installed" (managed-injected) status and never touch `~/.codex`. */
+function codexInjectedLocation(
+  path: string,
+  version: string,
+): IntegrationLocation {
+  return {
+    scope: "user",
+    path,
+    status: "installed",
+    version,
+    reason: "injected into each managed codex launch (not installed machine-global)",
+    safe_auto_apply: true,
+  };
+}
+
+function codexInjectedCheck(path: string, version: string): IntegrationCheck {
+  return {
+    status: "installed",
+    expected_version: version,
+    locations: [codexInjectedLocation(path, version)],
+  };
+}
+
+async function codexInjectedPreflight(input: {
+  executable?: string;
+  env: NodeJS.ProcessEnv;
+}): Promise<IntegrationPreflightResponse> {
+  const runtime = await probeRuntime("codex", input.env, input.executable);
+  const configPath = join(codexHome(input.env), "config.toml");
+  return {
+    runtime,
+    mcp: codexInjectedCheck(configPath, FMARK_MCP_INSTALL_VERSION),
+    hooks: codexInjectedCheck(configPath, FMARK_HOOK_INSTALL_VERSION),
+    chosen_scope: "user",
+    can_apply: runtime.available,
+  };
+}
+
 export async function preflightIntegration(input: {
   runtimeId: RuntimeId;
   executable?: string;
@@ -347,6 +392,9 @@ export async function preflightIntegration(input: {
   chosenScope?: IntegrationScope;
 }): Promise<IntegrationPreflightResponse> {
   const env = input.env ?? process.env;
+  if (input.runtimeId === "codex") {
+    return codexInjectedPreflight({ executable: input.executable, env });
+  }
   const participantId = input.participantId ?? "ag-preflight";
   const resolvedChosenScope = input.chosenScope ?? defaultScope(input.runtimeId);
   const chosenHookScope =
@@ -392,6 +440,31 @@ export async function applyIntegration(input: {
   env?: NodeJS.ProcessEnv;
 }): Promise<IntegrationApplyResponse> {
   const env = input.env ?? process.env;
+  if (input.runtimeId === "codex") {
+    // Codex is injected per managed launch, never installed machine-global.
+    // "Apply" removes any legacy global install (idempotent) and confirms the
+    // injected setup; nothing is written to `~/.codex`.
+    const preflight = await codexInjectedPreflight({
+      executable: input.executable,
+      env,
+    });
+    if (!preflight.runtime.available) {
+      throw new Error(
+        preflight.runtime.reason ?? `${preflight.runtime.executable} is not available`,
+      );
+    }
+    await cleanupCodexGlobalFmarkInstall(env).catch(() => undefined);
+    return {
+      ...preflight,
+      applied: {
+        mcp: preflight.mcp.locations[0],
+        hooks: preflight.hooks.locations[0],
+      },
+      changed: false,
+      mcp_changed: false,
+      hooks_changed: false,
+    };
+  }
   const runtime = await probeRuntime(input.runtimeId, env, input.executable);
   if (!runtime.available) {
     throw new Error(runtime.reason ?? `${runtime.executable} is not available`);

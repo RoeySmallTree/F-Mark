@@ -91,7 +91,7 @@ describe("GET /guide", () => {
     hookSnippetIsGenericForClaude,
   );
   it(
-    "Codex hook snippet is generic and does not include participant ids",
+    "Codex hook guidance describes per-launch injection without participant ids",
     codexHookSnippetIsGenericForParticipants,
   );
   it(
