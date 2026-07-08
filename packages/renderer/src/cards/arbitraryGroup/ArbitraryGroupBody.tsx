@@ -14,6 +14,7 @@ const NO_LOOSE_STRING_VALUES = {
   streaming: "streaming",
   toolUse: "tool-use",
   none: "none",
+  narration: "narration",
 } as const;
 
 interface ArbitraryGroupBodyProps {
@@ -76,7 +77,7 @@ export function ArbitraryGroupBody({
                 participants={participants}
                 comments={comments}
                 revealWords={isLiveStreaming}
-                variant="narration"
+                variant={NO_LOOSE_STRING_VALUES.narration}
               />
             ) : (
               <EventCard

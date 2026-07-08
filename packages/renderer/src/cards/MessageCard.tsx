@@ -3,6 +3,9 @@ const NO_LOOSE_STRING_VALUES = {
   msgCard: "msg-card",
   user: "user",
   agent: "agent",
+  message: "message",
+  narration: "narration",
+  narrationClass: "is-narration",
 } as const;
 
 /* MessageCard — unnamed prose with no target. Renders short messages
@@ -33,12 +36,12 @@ export function MessageCard({
   comments,
   content,
   revealWords = false,
-  variant = "message",
+  variant = NO_LOOSE_STRING_VALUES.message,
 }: Props): JSX.Element {
   const payload = event.payload as ProsePayload;
   const text = content ?? payload.content;
   const who = whoOf(event.participant_id, participants);
-  const isNarration = variant === "narration";
+  const isNarration = variant === NO_LOOSE_STRING_VALUES.narration;
   const lane = who.isUser
     ? NO_LOOSE_STRING_VALUES.user
     : NO_LOOSE_STRING_VALUES.agent;
@@ -46,7 +49,7 @@ export function MessageCard({
     NO_LOOSE_STRING_VALUES.card,
     NO_LOOSE_STRING_VALUES.msgCard,
     lane,
-    isNarration ? "is-narration" : "",
+    isNarration ? NO_LOOSE_STRING_VALUES.narrationClass : "",
   ]
     .filter(Boolean)
     .join(" ");
