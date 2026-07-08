@@ -1,12 +1,12 @@
-/* Popovers — ported from planning/redesign/design.html (lines 522-539).
-   Reusable for P8 (Presets), P9 (Skills), P12 (Log filter), and future
+/* Popovers.
+   Reusable for Presets, Skills, Log filter, and future
    anchored panels. Every color resolves through CSS variables (tokens.css)
    so all six themes look right. The pop-toggle selector is intentionally
    left in modals.css since P10 already lifted it; this file owns the rest. */
 
 /* ============ Popover frame ============ */
 @keyframes popover-enter {
-  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  from { opacity: 0; transform: translateY(10px) scale(0.982); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -17,18 +17,33 @@
 }
 .popover {
   position: fixed;
-  background: var(--canvas);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--canvas) 94%, var(--panel)),
+      var(--canvas)
+    );
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 14px;
   box-shadow:
-    0 12px 40px rgba(40, 30, 15, 0.18),
-    0 2px 8px rgba(40, 30, 15, 0.06);
+    0 24px 70px color-mix(in srgb, var(--ink) 18%, transparent),
+    0 4px 16px color-mix(in srgb, var(--ink) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 78%, transparent);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   z-index: 91;
-  transform-origin: top center;
-  animation: popover-enter var(--dur-fast) var(--ease-out-quint) backwards;
+  transform-origin: bottom center;
+  animation: popover-enter var(--dur-base) var(--ease-out-expo) backwards;
+}
+.popover::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 13px;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--canvas) 44%, transparent);
 }
 .popover.log-filter-popover {
   min-width: 320px;
@@ -36,19 +51,113 @@
   width: 320px;
 }
 .popover.presets-pop {
-  width: 380px;
-  max-height: 520px;
+  width: min(400px, calc(100vw - 20px));
+  max-height: min(560px, calc(100vh - 24px));
 }
 .popover.create-todo-pop {
-  width: 360px;
+  width: min(448px, calc(100vw - 20px));
   max-height: calc(100vh - 24px);
 }
 .popover.fork-session-pop {
-  width: 340px;
+  width: min(390px, calc(100vw - 20px));
   max-height: calc(100vh - 24px);
 }
+.popover.agent-pop {
+  width: min(390px, calc(100vw - 20px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+.popover.agent-chip-editor-pop {
+  width: min(480px, calc(100vw - 20px));
+  max-height: calc(100dvh - 20px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
 .popover.compose-settings-pop {
-  width: 260px;
+  width: min(292px, calc(100vw - 20px));
+}
+.popover.skills-pop {
+  width: min(460px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+  max-height: min(560px, calc(100vh - 24px));
+}
+.skills-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 82%, var(--canvas)),
+      color-mix(in srgb, var(--canvas) 88%, var(--panel))
+    );
+  color: var(--ink-3);
+}
+.skills-pop-query {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.skills-pop-results {
+  overflow: auto;
+  padding: 6px;
+  max-height: 460px;
+}
+.skills-pop .cmdk-group {
+  padding: 10px 10px 5px;
+  letter-spacing: 0.16em;
+  color: color-mix(in srgb, var(--ink-4) 86%, var(--agent));
+}
+.skills-pop .skill-row {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition:
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    box-shadow 180ms var(--ease-out-quint);
+}
+.skills-pop .skill-row:hover,
+.skills-pop .skill-row.sel {
+  background: color-mix(in srgb, var(--panel) 54%, var(--canvas));
+  border-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
+}
+.skills-pop .skill-row-pick {
+  padding: 11px 11px;
+}
+.skills-pop .cmdk-icon,
+.skills-pop .skill-badge {
+  background: color-mix(in srgb, var(--panel) 72%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 62%, transparent);
+}
+.skills-pop .skill-row-edit {
+  border-radius: 8px;
+  transition:
+    opacity 140ms var(--ease-out-quint),
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint);
+}
+.skills-pop .skill-row-edit:hover {
+  background: color-mix(in srgb, var(--canvas) 68%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.skills-pop-empty {
+  padding: 16px;
+  text-align: center;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--ink-4);
 }
 .settings-toggle {
   display: flex;
@@ -62,14 +171,18 @@
 }
 .settings-toggle input[type="checkbox"] {
   appearance: none;
-  width: 32px;
-  height: 18px;
-  background: var(--line-2);
-  border-radius: 10px;
+  width: 34px;
+  height: 20px;
+  background: color-mix(in srgb, var(--ink) 9%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: var(--radius-pill);
   position: relative;
   outline: none;
   cursor: pointer;
-  transition: background 200ms ease;
+  transition:
+    background-color 220ms var(--ease-out-quint),
+    border-color 220ms var(--ease-out-quint),
+    box-shadow 220ms var(--ease-out-quint);
   flex-shrink: 0;
 }
 .settings-toggle input[type="checkbox"]::before {
@@ -79,16 +192,23 @@
   left: 2px;
   width: 14px;
   height: 14px;
-  background: var(--ink-3);
+  background: var(--canvas);
   border-radius: 50%;
-  transition: transform 200ms var(--ease-out-quint), background 200ms ease;
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--ink) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 75%, transparent);
+  transition:
+    transform 220ms var(--ease-out-expo),
+    background-color 220ms var(--ease-out-quint);
 }
 .settings-toggle input[type="checkbox"]:checked {
-  background: var(--ink-4);
+  background: color-mix(in srgb, var(--agent) 44%, var(--ink));
+  border-color: color-mix(in srgb, var(--agent) 36%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent) 10%, transparent);
 }
 .settings-toggle input[type="checkbox"]:checked::before {
   transform: translateX(14px);
-  background: var(--ink);
+  background: var(--canvas);
 }
 .settings-toggle .toggle-label {
   font-family: var(--sans);
@@ -102,17 +222,28 @@
 .pop-head {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: var(--pop-head-pad-y) var(--pop-head-pad-x);
-  border-bottom: 1px solid var(--line-3);
+  gap: 8px;
+  padding: 13px 16px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 82%, var(--canvas)),
+      color-mix(in srgb, var(--canvas) 88%, var(--panel))
+    );
   font-family: var(--serif);
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
   color: var(--ink);
 }
+.pop-head svg,
+.skills-pop-head svg {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+}
 .pop-section {
-  padding: var(--pop-section-pad-y) var(--pop-section-pad-x);
-  border-bottom: 1px solid var(--line-3);
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
 }
 .pop-section-h {
   display: flex;
@@ -124,9 +255,9 @@
 .pop-label {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: color-mix(in srgb, var(--ink-4) 86%, var(--agent));
   margin-bottom: 8px;
 }
 .pop-chips {
@@ -138,23 +269,33 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px 4px 6px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  padding: 5px 11px 5px 7px;
+  background: color-mix(in srgb, var(--bg) 70%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: var(--radius-pill);
   font-family: var(--mono);
   font-size: 11px;
   color: var(--ink-3);
   cursor: pointer;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 62%, transparent);
+  transition:
+    transform 120ms var(--ease-out-quart),
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint);
 }
 .pop-chip.on {
   background: var(--ink);
   color: var(--canvas);
-  border-color: var(--ink);
+  border-color: color-mix(in srgb, var(--canvas) 15%, var(--ink));
 }
 .pop-chip:not(.on):hover {
-  border-color: var(--ink-4);
+  background: color-mix(in srgb, var(--canvas) 88%, var(--panel));
+  border-color: color-mix(in srgb, var(--ink) 18%, transparent);
   color: var(--ink-2);
+}
+.pop-chip:active {
+  transform: scale(0.985);
 }
 .pop-chip .x {
   color: inherit;
@@ -176,9 +317,9 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--line-3);
-  background: rgba(0, 0, 0, 0.012);
+  padding: 12px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--panel) 42%, transparent);
 }
 
 /* Custom date inputs inside a popover */
@@ -189,33 +330,109 @@
 }
 .pop-date-row input[type="datetime-local"] {
   flex: 1;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 9px;
+  background: color-mix(in srgb, var(--bg) 62%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 9px;
+  padding: 7px 10px;
   font: inherit;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink);
   outline: 0;
   min-width: 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 68%, transparent);
 }
 .pop-date-row input[type="datetime-local"]:focus {
-  border-color: var(--ink-4);
-  box-shadow: 0 0 0 3px rgba(40, 30, 15, 0.04);
+  border-color: color-mix(in srgb, var(--agent) 34%, var(--ink-4));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--agent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 72%, transparent);
 }
 
-/* ============ Presets popover (P8) ============
-   Ported from planning/redesign/design.html `.presets-pop`, `.presets-search`,
+.popover .form-label {
+  color: color-mix(in srgb, var(--ink-4) 88%, var(--agent));
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+.popover .form-input {
+  min-height: 43px;
+  background: color-mix(in srgb, var(--bg) 62%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 9px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 68%, transparent);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  transition:
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    box-shadow 180ms var(--ease-out-quint);
+}
+.popover .form-input::placeholder {
+  color: color-mix(in srgb, var(--ink-4) 84%, transparent);
+}
+.popover .form-input:focus {
+  background: color-mix(in srgb, var(--canvas) 94%, var(--panel));
+  border-color: color-mix(in srgb, var(--agent) 34%, var(--ink-4));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--agent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 72%, transparent);
+}
+.popover select.form-input {
+  appearance: auto;
+}
+.popover .btn-solid,
+.popover .btn-ghost {
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 8px 15px;
+  transition:
+    transform 120ms var(--ease-out-quart),
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint),
+    box-shadow 180ms var(--ease-out-quint),
+    opacity 180ms var(--ease-out-quint);
+}
+.popover .btn-solid {
+  background: var(--ink);
+  color: var(--canvas);
+  box-shadow:
+    var(--shadow),
+    inset 0 0 0 1px color-mix(in srgb, var(--canvas) 14%, transparent);
+}
+.popover .btn-solid:hover:not(:disabled) {
+  filter: none;
+  background: color-mix(in srgb, var(--ink) 92%, var(--agent));
+}
+.popover .btn-ghost {
+  background: color-mix(in srgb, var(--canvas) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 11%, transparent);
+  color: var(--ink-2);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 62%, transparent);
+}
+.popover .btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 60%, var(--canvas));
+  border-color: color-mix(in srgb, var(--ink) 18%, transparent);
+  color: var(--ink);
+}
+.popover .btn-solid:active:not(:disabled),
+.popover .btn-ghost:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+/* ============ Presets popover ============
+   Presets popover search, list, and item styling:
    `.presets-list`, `.presets-group`, `.preset-item`, `.preset-icon`,
    `.preset-text`, `.preset-name`, `.preset-body`. */
 .presets-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line-3);
-  background: var(--bg);
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--panel) 48%, var(--canvas));
 }
 .presets-search input {
   flex: 1;
@@ -232,16 +449,16 @@
 }
 .presets-list {
   overflow: auto;
-  padding: 4px 0;
-  max-height: 380px;
+  padding: 6px;
+  max-height: 400px;
 }
 .presets-group {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-4);
-  padding: 9px 14px 4px;
+  color: color-mix(in srgb, var(--ink-4) 86%, var(--agent));
+  padding: 10px 10px 5px;
 }
 /* Preset row — a click-to-pick body plus an optional pencil affordance
    on the right for custom (editable) presets. The two split-buttons
@@ -249,18 +466,23 @@
 .preset-item {
   display: flex;
   align-items: stretch;
-  border-left: 2px solid transparent;
-  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  transition:
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    transform 120ms var(--ease-out-quart);
 }
 .preset-item:hover,
 .preset-item:focus-within {
-  background: var(--bg);
-  border-left-color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 54%, var(--canvas));
+  border-color: color-mix(in srgb, var(--ink) 8%, transparent);
 }
 .preset-item-pick {
   display: flex;
   gap: 10px;
-  padding: 9px 14px;
+  padding: 10px 11px;
   flex: 1;
   text-align: left;
   background: none;
@@ -280,12 +502,16 @@
   justify-content: center;
   width: 28px;
   margin: 6px 6px 6px 0;
-  border-radius: 5px;
+  border-radius: 7px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--ink-4);
   opacity: 0;
-  transition: opacity 100ms ease;
+  transition:
+    opacity 140ms var(--ease-out-quint),
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint);
   cursor: pointer;
   flex-shrink: 0;
   align-self: center;
@@ -311,35 +537,43 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--bg);
-  border: 1px solid var(--line);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--canvas) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink-3);
   cursor: pointer;
   padding: 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 62%, transparent);
+  transition:
+    background-color 180ms var(--ease-out-quint),
+    border-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint),
+    transform 120ms var(--ease-out-quart);
 }
 .pop-head-add:hover {
-  border-color: var(--ink-4);
+  border-color: color-mix(in srgb, var(--ink) 18%, transparent);
   color: var(--ink);
-  background: var(--canvas);
+  background: color-mix(in srgb, var(--panel) 52%, var(--canvas));
 }
 .pop-head-add:focus-visible {
   outline: 2px solid var(--ink-4);
   outline-offset: 1px;
 }
 .preset-icon {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--panel);
-  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel) 72%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 8px;
   font-size: 14px;
   color: var(--ink-2);
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 62%, transparent);
 }
 .preset-text {
   flex: 1;
@@ -378,7 +612,7 @@
 .create-todo-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .create-todo-fields .form-row {
   margin-bottom: 0;
@@ -386,7 +620,7 @@
 .create-todo-fields .form-label {
   display: block;
   min-width: 0;
-  margin-bottom: 5px;
+  margin-bottom: 7px;
 }
 .create-todo-fields select.form-input {
   cursor: pointer;
@@ -409,16 +643,17 @@
 .fork-session-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .fork-source-line {
   min-width: 0;
   display: grid;
   gap: 2px;
-  padding: 8px 9px;
-  border: 1px solid var(--line-2);
-  border-radius: 7px;
-  background: var(--bg);
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 62%, var(--canvas));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 68%, transparent);
 }
 .fork-source-slug,
 .fork-source-path {
@@ -443,7 +678,7 @@
 .fork-session-fields .form-label {
   display: block;
   min-width: 0;
-  margin-bottom: 5px;
+  margin-bottom: 7px;
 }
 .fork-session-error {
   font-size: 12px;
@@ -488,189 +723,238 @@
 /* ============ Segmented control (popover-internal) ============ */
 .seg-control {
   display: inline-flex;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 2px;
+  background: color-mix(in srgb, var(--bg) 64%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 10px;
+  padding: 3px;
   gap: 1px;
   flex-wrap: wrap;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 64%, transparent);
 }
 .seg-control button {
-  padding: 5px 11px;
-  border-radius: 5px;
+  padding: 6px 11px;
+  border-radius: 8px;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-3);
   background: none;
   border: 0;
   cursor: pointer;
+  transition:
+    transform 120ms var(--ease-out-quart),
+    background-color 180ms var(--ease-out-quint),
+    color 180ms var(--ease-out-quint),
+    box-shadow 180ms var(--ease-out-quint);
 }
 .seg-control button.on {
   background: var(--canvas);
   color: var(--ink);
-  box-shadow: var(--shadow);
+  box-shadow:
+    var(--shadow),
+    inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent);
 }
 .seg-control button:not(.on):hover {
   color: var(--ink-2);
+  background: color-mix(in srgb, var(--canvas) 56%, transparent);
+}
+.seg-control button:active {
+  transform: scale(0.985);
 }
 
-/* ============ Activity-log table (P12) ============
-   Five-column fixed-width grid: identity avatar · time · kind tag
-   with icon · summary (flex) · hover-only jump chevron. Mono throughout so
-   columns stay aligned even with single-glyph cells. Rows sit on a hairline
-   dashed grid; the kind tag carries the subtle per-kind tint that gives the
-   log its scannable color palette without hijacking attention. */
+/* ============ Activity-log — redesign ============
+   Two-row timeline tuned for the narrow right panel:
+   meta line on top, full-width summary below. No cramming. */
+
+/* ── List container ─────────────────────────────────────────────────── */
 .log-list {
   display: flex;
   flex-direction: column;
 }
+
+/* ── Row ─────────────────────────────────────────────────────────────── */
 .log-row {
   display: grid;
-  grid-template-columns: 30px 64px 104px 1fr 12px;
-  column-gap: 10px;
+  /* top: avatar · time · kind · jump
+     bottom: summary spanning the row */
+  grid-template-columns: 22px 58px minmax(0, 1fr) 12px;
+  grid-template-areas:
+    "who ts kind jump"
+    "summary summary summary summary";
+  column-gap: 8px;
+  row-gap: 3px;
   align-items: center;
-  padding: 5px 4px;
-  border-bottom: 1px dashed var(--line-2);
-  font-family: var(--mono);
-  font-size: 11.5px;
-  cursor: pointer;
-  background: none;
-  border-left: 0;
+  padding: 8px 12px 8px 9px;          /* 9px left leaves room for accent */
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
+  border-left: 3px solid transparent;
   border-right: 0;
   border-top: 0;
   width: 100%;
   text-align: left;
   color: inherit;
+  background: none;
+  cursor: pointer;
+  transition:
+    background     160ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-left-color 160ms cubic-bezier(0.32, 0.72, 0, 1);
 }
+.log-row .log-who  { grid-area: who; }
+.log-row .ts       { grid-area: ts; }
+.log-row .kind-tag { grid-area: kind; }
+.log-row .summary  { grid-area: summary; }
+.log-row .row-jump { grid-area: jump; }
+
 .log-row:hover {
-  background: var(--panel-2);
+  background: color-mix(in srgb, var(--agent) 6%, transparent);
+  border-left-color: color-mix(in srgb, var(--agent) 45%, transparent);
 }
 .log-row:focus-visible {
-  outline: 2px solid var(--ink-4);
-  outline-offset: -2px;
-  border-radius: 4px;
+  outline: none;
+  background: color-mix(in srgb, var(--agent) 8%, transparent);
+  border-left-color: var(--agent);
 }
 
-/* Column 1 — identity. The shared avatar component keeps human/agent marks
-   consistent with the feed and top bar. */
+/* ── Col 1 — identity dot / avatar ──────────────────────────────────── */
 .log-row .log-who {
   display: inline-flex;
   align-items: center;
   justify-self: start;
 }
-.log-row .log-who .avatar {
-  margin-left: 0;
-}
+.log-row .log-who .avatar { margin-left: 0; }
 .log-row .log-who .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
-.log-row .log-who.user .dot {
-  background: var(--user);
-}
-.log-row .log-who.agent .dot {
-  background: var(--agent);
-}
+.log-row .log-who.user .dot  { background: var(--user); }
+.log-row .log-who.agent .dot { background: var(--agent); }
 .log-row .log-who .initial {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--ink-3);
   line-height: 1;
 }
 
-/* Column 2 — time. Tabular figures keep digits in lockstep across rows. */
+/* ── Col 2 — timestamp ───────────────────────────────────────────────── */
 .log-row .ts {
   color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-/* Column 3 — kind tag with lucide icon + label. Subtle per-kind tint
-   carried via [data-kind="..."] so all six themes stay coherent (tints
-   resolve through CSS vars with safe fallbacks). */
+/* ── Col 3 — kind pill ───────────────────────────────────────────────── */
 .log-row .kind-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 7px 2px 6px;
-  border-radius: 4px;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: var(--radius-pill);
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-3);
-  background: var(--panel-2);
-  border: 1px solid var(--line-3);
-  letter-spacing: 0.02em;
+  font-size: 9.5px;
+  letter-spacing: 0.025em;
   line-height: 1.2;
-  justify-self: start;
   white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink-3);
+  justify-self: start;
+  transition: border-color 160ms cubic-bezier(0.32, 0.72, 0, 1);
   overflow: hidden;
   max-width: 100%;
 }
+.log-row:hover .kind-tag {
+  border-color: color-mix(in srgb, var(--agent) 24%, transparent);
+}
 .log-row .kind-tag svg {
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 0.7;
 }
 .log-row .kind-tag .kind-tag-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Per-kind tints. Each pairs a low-chroma background with an ink color
-   inherited from the theme. The tints are intentionally faint — the icon
-   carries most of the semantic signal. */
+/* Per-kind semantic tints — faint, so color complements icon signal */
 .log-row .kind-tag[data-kind="prose"] {
-  background: color-mix(in oklch, var(--panel) 70%, var(--ink) 4%);
+  background: color-mix(in oklch, var(--panel) 70%, var(--ink) 5%);
   color: var(--ink-2);
+  border-color: color-mix(in srgb, var(--ink) 8%, transparent);
 }
-.log-row .kind-tag[data-kind="choices"] {
-  background: color-mix(in oklch, var(--panel) 70%, var(--user) 14%);
-  color: var(--ink-2);
-}
+.log-row .kind-tag[data-kind="choices"],
 .log-row .kind-tag[data-kind="choice"] {
-  background: color-mix(in oklch, var(--panel) 70%, var(--user) 18%);
+  background: color-mix(in oklch, var(--panel) 60%, var(--user) 20%);
+  border-color: color-mix(in srgb, var(--user) 20%, transparent);
   color: var(--ink-2);
 }
 .log-row .kind-tag[data-kind="turn-end"] {
-  background: color-mix(in oklch, var(--panel) 80%, var(--ink) 8%);
+  background: color-mix(in oklch, var(--panel) 80%, var(--ink) 6%);
   color: var(--ink-3);
 }
-.log-row .kind-tag[data-kind="todo"] {
-  background: color-mix(in oklch, var(--panel) 70%, var(--agent) 14%);
-  color: var(--ink-2);
-}
+.log-row .kind-tag[data-kind="todo"],
 .log-row .kind-tag[data-kind="html"] {
-  background: color-mix(in oklch, var(--panel) 70%, var(--agent) 18%);
+  background: color-mix(in oklch, var(--panel) 62%, var(--agent) 22%);
+  border-color: color-mix(in srgb, var(--agent) 20%, transparent);
   color: var(--ink-2);
 }
 .log-row .kind-tag[data-kind="file"] {
   background: color-mix(in oklch, var(--panel) 70%, var(--ink) 10%);
   color: var(--ink-2);
 }
-
-/* Column 4 — summary. Single line, truncate. */
-.log-row .summary {
+.log-row .kind-tag[data-kind="tool-use"] {
+  background: color-mix(in oklch, var(--panel) 65%, var(--agent) 18%);
+  border-color: color-mix(in srgb, var(--agent) 16%, transparent);
   color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="subagent-run"],
+.log-row .kind-tag[data-kind="subagent-output"] {
+  background: color-mix(in oklch, var(--panel) 60%, var(--user) 16%);
+  border-color: color-mix(in srgb, var(--user) 14%, transparent);
+  color: var(--ink-2);
+}
+.log-row .kind-tag[data-kind="access-request"],
+.log-row .kind-tag[data-kind="access-response"] {
+  background: color-mix(in oklch, var(--panel) 65%, var(--rose) 14%);
+  border-color: color-mix(in srgb, var(--rose) 16%, transparent);
+  color: var(--ink-2);
+}
+
+/* ── Row 2 — summary ─────────────────────────────────────────────────── */
+.log-row .summary {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  padding-left: 30px;
+  transition: color 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.log-row:hover .summary {
+  color: var(--ink-2);
 }
 
-/* Column 5 — hover-only jump chevron. Sits at the right edge as an
-   affordance for "click to jump to this card". */
+/* ── Col 5 — jump affordance ─────────────────────────────────────────── */
 .log-row .row-jump {
-  color: var(--ink-4);
+  color: var(--agent);
   opacity: 0;
-  transition: opacity 120ms ease;
   justify-self: end;
+  flex-shrink: 0;
+  transition:
+    opacity   160ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .log-row:hover .row-jump,
 .log-row:focus-visible .row-jump {
-  opacity: 1;
+  opacity: 0.65;
+  transform: translateX(2px);
 }
 
+/* ── Log header ──────────────────────────────────────────────────────── */
 .log-empty {
   font-family: var(--serif);
   font-style: italic;
@@ -683,59 +967,79 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--panel);
 }
 .log-head .scope {
   flex: 1;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   color: var(--ink-4);
-  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+/* Filter button — pill, agent-tinted, matches the rest of the chrome */
 .log-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--agent) 5%, var(--panel));
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-3);
-  padding: 3px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   cursor: pointer;
-  position: relative;
+  transition:
+    background   200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color        200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .log-filter-btn:hover,
 .log-filter-btn[aria-expanded="true"] {
-  background: var(--canvas);
+  background: color-mix(in srgb, var(--agent) 11%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 35%, transparent);
   color: var(--ink);
-  border-color: var(--ink-4);
 }
+/* Active-filter count badge */
 .log-filter-btn .filter-ct {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  background: var(--ink);
-  color: var(--canvas);
-  padding: 0 5px;
-  min-width: 14px;
-  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  margin-left: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--agent);
+  color: var(--canvas);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
 }
+
+/* ── Active filter chips ─────────────────────────────────────────────── */
 .active-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 8px;
-  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
+  background: color-mix(in srgb, var(--agent) 3%, transparent);
 }
-.active-chips:empty {
-  display: none;
-}
+.active-chips:empty { display: none; }
+
 .active-chips-clear {
   font-family: var(--mono);
   font-size: 10px;

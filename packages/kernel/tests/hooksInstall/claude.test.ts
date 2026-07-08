@@ -5,42 +5,45 @@ import {
   applyClaudeHooks,
   detectClaudeHookLocations,
   detectClaudeHooks,
+  removeClaudeFmarkHooks,
   renderClaudeInstallSnippet,
 } from "../../src/hooksInstall/claude.js";
 import { autoStreamHookCommand } from "../../src/hooksInstall/command.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 describe("Claude hooks adapter", () => {
-  it("detects installed when the generic Stop+PermissionRequest+PostToolUse hooks are present", () => {
+  it("detects installed when the generic live-stream hooks are present", () => {
     const command = autoStreamHookCommand();
     const settings = {
       hooks: {
         Stop: [{ hooks: [{ type: "command", command }] }],
         PermissionRequest: [{ hooks: [{ type: "command", command }] }],
         PostToolUse: [{ hooks: [{ type: "command", command }] }],
+        MessageDisplay: [{ hooks: [{ type: "command", command }] }],
       },
     };
     const r = detectClaudeHooks(settings);
     expect(r.installed).toBe(true);
     expect(r.status).toBe("installed");
-    expect(r.detectedEntries.length).toBe(3);
+    expect(r.detectedEntries.length).toBe(4);
     expect(r.detectedEntries.every((entry) => entry.version !== null)).toBe(true);
   });
 
-  it("reports stale when PostToolUse hook is missing (v1 install upgraded to v2)", () => {
+  it("reports stale when MessageDisplay hook is missing (v2 install upgraded to v3)", () => {
     const command = autoStreamHookCommand();
     const settings = {
       hooks: {
         Stop: [{ hooks: [{ type: "command", command }] }],
         PermissionRequest: [{ hooks: [{ type: "command", command }] }],
-        /* No PostToolUse — v1 layout. */
+        PostToolUse: [{ hooks: [{ type: "command", command }] }],
+        /* No MessageDisplay — v2 layout. */
       },
     };
     const r = detectClaudeHooks(settings);
     expect(r.installed).toBe(false);
     expect(r.status).toBe("stale");
-    expect(r.detectedEntries.length).toBe(2);
-    expect(r.expectedEntries.length).toBe(3);
+    expect(r.detectedEntries.length).toBe(3);
+    expect(r.expectedEntries.length).toBe(4);
   });
 
   it("legacy participant-specific hooks are reported as stale", () => {
@@ -58,6 +61,7 @@ describe("Claude hooks adapter", () => {
     expect(s).not.toContain("us-1");
     expect(s).not.toContain("UserPromptSubmit");
     expect(s).toContain("Stop");
+    expect(s).toContain("MessageDisplay");
     expect(s).toContain("hook auto-stream");
     expect(s).not.toContain("npx -y f-mark");
   });
@@ -67,7 +71,7 @@ describe("Claude hooks adapter", () => {
     expect(r.installed).toBe(false);
     expect(r.status).toBe("missing");
     expect(r.detectedEntries).toEqual([]);
-    expect(r.expectedEntries.length).toBe(3);
+    expect(r.expectedEntries.length).toBe(4);
   });
 
   it("returns empty detected entries when settings is null", () => {
@@ -75,7 +79,7 @@ describe("Claude hooks adapter", () => {
     expect(r.installed).toBe(false);
   });
 
-  it("renders parseable JSON in the snippet that includes PostToolUse", () => {
+  it("renders parseable JSON in the snippet that includes live hooks", () => {
     const s = renderClaudeInstallSnippet();
     const match = /```json\n([\s\S]+?)\n```/.exec(s);
     expect(match).not.toBeNull();
@@ -86,6 +90,7 @@ describe("Claude hooks adapter", () => {
         Stop: Array<{ hooks: Array<{ type: string; command: string }> }>;
         PermissionRequest: Array<{ hooks: Array<{ type: string; command: string }> }>;
         PostToolUse: Array<{ hooks: Array<{ type: string; command: string }> }>;
+        MessageDisplay: Array<{ hooks: Array<{ type: string; command: string }> }>;
       };
     };
     expect(parsed.hooks.Stop[0]!.hooks[0]!.command).toBe(autoStreamHookCommand());
@@ -93,6 +98,9 @@ describe("Claude hooks adapter", () => {
       autoStreamHookCommand(),
     );
     expect(parsed.hooks.PostToolUse[0]!.hooks[0]!.command).toBe(
+      autoStreamHookCommand(),
+    );
+    expect(parsed.hooks.MessageDisplay[0]!.hooks[0]!.command).toBe(
       autoStreamHookCommand(),
     );
     expect("UserPromptSubmit" in parsed.hooks).toBe(false);
@@ -126,6 +134,16 @@ describe("Claude hooks adapter", () => {
               },
             ],
             PostToolUse: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: autoStreamHookCommand(),
+                  },
+                ],
+              },
+            ],
+            MessageDisplay: [
               {
                 hooks: [
                   {
@@ -204,10 +222,10 @@ describe("Claude hooks adapter", () => {
       expect(second.changed).toBe(false);
       expect(saved.theme).toBe("dark");
       expect(serializedHooks).toContain("echo existing");
-      /* Three F-Mark hooks now: Stop, PermissionRequest, PostToolUse. */
+      /* Four F-Mark hooks now: Stop, PermissionRequest, PostToolUse, MessageDisplay. */
       expect(
         serializedHooks.match(/hook auto-stream/g)?.length,
-      ).toBe(3);
+      ).toBe(4);
       expect(serializedHooks).not.toContain("npx -y f-mark");
       expect(serializedHooks).not.toContain("ag-old");
       expect(serializedHooks).not.toContain("us-1");
@@ -233,6 +251,87 @@ describe("Claude hooks adapter", () => {
       expect(saved.theme).toBe("parent");
       expect(JSON.stringify(saved.hooks)).toContain("hook auto-stream");
       expect(JSON.stringify(saved.hooks)).not.toContain("npx -y f-mark");
+    });
+  });
+
+  it("removes all F-Mark hooks while preserving non-F-Mark hooks", async () => {
+    await withTempProject(async (root) => {
+      const configPath = join(root, ".claude", "settings.json");
+      await mkdir(join(root, ".claude"), { recursive: true });
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          theme: "dark",
+          hooks: {
+            Stop: [
+              {
+                hooks: [
+                  { type: "command", command: autoStreamHookCommand() },
+                  { type: "command", command: "echo keep-stop" },
+                ],
+              },
+            ],
+            PermissionRequest: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: "npx -y f-mark hook auto-stream ag-old",
+                  },
+                ],
+              },
+            ],
+            UserPromptSubmit: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: "f-mark hook auto-stream us-old --kind user",
+                  },
+                ],
+              },
+            ],
+            OtherEvent: [
+              {
+                hooks: [
+                  { type: "command", command: "f-mark hook auto-stream ag-other" },
+                ],
+              },
+            ],
+          },
+        }),
+        "utf8",
+      );
+
+      const removed = await removeClaudeFmarkHooks({
+        scope: "local",
+        projectRoot: root,
+      });
+
+      const saved = JSON.parse(await readFile(configPath, "utf8"));
+      expect(removed).toEqual({ configPath, changed: true });
+      expect(saved.theme).toBe("dark");
+      expect(saved.hooks.Stop).toEqual([
+        { hooks: [{ type: "command", command: "echo keep-stop" }] },
+      ]);
+      expect(saved.hooks.PermissionRequest).toBeUndefined();
+      expect(saved.hooks.UserPromptSubmit).toBeUndefined();
+      expect(saved.hooks.OtherEvent).toBeUndefined();
+      expect(JSON.stringify(saved)).not.toContain("hook auto-stream");
+    });
+  });
+
+  it("remove is a no-op when the settings file is missing", async () => {
+    await withTempProject(async (root) => {
+      const removed = await removeClaudeFmarkHooks({
+        scope: "local",
+        projectRoot: root,
+      });
+
+      expect(removed).toEqual({
+        configPath: join(root, ".claude", "settings.json"),
+        changed: false,
+      });
     });
   });
 });

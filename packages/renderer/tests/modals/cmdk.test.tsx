@@ -54,8 +54,8 @@ const PARTICIPANTS: Record<string, Participant> = {
 
 const SESSIONS: SessionMeta[] = [
   {
-    id: "2026-05-22-launch-planning",
-    slug: "launch-planning",
+    id: "2026-05-22-launch-review",
+    slug: "launch-review",
     created_at: "2026-05-22T10:00:00Z",
   },
   {
@@ -205,7 +205,7 @@ describe("CmdKModal — default groups (empty query)", () => {
   test("Recent sessions row lists session slugs", () => {
     render(<CmdKModal />);
     // Most recent first (sorted by created_at desc).
-    expect(screen.getByText("launch-planning")).toBeInTheDocument();
+    expect(screen.getByText("launch-review")).toBeInTheDocument();
     expect(screen.getByText("pricing-research")).toBeInTheDocument();
     expect(screen.getByText("onboarding-flow")).toBeInTheDocument();
   });
@@ -264,7 +264,7 @@ describe("CmdKModal — filtering", () => {
     const input = screen.getByLabelText(/command palette query/i);
     await user.type(input, "pricing");
     expect(screen.getByText("pricing-research")).toBeInTheDocument();
-    expect(screen.queryByText("launch-planning")).toBeNull();
+    expect(screen.queryByText("launch-review")).toBeNull();
   });
 
   test("typing matches against named contribution names", async () => {
@@ -379,7 +379,7 @@ describe("CmdKModal — activation (Enter)", () => {
       currentSessionId: SESSIONS[2]!.id,
     });
     render(<CmdKModal />);
-    // The first row is the most-recent session: launch-planning.
+    // The first row is the most-recent session: launch-review.
     await user.keyboard("{Enter}");
     expect(useStore.getState().currentSessionId).toBe(SESSIONS[0]!.id);
     expect(useStore.getState().activeModal).toBeNull();
@@ -425,7 +425,7 @@ describe("CmdKModal — activation (Enter)", () => {
       currentSessionId: SESSIONS[2]!.id,
     });
     render(<CmdKModal />);
-    const row = screen.getByText("launch-planning").closest(".cmdk-row");
+    const row = screen.getByText("launch-review").closest(".cmdk-row");
     expect(row).not.toBeNull();
     await user.click(row as HTMLElement);
     expect(useStore.getState().currentSessionId).toBe(SESSIONS[0]!.id);

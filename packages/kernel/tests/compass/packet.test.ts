@@ -5,6 +5,10 @@
 import { describe, expect, it } from "vitest";
 import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
 import { buildCompassPacket, buildWakePrompt } from "../../src/compass/packet.js";
+import {
+  FMARK_WAKE_PROMPT_MARKER,
+  isFmarkInjectedPrompt,
+} from "../../src/launchPrompt.js";
 
 function proseEvent(
   filename: string,
@@ -145,6 +149,44 @@ describe("buildCompassPacket — comment anchor metadata", () => {
     expect(prompt).toContain('"mode": "comment"');
     expect(prompt).toContain('"lines"');
     expect(prompt).toContain("comment activity");
+  });
+
+  it("wake prompts start with the injected-prompt marker so UserPromptSubmit hooks drop them", () => {
+    const packet = buildCompassPacket({
+      sessionId: "sess-1",
+      participantId: "ag-codex",
+      reason: "user-message",
+      cursorBefore: null,
+      events: [],
+    });
+    const prompt = buildWakePrompt(packet);
+    expect(prompt.startsWith(FMARK_WAKE_PROMPT_MARKER)).toBe(true);
+    expect(isFmarkInjectedPrompt(prompt)).toBe(true);
+  });
+
+  it("nudges a rename while the session still has a placeholder name", () => {
+    const packet = buildCompassPacket({
+      sessionId: "2026-07-04-1a2b3c",
+      sessionSlug: "new-session",
+      participantId: "ag-claude",
+      reason: "user-message",
+      cursorBefore: null,
+      events: [],
+    });
+    const prompt = buildWakePrompt(packet);
+    expect(prompt).toContain("fmark_rename_session");
+    expect(prompt).toContain("placeholder name");
+  });
+
+  it("drops the rename nudge once the session has a real name", () => {
+    const packet = buildCompassPacket({
+      sessionId: "2026-07-04-fix-login-flow",
+      participantId: "ag-claude",
+      reason: "user-message",
+      cursorBefore: null,
+      events: [],
+    });
+    expect(buildWakePrompt(packet)).not.toContain("fmark_rename_session");
   });
 
   it("single-line anchor renders as @n-n", () => {

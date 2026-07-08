@@ -7,6 +7,7 @@ import {
   applyOpencodeHooks,
   detectOpencodeHooks,
   loadOpencodePluginFile,
+  removeOpencodeHooks,
   renderOpencodeInstallSnippet,
   opencodePluginPath,
   FMARK_OPENCODE_PLUGIN_VERSION,
@@ -54,6 +55,8 @@ describe("hooksInstall/opencode", () => {
 
     const ts = await readFile(applied.configPath, "utf8");
     expect(ts).toContain("FmarkPlugin");
+    expect(ts).toContain("opencode:always");
+    expect(ts).toContain("scope: \"always\"");
 
     const metaPath = join(tmp, ".opencode/plugin/fmark.meta.json");
     const meta = JSON.parse(await readFile(metaPath, "utf8"));
@@ -149,5 +152,29 @@ describe("hooksInstall/opencode", () => {
     await applyOpencodeHooks({ scope: "project", projectRoot: tmp });
     const dirStat = await stat(join(tmp, ".opencode/plugin"));
     expect(dirStat.isDirectory()).toBe(true);
+  });
+
+  test("remove deletes the plugin and sidecar when present", async () => {
+    const applied = await applyOpencodeHooks({ scope: "project", projectRoot: tmp });
+    const sidecar = join(tmp, ".opencode/plugin/fmark.meta.json");
+
+    const removed = await removeOpencodeHooks({ scope: "project", projectRoot: tmp });
+
+    expect(removed).toEqual({ changed: true, configPath: applied.configPath });
+    await expect(readFile(applied.configPath, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(sidecar, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  test("remove is a no-op when plugin and sidecar are absent", async () => {
+    await expect(
+      removeOpencodeHooks({ scope: "project", projectRoot: tmp }),
+    ).resolves.toEqual({
+      changed: false,
+      configPath: join(tmp, ".opencode/plugin/fmark.ts"),
+    });
   });
 });

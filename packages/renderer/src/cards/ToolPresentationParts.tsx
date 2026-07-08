@@ -1,6 +1,15 @@
-import { AlertTriangle, FileText } from "lucide-react";
+import { AlertTriangle, Code2, FileText, Rows3 } from "lucide-react";
 import { useRef, useState, type JSX, type ReactNode } from "react";
-import { useStore } from "../state/store.js";
+import { JsonRenderer } from "../render/JsonRenderer.js";
+import { usePresentFile } from "../shell/usePresentFile.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  inline: "inline",
+  changes: "Changes",
+  sideBySide: "side-by-side",
+  source: "source",
+  tree: "tree",
+} as const;
 
 export interface FileReference {
   path: string;
@@ -82,16 +91,8 @@ function relPath(path: string): string {
   return parts.slice(Math.max(0, parts.length - 3)).join("/");
 }
 
-function toOpenablePath(path: string, activePath: string | null): string {
-  if (path.startsWith("/")) return path;
-  if (activePath === null || activePath.length === 0) return path;
-  return `${activePath.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
-}
-
 export function ToolFileReference({ file }: { file: FileReference }): JSX.Element {
-  const activePath = useStore((s) => s.activePath);
-  const openFile = useStore((s) => s.openFile);
-  const openPath = toOpenablePath(file.path, activePath);
+  const presentFile = usePresentFile();
   const title = file.line !== undefined ? `${file.path}:${file.line}` : file.path;
 
   return (
@@ -99,7 +100,9 @@ export function ToolFileReference({ file }: { file: FileReference }): JSX.Elemen
       type="button"
       className="tool-file-ref"
       title={title}
-      onClick={() => openFile(openPath)}
+      onClick={() => {
+        presentFile(file.path);
+      }}
     >
       <FileText size={13} aria-hidden="true" />
       <span className="tool-file-ref-name">{file.label ?? basename(file.path)}</span>
@@ -134,17 +137,85 @@ export function CodeBlock({
   children: string;
   label?: string;
 }): JSX.Element {
+  const json = parseJsonBlock(children);
+  const block =
+    json === null ? (
+      <pre className="io-raw">{children}</pre>
+    ) : (
+      <InteractiveJsonBlock source={children} value={json} />
+    );
+
   // Reference `.io` vocabulary: a mono output box, optionally with its own label
   // (in tool sections the parent `.io-label` already names it, so callers omit it).
   if (label !== undefined) {
     return (
       <div className="io">
         <div className="io-label">{label}</div>
-        <pre className="io-raw">{children}</pre>
+        {block}
       </div>
     );
   }
-  return <pre className="io-raw">{children}</pre>;
+  return block;
+}
+
+type JsonBlockMode = "source" | "tree";
+
+function parseJsonBlock(text: string): unknown | null {
+  const trimmed = text.trim();
+  if (
+    (!trimmed.startsWith("{") || !trimmed.endsWith("}")) &&
+    (!trimmed.startsWith("[") || !trimmed.endsWith("]"))
+  ) {
+    return null;
+  }
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function InteractiveJsonBlock({
+  source,
+  value,
+}: {
+  source: string;
+  value: unknown;
+}): JSX.Element {
+  const [mode, setMode] = useState<JsonBlockMode>(NO_LOOSE_STRING_VALUES.source);
+  return (
+    <div className="io-json-block">
+      <div className="io-json-toolbar">
+        <div className="io-json-mode-toggle" role="group" aria-label="JSON view mode">
+          <button
+            type="button"
+            className={mode === NO_LOOSE_STRING_VALUES.source ? "is-current" : ""}
+            onClick={() => setMode(NO_LOOSE_STRING_VALUES.source)}
+            aria-label="Source"
+            aria-pressed={mode === NO_LOOSE_STRING_VALUES.source}
+            title="Source"
+          >
+            <Code2 size={13} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={mode === NO_LOOSE_STRING_VALUES.tree ? "is-current" : ""}
+            onClick={() => setMode(NO_LOOSE_STRING_VALUES.tree)}
+            aria-label="Interactive JSON"
+            aria-pressed={mode === NO_LOOSE_STRING_VALUES.tree}
+            title="Interactive JSON"
+          >
+            <Rows3 size={13} aria-hidden />
+          </button>
+        </div>
+      </div>
+      {mode === NO_LOOSE_STRING_VALUES.source ? (
+        <pre className="io-raw">{source}</pre>
+      ) : (
+        <JsonRenderer value={value} mode={NO_LOOSE_STRING_VALUES.tree} />
+      )}
+    </div>
+  );
 }
 
 export function CodeExcerpt({
@@ -190,7 +261,7 @@ export function ToolDiff({
   newText: string;
   title?: string;
 }): JSX.Element {
-  const [mode, setMode] = useState<"inline" | "side-by-side">("inline");
+  const [mode, setMode] = useState<"inline" | "side-by-side">(NO_LOOSE_STRING_VALUES.inline);
   const beforePaneRef = useRef<HTMLDivElement | null>(null);
   const afterPaneRef = useRef<HTMLDivElement | null>(null);
   const oldLines = splitLines(oldText);
@@ -210,7 +281,7 @@ export function ToolDiff({
   return (
     <div className="diff" data-testid="tool-diff">
       <div className="diff-head">
-        <span className="diff-file">{title ?? "Changes"}</span>
+        <span className="diff-file">{title ?? NO_LOOSE_STRING_VALUES.changes}</span>
         <span className="diff-stats">
           <span className="a">+{newLines.length}</span>
           <span className="d">&minus;{oldLines.length}</span>
@@ -219,20 +290,20 @@ export function ToolDiff({
           <button
             type="button"
             aria-pressed={mode === "inline"}
-            onClick={() => setMode("inline")}
+            onClick={() => setMode(NO_LOOSE_STRING_VALUES.inline)}
           >
             Inline
           </button>
           <button
             type="button"
             aria-pressed={mode === "side-by-side"}
-            onClick={() => setMode("side-by-side")}
+            onClick={() => setMode(NO_LOOSE_STRING_VALUES.sideBySide)}
           >
             Side by side
           </button>
         </div>
       </div>
-      {mode === "inline" ? (
+      {mode === NO_LOOSE_STRING_VALUES.inline ? (
         <div className="diff-body" data-testid="tool-diff-inline">
           {oldLines.map((line, index) => (
             <div className="diff-line del" key={`old-${index}-${line}`}>
@@ -295,7 +366,7 @@ export function RawDetails({
   return (
     <details className="tool-raw-details">
       <summary>{label}</summary>
-      <pre>{stringifyForDisplay(value)}</pre>
+      <InteractiveJsonBlock source={stringifyForDisplay(value)} value={value} />
     </details>
   );
 }

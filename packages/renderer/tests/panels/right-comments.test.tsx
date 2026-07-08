@@ -70,6 +70,64 @@ describe("RightComments", () => {
     vi.restoreAllMocks();
   });
 
+  test("shows an empty state instead of a perpetual loader", () => {
+    useStore.setState({ events: [] });
+
+    render(<RightComments />);
+
+    expect(screen.getByText(/No comments yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/loading/i)).toBeNull();
+  });
+
+  test("renders list-only comments without the anchored layout toggle", () => {
+    const target = makeProse(
+      "20260522T121000Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Anchor", content: "Line 1" },
+    );
+    const first = makeProse(
+      "20260522T121100Z_us-a7f3.prose.md",
+      "us-a7f3",
+      { content: "Comment", append_to: target.filename, mode: "comment", lines: [1, 1] },
+    );
+    useStore.setState({ events: [target, first] });
+
+    render(<RightComments />);
+
+    expect(screen.queryByLabelText(/Thread layout mode/i)).toBeNull();
+    expect(document.querySelector(".right-comments.list")).not.toBeNull();
+  });
+
+  test("renders selected comment body as markdown", async () => {
+    const user = userEvent.setup();
+    const target = makeProse(
+      "20260522T121000Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Anchor", content: "Line 1" },
+    );
+    const first = makeProse(
+      "20260522T121100Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "**bold note**\n\n- item",
+        append_to: target.filename,
+        mode: "comment",
+        lines: [1, 1],
+      },
+    );
+    useStore.setState({ events: [target, first] });
+
+    render(<RightComments />);
+    await user.click(
+      screen.getByText(/line 1/i, {
+        selector: ".right-comments-thread-head span",
+      }),
+    );
+
+    expect(screen.getByText("bold note").tagName).toBe("STRONG");
+    expect(screen.getByText("item").tagName).toBe("LI");
+  });
+
   test("clicking a thread focuses its target and schedules panel/feed alignment", async () => {
     const flushRaf = installRafQueue();
     const user = userEvent.setup();

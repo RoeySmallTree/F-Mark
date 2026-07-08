@@ -90,7 +90,7 @@ describe("participants", () => {
     });
   });
 
-  it("updateParticipant persists a user avatar data URL", async () => {
+  it("updateParticipant persists a user avatar preset", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -98,26 +98,40 @@ describe("participants", () => {
       const userId = Object.entries(list).find(
         ([, v]) => v.kind === "user",
       )![0];
-      const avatar = "data:image/png;base64,aGVsbG8=";
 
       const updated = await updateParticipant(p, userId, {
-        avatar_data_url: avatar,
+        avatar_preset: "02",
       });
-      expect(updated.avatar_data_url).toBe(avatar);
+      expect(updated.avatar_preset).toBe("02");
 
       const refetched = await listParticipants(p);
-      expect(refetched[userId]?.avatar_data_url).toBe(avatar);
+      expect(refetched[userId]?.avatar_preset).toBe("02");
     });
   });
 
-  it("updateParticipant rejects avatar images for agents", async () => {
+  it("updateParticipant rejects invalid avatar presets", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const list = await listParticipants(p);
+      const userId = Object.entries(list).find(
+        ([, v]) => v.kind === "user",
+      )![0];
+
+      await expect(
+        updateParticipant(p, userId, { avatar_preset: "999" }),
+      ).rejects.toThrow(/invalid avatar preset/);
+    });
+  });
+
+  it("updateParticipant rejects avatar presets for agents", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
       const agent = await registerAgent(p, { name: "Claude" });
       await expect(
         updateParticipant(p, agent.id, {
-          avatar_data_url: "data:image/png;base64,aGVsbG8=",
+          avatar_preset: "02",
         }),
       ).rejects.toThrow(/only supported for user/);
     });

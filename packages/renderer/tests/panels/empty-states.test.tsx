@@ -20,12 +20,14 @@ describe("Empty-state copy", () => {
     cleanup();
   });
 
-  test("Sessions panel — 'No sessions yet. Press + New.' when empty", () => {
+  test("Sessions panel — 'No sessions yet. Press + New.' when empty", async () => {
     useStore.setState({ sessions: [], currentSessionId: null });
     render(<Sessions />);
-    expect(
-      screen.getByText(/No sessions yet\. Press \+ New\./i),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No sessions yet\. Press \+ New\./i),
+      ).toBeInTheDocument();
+    });
   });
 
   test("Search panel — instructs the user to type when query is empty", async () => {
@@ -37,15 +39,17 @@ describe("Empty-state copy", () => {
     });
   });
 
-  test("Agents (Settings) — empty-state mentions the + Add button", () => {
+  test("Agents (Settings) — shows the loaded empty connected-agents state", async () => {
     // Reset to a state with only a user participant — no agents.
     useStore.setState({
       participants: { "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" } },
       events: [],
     });
     render(<Agents />);
-    expect(
-      screen.getByText(/No agents registered yet\. Click \+ Add agent above\./i),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No connected agents right now\./i),
+      ).toBeInTheDocument();
+    });
   });
 });

@@ -5,6 +5,10 @@ import type {
 } from "@f-mark/shared";
 import { SubagentPill, subagentInitials } from "./SubagentBox.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  subagentRun: "subagent-run",
+} as const;
+
 type SubagentEvent = SubagentRunEventRecord | SubagentOutputEventRecord;
 
 function stringify(value: unknown): string {
@@ -17,7 +21,7 @@ function stringify(value: unknown): string {
 }
 
 export function SubagentCard({ event }: { event: SubagentEvent }): JSX.Element {
-  if (event.kind === "subagent-run") {
+  if (event.kind === NO_LOOSE_STRING_VALUES.subagentRun) {
     const payload = event.payload;
     return (
       <div className="subagent" data-event-kind="subagent-run" data-status={payload.status}>

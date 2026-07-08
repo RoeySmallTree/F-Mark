@@ -1,6 +1,5 @@
-/* Overlays — comment-thread overlay rendered inside the right panel when
-   `store.commentTarget` is non-null. Styles ported verbatim from
-   planning/redesign/design.html (lines 444-467). All colors resolve via
+/* Overlays - comment-thread overlay rendered inside the right panel when
+   `store.commentTarget` is non-null. All colors resolve via
    CSS variables (tokens.css) so theme swaps just work.
 
    Note: `.panel-scroll`, `.feed-scroll.dimmed`, and `.prose-card.focused`
@@ -165,6 +164,9 @@
 }
 
 .resolve-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--ink-3);
@@ -175,17 +177,56 @@
   cursor: pointer;
 }
 .resolve-btn:hover:not(:disabled) {
-  background: var(--bg);
-  color: var(--ink);
-}
-.resolve-btn.resolved {
-  background: var(--green-tint);
+  background: color-mix(in srgb, var(--green-tint) 40%, var(--bg));
   color: var(--green);
-  border-color: var(--green);
-  cursor: default;
+  border-color: color-mix(in srgb, var(--green) 50%, var(--line));
 }
-.resolve-btn:disabled {
-  cursor: default;
+
+.thread.resolved {
+  background: color-mix(in srgb, var(--green-tint) 28%, var(--panel));
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.thread-resolved-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--green) 38%, var(--line));
+  background: color-mix(in srgb, var(--green-tint) 58%, var(--panel));
+}
+
+.thread-resolved-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.thread-reopen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, var(--line));
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.thread-reopen-btn:hover {
+  border-color: var(--green);
+  color: var(--green);
 }
 
 /* Note on dimming: .feed-scroll.dimmed and .prose-card.focused already

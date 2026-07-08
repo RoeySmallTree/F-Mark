@@ -6,12 +6,17 @@ import userEvent from "@testing-library/user-event";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import { TopBar } from "../src/shell/TopBar.js";
 import { Feed } from "../src/shell/Feed.js";
-import { LeftRail } from "../src/shell/LeftRail.js";
 import { LeftPanel } from "../src/shell/LeftPanel.js";
 import { RightPanel } from "../src/shell/RightPanel.js";
+import { MessagesPane } from "../src/shell/MessagesPane.js";
 import { useStore } from "../src/state/store.js";
 import type { SessionMeta } from "../src/api/client.js";
 import { renderWithAgentSpawn } from "./agentSpawnProvider.js";
+import {
+  AgentSpawnProvider,
+  type AgentSpawnValue,
+} from "../src/hooks/useAgentSpawn.js";
+import { resetDockLayout } from "../src/shell/dockLayout.js";
 
 const shellCssPath = [
   path.join(process.cwd(), "src/shell/shell.css"),
@@ -25,8 +30,8 @@ if (shellCssPath === undefined) {
 const SHELL_CSS = readFileSync(shellCssPath, "utf8");
 
 const MOCK_SESSION: SessionMeta = {
-  id: "2026-05-22-launch-planning",
-  slug: "launch-planning",
+  id: "2026-05-22-launch-review",
+  slug: "launch-review",
   created_at: "2026-05-22T10:00:00Z",
 };
 
@@ -36,6 +41,7 @@ const PARTICIPANTS: Record<string, Participant> = {
 };
 
 function resetStore(): void {
+  resetDockLayout();
   // Reset the zustand store to a known baseline for each test.
   useStore.setState({
     token: null,
@@ -44,12 +50,42 @@ function resetStore(): void {
     participants: PARTICIPANTS,
     currentUserId: "us-a7f3",
     events: [],
+    eventsLoadingSessionId: null,
     composeMode: "message",
     commentTarget: null,
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",
   });
+}
+
+function spawnValue(
+  overrides: Partial<AgentSpawnValue> = {},
+): AgentSpawnValue {
+  return {
+    runtimes: [],
+    tmuxMissing: false,
+    spawnDisabledReason: null,
+    spawnError: null,
+    connectingAgents: [],
+    integrationSetupFor: null,
+    setIntegrationSetupFor: vi.fn(),
+    setSpawnError: vi.fn(),
+    accessModeForRuntime: () => "default",
+    accessModeOptionsForRuntime: () => [],
+    setAccessModeForRuntime: vi.fn(),
+    modelForRuntime: () => "",
+    effortForRuntime: () => "",
+    modelOptionsForRuntime: () => [],
+    effortOptionsForRuntime: () => [],
+    setModelForRuntime: vi.fn(),
+    setEffortForRuntime: vi.fn(),
+    onSpawnRuntime: vi.fn(),
+    onConfigureRuntime: vi.fn(),
+    onManageRuntimes: vi.fn(),
+    onSpawnComplete: vi.fn(),
+    ...overrides,
+  };
 }
 
 function cssRule(selector: string): string {
@@ -73,7 +109,7 @@ describe("Shell — TopBar", () => {
     const breadcrumb = container.querySelector(".breadcrumb");
     expect(breadcrumb).not.toBeNull();
     expect(
-      within(breadcrumb as HTMLElement).getByText("launch-planning"),
+      within(breadcrumb as HTMLElement).getByText("launch-review"),
     ).toBeInTheDocument();
   });
 
@@ -96,6 +132,61 @@ describe("Shell — TopBar", () => {
     expect(useStore.getState().viewMode).toBe("document");
     await user.click(buttons[2]!);
     expect(useStore.getState().viewMode).toBe("conversation");
+  });
+});
+
+describe("Shell — main layout", () => {
+  test("does not reserve a left toolbar column", () => {
+    const rule = cssRule(".main");
+    expect(rule).toContain(
+      'grid-template-areas: "leftPanel chat rightPanel"',
+    );
+    expect(rule).not.toContain("rail");
+    expect(rule).not.toContain("48px var(--pane-w-leftPanel");
+  });
+});
+
+describe("Shell — MessagesPane loading", () => {
+  beforeEach(() => {
+    resetStore();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  test("shows the feed loader instead of the empty agent launcher while session events load", () => {
+    useStore.setState({
+      participants: {
+        "us-a7f3": PARTICIPANTS["us-a7f3"]!,
+      },
+      events: [],
+      eventsLoadingSessionId: MOCK_SESSION.id,
+    });
+
+    renderWithAgentSpawn(<MessagesPane />);
+
+    expect(
+      screen.getByRole("status", { name: /loading/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /add a coding agent/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("shows the empty agent launcher after an empty session has loaded", () => {
+    useStore.setState({
+      participants: {
+        "us-a7f3": PARTICIPANTS["us-a7f3"]!,
+      },
+      events: [],
+      eventsLoadingSessionId: null,
+    });
+
+    renderWithAgentSpawn(<MessagesPane />);
+
+    expect(
+      screen.getByRole("heading", { name: /add a coding agent/i }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -137,6 +228,44 @@ describe("Shell — composer-adjacent participant row", () => {
     ).not.toBeNull();
   });
 
+  test("renders the working strip while a mid-run agent is connecting", () => {
+    useStore.setState({
+      events: [
+        {
+          filename: "20260522T100000Z_us-a7f3.turn-end.json",
+          timestamp: "20260522T100000Z",
+          participant_id: "us-a7f3",
+          kind: "turn-end",
+          payload: { participant_id: "us-a7f3" },
+        },
+      ],
+    });
+    render(
+      <AgentSpawnProvider
+        value={spawnValue({
+          connectingAgents: [
+            {
+              participantId: "ag-codex-1111",
+              name: "Mira",
+              color: "#2a7f62",
+              runtimeId: "codex",
+              sessionId: MOCK_SESSION.id,
+              startedAtMs: Date.now(),
+            },
+          ],
+        })}
+      >
+        <Feed />
+      </AgentSpawnProvider>,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Mira is connecting" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Mira")).toBeInTheDocument();
+    expect(screen.getByText("connecting", { exact: false })).toBeInTheDocument();
+  });
+
   test("clears the agent active wrapper after that agent's turn-end arrives", () => {
     const userTurnEnd: AnyEventRecord = {
       filename: "20260522T100000Z_us-a7f3.turn-end.json",
@@ -176,36 +305,6 @@ describe("Shell — composer-adjacent participant row", () => {
 
     expect(container.querySelector(".agent-chip-anchor.active-turn")).toBeNull();
     expect(chip()?.classList.contains("active")).toBe(false);
-  });
-});
-
-describe("Shell — LeftRail", () => {
-  beforeEach(() => {
-    resetStore();
-  });
-  afterEach(() => {
-    cleanup();
-  });
-
-  test("renders five rail buttons; clicking each updates store.leftRail", async () => {
-    const user = userEvent.setup();
-    render(<LeftRail />);
-    const rail = screen.getByRole("tablist", {
-      name: /left panel navigation/i,
-    });
-    const buttons = within(rail).getAllByRole("tab");
-    expect(buttons).toHaveLength(5);
-    const expectedKeys = [
-      "sessions",
-      "named",
-      "todos",
-      "comments",
-      "search",
-    ] as const;
-    for (let i = 0; i < expectedKeys.length; i++) {
-      await user.click(buttons[i]!);
-      expect(useStore.getState().leftRail).toBe(expectedKeys[i]);
-    }
   });
 });
 
@@ -273,7 +372,7 @@ describe("Shell — LeftPanel routing", () => {
 describe("Shell — RightPanel", () => {
   beforeEach(() => {
     resetStore();
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn().mockImplementation(async () =>
       new Response(JSON.stringify({ open: [], wip: [], done: [] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -298,6 +397,8 @@ describe("Shell — RightPanel", () => {
       "agents",
       "log",
       "files",
+      "diffTree",
+      "terminal",
       "layout",
     ] as const;
     expect(buttons).toHaveLength(expectedKeys.length);
@@ -307,7 +408,9 @@ describe("Shell — RightPanel", () => {
     expect(buttons[3]).toHaveTextContent(/agents/i);
     expect(buttons[4]).toHaveTextContent(/log/i);
     expect(buttons[5]).toHaveTextContent(/files/i);
-    expect(buttons[6]).toHaveAccessibleName(/layout settings/i);
+    expect(buttons[6]).toHaveTextContent(/diff tree/i);
+    expect(buttons[7]).toHaveTextContent(/terminal/i);
+    expect(buttons[8]).toHaveAccessibleName(/layout settings/i);
 
     for (let i = 0; i < expectedKeys.length; i++) {
       expect(buttons[i]).toHaveAttribute("data-tab", expectedKeys[i]);

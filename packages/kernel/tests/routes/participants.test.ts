@@ -1,326 +1,187 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createServer } from "../../src/server.js";
-import { initProject } from "../../src/project.js";
-import { paths } from "../../src/paths.js";
-import { activePaths } from "../../src/paths/active.js";
-import { globalPaths } from "../../src/paths/global.js";
-import { PathContextRef } from "../../src/paths/contextRef.js";
-import { writeActiveSession } from "../../src/agents/activeSession.js";
-import { withTempProject } from "../helpers/tempdir.js";
+import {
+  ACTIVE_SESSION_ID,
+  AVATAR_PRESET_ID,
+  MACHINE_USER_PROFILE,
+  expectParticipantNamed,
+  expectStatus,
+  expectUserProfileOverlay,
+  getParticipantsMap,
+  getUserId,
+  patchParticipant,
+  patchUserParticipant,
+  registerParticipant,
+  responseJson,
+  withFreshActivePathParticipantsApp,
+  withOtherActivePathParticipantsApp,
+  withParticipantsApp,
+  withProfileParticipantsApp,
+  withRegisteredOtherPathParticipantsApp,
+  writeAgentActiveSession,
+} from "./participants/harness.js";
 
 describe("routes /participants", () => {
   it("GET /participants returns config participants", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const res = await app.inject({ method: "GET", url: "/participants" });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(Object.keys(body.participants).length).toBe(1);
-      await app.close();
+    await withParticipantsApp(async ({ app }) => {
+      const participants = await getParticipantsMap(app);
+      expect(Object.keys(participants).length).toBe(1);
+    });
+  });
+
+  it("GET /participants overlays the machine user profile", async () => {
+    await withProfileParticipantsApp(MACHINE_USER_PROFILE, async ({ app }) => {
+      const participants = await getParticipantsMap(app);
+      expectUserProfileOverlay(participants, MACHINE_USER_PROFILE);
     });
   });
 
   it("POST /participants/register creates an agent", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const res = await app.inject({
-        method: "POST",
-        url: "/participants/register",
-        payload: { kind: "agent", name: "Claude" },
+    await withParticipantsApp(async ({ app }) => {
+      const res = await registerParticipant(app, {
+        kind: "agent",
+        name: "Claude",
       });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
+      expectStatus(res, 200);
+      const body = responseJson<{ id: string }>(res);
       expect(body.id).toMatch(/^ag-/);
-      await app.close();
     });
   });
 
   it("POST /participants/register rejects bad payload", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const res = await app.inject({
-        method: "POST",
-        url: "/participants/register",
-        payload: { kind: "user" },
-      });
-      expect(res.statusCode).toBe(400);
-      await app.close();
+    await withParticipantsApp(async ({ app }) => {
+      const res = await registerParticipant(app, { kind: "user" });
+      expectStatus(res, 400);
     });
   });
 
   it("PATCH /participants/:id updates name + color and persists", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-
-      // Look up the user id created by initProject.
-      const listed = await app.inject({ method: "GET", url: "/participants" });
-      const participants = listed.json().participants as Record<
-        string,
-        { kind: string; name: string; color: string }
-      >;
-      const userId = Object.entries(participants).find(
-        ([, v]) => v.kind === "user",
-      )![0];
-
-      const res = await app.inject({
-        method: "PATCH",
-        url: `/participants/${userId}`,
-        payload: { name: "Roey", color: "#2a5fa8" },
+    await withParticipantsApp(async ({ app }) => {
+      const userId = await getUserId(app);
+      const res = await patchParticipant(app, userId, {
+        name: "Roey",
+        color: "#2a5fa8",
       });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
+      expectStatus(res, 200);
+      const body = responseJson<{ color: string; id: string; name: string }>(
+        res,
+      );
       expect(body.id).toBe(userId);
       expect(body.name).toBe("Roey");
       expect(body.color).toBe("#2a5fa8");
 
-      // Verify the change persisted on disk.
-      const refetched = await app.inject({
-        method: "GET",
-        url: "/participants",
-      });
-      const after = refetched.json().participants as Record<
-        string,
-        { name: string; color: string }
-      >;
+      const after = await getParticipantsMap(app);
       expect(after[userId]!.name).toBe("Roey");
       expect(after[userId]!.color).toBe("#2a5fa8");
-      await app.close();
     });
   });
 
-  it("PATCH /participants/:id updates and removes a user avatar image", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const listed = await app.inject({ method: "GET", url: "/participants" });
-      const userId = Object.entries(
-        listed.json().participants as Record<string, { kind: string }>,
-      ).find(([, v]) => v.kind === "user")![0];
-      const avatar = "data:image/png;base64,aGVsbG8=";
-
-      const updated = await app.inject({
-        method: "PATCH",
-        url: `/participants/${userId}`,
-        payload: { avatar_data_url: avatar },
+  it("PATCH /participants/:id updates and removes a user avatar preset", async () => {
+    await withParticipantsApp(async ({ app }) => {
+      const userId = await getUserId(app);
+      const updated = await patchParticipant(app, userId, {
+        avatar_preset: AVATAR_PRESET_ID,
       });
-      expect(updated.statusCode).toBe(200);
-      expect(updated.json().avatar_data_url).toBe(avatar);
+      expectStatus(updated, 200);
+      expect(responseJson<{ avatar_preset?: string }>(updated).avatar_preset)
+        .toBe(AVATAR_PRESET_ID);
 
-      const refetched = await app.inject({
-        method: "GET",
-        url: "/participants",
-      });
-      expect(refetched.json().participants[userId].avatar_data_url).toBe(
-        avatar,
-      );
+      const refetched = await getParticipantsMap(app);
+      expect(refetched[userId]!.avatar_preset).toBe(AVATAR_PRESET_ID);
 
-      const removed = await app.inject({
-        method: "PATCH",
-        url: `/participants/${userId}`,
-        payload: { avatar_data_url: null },
+      const removed = await patchParticipant(app, userId, {
+        avatar_preset: null,
       });
-      expect(removed.statusCode).toBe(200);
-      expect(removed.json().avatar_data_url).toBeUndefined();
-
-      const afterRemove = await app.inject({
-        method: "GET",
-        url: "/participants",
-      });
+      expectStatus(removed, 200);
       expect(
-        afterRemove.json().participants[userId].avatar_data_url,
+        responseJson<{ avatar_preset?: string }>(removed).avatar_preset,
       ).toBeUndefined();
-      await app.close();
+
+      const afterRemove = await getParticipantsMap(app);
+      expect(afterRemove[userId]!.avatar_preset).toBeUndefined();
     });
   });
 
   it("PATCH /participants/:id 404 on unknown id", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const res = await app.inject({
-        method: "PATCH",
-        url: "/participants/us-ffff",
-        payload: { name: "X" },
-      });
-      expect(res.statusCode).toBe(404);
-      await app.close();
+    await withParticipantsApp(async ({ app }) => {
+      const res = await patchParticipant(app, "us-ffff", { name: "X" });
+      expectStatus(res, 404);
     });
   });
 
   it("PATCH /participants/:id rejects bad color", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const listed = await app.inject({ method: "GET", url: "/participants" });
-      const userId = Object.entries(
-        listed.json().participants as Record<string, { kind: string }>,
-      ).find(([, v]) => v.kind === "user")![0];
-      const res = await app.inject({
-        method: "PATCH",
-        url: `/participants/${userId}`,
-        payload: { color: "not-a-color" },
-      });
-      expect(res.statusCode).toBe(400);
-      await app.close();
+    await withParticipantsApp(async ({ app }) => {
+      const res = await patchUserParticipant(app, { color: "not-a-color" });
+      expectStatus(res, 400);
     });
   });
 
-  it("PATCH /participants/:id rejects non-image avatar data URLs", async () => {
-    await withTempProject(async (root) => {
-      const p = paths(root);
-      await initProject(p);
-      const { app } = createServer({ token: null, paths: p });
-      const listed = await app.inject({ method: "GET", url: "/participants" });
-      const userId = Object.entries(
-        listed.json().participants as Record<string, { kind: string }>,
-      ).find(([, v]) => v.kind === "user")![0];
-      const res = await app.inject({
-        method: "PATCH",
-        url: `/participants/${userId}`,
-        payload: { avatar_data_url: "data:text/plain;base64,aGVsbG8=" },
+  it("PATCH /participants/:id rejects invalid avatar presets", async () => {
+    await withParticipantsApp(async ({ app }) => {
+      const res = await patchUserParticipant(app, {
+        avatar_preset: "999",
       });
-      expect(res.statusCode).toBe(400);
-      await app.close();
+      expectStatus(res, 400);
     });
   });
 
   describe("multi-path scoping", () => {
     it("returns empty when the active path has no .f-mark/ yet", async () => {
-      await withTempProject(async (fallbackRoot) => {
-        const fresh = mkdtempSync(join(tmpdir(), "fmark-pt-fresh-"));
-        const configRoot = mkdtempSync(join(tmpdir(), "fmark-pt-cfg-"));
-        try {
-          const fallback = paths(fallbackRoot);
-          await initProject(fallback);
-          // Note: fresh dir is NOT initialized — no .f-mark/.
-          const g = globalPaths(configRoot);
-          const ref = new PathContextRef({
-            global: g,
-            active: activePaths(fresh),
-          });
-          const { app } = createServer({
-            token: null,
-            paths: fallback,
-            pathContextRef: ref,
-          });
-          const res = await app.inject({ method: "GET", url: "/participants" });
-          expect(res.statusCode).toBe(200);
-          expect(res.json().participants).toEqual({});
-          await app.close();
-        } finally {
-          rmSync(fresh, { recursive: true, force: true });
-          rmSync(configRoot, { recursive: true, force: true });
-        }
+      await withFreshActivePathParticipantsApp(async ({ app }) => {
+        const participants = await getParticipantsMap(app);
+        expect(participants).toEqual({});
       });
     });
 
     it("reads participants from the active path, not the fallback", async () => {
-      await withTempProject(async (fallbackRoot) => {
-        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-pt-other-"));
-        const configRoot = mkdtempSync(join(tmpdir(), "fmark-pt-cfg-"));
-        try {
-          const fallback = paths(fallbackRoot);
-          await initProject(fallback);
-          const other = paths(otherRoot);
-          await initProject(other);
+      await withOtherActivePathParticipantsApp(async ({ app, ref }) => {
+        await registerParticipant(app, {
+          kind: "agent",
+          name: "OtherAgent",
+        });
 
-          const g = globalPaths(configRoot);
-          const ref = new PathContextRef({
-            global: g,
-            active: activePaths(otherRoot),
-          });
-          const { app } = createServer({
-            token: null,
-            paths: fallback,
-            pathContextRef: ref,
-          });
+        const list = await getParticipantsMap(app);
+        expectParticipantNamed(list, "OtherAgent", true);
 
-          // Register an agent in the active path.
-          await app.inject({
-            method: "POST",
-            url: "/participants/register",
-            payload: { kind: "agent", name: "OtherAgent" },
-          });
-
-          // GET should show the active-path roster (1 user + 1 agent).
-          const res = await app.inject({ method: "GET", url: "/participants" });
-          const list = res.json().participants as Record<string, { name: string }>;
-          expect(Object.values(list).some((p) => p.name === "OtherAgent")).toBe(true);
-
-          // Switch ref away — should now see only fallback's default user.
-          ref.setActive(null);
-          const res2 = await app.inject({ method: "GET", url: "/participants" });
-          const list2 = res2.json().participants as Record<string, { name: string }>;
-          expect(Object.values(list2).some((p) => p.name === "OtherAgent")).toBe(false);
-
-          await app.close();
-        } finally {
-          rmSync(otherRoot, { recursive: true, force: true });
-          rmSync(configRoot, { recursive: true, force: true });
-        }
+        ref.setActive(null);
+        const list2 = await getParticipantsMap(app);
+        expectParticipantNamed(list2, "OtherAgent", false);
       });
     });
 
-    it("enriches active-path participants from global agent state", async () => {
-      await withTempProject(async (fallbackRoot) => {
-        const otherRoot = mkdtempSync(join(tmpdir(), "fmark-pt-other-"));
-        const configRoot = mkdtempSync(join(tmpdir(), "fmark-pt-cfg-"));
-        try {
-          const fallback = paths(fallbackRoot);
-          await initProject(fallback);
-          const other = paths(otherRoot);
-          await initProject(other);
-
-          const g = globalPaths(configRoot);
-          const active = activePaths(otherRoot);
-          const ref = new PathContextRef({ global: g, active });
-          const { app } = createServer({
-            token: null,
-            paths: fallback,
-            pathContextRef: ref,
-          });
-
-          await app.inject({
-            method: "POST",
-            url: "/participants/register",
-            payload: {
-              kind: "agent",
-              name: "GlobalAgent",
-              suggested_id: "ag-global",
-            },
-          });
-          await writeActiveSession(
-            g.projectAgentsDir(active.pathId()),
-            "ag-global",
-            "session-from-global",
+    it("reads participants from an explicit path_id scope", async () => {
+      await withRegisteredOtherPathParticipantsApp(
+        async ({ app, fallbackPathId, otherPathId }) => {
+          await registerParticipant(
+            app,
+            { kind: "agent", name: "ScopedAgent" },
+            otherPathId,
           );
 
-          const res = await app.inject({ method: "GET", url: "/participants" });
-          const list = res.json().participants as Record<
-            string,
-            { active_session: string | null }
-          >;
-          expect(list["ag-global"]?.active_session).toBe("session-from-global");
+          const list = await getParticipantsMap(app, otherPathId);
+          expectParticipantNamed(list, "ScopedAgent", true);
 
-          await app.close();
-        } finally {
-          rmSync(otherRoot, { recursive: true, force: true });
-          rmSync(configRoot, { recursive: true, force: true });
-        }
+          const fallbackList = await getParticipantsMap(app, fallbackPathId);
+          expectParticipantNamed(fallbackList, "ScopedAgent", false);
+        },
+      );
+    });
+
+    it("enriches active-path participants from global agent state", async () => {
+      await withOtherActivePathParticipantsApp(async (context) => {
+        const { app } = context;
+        await registerParticipant(app, {
+          kind: "agent",
+          name: "GlobalAgent",
+          suggested_id: "ag-global",
+        });
+        await writeAgentActiveSession(
+          context,
+          "ag-global",
+          ACTIVE_SESSION_ID,
+        );
+
+        const list = await getParticipantsMap(app);
+        expect(list["ag-global"]?.active_session).toBe(ACTIVE_SESSION_ID);
       });
     });
   });

@@ -3,7 +3,7 @@
    rather than to one route's local copy so all file-serving paths agree
    on the response Content-Type. */
 
-export const MIME_BY_EXT: Record<string, string> = {
+const MIME_BY_EXT: Record<string, string> = {
   /* Text & markup */
   ".html": "text/html; charset=utf-8",
   ".htm": "text/html; charset=utf-8",
@@ -83,4 +83,15 @@ export function mimeForExtension(filename: string): string {
   if (dot < 0) return "application/octet-stream";
   const ext = filename.slice(dot).toLowerCase();
   return MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
+
+export function isActiveContentMime(mime: string): boolean {
+  const value = mime.toLowerCase();
+  return (
+    value.startsWith("text/html") ||
+    value.includes("javascript") ||
+    value.includes("typescript") ||
+    value.startsWith("image/svg+xml") ||
+    value.includes("xml")
+  );
 }

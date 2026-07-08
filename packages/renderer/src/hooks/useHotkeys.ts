@@ -35,33 +35,77 @@ const isMac =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.platform ?? "");
 
+const domKeys = {
+  spacebar: "Spacebar",
+  enter: "Enter",
+  escape: "Escape",
+  esc: "Esc",
+  arrowUp: "ArrowUp",
+  arrowDown: "ArrowDown",
+  arrowLeft: "ArrowLeft",
+  arrowRight: "ArrowRight",
+  question: "?",
+} as const;
+
+const hotkeyTokens = {
+  space: "space",
+  enter: "enter",
+  escape: "escape",
+  arrowUp: "arrowup",
+  arrowDown: "arrowdown",
+  arrowLeft: "arrowleft",
+  arrowRight: "arrowright",
+  question: "?",
+  control: "control",
+  ctrl: "ctrl",
+  meta: "meta",
+  alt: "alt",
+  shift: "shift",
+  mod: "$mod",
+  empty: "",
+} as const;
+
+const editableTagNames = {
+  textarea: "TEXTAREA",
+  input: "INPUT",
+} as const;
+
+const keyboardEventNames = {
+  keydown: "keydown",
+} as const;
+
 /** Normalize a single key string from a KeyboardEvent into our token vocab. */
 function normalizeKey(e: KeyboardEvent): string {
   const k = e.key;
-  if (k === " " || k === "Spacebar") return "space";
-  if (k === "Enter") return "enter";
-  if (k === "Escape" || k === "Esc") return "escape";
-  if (k === "ArrowUp") return "arrowup";
-  if (k === "ArrowDown") return "arrowdown";
-  if (k === "ArrowLeft") return "arrowleft";
-  if (k === "ArrowRight") return "arrowright";
-  if (k === "?") return "?";
+  if (k === " " || k === domKeys.spacebar) return hotkeyTokens.space;
+  if (k === domKeys.enter) return hotkeyTokens.enter;
+  if (k === domKeys.escape || k === domKeys.esc) return hotkeyTokens.escape;
+  if (k === domKeys.arrowUp) return hotkeyTokens.arrowUp;
+  if (k === domKeys.arrowDown) return hotkeyTokens.arrowDown;
+  if (k === domKeys.arrowLeft) return hotkeyTokens.arrowLeft;
+  if (k === domKeys.arrowRight) return hotkeyTokens.arrowRight;
+  if (k === domKeys.question) return hotkeyTokens.question;
   // Letters / digits / punctuation → lower-case.
-  return k.length === 1 ? k.toLowerCase() : k.toLowerCase();
+  return k.toLowerCase();
 }
 
 /** Build the canonical chord string for an event (modifiers sorted). */
 function chordFromEvent(e: KeyboardEvent): string {
   const parts: string[] = [];
-  if (e.ctrlKey) parts.push("ctrl");
-  if (e.metaKey) parts.push("meta");
-  if (e.altKey) parts.push("alt");
-  if (e.shiftKey) parts.push("shift");
+  if (e.ctrlKey) parts.push(hotkeyTokens.ctrl);
+  if (e.metaKey) parts.push(hotkeyTokens.meta);
+  if (e.altKey) parts.push(hotkeyTokens.alt);
+  if (e.shiftKey) parts.push(hotkeyTokens.shift);
   parts.sort();
   const key = normalizeKey(e);
-  if (key === "control" || key === "meta" || key === "alt" || key === "shift") {
+  if (
+    key === hotkeyTokens.control ||
+    key === hotkeyTokens.meta ||
+    key === hotkeyTokens.alt ||
+    key === hotkeyTokens.shift
+  ) {
     // Modifier-only press; never a chord.
-    return "";
+    return hotkeyTokens.empty;
   }
   parts.push(key);
   return parts.join("+");
@@ -75,15 +119,15 @@ function chordFromPattern(pattern: string): string {
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
   const mods: string[] = [];
-  let key = "";
+  let key: string = hotkeyTokens.empty;
   for (const tok of tokens) {
-    if (tok === "$mod") {
-      mods.push(isMac ? "meta" : "ctrl");
+    if (tok === hotkeyTokens.mod) {
+      mods.push(isMac ? hotkeyTokens.meta : hotkeyTokens.ctrl);
     } else if (
-      tok === "ctrl" ||
-      tok === "meta" ||
-      tok === "alt" ||
-      tok === "shift"
+      tok === hotkeyTokens.ctrl ||
+      tok === hotkeyTokens.meta ||
+      tok === hotkeyTokens.alt ||
+      tok === hotkeyTokens.shift
     ) {
       mods.push(tok);
     } else {
@@ -98,14 +142,19 @@ function chordFromPattern(pattern: string): string {
 
 /** True if a chord pattern uses $mod (mac meta / win ctrl). */
 function patternUsesMod(chord: string): boolean {
-  return chord.includes(isMac ? "meta" : "ctrl");
+  return chord.includes(isMac ? hotkeyTokens.meta : hotkeyTokens.ctrl);
 }
 
 function isEditableTarget(t: EventTarget | null): boolean {
   if (t === null) return false;
   if (!(t instanceof Element)) return false;
   const tag = t.tagName;
-  if (tag === "TEXTAREA" || tag === "INPUT") return true;
+  if (
+    tag === editableTagNames.textarea ||
+    tag === editableTagNames.input
+  ) {
+    return true;
+  }
   // contenteditable also counts.
   if ((t as HTMLElement).isContentEditable) return true;
   return false;
@@ -113,7 +162,7 @@ function isEditableTarget(t: EventTarget | null): boolean {
 
 function onKey(e: KeyboardEvent): void {
   const chord = chordFromEvent(e);
-  if (chord === "") return;
+  if (chord === hotkeyTokens.empty) return;
 
   const inEditable = isEditableTarget(e.target);
 
@@ -139,7 +188,7 @@ function onKey(e: KeyboardEvent): void {
 function ensureListener(): void {
   if (listenerInstalled) return;
   if (typeof window === "undefined") return;
-  window.addEventListener("keydown", onKey);
+  window.addEventListener(keyboardEventNames.keydown, onKey);
   listenerInstalled = true;
 }
 
@@ -147,7 +196,7 @@ function maybeRemoveListener(): void {
   if (REGISTRY.length > 0) return;
   if (!listenerInstalled) return;
   if (typeof window === "undefined") return;
-  window.removeEventListener("keydown", onKey);
+  window.removeEventListener(keyboardEventNames.keydown, onKey);
   listenerInstalled = false;
 }
 

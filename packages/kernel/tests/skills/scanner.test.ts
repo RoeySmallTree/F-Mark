@@ -24,6 +24,20 @@ async function placeSkill(
   await writeFile(join(dir, "SKILL.md"), `---\n${fm}\n---\n\n${body}\n`);
 }
 
+async function placeDirectSkill(
+  skillsRoot: string,
+  skillName: string,
+  frontmatter: Record<string, string>,
+  body: string = "Body",
+): Promise<void> {
+  const dir = join(skillsRoot, skillName);
+  await mkdir(dir, { recursive: true });
+  const fm = Object.entries(frontmatter)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("\n");
+  await writeFile(join(dir, "SKILL.md"), `---\n${fm}\n---\n\n${body}\n`);
+}
+
 describe("findSkills", () => {
   it("finds skills under .{agent}/skills and .skills, walking upward", async () => {
     await withTempProject(async (root) => {
@@ -132,6 +146,73 @@ describe("findSkills", () => {
       const skills = await findSkills(root);
       const found = skills.find((s) => s.name === "with-args")!;
       expect(found.args).toBe("<query>");
+    });
+  });
+
+  it("includes user and plugin skills when global discovery is enabled", async () => {
+    await withTempProject(async (root) => {
+      const project = join(root, "project");
+      const home = join(root, "home");
+      await mkdir(project, { recursive: true });
+      await placeDirectSkill(
+        join(home, ".codex", "skills", ".system"),
+        "docs",
+        {
+          name: "openai-docs",
+          description: "OpenAI docs",
+        },
+      );
+      await placeDirectSkill(
+        join(home, ".agents", "skills"),
+        "frontend-design",
+        {
+          name: "frontend-design",
+          description: "Frontend design",
+        },
+      );
+      await placeDirectSkill(
+        join(home, ".codex", "plugins", "cache", "curated", "github", "1", "skills"),
+        "github",
+        {
+          name: "github",
+          description: "GitHub work",
+        },
+      );
+
+      const skills = await findSkills(project, "codex", {
+        includeGlobal: true,
+        homeDir: home,
+        pluginCacheDir: join(home, ".codex", "plugins", "cache"),
+      });
+      const names = skills.map((s) => s.name);
+      expect(names).toContain("openai-docs");
+      expect(names).toContain("frontend-design");
+      expect(names).toContain("github");
+      expect(skills.find((s) => s.name === "github")?.scope).toBe("plugin");
+      expect(skills.find((s) => s.name === "frontend-design")?.agent).toBe(
+        "generic",
+      );
+    });
+  });
+
+  it("uses heading and first body paragraph as concise fallbacks", async () => {
+    await withTempProject(async (root) => {
+      const skillDir = join(root, ".codex", "skills", "fallbacks");
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        join(skillDir, "SKILL.md"),
+        [
+          "# Heading Name",
+          "",
+          "First paragraph is the description.",
+          "",
+          "Second paragraph should not be dumped into the row.",
+        ].join("\n"),
+      );
+      const skills = await findSkills(root, "codex");
+      const found = skills.find((s) => s.name === "Heading Name")!;
+      expect(found.description).toBe("First paragraph is the description.");
+      expect(found.description).not.toContain("Second paragraph");
     });
   });
 });

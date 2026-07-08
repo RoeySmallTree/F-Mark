@@ -2,6 +2,13 @@ import { useCallback, useRef, useEffect } from "react";
 import { CaseSensitive, Regex, WholeWord } from "lucide-react";
 import { useStore, type FilesSearchState } from "../../../state/store.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  off: "off",
+  casesensitive: "caseSensitive",
+  whole: "whole",
+  regex: "regex",
+} as const;
+
 export interface FilesSearchProps {
   search: FilesSearchState;
   searchValid: boolean;
@@ -44,13 +51,13 @@ export function FilesSearch({
         value={search.q}
         onChange={onChange}
         spellCheck={false}
-        autoCorrect="off"
-        autoCapitalize="off"
+        autoCorrect={NO_LOOSE_STRING_VALUES.off}
+        autoCapitalize={NO_LOOSE_STRING_VALUES.off}
       />
       <button
         type="button"
         className={`files-search-toggle ${search.caseSensitive ? "is-on" : ""}`}
-        onClick={toggle("caseSensitive")}
+        onClick={toggle(NO_LOOSE_STRING_VALUES.casesensitive)}
         title="Match case"
         aria-pressed={search.caseSensitive}
         aria-label="Match case"
@@ -60,7 +67,7 @@ export function FilesSearch({
       <button
         type="button"
         className={`files-search-toggle ${search.whole ? "is-on" : ""}`}
-        onClick={toggle("whole")}
+        onClick={toggle(NO_LOOSE_STRING_VALUES.whole)}
         title="Whole word"
         aria-pressed={search.whole}
         aria-label="Whole word"
@@ -70,7 +77,7 @@ export function FilesSearch({
       <button
         type="button"
         className={`files-search-toggle ${search.regex ? "is-on" : ""}`}
-        onClick={toggle("regex")}
+        onClick={toggle(NO_LOOSE_STRING_VALUES.regex)}
         title="Regular expression"
         aria-pressed={search.regex}
         aria-label="Regular expression"

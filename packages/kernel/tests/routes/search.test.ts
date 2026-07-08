@@ -31,6 +31,7 @@ describe("GET /search", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "We should discuss launch logistics today.",
         },
@@ -54,6 +55,7 @@ describe("GET /search", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           name: "Launch Plan v1",
           content: "Plan body content here.",
@@ -77,6 +79,7 @@ describe("GET /search", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/choices`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_1",
           question: "Which approach for the rewrite?",
@@ -105,6 +108,7 @@ describe("GET /search", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/todo`,
         payload: {
+          root,
           participant_id: pid,
           id: "td_1",
           title: "Draft the announcement email",
@@ -131,7 +135,7 @@ describe("GET /search", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: long },
+        payload: { root, participant_id: pid, content: long  },
       });
       const res = await app.inject({
         method: "GET",
@@ -152,12 +156,12 @@ describe("GET /search", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "needle in A" },
+        payload: { root, participant_id: pid, content: "needle in A"  },
       });
       await app.inject({
         method: "POST",
         url: `/sessions/${sessB.id}/events/prose`,
-        payload: { participant_id: pid, content: "needle in B" },
+        payload: { root, participant_id: pid, content: "needle in B"  },
       });
       const resAll = await app.inject({
         method: "GET",
@@ -183,7 +187,7 @@ describe("GET /search", () => {
         await app.inject({
           method: "POST",
           url: `/sessions/${sessionId}/events/prose`,
-          payload: { participant_id: pid, content: `match_${i} the keyword` },
+          payload: { root, participant_id: pid, content: `match_${i} the keyword`  },
         });
       }
       const res = await app.inject({
@@ -201,14 +205,14 @@ describe("GET /search", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "alpha keyword" },
+        payload: { root, participant_id: pid, content: "alpha keyword"  },
       });
       // sleep briefly to ensure different timestamp
       await new Promise((r) => setTimeout(r, 1100));
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "beta keyword" },
+        payload: { root, participant_id: pid, content: "beta keyword"  },
       });
       const res = await app.inject({
         method: "GET",

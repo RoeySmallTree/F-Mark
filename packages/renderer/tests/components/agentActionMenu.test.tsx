@@ -26,7 +26,6 @@ interface MenuHandlers {
   onOpenTerminal: ReturnType<typeof vi.fn>;
   onReconnect: ReturnType<typeof vi.fn>;
   onInstallHooks: ReturnType<typeof vi.fn>;
-  onShowLogs: ReturnType<typeof vi.fn>;
   onSayGoodbye: ReturnType<typeof vi.fn>;
 }
 
@@ -40,7 +39,6 @@ function makeHandlers(): MenuHandlers {
     onOpenTerminal: vi.fn(),
     onReconnect: vi.fn(),
     onInstallHooks: vi.fn(),
-    onShowLogs: vi.fn(),
     onSayGoodbye: vi.fn(),
   };
 }
@@ -66,7 +64,6 @@ function renderMenu(opts: {
       onOpenTerminal={h.onOpenTerminal}
       onReconnect={h.onReconnect}
       onInstallHooks={h.onInstallHooks}
-      onShowLogs={h.onShowLogs}
       onSayGoodbye={h.onSayGoodbye}
     />,
   );
@@ -129,16 +126,6 @@ describe("AgentActionMenu — conditional visibility", () => {
   test("Say goodbye hidden when managed === false", () => {
     renderMenu({ managed: false });
     expect(screen.queryByRole("menuitem", { name: /Say goodbye/i })).not.toBeInTheDocument();
-  });
-
-  test("Show last failure shown when managed === true", () => {
-    renderMenu({ managed: true });
-    expect(screen.getByRole("menuitem", { name: /Show last failure/i })).toBeInTheDocument();
-  });
-
-  test("Show last failure hidden when managed === false", () => {
-    renderMenu({ managed: false });
-    expect(screen.queryByRole("menuitem", { name: /Show last failure/i })).not.toBeInTheDocument();
   });
 
   test("Install hooks shown when state === 'hook-not-installed'", () => {
@@ -260,14 +247,6 @@ describe("AgentActionMenu — actions", () => {
     expect(h.onInstallHooks).toHaveBeenCalledTimes(1);
   });
 
-  test("clicking Show last failure fires onShowLogs", async () => {
-    const user = userEvent.setup();
-    const h = renderMenu({ managed: true });
-    await user.click(
-      screen.getByRole("menuitem", { name: /Show last failure/i }),
-    );
-    expect(h.onShowLogs).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("AgentActionMenu — rename", () => {

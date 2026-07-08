@@ -4,6 +4,7 @@ import {
   STORAGE_KEY,
   SHELL_LAYOUT_KINDS,
   applyPlacement,
+  enumeratePlacements,
   getCurrentPlacement,
   isShellPlacement,
   paneGeometry,
@@ -12,6 +13,41 @@ import {
   subscribePlacement,
   type ShellPlacement,
 } from "../src/themes/layout.js";
+
+/** Parse a `grid-template-areas: "..." "..."` declaration back into a matrix of
+ *  area names, then assert every area occupies a contiguous rectangle (the rule
+ *  CSS grid enforces — a malformed template silently drops the rule). */
+function areasMatrix(css: string): string[][] {
+  const decl = /grid-template-areas:\s*([^;]+);/.exec(css)?.[1] ?? "";
+  return [...decl.matchAll(/"([^"]+)"/g)].map((m) =>
+    (m[1] ?? "").trim().split(/\s+/),
+  );
+}
+function assertRectangularAreas(css: string, label: string): void {
+  const rows = areasMatrix(css);
+  const width = rows[0]?.length ?? 0;
+  expect(rows.every((r) => r.length === width), `${label}: ragged`).toBe(true);
+  const names = new Set(rows.flat());
+  for (const name of names) {
+    let minR = Infinity;
+    let maxR = -Infinity;
+    let minC = Infinity;
+    let maxC = -Infinity;
+    let count = 0;
+    rows.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (cell !== name) return;
+        count++;
+        minR = Math.min(minR, r);
+        maxR = Math.max(maxR, r);
+        minC = Math.min(minC, c);
+        maxC = Math.max(maxC, c);
+      }),
+    );
+    const area = (maxR - minR + 1) * (maxC - minC + 1);
+    expect(count, `${label}: area "${name}" not a filled rectangle`).toBe(area);
+  }
+}
 
 const STYLE_ID = "fmark-shell-layout";
 
@@ -80,30 +116,32 @@ describe("shell layout engine", () => {
   test("placementCss(columns) puts chat on the flexible track and orders areas", () => {
     const css = placementCss(COLUMNS);
     expect(css).toContain(`[data-shell-layout="columns:leftPanel-chat-rightPanel"]`);
-    expect(css).toContain(`grid-template-areas: "rail leftPanel chat rightPanel"`);
+    expect(css).toContain(`grid-template-areas: "leftPanel chat rightPanel"`);
     expect(css).toContain("minmax(0, 1fr)");
-    // rail track is the fixed 48px nav
-    expect(css).toContain("48px");
+    expect(css).not.toContain("rail");
   });
 
-  test("placementCss(rows) stacks the three panes as rows beside the rail", () => {
+  test("placementCss(rows) stacks the three panes as rows", () => {
     const css = placementCss(ROWS);
-    expect(css).toContain(`"rail leftPanel"`);
-    expect(css).toContain(`"rail chat"`);
-    expect(css).toContain(`"rail rightPanel"`);
+    expect(css).toContain(`"leftPanel"`);
+    expect(css).toContain(`"chat"`);
+    expect(css).toContain(`"rightPanel"`);
     expect(css).toContain("minmax(0, 1fr)");
+    expect(css).not.toContain("rail");
   });
 
   test("placementCss(side-stack) gives the full pane both rows", () => {
     const css = placementCss(SIDE_STACK);
-    expect(css).toContain(`"rail leftPanel chat"`);
-    expect(css).toContain(`"rail leftPanel rightPanel"`);
+    expect(css).toContain(`"leftPanel chat"`);
+    expect(css).toContain(`"leftPanel rightPanel"`);
+    expect(css).not.toContain("rail");
   });
 
   test("placementCss(band-split) spans the band pane across the content columns", () => {
     const css = placementCss(BAND_SPLIT);
-    expect(css).toContain(`"rail chat chat"`);
-    expect(css).toContain(`"rail leftPanel rightPanel"`);
+    expect(css).toContain(`"chat chat"`);
+    expect(css).toContain(`"leftPanel rightPanel"`);
+    expect(css).not.toContain("rail");
   });
 
   test("paneGeometry: columns places resizers on the edge facing chat", () => {
@@ -189,5 +227,30 @@ describe("shell layout engine", () => {
     unsub();
     applyPlacement(COLUMNS);
     expect(cb).toHaveBeenCalledTimes(2);
+  });
+
+  test("applyPlacement emits the base grid rule (no extra-pane variant)", () => {
+    applyPlacement(COLUMNS);
+    const text = styleText();
+    expect(text).toContain(
+      `.main[data-shell-layout="columns:leftPanel-chat-rightPanel"] {`,
+    );
+    expect(text).not.toContain("data-has-extra");
+  });
+
+  test("every one of the 36 placements emits well-formed rectangular areas", () => {
+    const kinds = SHELL_LAYOUT_KINDS.map((k) => k.kind);
+    const all = kinds.flatMap((kind) => enumeratePlacements(kind));
+    expect(all.length).toBe(36);
+    for (const p of all) {
+      const key = placementKey(p);
+      assertRectangularAreas(placementCss(p), key);
+      const cells = areasMatrix(placementCss(p)).flat();
+      expect(cells, `${key}: chat dropped`).toContain("chat");
+      // Chat keeps a flexible track on its axis.
+      expect(placementCss(p), `${key}: chat not flexible`).toContain(
+        "minmax(0, 1fr)",
+      );
+    }
   });
 });

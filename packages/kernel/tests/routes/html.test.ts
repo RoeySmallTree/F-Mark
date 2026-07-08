@@ -25,6 +25,7 @@ describe("POST /sessions/:id/events/html", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/html`,
         payload: {
+          root,
           participant_id: pid,
           html: "<h1>Hello</h1>",
           css: "h1 { color: red; }",
@@ -53,12 +54,74 @@ describe("POST /sessions/:id/events/html", () => {
         join(folderPath, "index.html"),
         "utf8",
       );
-      expect(indexHtml).toBe("<h1>Hello</h1>");
+      expect(indexHtml).toContain("<!doctype html>");
+      expect(indexHtml).toContain('<style data-fmark-bundle="style.css">');
+      expect(indexHtml).toContain("h1 { color: red; }");
+      expect(indexHtml).toContain('<script data-fmark-bundle="script.js">');
+      expect(indexHtml).toContain("console.log('hi')");
+      expect(indexHtml).not.toContain('href="./style.css"');
+      expect(indexHtml).not.toContain('src="./script.js"');
+      expect(indexHtml).toContain("<h1>Hello</h1>");
 
       const css = await readFile(join(folderPath, "style.css"), "utf8");
       expect(css).toBe("h1 { color: red; }");
       const js = await readFile(join(folderPath, "script.js"), "utf8");
       expect(js).toBe("console.log('hi')");
+      await app.close();
+    });
+  });
+
+  it("injects bundle assets into full HTML documents", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/html`,
+        payload: {
+          root,
+          participant_id: pid,
+          html: "<!doctype html><html><head><title>X</title></head><body><main>Demo</main></body></html>",
+          css: "main { color: red; }",
+          js: "document.body.dataset.ready = 'true';",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const folder = join(p.sessionDir(sessionId), res.json().filename);
+      const indexHtml = await readFile(join(folder, "index.html"), "utf8");
+      expect(indexHtml).toContain("<title>X</title>");
+      expect(indexHtml).toContain('<style data-fmark-bundle="style.css">');
+      expect(indexHtml).toContain("main { color: red; }");
+      expect(indexHtml).toContain('<script data-fmark-bundle="script.js">');
+      expect(indexHtml).toContain("document.body.dataset.ready = 'true';");
+      expect(indexHtml).not.toContain('href="./style.css"');
+      expect(indexHtml).not.toContain('src="./script.js"');
+      expect(indexHtml).toContain("<body><main>Demo</main>");
+      expect(indexHtml).toContain("</script>\n</body>");
+      await app.close();
+    });
+  });
+
+  it("removes companion asset tags before inlining css and js", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/html`,
+        payload: {
+          root,
+          participant_id: pid,
+          html: '<!doctype html><html><head><link rel="stylesheet" href="./style.css"></head><body><main>Demo</main><script src="./script.js"></script></body></html>',
+          css: "main { color: red; }",
+          js: "document.body.dataset.ready = 'true';",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const folder = join(p.sessionDir(sessionId), res.json().filename);
+      const indexHtml = await readFile(join(folder, "index.html"), "utf8");
+      expect(indexHtml).toContain('<style data-fmark-bundle="style.css">');
+      expect(indexHtml).toContain('<script data-fmark-bundle="script.js">');
+      expect(indexHtml).not.toContain('href="./style.css"');
+      expect(indexHtml).not.toContain('src="./script.js"');
       await app.close();
     });
   });
@@ -69,7 +132,7 @@ describe("POST /sessions/:id/events/html", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/html`,
-        payload: { participant_id: pid },
+        payload: { root, participant_id: pid  },
       });
       expect(res.statusCode).toBe(400);
       await app.close();
@@ -82,7 +145,7 @@ describe("POST /sessions/:id/events/html", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/no-such/events/html`,
-        payload: { participant_id: pid, html: "<p/>" },
+        payload: { root, participant_id: pid, html: "<p/>"  },
       });
       expect(res.statusCode).toBe(404);
       await app.close();
@@ -95,7 +158,7 @@ describe("POST /sessions/:id/events/html", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/html`,
-        payload: { participant_id: pid, html: "<p>hi</p>" },
+        payload: { root, participant_id: pid, html: "<p>hi</p>"  },
       });
       expect(res.statusCode).toBe(200);
       const folder = join(p.sessionDir(sessionId), res.json().filename);

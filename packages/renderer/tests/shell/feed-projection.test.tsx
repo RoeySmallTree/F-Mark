@@ -121,9 +121,9 @@ describe("Feed — projectFeed + ArbitraryGroupCard integration", () => {
     const { container } = render(<Feed />);
     /* Concluding prose is its own card, visible immediately. */
     expect(screen.getByText("Done.")).toBeInTheDocument();
-    /* Concluded group is collapsed by default — "Thinking..." NOT rendered
-       and the inner tool-use ("Bash") also NOT rendered. */
-    expect(screen.queryByText("Thinking...")).not.toBeInTheDocument();
+    /* Concluded group is collapsed by default. Its compact preview may show
+       snippets, but the full child cards remain unmounted. */
+    expect(container.querySelector(".toolbox-body")).toBeNull();
     /* The group header shows the participant display name + tool count. */
     const groupHeader = container.querySelector(".tb-summary");
     expect(groupHeader).not.toBeNull();

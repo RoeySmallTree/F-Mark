@@ -50,4 +50,143 @@ describe("extractLastAssistantTurn", () => {
     const onlyUser = `{"role":"user","content":[{"type":"text","text":"hi"}]}\n`;
     expect(extractLastAssistantTurn(onlyUser)).toEqual([]);
   });
+
+  it("extracts Codex wait_agent results and assistant text", () => {
+    const codex = [
+      { type: "event_msg", payload: { type: "task_started" } },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          call_id: "spawn-1",
+          name: "spawn_agent",
+          namespace: "multi_agent_v1",
+          arguments: JSON.stringify({ message: "check it", agent_name: "Scout" }),
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "spawn-1",
+          output: JSON.stringify({ agent_id: "agent-a", nickname: "Scouty" }),
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          call_id: "wait-1",
+          name: "wait_agent",
+          namespace: "multi_agent_v1",
+          arguments: { agent_ids: ["agent-a"] },
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "wait-1",
+          output: {
+            status: {
+              "agent-a": { status: "completed", message: "done" },
+            },
+          },
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Final answer" }],
+        },
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n");
+
+    expect(extractLastAssistantTurn(codex)).toEqual<TurnBlock[]>([
+      {
+        type: "tool_use",
+        id: "wait-1:agent-a",
+        name: "codex_subagent",
+        input: {
+          message: "check it",
+          agent_name: "Scouty",
+          agent_id: "agent-a",
+          wait_arguments: { agent_ids: ["agent-a"] },
+          status: "completed",
+        },
+        result: "done",
+        is_error: false,
+      },
+      { type: "text", text: "Final answer" },
+    ]);
+  });
+
+  it("extracts Codex collab_tool_call wait results", () => {
+    const codex = [
+      { type: "event_msg", payload: { type: "task_started" } },
+      {
+        type: "item.completed",
+        item: {
+          type: "collab_tool_call",
+          id: "spawn-item",
+          tool: "spawn_agent",
+          prompt: "inspect",
+          receiver_thread_ids: ["agent-b", 42],
+        },
+      },
+      {
+        type: "item.completed",
+        item: {
+          type: "collab_tool_call",
+          id: "wait-item",
+          tool: "wait",
+          agents_states: {
+            "agent-b": "looks good",
+          },
+        },
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n");
+
+    expect(extractLastAssistantTurn(codex)).toEqual<TurnBlock[]>([
+      {
+        type: "tool_use",
+        id: "wait-item:agent-b",
+        name: "codex_subagent",
+        input: {
+          message: "inspect",
+          agent_id: "agent-b",
+          status: "completed",
+        },
+        result: "looks good",
+        is_error: false,
+      },
+    ]);
+  });
+
+  it("uses Codex agent messages only when no assistant message was emitted", () => {
+    const codex = [
+      { type: "event_msg", payload: { type: "task_started" } },
+      {
+        type: "item.completed",
+        item: { type: "agent_message", text: "fallback item" },
+      },
+      {
+        type: "response_item",
+        payload: { type: "agent_message", message: "fallback payload" },
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n");
+
+    expect(extractLastAssistantTurn(codex)).toEqual([
+      { type: "text", text: "fallback item" },
+      { type: "text", text: "fallback payload" },
+    ]);
+  });
 });

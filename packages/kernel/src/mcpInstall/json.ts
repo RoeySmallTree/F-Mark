@@ -1,6 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
+import {
+  claudeCommandVector,
+  classifyFmarkMcpDefinition,
+  opencodeCommandVector,
+} from "./ownership.js";
 
 function parseJsonOrJsonc(raw: string):
   | { ok: true; value: unknown }
@@ -43,15 +48,7 @@ export function getObject(value: unknown, key: string): Record<string, unknown> 
   return child as Record<string, unknown>;
 }
 
-function stringArraysEqual(a: unknown, b: string[]): boolean {
-  return (
-    Array.isArray(a) &&
-    a.length === b.length &&
-    a.every((item, index) => item === b[index])
-  );
-}
-
-export function statusFromServer(
+function statusFromServer(
   server: unknown,
   expected?: { command: string; args: string[] },
 ): {
@@ -61,6 +58,24 @@ export function statusFromServer(
 } {
   if (server === null || typeof server !== "object" || Array.isArray(server)) {
     return { status: "missing" };
+  }
+  const pathIndex = expected?.args.lastIndexOf("--path") ?? -1;
+  const projectRoot =
+    expected !== undefined && pathIndex >= 0 ? expected.args[pathIndex + 1] ?? "" : "";
+  const inspected = classifyFmarkMcpDefinition({
+    name: "fmark",
+    server,
+    projectRoot,
+    expected,
+    commandVector: claudeCommandVector(server),
+    envKeys: ["env"],
+  });
+  if (inspected !== null) {
+    return {
+      status: inspected.status,
+      version: inspected.version,
+      reason: inspected.reason,
+    };
   }
   const value = server as Record<string, unknown>;
   const env = value.env;
@@ -69,25 +84,13 @@ export function statusFromServer(
     const raw = (env as Record<string, unknown>).F_MARK_MCP_VERSION;
     if (typeof raw === "string") version = raw;
   }
-  if (version === "phase5-stdio-v1" && expected !== undefined) {
-    if (
-      value.command !== expected.command ||
-      !stringArraysEqual(value.args, expected.args)
-    ) {
-      return {
-        status: "stale",
-        version,
-        reason: "fmark MCP command does not match this project path",
-      };
-    }
-  }
   return {
     status: version === "phase5-stdio-v1" ? "installed" : "stale",
     version,
   };
 }
 
-export function statusFromOpencodeServer(
+function statusFromOpencodeServer(
   server: unknown,
   expected?: { command: string; args: string[] },
 ): {
@@ -97,6 +100,24 @@ export function statusFromOpencodeServer(
 } {
   if (server === null || typeof server !== "object" || Array.isArray(server)) {
     return { status: "missing" };
+  }
+  const pathIndex = expected?.args.lastIndexOf("--path") ?? -1;
+  const projectRoot =
+    expected !== undefined && pathIndex >= 0 ? expected.args[pathIndex + 1] ?? "" : "";
+  const inspected = classifyFmarkMcpDefinition({
+    name: "fmark",
+    server,
+    projectRoot,
+    expected,
+    commandVector: opencodeCommandVector(server),
+    envKeys: ["environment", "env"],
+  });
+  if (inspected !== null) {
+    return {
+      status: inspected.status,
+      version: inspected.version,
+      reason: inspected.reason,
+    };
   }
   const value = server as Record<string, unknown>;
   // SDK type McpLocalConfig uses `environment`; permit legacy `env` for forward-compat.
@@ -109,22 +130,13 @@ export function statusFromOpencodeServer(
     const raw = (envCandidate as Record<string, unknown>).F_MARK_MCP_VERSION;
     if (typeof raw === "string") version = raw;
   }
-  if (version === "phase5-stdio-v1" && expected !== undefined) {
-    if (!stringArraysEqual(value.command, [expected.command, ...expected.args])) {
-      return {
-        status: "stale",
-        version,
-        reason: "fmark MCP command does not match this project path",
-      };
-    }
-  }
   return {
     status: version === "phase5-stdio-v1" ? "installed" : "stale",
     version,
   };
 }
 
-export function isPlainObject(value: unknown): value is Record<string, unknown> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 

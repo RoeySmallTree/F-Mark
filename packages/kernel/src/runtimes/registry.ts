@@ -65,8 +65,18 @@ export async function saveRuntimes(fmarkDir: string, cfg: RuntimesFile): Promise
 
 export async function initRuntimesFile(fmarkDir: string): Promise<void> {
   await mkdir(fmarkDir, { recursive: true });
-  if (await exists(filePath(fmarkDir))) return;
-  await saveRuntimes(fmarkDir, { version: VERSION, runtimes: { ...DEFAULT_RUNTIMES } });
+  if (!(await exists(filePath(fmarkDir)))) {
+    await saveRuntimes(fmarkDir, { version: VERSION, runtimes: { ...DEFAULT_RUNTIMES } });
+    return;
+  }
+  const cfg = await loadRuntimes(fmarkDir);
+  let changed = false;
+  for (const [id, entry] of Object.entries(DEFAULT_RUNTIMES)) {
+    if (cfg.runtimes[id] !== undefined) continue;
+    cfg.runtimes[id] = entry;
+    changed = true;
+  }
+  if (changed) await saveRuntimes(fmarkDir, cfg);
 }
 
 export async function upsertRuntime(

@@ -1,23 +1,10 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { PostFlowBody } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
-import { sessionExists } from "../sessions.js";
 import type { Bus } from "../ws/bus.js";
-import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
+import { normaliseDeps, type PathDeps } from "./pathDeps.js";
 import { writeFlowEvent } from "../services/events.js";
-import { publishEventWrites } from "../services/eventPublisher.js";
-
-async function ensureSession(
-  p: Paths,
-  sessionId: string,
-  reply: FastifyReply,
-): Promise<boolean> {
-  if (!(await sessionExists(p, sessionId))) {
-    reply.code(404).send({ error: `session not found: ${sessionId}` });
-    return false;
-  }
-  return true;
-}
+import { createScopedWriteRunner } from "./events/scopedWrite.js";
 
 export function registerFlowRoutes(
   app: FastifyInstance,
@@ -25,8 +12,12 @@ export function registerFlowRoutes(
   getBus: () => Bus,
 ): void {
   const deps = normaliseDeps(pOrDeps);
+  const runScopedWrite = createScopedWriteRunner(deps, getBus);
 
-  app.post<{ Params: { id: string }; Body: PostFlowBody }>(
+  app.post<{
+    Params: { id: string };
+    Body: PostFlowBody & { path_id?: string; root?: string };
+  }>(
     "/sessions/:id/events/flow",
     {
       schema: {
@@ -45,6 +36,9 @@ export function registerFlowRoutes(
             title: { type: "string" },
             supersedes: { type: "string" },
             append_to: { type: "string", minLength: 1 },
+            /* Required root scope (X2). */
+            path_id: { type: "string" },
+            root: { type: "string" },
             nodes: {
               type: "array",
               items: {
@@ -109,16 +103,9 @@ export function registerFlowRoutes(
       },
     },
     async (req, reply) => {
-      const p = resolvePaths(deps);
-      if (!(await ensureSession(p, req.params.id, reply))) return;
-      try {
-        const written = await writeFlowEvent(p, req.params.id, req.body);
-        publishEventWrites(getBus(), req.params.id, written.publish);
-        return written.response;
-      } catch (err) {
-        reply.code(400);
-        return { error: err instanceof Error ? err.message : String(err) };
-      }
+      return runScopedWrite(req.body, req.params.id, reply, (p) =>
+        writeFlowEvent(p, req.params.id, req.body),
+      );
     },
   );
 }

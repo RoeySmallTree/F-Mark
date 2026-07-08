@@ -17,7 +17,7 @@ If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up
 F-Mark v0.4 added the ability for the kernel to launch this agent for the user via a `+` button in the UI. When that happens:
 - The kernel creates a detached tmux session running this agent CLI.
 - It writes `.f-mark/agents/<your-id>/tmux-session` and `runtime` pointers automatically.
-- The user pastes the auto-stream hook snippet for this agent's id into their runtime config (the kernel renders the snippet via `GET /managed-agents/hook-install-instructions`).
+- The kernel applies and reconciles the managed runtime integration for the chosen scope during setup.
 - Once hooks fire, presence flips online and your contributions stream automatically.
 
 You don't need to handle the managed-vs-manual distinction in your code — both paths converge on the same auto-stream hook. The only side-effect for you: if you see `.f-mark/agents/<your-id>/tmux-session`, your process is being supervised by the kernel.
@@ -31,48 +31,55 @@ Before producing any output worth logging, pick a session and link to it:
 
 After linking, the kernel knows where your stream goes.
 
+## Session naming
+Sessions open with a placeholder name (`new-session`). Once you know what the session is about — usually after the first user message — rename it with the `fmark_rename_session` MCP tool (or `PATCH /sessions/:id` with `{ "slug": "..." }`) using a short kebab-case slug like `fix-login-flow`. If no request has arrived yet, leave the placeholder; never invent a name. The session id is immutable: renaming only changes the display slug, so keep using the same id. Don't rename sessions that already have a real name unless the user asks.
+
 ## Install the auto-stream hook (one-time per project)
-Your output is streamed automatically by hooks; you only call the API for *structured* contributions. There are TWO hooks to install — one captures the assistant's turn (you), the other captures user prompts.
+Your output is streamed automatically by hooks; you only call the API for *structured* contributions. Install the F-Mark auto-stream command on the Claude hooks below.
 
 1. Read `.claude/settings.json` (create if missing).
 2. Verify it contains:
-   - `hooks.Stop`: invokes `npx -y f-mark hook auto-stream <your-agent-participant-id>` — this captures YOUR turn (post as the agent).
-   - `hooks.UserPromptSubmit`: invokes the same command with `--kind user`, scoped to the USER's participant id — this captures the user's prompts (post as the user).
-3. The user's participant id may not exist yet at install time. Use `GET /participants?kind=user` to find it — if there's exactly one user participant, use that id. If there are zero, skip the UserPromptSubmit hook and ask the user to register first.
+   - `hooks.MessageDisplay`: captures live assistant text as mid-turn prose.
+   - `hooks.PostToolUse`: captures tool calls live during the turn.
+   - `hooks.PermissionRequest`: forwards permission prompts into F-Mark.
+   - `hooks.Stop`: captures the final assistant message and closes the turn.
 
-   The agent's own id is whatever you cached during Bootstrap.
-
-4. If absent, add the missing entries. Minimal config (substitute IDs):
+3. If absent, add the missing entries. Minimal config:
 
 ```json
 {
   "hooks": {
     "Stop": [{ "hooks": [{ "type": "command",
-      "command": "npx -y f-mark hook auto-stream ag-yourname",
+      "command": "npx -y f-mark hook auto-stream",
       "timeout": 30 }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command",
-      "command": "npx -y f-mark hook auto-stream us-username --kind user",
+    "PermissionRequest": [{ "hooks": [{ "type": "command",
+      "command": "npx -y f-mark hook auto-stream",
+      "timeout": 300 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command",
+      "command": "npx -y f-mark hook auto-stream" }] }],
+    "MessageDisplay": [{ "hooks": [{ "type": "command",
+      "command": "npx -y f-mark hook auto-stream",
       "timeout": 10 }] }]
   }
 }
 ```
 
-5. Tell the user: "I've added the F-Mark auto-stream hook with my id `ag-…` for Stop and the user id `us-…` for UserPromptSubmit. Restart Claude Code (or run `/exit` and re-launch) so it activates — output will start streaming on the next session."
+4. Tell the user: "I've added the F-Mark auto-stream hooks for Claude. Restart Claude Code (or run `/exit` and re-launch) so they activate — output will start streaming on the next session."
 
 ## What streams automatically
 Once the hook is active, every assistant turn flows into the session as:
-- mid-turn text → prose with `arbitrary: true`
-- tool calls → `tool-use` events
-- final text → prose with `arbitrary: false`, followed by `turn-end`
+- live assistant text -> prose with `arbitrary: true`
+- tool calls -> `tool-use` events
+- final text -> prose with `arbitrary: false`, followed by `turn-end`
 
 You do NOT POST these manually.
 
 ## What you still POST manually
-- **Named contributions** (documents, plans): `POST /events/prose` with `name` set.
+- **Named contributions** (documents, plans): `POST /events/prose` with `name` set to open a header-only anchor, then `append_to` blocks onto it. Open a **new** anchor for each new deliverable — `append_to` only extends the document you are currently building, never a prior one or whatever anchor was last open.
 - **Comments anchored to lines**: `POST /events/prose` with `target: { file, lines }`.
 - **Replies**: `POST /events/prose` with `in_reply_to`.
 - **Revisions**: `POST /events/prose` with `supersedes`.
-- **Todos / choices / file / html**: their dedicated endpoints.
+- **Todos / choices / alternatives / file / html**: their dedicated endpoints.
 
 When you POST manually, do NOT set `arbitrary: true` — manual posts are by definition deliberate.
 

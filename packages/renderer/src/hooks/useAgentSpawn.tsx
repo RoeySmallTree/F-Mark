@@ -7,125 +7,55 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useMemo,
   useState,
   type JSX,
   type ReactNode,
 } from "react";
-import type {
-  IntegrationPreflightResponse,
-  RuntimeAccessModeOption,
-  SpawnResponse,
-} from "@f-mark/shared";
-import {
-  defaultRuntimeAccessMode,
-  isOfferableRuntimeId,
-  isRuntimeAccessMode,
-  runtimeAccessModeOptions,
-} from "@f-mark/shared";
-import { useStore } from "../state/store.js";
-import {
-  readAgentAccessMode,
-  writeAgentAccessMode,
-} from "../state/settings.js";
-import {
-  createManagedAgentsClient,
-  isProcessApiDisabledError,
-  PROCESS_API_DISABLED_MESSAGE,
-} from "../api/managedAgents.js";
+import { createManagedAgentsClient } from "../api/managedAgents.js";
 import { createClient } from "../api/client.js";
-import { randomAgentColor, randomAgentName } from "../lib/agentNaming.js";
-import { KNOWN_RUNTIMES } from "../runtimes.js";
-
-export interface AgentSpawnRuntime {
-  id: string;
-  displayName: string;
-  available: boolean;
-}
-
-export interface IntegrationSetupState {
-  runtimeId: string;
-  participantId: string;
-  preflight: IntegrationPreflightResponse;
-  suggestedName: string;
-  color: string;
-}
-
-export interface AgentSpawnValue {
-  runtimes: AgentSpawnRuntime[];
-  tmuxMissing: boolean;
-  spawnDisabledReason: string | null;
-  spawnError: string | null;
-  integrationSetupFor: IntegrationSetupState | null;
-  setIntegrationSetupFor(s: IntegrationSetupState | null): void;
-  setSpawnError(s: string | null): void;
-  accessModeForRuntime(runtimeId: string): string;
-  accessModeOptionsForRuntime(runtimeId: string): RuntimeAccessModeOption[];
-  setAccessModeForRuntime(runtimeId: string, mode: string): void;
-  onSpawnRuntime(runtimeId: string): void;
-  onConfigureRuntime(runtimeId: string): void;
-  onManageRuntimes(): void;
-  onSpawnComplete(resp: SpawnResponse, name: string, color: string): void;
-}
-
-function randomHex(bytes: number): string {
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-    const data = new Uint8Array(bytes);
-    crypto.getRandomValues(data);
-    return [...data].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  }
-  return Math.floor(Math.random() * 16 ** (bytes * 2))
-    .toString(16)
-    .padStart(bytes * 2, "0");
-}
-
-function suggestedParticipantId(runtimeId: string): string {
-  const safeRuntime = runtimeId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
-  return `ag-${safeRuntime.length > 0 ? safeRuntime : "agent"}-${randomHex(2)}`;
-}
-
-function shouldLaunchFromPreflight(preflight: IntegrationPreflightResponse): boolean {
-  if (!preflight.runtime.available) return false;
-  if (preflight.mcp.status === "blocked" || preflight.mcp.status === "stale") {
-    return false;
-  }
-  if (preflight.mcp.status === "missing") return false;
-  if (preflight.hooks.status === "blocked") return false;
-  if (preflight.hooks.status === "missing" || preflight.hooks.status === "stale") {
-    return false;
-  }
-  return true;
-}
-
-function normalizeAccessMode(runtimeId: string, mode: string): string {
-  if (mode === "default") return mode;
-  if (isRuntimeAccessMode(runtimeId, mode)) return mode;
-  return defaultRuntimeAccessMode(runtimeId);
-}
+import { useAgentAccessModes } from "./useAgentSpawn/accessModes.js";
+import { useAgentRuntimeCatalog } from "./useAgentSpawn/runtimeCatalog.js";
+import {
+  buildAgentSpawnRuntimes,
+  extractProbeRuntimes,
+  isTmuxMissing,
+} from "./useAgentSpawn/runtimeModel.js";
+import { useAgentSpawnActions } from "./useAgentSpawn/useAgentSpawnActions.js";
+import { useAgentSpawnStoreBindings } from "./useAgentSpawn/storeBindings.js";
+import type {
+  AgentSpawnValue,
+  ConnectingAgent,
+  IntegrationSetupState,
+} from "./useAgentSpawn/types.js";
+export type {
+  AgentSpawnRuntime,
+  AgentSpawnValue,
+  ConnectingAgent,
+  IntegrationSetupState,
+} from "./useAgentSpawn/types.js";
 
 export function useAgentSpawn(): AgentSpawnValue {
-  const token = useStore((s) => s.token);
-  const envProbe = useStore((s) => s.envProbe);
-  const currentSessionId = useStore((s) => s.currentSessionId);
-  const managedAgentsDisabledReason = useStore(
-    (s) => s.managedAgentsDisabledReason,
-  );
-  const setManagedAgentsDisabledReason = useStore(
-    (s) => s.setManagedAgentsDisabledReason,
-  );
-  const addManagedAgent = useStore((s) => s.addManagedAgent);
-  const upsertParticipant = useStore((s) => s.upsertParticipant);
-  const setPresence = useStore((s) => s.setPresence);
-  const openSettings = useStore((s) => s.openSettings);
+  const {
+    token,
+    envProbe,
+    currentSessionId,
+    managedAgentsDisabledReason,
+    setManagedAgentsDisabledReason,
+    addManagedAgent,
+    upsertParticipant,
+    setPresence,
+    openSettings,
+    spawnRootScope,
+  } = useAgentSpawnStoreBindings();
 
   const [integrationSetupFor, setIntegrationSetupFor] =
     useState<IntegrationSetupState | null>(null);
   const [spawnError, setSpawnError] = useState<string | null>(null);
-  const [accessModesByRuntime, setAccessModesByRuntime] = useState<
-    Record<string, string>
-  >({});
+  const [connectingAgents, setConnectingAgents] = useState<ConnectingAgent[]>(
+    [],
+  );
 
   const apiClient = useMemo(
     () => createManagedAgentsClient({ baseUrl: "", token }),
@@ -133,208 +63,73 @@ export function useAgentSpawn(): AgentSpawnValue {
   );
   const restClient = useMemo(() => createClient({ baseUrl: "", token }), [token]);
 
-  const probeRuntimes = useMemo<Record<string, boolean> | null>(() => {
-    if (envProbe === null) return null;
-    const r = (envProbe as { runtimes?: Record<string, boolean> }).runtimes;
-    if (r === undefined || r === null) return null;
-    return r;
-  }, [envProbe]);
-
-  const runtimes = useMemo<AgentSpawnRuntime[]>(() => {
-    const ids = new Set([
-      ...Object.keys(KNOWN_RUNTIMES),
-      ...(probeRuntimes !== null
-        ? Object.keys(probeRuntimes).filter(isOfferableRuntimeId)
-        : []),
-    ]);
-    return [...ids].map((id) => ({
-      id,
-      displayName: KNOWN_RUNTIMES[id]?.displayName ?? id,
-      available: probeRuntimes !== null ? probeRuntimes[id] !== false : true,
-    }));
-  }, [probeRuntimes]);
-
-  const tmuxMissing = envProbe !== null && envProbe.tmux === false;
+  const probeRuntimes = useMemo(() => extractProbeRuntimes(envProbe), [envProbe]);
+  const runtimes = useMemo(
+    () => buildAgentSpawnRuntimes(probeRuntimes),
+    [probeRuntimes],
+  );
+  const runtimeIds = useMemo(
+    () => runtimes.map((runtime) => runtime.id),
+    [runtimes],
+  );
+  const {
+    modelForRuntime,
+    effortForRuntime,
+    modelOptionsForRuntime,
+    effortOptionsForRuntime,
+    defaultAccessModeForRuntime,
+    setModelForRuntime,
+    setEffortForRuntime,
+  } = useAgentRuntimeCatalog(apiClient, runtimeIds);
+  const {
+    accessModeForRuntime,
+    accessModeOptionsForRuntime,
+    setAccessModeForRuntime,
+  } = useAgentAccessModes(defaultAccessModeForRuntime);
+  const tmuxMissing = isTmuxMissing(envProbe);
   const spawnDisabledReason = managedAgentsDisabledReason;
-
-  const accessModeForRuntime = useCallback(
-    (runtimeId: string): string => {
-      const fallback = defaultRuntimeAccessMode(runtimeId);
-      return normalizeAccessMode(
-        runtimeId,
-        accessModesByRuntime[runtimeId] ??
-          readAgentAccessMode(runtimeId, fallback),
-      );
-    },
-    [accessModesByRuntime],
-  );
-
-  const accessModeOptionsForRuntime = useCallback(
-    (runtimeId: string): RuntimeAccessModeOption[] =>
-      runtimeAccessModeOptions(runtimeId),
-    [],
-  );
-
-  const setAccessModeForRuntime = useCallback(
-    (runtimeId: string, mode: string): void => {
-      const normalized = normalizeAccessMode(runtimeId, mode);
-      setAccessModesByRuntime((prev) => ({
-        ...prev,
-        [runtimeId]: normalized,
-      }));
-      writeAgentAccessMode(runtimeId, normalized);
-    },
-    [],
-  );
-
-  const onSpawnComplete = useCallback(
-    (resp: SpawnResponse, suggestedName: string, color: string) => {
-      addManagedAgent({
-        participant_id: resp.participant_id,
-        tmux_session: resp.tmux_session,
-        runtime_id: resp.runtime_id,
-      });
-      upsertParticipant(resp.participant_id, {
-        kind: "agent",
-        name: suggestedName,
-        color,
-        active_session: resp.active_session,
-        runtime_id: resp.runtime_id,
-      });
-      void restClient
-        .updateParticipant(resp.participant_id, { color })
-        .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.error("failed to persist agent color", err);
-        });
-      const presenceState =
-        resp.hooks_status === "installed"
-          ? "stale"
-          : resp.hooks_status === "not_required"
-            ? "stale"
-            : resp.hooks_status === "missing"
-              ? "hook-not-installed"
-              : "launching";
-      setPresence(resp.participant_id, {
-        state: presenceState,
-        last_hook_at: null,
-      });
-    },
-    [addManagedAgent, upsertParticipant, setPresence, restClient],
-  );
-
-  const onSpawnRuntime = useCallback(
-    (runtimeId: string) => {
-      setSpawnError(null);
-      setIntegrationSetupFor(null);
-      if (managedAgentsDisabledReason !== null) {
-        setSpawnError(managedAgentsDisabledReason);
-        return;
-      }
-      void (async () => {
-        try {
-          const participantId = suggestedParticipantId(runtimeId);
-          const suggestedName = randomAgentName();
-          const color = randomAgentColor();
-          const accessMode = accessModeForRuntime(runtimeId);
-          const preflight = await apiClient.preflight({
-            runtime_id: runtimeId,
-            participant_id: participantId,
-          });
-          if (!shouldLaunchFromPreflight(preflight)) {
-            setIntegrationSetupFor({
-              runtimeId,
-              participantId,
-              preflight,
-              suggestedName,
-              color,
-            });
-            return;
-          }
-          const resp = await apiClient.spawn({
-            runtime_id: runtimeId,
-            session_id: currentSessionId ?? undefined,
-            suggested_participant_id: participantId,
-            name: suggestedName,
-            access_mode: accessMode,
-          });
-          onSpawnComplete(resp, suggestedName, color);
-        } catch (e: unknown) {
-          if (isProcessApiDisabledError(e)) {
-            setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
-            setSpawnError(PROCESS_API_DISABLED_MESSAGE);
-          } else {
-            setSpawnError(e instanceof Error ? e.message : String(e));
-          }
-          // eslint-disable-next-line no-console
-          console.error("spawn failed", e);
-        }
-      })();
-    },
-    [
-      apiClient,
-      accessModeForRuntime,
-      currentSessionId,
-      managedAgentsDisabledReason,
-      onSpawnComplete,
-      setManagedAgentsDisabledReason,
-    ],
-  );
-
-  /* Force-open the integration setup modal regardless of preflight state.
-     Used by the empty-state AgentLauncher's "Configure" button, which lets
-     the user inspect/override what will be installed before launch. */
-  const onConfigureRuntime = useCallback(
-    (runtimeId: string) => {
-      setSpawnError(null);
-      if (managedAgentsDisabledReason !== null) {
-        setSpawnError(managedAgentsDisabledReason);
-        return;
-      }
-      void (async () => {
-        try {
-          const participantId = suggestedParticipantId(runtimeId);
-          const suggestedName = randomAgentName();
-          const color = randomAgentColor();
-          const preflight = await apiClient.preflight({
-            runtime_id: runtimeId,
-            participant_id: participantId,
-          });
-          setIntegrationSetupFor({
-            runtimeId,
-            participantId,
-            preflight,
-            suggestedName,
-            color,
-          });
-        } catch (e: unknown) {
-          if (isProcessApiDisabledError(e)) {
-            setManagedAgentsDisabledReason(PROCESS_API_DISABLED_MESSAGE);
-            setSpawnError(PROCESS_API_DISABLED_MESSAGE);
-          } else {
-            setSpawnError(e instanceof Error ? e.message : String(e));
-          }
-        }
-      })();
-    },
-    [apiClient, managedAgentsDisabledReason, setManagedAgentsDisabledReason],
-  );
-
-  const onManageRuntimes = useCallback(() => {
-    openSettings("runtimes");
-  }, [openSettings]);
+  const {
+    onSpawnRuntime,
+    onConfigureRuntime,
+    onManageRuntimes,
+    onSpawnComplete,
+  } = useAgentSpawnActions({
+    apiClient,
+    restClient,
+    currentSessionId,
+    managedAgentsDisabledReason,
+    setManagedAgentsDisabledReason,
+    addManagedAgent,
+    upsertParticipant,
+    setPresence,
+    openSettings,
+    spawnRootScope,
+    setConnectingAgents,
+    setIntegrationSetupFor,
+    setSpawnError,
+    accessModeForRuntime,
+    modelForRuntime,
+    effortForRuntime,
+  });
 
   return {
     runtimes,
     tmuxMissing,
     spawnDisabledReason,
     spawnError,
+    connectingAgents,
     integrationSetupFor,
     setIntegrationSetupFor,
     setSpawnError,
     accessModeForRuntime,
     accessModeOptionsForRuntime,
     setAccessModeForRuntime,
+    modelForRuntime,
+    effortForRuntime,
+    modelOptionsForRuntime,
+    effortOptionsForRuntime,
+    setModelForRuntime,
+    setEffortForRuntime,
     onSpawnRuntime,
     onConfigureRuntime,
     onManageRuntimes,
@@ -364,4 +159,8 @@ export function useAgentSpawnContext(): AgentSpawnValue {
     );
   }
   return ctx;
+}
+
+export function useOptionalAgentSpawnContext(): AgentSpawnValue | null {
+  return useContext(AgentSpawnContext);
 }

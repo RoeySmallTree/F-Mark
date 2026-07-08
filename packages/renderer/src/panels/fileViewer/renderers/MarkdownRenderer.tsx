@@ -1,109 +1,132 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "../../../api/client.js";
-import { useStore } from "../../../state/store.js";
+import { lazy, Suspense, useCallback, useRef } from "react";
+import type { OnMount } from "@monaco-editor/react";
+import { MarkdownRenderer as RenderMarkdown } from "../../../render/MarkdownRenderer.js";
+import { RenderedLineCommentRail } from "../lineComment/RenderedLineCommentRail.js";
+import { FvLoading } from "../FileViewerLoading.js";
+import { FileEditBar } from "./FileEditBar.js";
+import { MarkdownViewModeToggle } from "./MarkdownViewModeToggle.js";
+import { extOf, monacoLanguage } from "./pickRenderer.js";
+import {
+  monacoEditorTheme,
+  useMonacoThemeMode,
+} from "./monaco/theme.js";
+import { useMonacoFileText } from "./monaco/useMonacoFileText.js";
+import { useFileAutosave } from "../useFileAutosave.js";
+import { useMarkdownViewMode } from "../useMarkdownViewMode.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  on: "on",
+  none: "none",
+  preview: "preview",
+  interactive: "interactive",
+  source: "source",
+  rendered: "rendered",
+  accordion: "accordion",
+} as const;
+
+const Editor = lazy(async () => {
+  const mod = await import("@monaco-editor/react");
+  return { default: mod.default };
+});
 
 export interface MarkdownRendererProps {
   path: string;
 }
 
-interface CherryInstance {
-  destroy(): void;
-  setMarkdown(md: string): void;
-  setTheme(theme: string): void;
-}
-
-interface CherryConstructor {
-  new (config: {
-    id?: string;
-    el?: HTMLElement;
-    value: string;
-    editor?: { defaultModel: "edit&preview" | "previewOnly" | "editOnly" };
-    [key: string]: unknown;
-  }): CherryInstance;
-}
-
-/* Wraps cherry-markdown (vanilla JS class) in a React component. The
-   editor is loaded dynamically so the eager bundle doesn't pay the
-   ~300 KB cost when no markdown file is open. Theme syncs to whichever
-   F-Mark theme is active by reading `data-theme` on <html>. */
 export function MarkdownRenderer({
   path,
 }: MarkdownRendererProps): JSX.Element {
-  const token = useStore((s) => s.token);
-  const client = useMemo(
-    () => createClient({ baseUrl: "", token }),
-    [token],
-  );
-
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const instRef = useRef<CherryInstance | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-    setLoading(true);
-
-    void (async () => {
-      try {
-        const [cherryMod, textRes] = await Promise.all([
-          import("cherry-markdown"),
-          client.fetchFileText(path, 8 * 1024 * 1024),
-        ]);
-        if (cancelled || wrapRef.current === null) return;
-        await import("cherry-markdown/dist/cherry-markdown.css" as string).catch(
-          () => undefined,
-        );
-        /* The package exports the constructor as the default; some bundlers
-           wrap it. Fall back to the named export if default is undefined. */
-        const Cherry = (cherryMod.default ??
-          (cherryMod as unknown as { Cherry: CherryConstructor })
-            .Cherry) as CherryConstructor;
-        if (Cherry === undefined) {
-          throw new Error("cherry-markdown export not found");
-        }
-        const inst = new Cherry({
-          el: wrapRef.current,
-          value: textRes.content,
-          editor: { defaultModel: "previewOnly" },
-        });
-        instRef.current = inst;
-        setLoading(false);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (instRef.current !== null) {
-        try {
-          instRef.current.destroy();
-        } catch {
-          /* swallow */
-        }
-        instRef.current = null;
-      }
-      if (wrapRef.current !== null) wrapRef.current.innerHTML = "";
-    };
-  }, [path, client]);
+  const [autosave, setAutosave] = useFileAutosave();
+  const [viewMode, setViewMode] = useMarkdownViewMode();
+  const file = useMonacoFileText(path, { autosave });
+  const { text, error, truncated } = file;
+  const theme = useMonacoThemeMode();
+  const saveRef = useRef(file.save);
+  saveRef.current = file.save;
+  const onMount = useCallback<OnMount>((editor, monaco) => {
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      void saveRef.current();
+    });
+  }, []);
 
   if (error !== null) {
     return (
       <div className="fv-error">failed to load markdown: {error}</div>
     );
   }
+  if (text === null) {
+    return <FvLoading />;
+  }
+
+  const renderMode =
+    viewMode === NO_LOOSE_STRING_VALUES.interactive
+      ? NO_LOOSE_STRING_VALUES.accordion
+      : NO_LOOSE_STRING_VALUES.rendered;
+  const showEditor =
+    viewMode !== NO_LOOSE_STRING_VALUES.preview &&
+    viewMode !== NO_LOOSE_STRING_VALUES.interactive;
+  const showPreview = viewMode !== NO_LOOSE_STRING_VALUES.source;
 
   return (
     <div className="fv-markdown-wrap">
-      {loading ? (
-        <div className="fv-loading">loading markdown editor…</div>
+      <FileEditBar
+        path={path}
+        dirty={file.dirty}
+        saving={file.saving}
+        saveError={file.saveError}
+        savedAt={file.savedAt}
+        truncated={truncated}
+        saveLabel="Save markdown file"
+        autosave={autosave}
+        onAutosaveChange={setAutosave}
+        onSave={() => void file.save()}
+        extraControls={
+          <MarkdownViewModeToggle mode={viewMode} onModeChange={setViewMode} />
+        }
+      />
+      {truncated ? (
+        <div className="fv-loading">
+          file truncated to first 8 MB, editing is disabled for this preview
+        </div>
       ) : null}
-      <div ref={wrapRef} style={{ height: "100%", width: "100%" }} />
+      <div className={`fv-markdown-surface fv-markdown-surface--${viewMode}`}>
+        {showEditor ? (
+          <section className="fv-markdown-editor-pane" aria-label="Markdown editor">
+            <Suspense fallback={<FvLoading />}>
+              <Editor
+                height="100%"
+                width="100%"
+                path={path}
+                language={monacoLanguage(extOf(path))}
+                value={text}
+                theme={monacoEditorTheme(theme)}
+                onMount={onMount}
+                onChange={(value) => file.setText(value ?? "")}
+                options={{
+                  readOnly: truncated,
+                  minimap: { enabled: false },
+                  fontSize: 12,
+                  wordWrap: NO_LOOSE_STRING_VALUES.on,
+                  scrollBeyondLastLine: false,
+                  renderLineHighlight: NO_LOOSE_STRING_VALUES.none,
+                  automaticLayout: true,
+                }}
+              />
+            </Suspense>
+          </section>
+        ) : null}
+        {showPreview ? (
+          <section className="fv-markdown-preview-pane" aria-label="Markdown preview">
+            <RenderedLineCommentRail path={path} sourceText={text}>
+              <RenderMarkdown
+                content={text}
+                mode={renderMode}
+                className="fv-markdown-doc"
+              />
+            </RenderedLineCommentRail>
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

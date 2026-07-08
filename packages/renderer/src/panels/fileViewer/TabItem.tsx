@@ -3,6 +3,12 @@ import { Pin, PinOff, X } from "lucide-react";
 import { iconForExtension } from "../right/files/iconForExtension.js";
 import { basenameOf, extOf } from "./renderers/pickRenderer.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  fvTab: "fv-tab",
+  isActive: "is-active",
+  isPinned: "is-pinned",
+} as const;
+
 export interface TabItemProps {
   path: string;
   pinned: boolean;
@@ -12,7 +18,10 @@ export interface TabItemProps {
   onTogglePin: (path: string) => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>, path: string) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>, path: string) => void;
+  onDragLeave: (e: React.DragEvent<HTMLDivElement>, path: string) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>, path: string) => void;
+  onDragEnd: () => void;
+  dropBefore?: boolean;
 }
 
 export function TabItem({
@@ -24,7 +33,10 @@ export function TabItem({
   onTogglePin,
   onDragStart,
   onDragOver,
+  onDragLeave,
   onDrop,
+  onDragEnd,
+  dropBefore = false,
 }: TabItemProps): JSX.Element {
   const name = basenameOf(path);
   const ext = extOf(path);
@@ -47,9 +59,9 @@ export function TabItem({
   );
 
   const className = [
-    "fv-tab",
-    active ? "is-active" : null,
-    pinned ? "is-pinned" : null,
+    NO_LOOSE_STRING_VALUES.fvTab,
+    active ? NO_LOOSE_STRING_VALUES.isActive : null,
+    pinned ? NO_LOOSE_STRING_VALUES.isPinned : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -58,12 +70,15 @@ export function TabItem({
     <div
       className={className}
       data-flip-id={path}
+      data-drop-before={dropBefore ? "true" : undefined}
       style={{ "--fv-tab-pinned": pinned ? 1 : 0 } as CSSProperties}
       onClick={handleClick}
       draggable
       onDragStart={(e) => onDragStart(e, path)}
       onDragOver={(e) => onDragOver(e, path)}
+      onDragLeave={(e) => onDragLeave(e, path)}
       onDrop={(e) => onDrop(e, path)}
+      onDragEnd={onDragEnd}
       title={path}
       role="tab"
       aria-selected={active}

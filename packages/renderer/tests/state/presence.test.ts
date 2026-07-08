@@ -14,6 +14,7 @@ describe("PresenceSlice", () => {
       managedAgents: [],
       managedTerminals: [],
       envProbe: null,
+      managedAgentLiveRevision: 0,
     });
   });
 
@@ -51,6 +52,26 @@ describe("PresenceSlice", () => {
     expect(agents[0]?.tmux_session).toBe("s2");
   });
 
+  it("addManagedAgent is a no-op when the row is unchanged", () => {
+    const agent = {
+      participant_id: "ag-1",
+      tmux_session: "s1",
+      runtime_id: "claude",
+      alive: true,
+    };
+    useStore.getState().addManagedAgent(agent);
+    const before = useStore.getState().managedAgents;
+    useStore.getState().addManagedAgent({ ...agent });
+    expect(useStore.getState().managedAgents).toBe(before);
+  });
+
+  it("bumpManagedAgentLiveRevision increments monotonically", () => {
+    expect(useStore.getState().managedAgentLiveRevision).toBe(0);
+    useStore.getState().bumpManagedAgentLiveRevision();
+    useStore.getState().bumpManagedAgentLiveRevision();
+    expect(useStore.getState().managedAgentLiveRevision).toBe(2);
+  });
+
   it("removeManagedAgent filters", () => {
     useStore
       .getState()
@@ -61,6 +82,35 @@ describe("PresenceSlice", () => {
       });
     useStore.getState().removeManagedAgent("ag-1");
     expect(useStore.getState().managedAgents).toEqual([]);
+  });
+
+  it("addManagedTerminal upserts by tmux_session and carries index", () => {
+    useStore
+      .getState()
+      .addManagedTerminal({ tmux_session: "t1", label: "terminal 1", index: 1 });
+    useStore
+      .getState()
+      .addManagedTerminal({ tmux_session: "t1", label: "renamed", index: 1 });
+    const terminals = useStore.getState().managedTerminals;
+    expect(terminals).toHaveLength(1);
+    expect(terminals[0]).toEqual({
+      tmux_session: "t1",
+      label: "renamed",
+      index: 1,
+    });
+  });
+
+  it("removeManagedTerminal filters by tmux_session", () => {
+    useStore
+      .getState()
+      .addManagedTerminal({ tmux_session: "t1", label: "terminal 1", index: 1 });
+    useStore
+      .getState()
+      .addManagedTerminal({ tmux_session: "t2", label: "terminal 2", index: 2 });
+    useStore.getState().removeManagedTerminal("t1");
+    expect(useStore.getState().managedTerminals).toEqual([
+      { tmux_session: "t2", label: "terminal 2", index: 2 },
+    ]);
   });
 
   it("setEnvProbe replaces", () => {

@@ -7,64 +7,29 @@
    useHotkeys deliberately suppresses non-$mod chords when focus is inside an
    <input>/<textarea> — and a modal's first input is usually autofocused. */
 
-import { useEffect, type JSX } from "react";
+import type { JSX } from "react";
 import { useStore } from "../state/store.js";
-import { NewSessionModal } from "./NewSessionModal.js";
-import { SettingsModal } from "./settings/SettingsModal.js";
-import { CmdKModal } from "./CmdKModal.js";
-import { SkillsPaletteModal } from "./SkillsPaletteModal.js";
-import { PresetEditorModal } from "./PresetEditorModal.js";
-import { HtmlPreviewModal } from "./HtmlPreviewModal.js";
+import {
+  ActiveModalContent,
+  hasActiveModalContent,
+} from "./modalRoot/ActiveModalContent.js";
+import { ModalBackdrop } from "./modalRoot/ModalBackdrop.js";
+import { useModalEscape } from "./modalRoot/useModalEscape.js";
 
 export function ModalRoot(): JSX.Element | null {
   const activeModal = useStore((s) => s.activeModal);
   const closeModal = useStore((s) => s.closeModal);
 
-  // Escape closes any active modal. We attach the listener only while a modal
-  // is open so we don't interfere with Escape handlers elsewhere (compose's
-  // textarea blur, etc.).
-  useEffect(() => {
-    if (activeModal === null) return;
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === "Escape" || e.key === "Esc") {
-        e.preventDefault();
-        e.stopPropagation();
-        closeModal();
-      }
-    }
-    // Capture phase so we beat any inner element's keydown handler.
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [activeModal, closeModal]);
+  useModalEscape(activeModal, closeModal);
 
   if (activeModal === null) return null;
+  if (!hasActiveModalContent(activeModal)) return null;
 
-  // P10 wires 'new-session', P11 wires 'settings', P7 wires 'cmdk',
-  // P9 wires 'skills'. P8 (presets) lives in a popover, not here.
-  let content: JSX.Element | null = null;
-  if (activeModal === "new-session") {
-    content = <NewSessionModal />;
-  } else if (activeModal === "settings") {
-    content = <SettingsModal />;
-  } else if (activeModal === "cmdk") {
-    content = <CmdKModal />;
-  } else if (activeModal === "skills") {
-    content = <SkillsPaletteModal />;
-  } else if (activeModal === "preset-editor") {
-    content = <PresetEditorModal />;
-  } else if (activeModal === "html-preview") {
-    content = <HtmlPreviewModal />;
-  }
-  if (content === null) return null;
+  const content = <ActiveModalContent activeModal={activeModal} />;
 
   return (
-    <div
-      className="modal-backdrop"
-      onClick={closeModal}
-      role="presentation"
-      data-modal={activeModal}
-    >
+    <ModalBackdrop activeModal={activeModal} onClose={closeModal}>
       {content}
-    </div>
+    </ModalBackdrop>
   );
 }

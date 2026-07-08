@@ -18,7 +18,7 @@
    Storage key: `fmark:settings:custom-categories` → JSON-encoded
    CustomCategory[]. */
 
-export const CUSTOM_CATEGORIES_STORAGE_KEY =
+const CUSTOM_CATEGORIES_STORAGE_KEY =
   "fmark:settings:custom-categories";
 
 export interface CustomCategory {

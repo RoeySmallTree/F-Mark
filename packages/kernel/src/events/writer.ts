@@ -1,10 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type { EventKind } from "@f-mark/shared";
-import { composeFilename, isoTimestamp, toIsoTimestamp } from "@f-mark/shared";
+import { composeFilename, isoTimestamp } from "@f-mark/shared";
 import { listParticipants } from "../participants.js";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
+import { assertWithinSession, bumpMillisecond } from "./sessionPath.js";
 
 export interface WriteEventInput {
   participant_id: string;
@@ -16,30 +17,6 @@ export interface WriteEventInput {
    *  writes (fork-link pair). On EEXIST inside the session, the loop bumps
    *  by +1ms exactly as it would for the auto-stamped path. */
   timestamp?: string;
-}
-
-function assertWithinSession(p: Paths, sessionId: string, target: string): void {
-  const sessionRoot = resolve(p.sessionDir(sessionId));
-  const targetResolved = resolve(target);
-  if (
-    !targetResolved.startsWith(`${sessionRoot}/`) &&
-    targetResolved !== sessionRoot
-  ) {
-    throw new Error("path escapes session root");
-  }
-}
-
-function parseCompactTs(ts: string): Date {
-  const ms = ts.length === 20 ? ts.slice(16, 19) : "000";
-  return new Date(
-    `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}T${ts.slice(9, 11)}:${ts.slice(11, 13)}:${ts.slice(13, 15)}.${ms}Z`,
-  );
-}
-
-function bumpMillisecond(ts: string): string {
-  const d = parseCompactTs(ts);
-  d.setUTCMilliseconds(d.getUTCMilliseconds() + 1);
-  return toIsoTimestamp(d);
 }
 
 export async function writeEventFile(

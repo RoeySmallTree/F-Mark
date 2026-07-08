@@ -30,6 +30,17 @@ export interface SkillRef {
   description: string;
   args?: string;
   path: string;
+  scope?: "project" | "global" | "plugin";
+  editable?: boolean;
+}
+
+export interface SkillFile {
+  skill: SkillRef;
+  name: string;
+  description: string;
+  args?: string;
+  body: string;
+  frontmatter: Record<string, unknown>;
 }
 
 export interface SearchHit {

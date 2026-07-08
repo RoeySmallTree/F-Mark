@@ -12,6 +12,7 @@ import { writeActiveSession } from "../../src/agents/activeSession.js";
 import { createSession } from "../../src/sessions.js";
 import { registerAgent } from "../../src/participants.js";
 import { createInputQueue } from "../../src/tmux/inputQueue.js";
+import { createAgentStateStoreForAgentsDir } from "../../src/services/agentState.js";
 import type { BusMessage } from "../../src/ws/bus.js";
 import type { TmuxManager } from "../../src/tmux/manager.js";
 
@@ -40,6 +41,9 @@ function fakeTmux(): FakeTmux {
     },
     sendLiteralText: async (id: string, text: string) => {
       calls.push({ method: "sendLiteralText", args: [id, text] });
+    },
+    deliverPrompt: async (id: string, text: string) => {
+      calls.push({ method: "deliverPrompt", args: [id, text] });
     },
     resize: async () => {},
     paneAlive: async () => true,
@@ -171,7 +175,7 @@ describe("POST /managed-agents/:id/command", () => {
   });
 
   it("slash compact -> sends /compact then C-m", async () => {
-    const { app, tmux, cleanup } = await makeApp();
+    const { app, tmux, p, cleanup } = await makeApp();
     const res = await app.inject({
       method: "POST",
       url: "/managed-agents/ag-claude/command",
@@ -188,11 +192,15 @@ describe("POST /managed-agents/:id/command", () => {
     const litIdx = tmux.calls.indexOf(lit!);
     const enterIdx = tmux.calls.indexOf(enter!);
     expect(litIdx).toBeLessThan(enterIdx);
+    const state = createAgentStateStoreForAgentsDir(join(p.fmarkDir(), "agents"));
+    await expect(state.readControlState("ag-claude")).resolves.toMatchObject({
+      activity_state: "running",
+    });
     await app.close();
     await cleanup();
   });
 
-  it("message -> sends literal text + C-m", async () => {
+  it("message -> delivers prompt (paste + submit)", async () => {
     const { app, tmux, cleanup } = await makeApp();
     const res = await app.inject({
       method: "POST",
@@ -200,14 +208,10 @@ describe("POST /managed-agents/:id/command", () => {
       payload: { type: "message", text: "hello there" },
     });
     expect(res.statusCode).toBe(200);
-    const lit = tmux.calls.find(
-      (x) => x.method === "sendLiteralText" && x.args[1] === "hello there",
+    const delivered = tmux.calls.find(
+      (x) => x.method === "deliverPrompt" && x.args[1] === "hello there",
     );
-    expect(lit).toBeDefined();
-    const enter = tmux.calls.find(
-      (x) => x.method === "sendKey" && x.args[1] === "C-m",
-    );
-    expect(enter).toBeDefined();
+    expect(delivered).toBeDefined();
     await app.close();
     await cleanup();
   });
@@ -254,6 +258,7 @@ describe("POST /managed-agents/:id/command", () => {
     });
     expect(res.statusCode).toBe(400);
     expect(tmux.calls.find((x) => x.method === "sendLiteralText")).toBeUndefined();
+    expect(tmux.calls.find((x) => x.method === "deliverPrompt")).toBeUndefined();
     await app.close();
     await cleanup();
   });

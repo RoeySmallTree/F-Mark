@@ -36,8 +36,11 @@
   color: color-mix(in srgb, var(--agent) 80%, var(--ink));
 }
 
-/* Headings — serif, decreasing scale, accent underline on h1 to anchor
-   the section without competing with the prose name in the card head. */
+/* Headings — each level gets its OWN signature (colour + a distinct underline
+   language), not merely a smaller size, so document structure is legible at a
+   glance. The speaker accent (--prose-accent) is the spine; its intensity
+   steps down h1 → h6. All hues resolve from theme tokens, so every theme — incl.
+   the monochrome ones where the accent collapses to ink — stays correct. */
 .fm-prose h1,
 .fm-prose h2,
 .fm-prose h3,
@@ -50,47 +53,85 @@
   letter-spacing: -0.01em;
   line-height: 1.25;
 }
+/* h1 — section anchor: large serif, ink warmed a touch toward the accent,
+   carried by a solid 2px accent underline that spans the column. */
 .fm-prose h1 {
   font-size: 22px;
   font-weight: 700;
   margin: 28px 0 10px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--prose-accent-tint-2, var(--user-tint-2));
+  padding-bottom: 5px;
+  color: color-mix(in oklab, var(--ink) 82%, var(--prose-accent, var(--user)));
+  border-bottom: 2px solid var(--prose-accent, var(--user));
 }
 .fm-prose h1:first-child { margin-top: 0; }
+/* h2 — coloured section head: full accent text on a neutral hairline rule,
+   so it reads as a sibling of h1 but unmistakably its own level. */
 .fm-prose h2 {
   font-size: 18px;
-  margin: 24px 0 8px;
+  margin: 24px 0 9px;
+  padding-bottom: 3px;
+  color: var(--prose-accent, var(--user));
+  border-bottom: 1px solid var(--line);
 }
 .fm-prose h2:first-child { margin-top: 0; }
+/* h3 — ink heading marked by a dotted accent underline on the text itself,
+   a different underline language from h1/h2's full-width rules. */
 .fm-prose h3 {
   font-size: 15.5px;
+  font-weight: 700;
   margin: 18px 0 6px;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: color-mix(in oklab, var(--prose-accent, var(--user)) 60%, transparent);
+  text-underline-offset: 3px;
 }
+.fm-prose h3:first-child { margin-top: 0; }
+/* h4 — accent eyebrow: small uppercase label, fully accent-coloured. */
 .fm-prose h4 {
-  font-size: 14px;
-  margin: 16px 0 4px;
-  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--prose-accent, var(--user));
+  margin: 16px 0 5px;
 }
+/* h5 / h6 — quiet neutral labels, stepping down the ink ramp. */
 .fm-prose h5,
 .fm-prose h6 {
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
+  letter-spacing: 0.07em;
   margin: 14px 0 4px;
 }
+.fm-prose h5 { color: var(--ink-3); }
+.fm-prose h6 { color: var(--ink-4); }
 
-/* Paragraphs + inline emphasis */
+/* Paragraphs + inline emphasis. Bold leans toward the speaker accent so it
+   pops out of body copy as "important" without reading as a link; italics
+   stay a quiet neutral so the two never compete. */
 .fm-prose p { margin: 0 0 12px; }
-.fm-prose strong { font-weight: 700; color: var(--ink); }
+.fm-prose strong {
+  font-weight: 700;
+  color: color-mix(in oklab, var(--ink) 70%, var(--prose-accent, var(--user)));
+}
 .fm-prose em { font-style: italic; color: var(--ink-2); }
+/* Deletions read as a faded red strike; insertions as a green underline.
+   --rose and --green exist in every theme. */
 .fm-prose del,
 .fm-prose s {
-  color: var(--ink-4);
+  color: color-mix(in oklab, var(--ink-4) 55%, var(--rose));
   text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--rose) 60%, transparent);
+}
+.fm-prose ins {
+  color: color-mix(in oklab, var(--ink) 45%, var(--green));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--green) 55%, transparent);
+  text-underline-offset: 2px;
 }
 .fm-prose mark {
   background: var(--prose-accent-tint, var(--user-tint));
@@ -149,16 +190,19 @@
   transform: rotate(45deg);
 }
 
-/* Inline code — panel chip with a thin line, accent-shifted text so it
-   reads as syntax, not plain text. */
+/* Inline code — accent-tinted chip: a wash of the speaker accent over the
+   panel, an accent-leaning border, and accent text deepened a hair for
+   contrast on the tint. Reads unmistakably as "syntax" and carries the
+   card's colour identity instead of sitting flat-gray. */
 .fm-prose code {
   font-family: var(--mono);
-  font-size: 0.87em;
-  background: var(--panel);
-  border: 1px solid var(--line-2);
+  font-size: 0.86em;
+  background: color-mix(in oklab, var(--prose-accent, var(--user)) 12%, var(--panel));
+  border: 1px solid color-mix(in oklab, var(--prose-accent, var(--user)) 28%, var(--line-2));
   padding: 1px 5px;
-  border-radius: 3px;
-  color: var(--prose-accent, var(--user));
+  border-radius: 4px;
+  color: color-mix(in oklab, var(--prose-accent, var(--user)) 88%, var(--ink));
+  font-variant-ligatures: none;
 }
 
 /* Code block — slightly stronger panel with a 2px accent rail on the
@@ -293,6 +337,58 @@
   margin: 12px 0;
 }
 
+/* Word-by-word reveal for newly streamed message/thinking prose. The real text
+   stays in the DOM for selection and assistive tech; the transient scramble is
+   painted by ::after and resolves back to the actual word. */
+@keyframes fm-word-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.18em);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.fm-word-reveal {
+  display: inline-block;
+  position: relative;
+  vertical-align: baseline;
+}
+.fm-word-reveal-text {
+  visibility: hidden;
+}
+.fm-word-reveal::after {
+  content: attr(data-word-reveal-current);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: inherit;
+  white-space: pre;
+}
+.fm-word-reveal.is-active {
+  animation: fm-word-reveal-in var(--dur-fast) var(--ease-out-quart) both;
+}
+.fm-word-reveal.is-done .fm-word-reveal-text {
+  visibility: visible;
+}
+.fm-word-reveal.is-done::after,
+.fm-word-reveal.is-pending::after {
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-word-reveal-text {
+    visibility: visible;
+  }
+  .fm-word-reveal::after {
+    content: none;
+  }
+}
+
 /* -- Source view ----------------------------------------------------------- */
 .fm-source {
   font-family: var(--mono);
@@ -395,6 +491,19 @@
   border: 1px solid var(--line-2);
   flex-shrink: 0;
 }
+.fm-accordion-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  letter-spacing: 0;
+}
+.fm-accordion-icon-chip svg {
+  width: 14px;
+  height: 14px;
+}
 .fm-accordion-chip-sm {
   font-size: 9px;
   padding: 3px 6px;
@@ -432,6 +541,9 @@
 }
 .fm-accordion-body > .fm-accordion-subsections {
   margin-top: 12px;
+}
+.fm-accordion-json {
+  min-width: 0;
 }
 
 /* -- JSON tree ------------------------------------------------------------- */

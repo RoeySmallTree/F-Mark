@@ -9,6 +9,8 @@ import {
 
 interface CapturedTool {
   config: {
+    title?: string;
+    description?: string;
     inputSchema?: Record<string, z.ZodType>;
     annotations?: {
       readOnlyHint?: boolean;
@@ -114,6 +116,82 @@ describe("MCP tool schemas", () => {
     expect(schema.participant_id.safeParse(undefined).success).toBe(true);
     expect(schema.session_id.safeParse("session-1").success).toBe(true);
     expect(schema.participant_id.safeParse("ag-phase5").success).toBe(true);
+  });
+
+  it("exposes fmark_get_theme as a read-only tool with an optional theme override", () => {
+    const tools = captureTools();
+    expect([...tools.keys()]).toContain("fmark_get_theme");
+    expect(FMARK_MCP_TOOL_NAMES).toContain("fmark_get_theme");
+
+    const tool = tools.get("fmark_get_theme");
+    expect(tool?.config.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    });
+
+    const schema = schemaFor(tools, "fmark_get_theme");
+    expect(Object.keys(schema)).toEqual(["theme"]);
+    /* Optional + treats empty string as absent (opencode populates optionals). */
+    expect(schema.theme.safeParse(undefined).success).toBe(true);
+    expect(schema.theme.safeParse("ember").success).toBe(true);
+    expect(schema.theme.parse("")).toBeUndefined();
+  });
+
+  it("documents visual alternatives multi-select semantics in the tool schema", () => {
+    const tools = captureTools();
+    const tool = tools.get("fmark_post_alternatives");
+    expect(tool?.config.description).toContain("multi:false");
+    expect(tool?.config.description).toContain("multi:true");
+    expect(tool?.config.description).toContain("multi-select cue");
+
+    const schema = schemaFor(tools, "fmark_post_alternatives");
+    expect(schema.multi.description).toContain("pick exactly one");
+    expect(schema.multi.description).toContain("pick any number");
+  });
+
+  it("write tools carry point-of-action worked examples", () => {
+    const tools = captureTools();
+    for (const name of [
+      "fmark_post_prose",
+      "fmark_post_html",
+      "fmark_post_flow",
+      "fmark_post_todo",
+      "fmark_post_alternatives",
+      "fmark_post_choices",
+      "fmark_post_choice",
+      "fmark_post_tool_use",
+      "fmark_post_file_ref",
+      "fmark_end_turn",
+    ]) {
+      const desc = tools.get(name)?.config.description ?? "";
+      expect(desc, `${name} description should carry an Example:`).toContain(
+        "Example:",
+      );
+    }
+    expect(tools.get("fmark_post_html")?.config.description).toContain("Avoid:");
+  });
+
+  it("classifies HTML by design target, not posting surface", () => {
+    const tools = captureTools();
+    for (const name of ["fmark_post_html", "fmark_post_alternatives"]) {
+      const desc = tools.get(name)?.config.description ?? "";
+      expect(desc, `${name} names the three visual targets`).toContain(
+        "target-repo-ui",
+      );
+      expect(desc).toContain("fmark-ui");
+      expect(desc).toContain("session-artifact");
+      expect(desc, `${name} defaults unbound artifacts to Amber`).toContain(
+        "Amber",
+      );
+      expect(desc, `${name} drops the old branch vocabulary`).not.toContain(
+        "external-product",
+      );
+      expect(desc).not.toContain("fmark-product-mockup");
+    }
+    const theme = tools.get("fmark_get_theme")?.config.description ?? "";
+    expect(theme).toContain("target-repo-ui");
+    expect(theme).toContain("session-artifact");
   });
 
   it("FMARK_MCP_TOOL_NAMES stays in sync with registerTool calls", () => {

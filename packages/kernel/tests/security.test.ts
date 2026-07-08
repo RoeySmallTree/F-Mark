@@ -16,7 +16,7 @@ describe("security", () => {
       const res = await app.inject({
         method: "POST",
         url: "/sessions/..%2Fescape/events/prose",
-        payload: { participant_id: pid, content: "x" },
+        payload: { root, participant_id: pid, content: "x"  },
       });
       expect([400, 404]).toContain(res.statusCode);
       await app.close();
@@ -32,7 +32,7 @@ describe("security", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
-        payload: { participant_id: "../etc/passwd", content: "x" },
+        payload: { root, participant_id: "../etc/passwd", content: "x"  },
       });
       expect(res.statusCode).toBe(400);
       await app.close();
@@ -53,6 +53,38 @@ describe("security", () => {
     });
   });
 
+  it("/health includes optional non-secret kernel identity", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const kernelIdentity = {
+        instance_id: "inst-123",
+        pid: 12345,
+        config_root: `${root}/config`,
+        project_root: root,
+        path_id: "abc123def456",
+        host: "localhost",
+        port: 7777,
+        version: "0.4.0",
+        started_at: "2026-06-18T11:00:00.000Z",
+        dev_supervisor_pid: 54321,
+      };
+      const { app } = createServer({
+        token: "secret",
+        paths: p,
+        kernelIdentity,
+      });
+      const health = await app.inject({ method: "GET", url: "/health" });
+      expect(health.statusCode).toBe(200);
+      expect(health.json()).toMatchObject({
+        status: "ok",
+        processApiEnabled: true,
+        kernel: kernelIdentity,
+      });
+      await app.close();
+    });
+  });
+
   it("/health reports when process-spawning routes are disabled under --no-auth", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
@@ -66,6 +98,48 @@ describe("security", () => {
       expect(health.statusCode).toBe(200);
       expect(health.json().processApiEnabled).toBe(false);
       await app.close();
+    });
+  });
+
+  it("only enables the dev kernel restart route when the dev supervisor provides a callback", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const disabled = createServer({ token: null, paths: p });
+      const disabledHealth = await disabled.app.inject({
+        method: "GET",
+        url: "/health",
+      });
+      expect(disabledHealth.json().devKernelRestartEnabled).toBe(false);
+      const disabledRestart = await disabled.app.inject({
+        method: "POST",
+        url: "/dev/restart-kernel",
+      });
+      expect(disabledRestart.statusCode).toBe(404);
+      await disabled.app.close();
+
+      let requested = 0;
+      const enabled = createServer({
+        token: null,
+        paths: p,
+        requestKernelRestart: () => {
+          requested += 1;
+        },
+      });
+      const enabledHealth = await enabled.app.inject({
+        method: "GET",
+        url: "/health",
+      });
+      expect(enabledHealth.json().devKernelRestartEnabled).toBe(true);
+      const restart = await enabled.app.inject({
+        method: "POST",
+        url: "/dev/restart-kernel",
+      });
+      expect(restart.statusCode).toBe(202);
+      expect(restart.json().status).toBe("restarting");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(requested).toBe(1);
+      await enabled.app.close();
     });
   });
 
@@ -105,6 +179,7 @@ describe("security", () => {
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "x",
           supersedes: "../../etc/passwd",

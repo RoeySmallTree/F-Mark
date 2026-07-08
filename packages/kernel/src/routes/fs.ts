@@ -34,7 +34,7 @@ interface ResolveError {
 
 export type { ResolvedPath, ResolveError, FsErrorShape };
 
-export async function resolveBrowsePath(
+async function resolveBrowsePath(
   raw: unknown,
 ): Promise<ResolvedPath | ResolveError> {
   if (typeof raw !== "string" || raw.length === 0) {

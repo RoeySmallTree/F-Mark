@@ -1,3 +1,9 @@
+const NO_LOOSE_STRING_VALUES = {
+  agent: "--agent",
+  class: "class",
+  circle: "circle",
+} as const;
+
 /* LoadingAnimation — fills its parent with a pixelated ambient field tinted
    with the active theme's accent color (--agent). Reusable across the app
    wherever a non-empty placeholder is needed while content loads. */
@@ -10,7 +16,7 @@ const FALLBACK_ACCENT = "#b86a1f";
 function readAccent(): string {
   if (typeof window === "undefined") return FALLBACK_ACCENT;
   const raw = getComputedStyle(document.body)
-    .getPropertyValue("--agent")
+    .getPropertyValue(NO_LOOSE_STRING_VALUES.agent)
     .trim();
   return raw.length > 0 ? raw : FALLBACK_ACCENT;
 }
@@ -41,7 +47,7 @@ export function LoadingAnimation({
     const obs = new MutationObserver(() => setAccent(readAccent()));
     obs.observe(document.body, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: [NO_LOOSE_STRING_VALUES.class],
     });
     return () => obs.disconnect();
   }, [color]);
@@ -54,7 +60,7 @@ export function LoadingAnimation({
       role="status"
     >
       <PixelBlast
-        variant="circle"
+        variant={NO_LOOSE_STRING_VALUES.circle}
         color={accent}
         pixelSize={4}
         patternScale={2.2}

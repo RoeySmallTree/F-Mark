@@ -1,3 +1,8 @@
+const NO_LOOSE_STRING_VALUES = {
+  light: "light",
+  theme: "theme-",
+} as const;
+
 /**
  * Theme manager — body-class swap + localStorage persistence + subscribers.
  *
@@ -154,27 +159,34 @@ function safeStorageSet(value: string): void {
 
 export function getCurrentTheme(): ThemeName {
   const raw = safeStorageGet();
-  return isThemeName(raw) ? raw : "light";
+  return isThemeName(raw) ? raw : NO_LOOSE_STRING_VALUES.light;
 }
 
 /**
  * Apply a theme: clears every existing `theme-*` class from `<body>` and (for
- * non-light themes) adds `theme-<name>`. Persists to localStorage and notifies
- * subscribers.
+ * non-light themes) adds `theme-<name>`. Persists to localStorage (unless
+ * `persist: false`) and notifies subscribers.
+ *
+ * `persist: false` is used by the cross-tab `storage` listener: another tab
+ * already wrote localStorage, so re-persisting here is redundant and (worse)
+ * could feed a loop if storage events ever reflected back.
  */
-export function applyTheme(name: ThemeName): void {
+export function applyTheme(
+  name: ThemeName,
+  opts: { persist?: boolean } = {},
+): void {
   const body = globalThis.document?.body;
   if (body !== undefined) {
     // Remove any prior theme-* class. We iterate from a snapshot because
     // classList is live and we are mutating it.
     const toRemove: string[] = [];
     body.classList.forEach((cls) => {
-      if (cls.startsWith("theme-")) toRemove.push(cls);
+      if (cls.startsWith(NO_LOOSE_STRING_VALUES.theme)) toRemove.push(cls);
     });
     for (const cls of toRemove) body.classList.remove(cls);
-    if (name !== "light") body.classList.add(`theme-${name}`);
+    if (name !== NO_LOOSE_STRING_VALUES.light) body.classList.add(`theme-${name}`);
   }
-  safeStorageSet(name);
+  if (opts.persist !== false) safeStorageSet(name);
   for (const cb of subscribers) {
     try {
       cb(name);
@@ -192,5 +204,32 @@ export function subscribeTheme(cb: (n: ThemeName) => void): () => void {
   subscribers.add(cb);
   return () => {
     subscribers.delete(cb);
+  };
+}
+
+/**
+ * Live-apply theme changes made in OTHER browser tabs (X6 cross-tab sync).
+ * The `storage` event fires only in tabs that did NOT make the write, so this
+ * never sees its own `applyTheme`. We re-apply without persisting (the value
+ * is already in localStorage) and let subscribers (ThemePicker, Appearance)
+ * reflect the new selection. Returns an unsubscribe.
+ *
+ * Idempotent across calls: a single listener is shared (a no-op if already
+ * started) so repeated invocations don't stack handlers.
+ */
+let themeStorageListening = false;
+export function startThemeStorageSync(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (themeStorageListening) return () => {};
+  themeStorageListening = true;
+  const onStorage = (e: StorageEvent): void => {
+    if (e.key !== STORAGE_KEY) return;
+    const next = getCurrentTheme();
+    applyTheme(next, { persist: false });
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    themeStorageListening = false;
   };
 }

@@ -53,6 +53,7 @@ const PREFLIGHT: IntegrationPreflightResponse = {
       },
     ],
   },
+  chosen_scope: "user",
   can_apply: true,
 };
 
@@ -113,7 +114,11 @@ describe("IntegrationSetupModal", () => {
 
     expect(setupItemFor("Runtime")).toHaveClass("ready");
     expect(setupItemFor("MCP")).toHaveClass("ready");
+    expect(setupItemFor("MCP")).toHaveTextContent("Global: /home/roey/.claude.json");
     expect(setupItemFor("Hook")).toHaveClass("missing");
+    expect(setupItemFor("Hook")).toHaveTextContent(
+      "Global: /home/roey/.claude/settings.json",
+    );
     expect(within(setupItemFor("Hook")).getByRole("button", { name: /setup/i }))
       .toHaveClass("integration-setup-action", "missing");
 
@@ -124,7 +129,58 @@ describe("IntegrationSetupModal", () => {
     expect(globalTab).toHaveAttribute("aria-selected", "false");
     expect(globalTab).not.toHaveClass("active");
     expect(setupItemFor("MCP")).toHaveClass("warn");
+    expect(setupItemFor("MCP")).toHaveTextContent("Project: /repo/.mcp.json");
     expect(setupItemFor("Hook")).toHaveClass("ready");
+    expect(setupItemFor("Hook")).toHaveTextContent(
+      "Project: /repo/.claude/settings.json",
+    );
+  });
+
+  test("codex local tab is disabled because Codex is global-only", async () => {
+    renderModal({
+      runtimeId: "codex",
+      initialPreflight: {
+        runtime: {
+          runtime_id: "codex",
+          executable: "codex",
+          available: true,
+          version: "codex-cli 0.142.2",
+        },
+        mcp: {
+          status: "blocked",
+          locations: [
+            {
+              scope: "user",
+              path: "/home/roey/.codex/config.toml",
+              status: "blocked",
+              reason: "invalid TOML",
+              safe_auto_apply: false,
+            },
+          ],
+        },
+        hooks: {
+          status: "installed",
+          locations: [
+            {
+              scope: "user",
+              path: "/home/roey/.codex/hooks.json",
+              status: "installed",
+              safe_auto_apply: true,
+              version: "managed-only-v3",
+            },
+          ],
+        },
+        chosen_scope: "user",
+        can_apply: false,
+      },
+    });
+
+    const localTab = screen.getByRole("tab", { name: /locally/i });
+    expect(localTab).toBeDisabled();
+    expect(localTab).toHaveAttribute(
+      "title",
+      "Codex is global-only (CODEX_HOME)",
+    );
   });
 
   test("runtime Setup surfaces the executable error instead of no-oping", async () => {
@@ -160,6 +216,7 @@ describe("IntegrationSetupModal", () => {
             },
           ],
         },
+        chosen_scope: "project",
         can_apply: false,
       },
     });
@@ -224,6 +281,7 @@ describe("IntegrationSetupModal", () => {
           },
         },
         changed: true,
+        chosen_scope: "project",
         can_apply: true,
       })),
       spawn: vi.fn(async () => SPAWNED),
@@ -268,6 +326,7 @@ describe("IntegrationSetupModal", () => {
             },
           ],
         },
+        chosen_scope: "project",
         can_apply: true,
       },
     });

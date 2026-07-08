@@ -3,10 +3,12 @@ import process from "node:process";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/* `managed-only-v2` adds the `PostToolUse` Claude hook for live
-   tool-use streaming. v1 installations show as "stale" until the user
-   re-applies; the Apply path is idempotent. */
-export const FMARK_HOOK_INSTALL_VERSION = "managed-only-v2";
+/* `managed-only-v3` adds Claude `MessageDisplay` and runtime `PostToolUse`
+   so live assistant/tool activity reaches F-Mark during the turn. Codex has
+   no MessageDisplay hook; its free-form commentary is bridged from rollout
+   live-text records instead. Older installations show as "stale" until the
+   user re-applies; the Apply path is idempotent. */
+export const FMARK_HOOK_INSTALL_VERSION = "managed-only-v3";
 const VERSION_FLAG = "--fmark-hook-version";
 
 function localTsxCommand(packageRoot: string): string {

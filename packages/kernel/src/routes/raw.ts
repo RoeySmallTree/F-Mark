@@ -1,40 +1,27 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
-import { extname, join, resolve, sep } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
+import { resolveKnownRootScope } from "./rootScope.js";
+import { assembleHtmlBundleIndex } from "../events/htmlBundle.js";
+import {
+  isActiveContentMime,
+  mimeForExtension,
+} from "../lib/mimeTable.js";
 
-const MIME_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".csv": "text/csv; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".pdf": "application/pdf",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ".xls": "application/vnd.ms-excel",
-  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  ".ppt": "application/vnd.ms-powerpoint",
-  ".wasm": "application/wasm",
-};
+const RAW_ACTIVE_CONTENT_CSP = "sandbox allow-scripts";
 
-function mimeFor(filename: string): string {
-  const ext = extname(filename).toLowerCase();
-  return MIME_TYPES[ext] ?? "application/octet-stream";
+function applyRawContentHeaders(reply: FastifyReply, mime: string): void {
+  reply.type(mime);
+  reply.header("X-Content-Type-Options", "nosniff");
+  if (isActiveContentMime(mime)) {
+    /* Raw html-event bundles are intentionally interactive previews, but they
+       must not inherit the app origin when opened directly or iframeed. */
+    reply.header("Content-Security-Policy", RAW_ACTIVE_CONTENT_CSP);
+  }
 }
 
 async function ensureSession(
@@ -87,9 +74,50 @@ async function serveFile(
     reply.code(404);
     return reply.send({ error: "not found" });
   }
-  reply.type(mimeFor(filepath));
+  applyRawContentHeaders(reply, mimeForExtension(filepath));
   reply.header("content-length", String(stats.size));
   return reply.send(createReadStream(filepath));
+}
+
+async function isFile(filepath: string): Promise<boolean> {
+  try {
+    return (await stat(filepath)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function readOptionalText(filepath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filepath, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+async function serveHtmlBundleIndex(
+  reply: FastifyReply,
+  filepath: string,
+): Promise<FastifyReply> {
+  let html;
+  try {
+    html = await readFile(filepath, "utf8");
+  } catch {
+    reply.code(404);
+    return reply.send({ error: "not found" });
+  }
+  const folder = dirname(filepath);
+  const assembled = assembleHtmlBundleIndex(html, {
+    css: await readOptionalText(join(folder, "style.css")),
+    js: await readOptionalText(join(folder, "script.js")),
+  });
+  applyRawContentHeaders(reply, "text/html; charset=utf-8");
+  reply.header("content-length", String(Buffer.byteLength(assembled)));
+  return reply.send(assembled);
+}
+
+function shouldAssembleHtmlBundleIndex(filename: string, rest: string): boolean {
+  return filename.endsWith(".html") && rest === "index.html";
 }
 
 export function registerRawRoutes(
@@ -98,10 +126,33 @@ export function registerRawRoutes(
 ): void {
   const deps = normaliseDeps(pOrDeps);
 
-  app.get<{ Params: { id: string; filename: string } }>(
+  async function resolveRawPaths(
+    query: { path_id?: unknown; root?: unknown },
+    reply: FastifyReply,
+  ): Promise<Paths | null> {
+    const hasScope =
+      (typeof query.path_id === "string" && query.path_id.length > 0) ||
+      (typeof query.root === "string" && query.root.length > 0);
+    if (!hasScope) return resolvePaths(deps);
+    const scope = await resolveKnownRootScope(deps, {
+      path_id: query.path_id,
+      root: query.root,
+    });
+    if (!scope.ok) {
+      reply.code(scope.status).send(scope.body);
+      return null;
+    }
+    return scope.known.paths;
+  }
+
+  app.get<{
+    Params: { id: string; filename: string };
+    Querystring: { path_id?: string; root?: string };
+  }>(
     "/sessions/:id/raw/:filename",
     async (req, reply) => {
-      const p = resolvePaths(deps);
+      const p = await resolveRawPaths(req.query, reply);
+      if (p === null) return reply;
       if (!(await ensureSession(p, req.params.id, reply))) return reply;
       const target = resolveSafe(
         p,
@@ -117,10 +168,14 @@ export function registerRawRoutes(
     },
   );
 
-  app.get<{ Params: { id: string; filename: string; "*": string } }>(
+  app.get<{
+    Params: { id: string; filename: string; "*": string };
+    Querystring: { path_id?: string; root?: string };
+  }>(
     "/sessions/:id/raw/:filename/*",
     async (req, reply) => {
-      const p = resolvePaths(deps);
+      const p = await resolveRawPaths(req.query, reply);
+      if (p === null) return reply;
       if (!(await ensureSession(p, req.params.id, reply))) return reply;
       const rest = req.params["*"];
       const target = resolveSafe(
@@ -132,6 +187,9 @@ export function registerRawRoutes(
       if (target === null) {
         reply.code(400);
         return reply.send({ error: "invalid path" });
+      }
+      if (shouldAssembleHtmlBundleIndex(req.params.filename, rest)) {
+        return serveHtmlBundleIndex(reply, target);
       }
       return serveFile(reply, target);
     },

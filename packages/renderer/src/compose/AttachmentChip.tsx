@@ -5,9 +5,15 @@ import {
   FileSpreadsheet,
   Image as ImageIcon,
   Loader2,
+  Music,
+  Video,
   X,
 } from "lucide-react";
 import type { FilePreviewKind } from "@f-mark/shared";
+
+const NO_LOOSE_STRING_VALUES = {
+  image: "image",
+} as const;
 
 export interface StagedAttachment {
   id: string;
@@ -30,6 +36,8 @@ interface Props {
 
 const ICON_BY_KIND: Record<FilePreviewKind, typeof FileIcon> = {
   image: ImageIcon,
+  video: Video,
+  audio: Music,
   text: FileText,
   pdf: FileText,
   csv: FileSpreadsheet,
@@ -48,7 +56,7 @@ function humanSize(bytes: number): string {
 export function AttachmentChip({ attachment, onRemove }: Props): JSX.Element {
   const Icon = ICON_BY_KIND[attachment.previewKind] ?? FileIcon;
   const isImage =
-    attachment.previewKind === "image" && attachment.previewUrl !== null;
+    attachment.previewKind === NO_LOOSE_STRING_VALUES.image && attachment.previewUrl !== null;
   return (
     <div
       className={`compose-attachment${attachment.error ? " is-error" : ""}`}

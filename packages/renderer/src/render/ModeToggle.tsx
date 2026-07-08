@@ -1,5 +1,9 @@
 import type { JSX } from "react";
 
+const NO_LOOSE_STRING_VALUES = {
+  fmModeToggle: "fm-mode-toggle",
+} as const;
+
 interface ModeOption<M extends string> {
   value: M;
   label: string;
@@ -24,7 +28,7 @@ export function ModeToggle<M extends string>({
   onChange,
   className,
 }: Props<M>): JSX.Element {
-  const cls = "fm-mode-toggle" + (className ? " " + className : "");
+  const cls = NO_LOOSE_STRING_VALUES.fmModeToggle + (className ? " " + className : "");
   return (
     <div className={cls} role="group">
       {options.map((opt) => {

@@ -4,7 +4,9 @@ import {
   CheckSquare,
   FileText,
   FolderTree,
+  GitCompareArrows,
   MessageSquare,
+  SquareTerminal,
 } from "lucide-react";
 import type { RightTabKey } from "../../state/store.js";
 
@@ -30,5 +32,13 @@ export const RIGHT_TAB_META: Record<RightTabKey, TabMeta> = {
   files: {
     label: "Files",
     icon: <FolderTree size={12} aria-hidden="true" />,
+  },
+  diffTree: {
+    label: "Diff tree",
+    icon: <GitCompareArrows size={12} aria-hidden="true" />,
+  },
+  terminal: {
+    label: "Terminal",
+    icon: <SquareTerminal size={12} aria-hidden="true" />,
   },
 };

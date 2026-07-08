@@ -10,7 +10,6 @@ import {
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { Paths } from "./paths.js";
-import { seqLog, LogLevel } from "./lib/seq-log.js";
 
 const GITIGNORE_FILE_NAME = ".gitignore";
 const GITIGNORE_ENTRY = ".f-mark/.token";
@@ -180,26 +179,11 @@ export function registerAuthHook(
   app.addHook("onRequest", async (req, reply) => {
     const queryIdx = req.url.indexOf("?");
     const urlPath = queryIdx === -1 ? req.url : req.url.slice(0, queryIdx);
-    const hasHeader = req.headers.authorization !== undefined;
     const queryToken = extractQueryToken(req.url);
     const cookieToken = extractCookieToken(req.headers.cookie);
-    void seqLog("auth hook {method} {urlPath}", {
-      module: "auth",
-      method: req.method,
-      urlPath,
-      url: req.url,
-      authConfigured: token !== null,
-      hasAuthHeader: hasHeader,
-      hasQueryToken: queryToken !== null,
-      hasCookieToken: cookieToken !== null,
-    });
     if (req.method === "GET" && urlPath === "/health") return;
     if (token === null) return;
     if (req.headers.authorization === `Bearer ${token}`) {
-      void seqLog("auth accepted via header {urlPath}", {
-        module: "auth",
-        urlPath,
-      });
       return;
     }
     if (queryToken === token) {
@@ -207,31 +191,11 @@ export function registerAuthHook(
         "Set-Cookie",
         `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict`,
       );
-      void seqLog("auth accepted via query token, cookie set {urlPath}", {
-        module: "auth",
-        urlPath,
-      });
       return;
     }
     if (cookieToken === token) {
-      void seqLog("auth accepted via cookie {urlPath}", {
-        module: "auth",
-        urlPath,
-      });
       return;
     }
-    void seqLog(
-      "auth rejected {urlPath}",
-      {
-        module: "auth",
-        urlPath,
-        hasAuthHeader: hasHeader,
-        hasQueryToken: queryToken !== null,
-        hasCookieToken: cookieToken !== null,
-        $note: "returning 401",
-      },
-      LogLevel.Warning,
-    );
     reply.code(401).send({ error: "unauthorized" });
   });
 }

@@ -7,7 +7,7 @@ import {
   type RuntimesFile,
 } from "./registry.js";
 
-export function resolveRuntimesDir(deps: PathDeps): string {
+function resolveRuntimesDir(deps: PathDeps): string {
   const active = deps.ref?.get().active ?? null;
   if (deps.ref !== undefined && active !== null) {
     return deps.ref.global().projectDir(active.pathId());

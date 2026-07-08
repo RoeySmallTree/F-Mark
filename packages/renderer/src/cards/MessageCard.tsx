@@ -1,50 +1,93 @@
+const NO_LOOSE_STRING_VALUES = {
+  card: "card",
+  msgCard: "msg-card",
+  user: "user",
+  agent: "agent",
+} as const;
+
 /* MessageCard — unnamed prose with no target. Renders short messages
    inline. Color stripe + small head row + rendered markdown body. */
 
 import type { JSX } from "react";
 import type { AnyEventRecord, Participant, ProsePayload } from "@f-mark/shared";
-import { formatWhen, whoOf } from "./format.js";
+import { whoOf } from "./format.js";
 import { LineCommentRail } from "./LineCommentRail.js";
-import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
+import { EventCardHeader } from "./EventCardHeader.js";
 
 interface Props {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
   comments: AnyEventRecord[];
+  /** Overrides `event.payload.content` — used to render a joined run of
+     streamed prose deltas as one document while still anchoring line
+     comments to `event` (the run's first delta). */
+  content?: string;
+  revealWords?: boolean;
+  /** Toolbox prose runs render as internal narration, not feed messages. */
+  variant?: "message" | "narration";
 }
 
 export function MessageCard({
   event,
   participants,
   comments,
+  content,
+  revealWords = false,
+  variant = "message",
 }: Props): JSX.Element {
   const payload = event.payload as ProsePayload;
+  const text = content ?? payload.content;
   const who = whoOf(event.participant_id, participants);
-  const classes = ["card", "msg-card", who.isUser ? "user" : "agent"].join(" ");
+  const isNarration = variant === "narration";
+  const lane = who.isUser
+    ? NO_LOOSE_STRING_VALUES.user
+    : NO_LOOSE_STRING_VALUES.agent;
+  const classes = [
+    NO_LOOSE_STRING_VALUES.card,
+    NO_LOOSE_STRING_VALUES.msgCard,
+    lane,
+    isNarration ? "is-narration" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (isNarration) {
+    return (
+      <article className={classes} data-event-kind="message">
+        <div className="narration-panel">
+          <LineCommentRail
+            event={event}
+            content={text}
+            comments={comments}
+            participants={participants}
+            mode="rendered"
+            className="narration-text"
+            lineHeight={22}
+            revealWords={revealWords}
+          />
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article className={classes} data-event-kind="message">
       <div className="stripe" aria-hidden />
       <div className="body">
-        <div className="card-head">
-          <ParticipantAvatar
-            participantId={who.id}
-            kind={who.isUser ? "user" : "agent"}
-            name={who.name}
-            color={who.color}
-            runtimeId={who.runtimeId}
-            size="sm"
-          />
-          <span className="who">{who.name}</span>
-          <span className="when">{formatWhen(event.timestamp)}</span>
-        </div>
+        <EventCardHeader
+          className="card-head"
+          who={who}
+          timestamp={event.timestamp}
+        />
         <LineCommentRail
           event={event}
-          content={payload.content}
+          content={text}
           comments={comments}
           participants={participants}
           mode="rendered"
           className="text"
           lineHeight={22}
+          revealWords={revealWords}
         />
       </div>
     </article>

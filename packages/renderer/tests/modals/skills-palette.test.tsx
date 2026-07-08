@@ -5,7 +5,7 @@
      - listSkills() returns 3 skills across 2 agents → 2 group headers.
      - Fuzzy search filters by name.
      - Agent dropdown switches active agent and refetches.
-     - Enter inserts `/skill-name <args>` into composeDraft and closes.
+     - Enter requests inline insertion for `/skill-name <args>` and closes.
      - Mouse click activates a skill row.
      - Active agent persists to localStorage. */
 
@@ -17,7 +17,7 @@ import {
   test,
   vi,
 } from "vitest";
-import { cleanup, render, screen, act } from "@testing-library/react";
+import { cleanup, render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Participant, SkillRef } from "@f-mark/shared";
 import { SkillsPaletteModal } from "../../src/modals/SkillsPaletteModal.js";
@@ -92,10 +92,12 @@ function resetStore(
     composeMode: "message",
     commentTarget: null,
     composeDraft: null,
+    composeInsertion: null,
     leftRail: "sessions",
     rightTab: "log",
     viewMode: "everything",
     activeModal: null,
+    editingSkill: null,
     activePopover: { key: null, anchorRect: null },
     ...overrides,
   });
@@ -370,7 +372,7 @@ describe("SkillsPaletteModal — activation (Enter & click)", () => {
     cleanup();
   });
 
-  test("Enter on first row writes `/<name> <args>` to composeDraft and closes", async () => {
+  test("Enter on first row requests inline insertion and closes", async () => {
     stubFetch(SKILLS_3);
     const user = userEvent.setup();
     render(<SkillsPaletteModal />);
@@ -379,11 +381,13 @@ describe("SkillsPaletteModal — activation (Enter & click)", () => {
     /* Default selection is index 0 — first row alphabetically across all
        Claude skills (review-pr). */
     await user.keyboard("{Enter}");
-    expect(useStore.getState().composeDraft).toBe("/review-pr <pr-url>");
+    expect(useStore.getState().composeInsertion?.text).toBe(
+      "/review-pr <pr-url>",
+    );
     expect(useStore.getState().activeModal).toBeNull();
   });
 
-  test("Enter on a skill without args writes `/<name> ` (trailing space)", async () => {
+  test("Enter on a skill without args requests `/<name> `", async () => {
     stubFetch(SKILLS_3);
     const user = userEvent.setup();
     render(<SkillsPaletteModal />);
@@ -392,7 +396,7 @@ describe("SkillsPaletteModal — activation (Enter & click)", () => {
     /* Move down: review-pr → standup. (Alphabetical inside Claude group.) */
     await user.keyboard("{ArrowDown}");
     await user.keyboard("{Enter}");
-    expect(useStore.getState().composeDraft).toBe("/standup ");
+    expect(useStore.getState().composeInsertion?.text).toBe("/standup ");
     expect(useStore.getState().activeModal).toBeNull();
   });
 
@@ -405,8 +409,19 @@ describe("SkillsPaletteModal — activation (Enter & click)", () => {
     );
     expect(row).not.toBeNull();
     await user.click(row as HTMLElement);
-    expect(useStore.getState().composeDraft).toBe("/refactor [path]");
+    expect(useStore.getState().composeInsertion?.text).toBe("/refactor [path]");
     expect(useStore.getState().activeModal).toBeNull();
+  });
+
+  test("clicking the edit button opens the skill editor for that skill", async () => {
+    stubFetch(SKILLS_3);
+    const user = userEvent.setup();
+    render(<SkillsPaletteModal />);
+    await screen.findByText(/\/review-pr/);
+
+    await user.click(screen.getByRole("button", { name: /Edit review-pr/i }));
+    expect(useStore.getState().activeModal).toBe("skill-editor");
+    expect(useStore.getState().editingSkill?.name).toBe("review-pr");
   });
 
   test("ArrowDown / ArrowUp navigate across group boundaries", async () => {
@@ -451,5 +466,76 @@ describe("SkillsPaletteModal — Escape & close", () => {
     expect(backdrop).not.toBeNull();
     await user.click(backdrop as HTMLElement);
     expect(useStore.getState().activeModal).toBeNull();
+  });
+});
+
+describe("SkillEditorModal — read and save", () => {
+  beforeEach(() => {
+    resetStore({
+      activeModal: "skill-editor",
+      editingSkill: SKILLS_3[0],
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  test("loads structured fields and saves the skill file", async () => {
+    const editableSkill = SKILLS_3[0]!;
+    const fetchMock = vi.fn().mockImplementation((input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/skills/detail") && (init?.method ?? "GET") === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            skill: editableSkill,
+            name: "review-pr",
+            description: "Read a PR and post a structured review.",
+            args: "<pr-url>",
+            body: "# Review\n\nUse care.",
+            frontmatter: {
+              name: "review-pr",
+              description: "Read a PR and post a structured review.",
+              args: "<pr-url>",
+            },
+          }),
+        );
+      }
+      if (url === "/skills/detail" && init?.method === "PUT") {
+        return Promise.resolve(
+          jsonResponse({
+            skill: editableSkill,
+            name: "review-pr",
+            description: "Updated description",
+            args: "<pr-url>",
+            body: "# Review\n\nUse extra care.",
+            frontmatter: {},
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<ModalRoot />);
+
+    const description = await screen.findByLabelText(/Skill description/i);
+    await user.clear(description);
+    await user.type(description, "Updated description");
+    const body = screen.getByLabelText(/Skill body/i);
+    await user.clear(body);
+    await user.type(body, "# Review\n\nUse extra care.");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() => expect(useStore.getState().activeModal).toBeNull());
+    const saveCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url) === "/skills/detail" && init?.method === "PUT",
+    );
+    expect(saveCall).toBeDefined();
+    expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({
+      path: editableSkill.path,
+      description: "Updated description",
+      body: "# Review\n\nUse extra care.",
+    });
   });
 });

@@ -29,7 +29,15 @@ Auth: `Authorization: Bearer <token>` where token is in `.f-mark/.token`.
 { "slug": "launch-plan" }
 ```
 
-→ `{ id, slug, created_at }`. Omitting `slug` defaults to "untitled".
+→ `{ id, slug, created_at }`. Omitting `slug` defaults to the placeholder "new-session".
+
+`PATCH /sessions/:id`
+
+```json
+{ "slug": "fix-login-flow" }
+```
+
+→ `{ id, slug, created_at, path, path_id }`. Renames the session. Sessions open with the placeholder name `new-session`; once you know what the session is about (usually after the first user message), rename it with a short kebab-case slug — via MCP use `fmark_rename_session`. If no request has arrived yet, leave the placeholder; never invent a name. The session id is immutable: renaming only changes the display slug, so keep using the same id. Don't rename a session that already has a real name unless the user asks.
 
 ## Events
 
@@ -62,6 +70,23 @@ All frontmatter fields are optional.
     { "id": "b", "label": "Rewrite" }
   ],
   "multi": false
+}
+```
+
+`multi: false` means pick exactly one; `multi: true` means pick any number. If the question says "or more", "mix", "combine", or "select all", use `multi: true` or reword it as single-select.
+
+`POST /sessions/<id>/events/alternatives` — generate several HTML mockups as one visual multi-option widget (each option renders as a selectable preview with a fullscreen view). Use for "explore N designs, pick one"; for plain-text options use `/events/choices` instead. `multi: false` means pick exactly one visual option; `multi: true` means pick any number. If the question says "or more", "mix", "combine", or "select all", use `multi: true` or reword it as single-select. **The posting surface is not the design target — theme each option to its destination, one of three visual targets:** (1) target-repo-ui — UI for a specific repo or product (the current project or another) → match *that* target's own design system (read its source first), not F-Mark's applied theme; (2) fmark-ui — UI that ships in F-Mark itself → read the real renderer source under `packages/renderer/src` and reuse its class names/structure, resolving colors via `GET /theme`; (3) session-artifact — an unbound chart, analysis, or preview → default to the Amber house theme (`GET /theme?theme=amber`) and build every option with its tokens. The user records the pick via `/events/choice`.
+
+```json
+{
+  "participant_id": "ag-claude",
+  "id": "ch_design",
+  "question": "Which landing layout?",
+  "multi": false,
+  "options": [
+    { "id": "a", "label": "Hero-first", "html": "<h1>A</h1>", "css": "h1{color:teal}" },
+    { "id": "b", "label": "Split", "html": "<h1>B</h1>" }
+  ]
 }
 ```
 
@@ -246,4 +271,4 @@ Logs a tool invocation. The auto-stream hook emits these automatically; you shou
 
 ## POST /sessions/:id/events/prose with `arbitrary`
 
-When set to `true`, the renderer groups the message into the collapsible mid-turn box. The auto-stream hook sets this on every text block except the final one of a turn. Do not set it manually.
+When set to `true`, the renderer groups the message into the collapsible mid-turn box. The auto-stream hook uses this for live assistant text chunks; final turn text uses `arbitrary: false`. Do not set it manually.

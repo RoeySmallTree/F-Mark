@@ -1,5 +1,7 @@
 import { paths as makePaths, type Paths } from "../paths.js";
 import type { PathContextRef } from "../paths/contextRef.js";
+import type { GlobalPaths } from "../paths/global.js";
+import type { TmuxManager } from "../tmux/manager.js";
 
 /* Standard deps shape used by every route that touches per-path data
    (sessions, participants, events, todos, files, flow, html, raw, search,
@@ -17,6 +19,13 @@ export interface PathDeps {
       than active) bypass the 409 STALE_PATH check. CLI flag
       --quiet-cross-path-hooks; server.ts threads it in. */
   quietCrossPathHooks?: boolean;
+  /** Global config tree for root-scoped managed-agent state. Optional so
+      legacy tests that pass only Paths keep using per-root .f-mark/agents. */
+  global?: GlobalPaths;
+  /** Runtime process manager, available once process routes are enabled. Event
+      writes use this only to publish a full managed-agent status row after
+      lifecycle reconciliation. */
+  getTmuxManager?: () => TmuxManager | null;
 }
 
 export function normaliseDeps(arg: Paths | PathDeps): PathDeps {

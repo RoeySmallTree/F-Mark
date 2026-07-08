@@ -26,11 +26,8 @@ function multilineTomlCommand(command: string): string {
 
 describe("Codex hooks adapter", () => {
   it("detects installed when hooks are enabled and all required hooks exist", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
-    const userCommand = autoStreamHookCommand({
-      participantId: "us-1",
-      kind: "user",
-    });
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
     const toml = `
 [features]
 hooks = true
@@ -46,15 +43,72 @@ timeout = 10
 [[hooks.PermissionRequest]]
 command = ${tomlCommand(agentCommand)}
 timeout = 300
+
+[[hooks.PostToolUse]]
+command = ${tomlCommand(agentCommand)}
+timeout = 30
     `;
     const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
     expect(r.installed).toBe(true);
     expect(r.status).toBe("installed");
-    expect(r.detectedEntries.length).toBe(3);
+    expect(r.detectedEntries.length).toBe(4);
+  });
+
+  it("keeps a generic install valid for later participant ids", () => {
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
+    const toml = `
+[features]
+hooks = true
+
+[[hooks.Stop]]
+command = ${tomlCommand(agentCommand)}
+
+[[hooks.UserPromptSubmit]]
+command = ${tomlCommand(userCommand)}
+
+[[hooks.PermissionRequest]]
+command = ${tomlCommand(agentCommand)}
+
+[[hooks.PostToolUse]]
+command = ${tomlCommand(agentCommand)}
+    `;
+
+    expect(detectCodexHooks(toml, "ag-codex-1", "us-1").installed).toBe(true);
+    expect(detectCodexHooks(toml, "ag-codex-2", "us-2").installed).toBe(true);
+  });
+
+  it("accepts current participant-specific installs from older setup runs", () => {
+    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-old" });
+    const userCommand = autoStreamHookCommand({
+      participantId: "us-old",
+      kind: "user",
+    });
+    const toml = `
+[features]
+hooks = true
+
+[[hooks.Stop]]
+command = ${tomlCommand(agentCommand)}
+
+[[hooks.UserPromptSubmit]]
+command = ${tomlCommand(userCommand)}
+
+[[hooks.PermissionRequest]]
+command = ${tomlCommand(agentCommand)}
+
+[[hooks.PostToolUse]]
+command = ${tomlCommand(agentCommand)}
+    `;
+
+    const detected = detectCodexHooks(toml, "ag-codex-new", "us-new");
+
+    expect(detected.installed).toBe(true);
+    expect(detected.status).toBe("installed");
   });
 
   it("partial install reported as stale", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
+    const agentCommand = autoStreamHookCommand();
     const toml = `[[hooks.Stop]]
 command = ${tomlCommand(agentCommand)}`;
     const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
@@ -63,11 +117,8 @@ command = ${tomlCommand(agentCommand)}`;
   });
 
   it("reports the legacy Bash-only PermissionRequest hook as stale", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
-    const userCommand = autoStreamHookCommand({
-      participantId: "us-1",
-      kind: "user",
-    });
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
     const hooksJson = JSON.stringify({
       hooks: {
         Stop: [{ hooks: [{ type: "command", command: agentCommand }] }],
@@ -93,11 +144,12 @@ command = ${tomlCommand(agentCommand)}`;
 
   it("renders a valid snippet", () => {
     const s = renderCodexInstallSnippet("ag-codex-1", "us-1");
-    expect(s).toContain("ag-codex-1");
-    expect(s).toContain("us-1");
+    expect(s).not.toContain("ag-codex-1");
+    expect(s).not.toContain("us-1");
     expect(s).toContain('"Stop"');
     expect(s).toContain('"UserPromptSubmit"');
     expect(s).toContain("PermissionRequest");
+    expect(s).toContain("PostToolUse");
     expect(s).toContain("hook auto-stream");
     expect(s).not.toContain("npx -y f-mark");
   });
@@ -110,11 +162,8 @@ command = ${tomlCommand(agentCommand)}`;
   });
 
   it("detects hooks declared with a multiline command array", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
-    const userCommand = autoStreamHookCommand({
-      participantId: "us-1",
-      kind: "user",
-    });
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
     const toml = `
 [features]
 hooks = true
@@ -128,10 +177,13 @@ command = ${multilineTomlCommand(userCommand)}
 
 [[hooks.PermissionRequest]]
 command = ${multilineTomlCommand(agentCommand)}
+
+[[hooks.PostToolUse]]
+command = ${multilineTomlCommand(agentCommand)}
 `;
     const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
     expect(r.installed).toBe(true);
-    expect(r.detectedEntries.length).toBe(3);
+    expect(r.detectedEntries.length).toBe(4);
   });
 
   it("does not detect commented-out command lines as installed", () => {
@@ -151,11 +203,8 @@ hooks = true
   });
 
   it("detects when one event uses single-line and the other uses multiline arrays", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
-    const userCommand = autoStreamHookCommand({
-      participantId: "us-1",
-      kind: "user",
-    });
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
     const toml = `
 [features]
 hooks = true
@@ -170,18 +219,19 @@ command = ${multilineTomlCommand(userCommand)}
 [[hooks.PermissionRequest]]
 command = ${tomlCommand(agentCommand)}
 timeout = 300
+
+[[hooks.PostToolUse]]
+command = ${tomlCommand(agentCommand)}
+timeout = 30
 `;
     const r = detectCodexHooks(toml, "ag-codex-1", "us-1");
     expect(r.installed).toBe(true);
-    expect(r.detectedEntries.length).toBe(3);
+    expect(r.detectedEntries.length).toBe(4);
   });
 
   it("detects when hooks live across both user-level and project-local TOML", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
-    const userCommand = autoStreamHookCommand({
-      participantId: "us-1",
-      kind: "user",
-    });
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
     // Simulates the dispatcher concatenating ~/.codex/config.toml and
     // <projectRoot>/.codex/config.toml. detectCodexHooks should treat the
     // combined content as a single TOML stream so installed status reflects
@@ -199,11 +249,14 @@ command = ${tomlCommand(userCommand)}
 
 [[hooks.PermissionRequest]]
 command = ${tomlCommand(agentCommand)}
+
+[[hooks.PostToolUse]]
+command = ${tomlCommand(agentCommand)}
 `;
     const combined = userToml + "\n" + projectToml;
     const r = detectCodexHooks(combined, "ag-codex-1", "us-1");
     expect(r.installed).toBe(true);
-    expect(r.detectedEntries.length).toBe(3);
+    expect(r.detectedEntries.length).toBe(4);
   });
 
   it("applyCodexHooks enables hooks and writes all required hook commands", async () => {
@@ -224,11 +277,14 @@ command = ${tomlCommand(agentCommand)}
       expect(detected.installed).toBe(true);
       expect(detected.detectedEntries.map((entry) => entry.event).sort()).toEqual([
         "PermissionRequest",
+        "PostToolUse",
         "Stop",
         "UserPromptSubmit",
       ]);
       expect(hooksConfig.hooks.PermissionRequest[0].matcher).toBeUndefined();
       expect(hooksJson).not.toContain("npx -y f-mark");
+      expect(hooksJson).not.toContain("ag-codex-1");
+      expect(hooksJson).not.toContain("us-1");
       expect(toml).toContain("[hooks.state.");
       expect(toml).toContain("trusted_hash = \"sha256:");
     } finally {
@@ -242,11 +298,8 @@ command = ${tomlCommand(agentCommand)}
   });
 
   it("detects hooks.json installs without matching trust state as stale", () => {
-    const agentCommand = autoStreamHookCommand({ participantId: "ag-codex-1" });
-    const userCommand = autoStreamHookCommand({
-      participantId: "us-1",
-      kind: "user",
-    });
+    const agentCommand = autoStreamHookCommand();
+    const userCommand = autoStreamHookCommand({ kind: "user" });
     const hooksJson = JSON.stringify({
       hooks: {
         Stop: [{ hooks: [{ type: "command", command: agentCommand, timeout: 30 }] }],
@@ -264,6 +317,9 @@ command = ${tomlCommand(agentCommand)}
               },
             ],
           },
+        ],
+        PostToolUse: [
+          { hooks: [{ type: "command", command: agentCommand, timeout: 30 }] },
         ],
       },
     });

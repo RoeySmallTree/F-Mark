@@ -2,12 +2,21 @@ import { type JSX } from "react";
 import { BaseEdge, getBezierPath, type Edge, type EdgeProps } from "@xyflow/react";
 import type { FlowEdge as FlowEdgeData, FlowEdgeStyle } from "@f-mark/shared";
 
+const NO_LOOSE_STRING_VALUES = {
+  dashed: "dashed",
+  dotted: "dotted",
+  flowing: "flowing",
+  default: "default",
+  solid: "solid",
+  flowEdge: "flow-edge",
+} as const;
+
 type FlowEdgeType = Edge<{ data: FlowEdgeData }>;
 
 function dashFor(style: FlowEdgeStyle | undefined): string | undefined {
-  if (style === "dashed") return "8 4";
-  if (style === "dotted") return "2 4";
-  if (style === "flowing") return "6 4";
+  if (style === NO_LOOSE_STRING_VALUES.dashed) return "8 4";
+  if (style === NO_LOOSE_STRING_VALUES.dotted) return "2 4";
+  if (style === NO_LOOSE_STRING_VALUES.flowing) return "6 4";
   return undefined;
 }
 
@@ -31,13 +40,13 @@ export function FlowEdge(props: EdgeProps<FlowEdgeType>): JSX.Element {
     targetY,
     targetPosition,
   });
-  const type = e?.type ?? "default";
-  const style = e?.style ?? "solid";
+  const type = e?.type ?? NO_LOOSE_STRING_VALUES.default;
+  const style = e?.style ?? NO_LOOSE_STRING_VALUES.solid;
   const dash = dashFor(style);
   const className = [
-    "flow-edge",
+    NO_LOOSE_STRING_VALUES.flowEdge,
     `flow-edge-${type}`,
-    style === "flowing" ? "flowing" : "",
+    style === NO_LOOSE_STRING_VALUES.flowing ? NO_LOOSE_STRING_VALUES.flowing : "",
   ]
     .filter(Boolean)
     .join(" ");

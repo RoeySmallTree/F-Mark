@@ -3,11 +3,19 @@ import type {
   CreateSessionRequest,
   EventKind,
   EventListParams,
+  EnsureManagedAgentsRequest,
+  EnsureManagedAgentsResponse,
   ForkSessionRequest,
   ForkSessionResponse,
-  ListEventsResponse,
+  GitChangedFilesResponse,
+  GitBranchRefsResponse,
+  GitDiffMode,
+  GitDiffResponse,
+  GitDiffSettingsResponse,
+  GitFileVersionResponse,
+  GitRevertAction,
+  GitRevertHunkResponse,
   ListSessionEventsResponse,
-  ListSessionsResponse,
   Participant,
   PostFileBody,
   PostFlowBody,
@@ -19,18 +27,40 @@ import type {
   SearchHit,
   SessionEventGroup,
   SessionMeta,
+  SkillFile,
   SkillRef,
   TodoListResponse,
   UpdateParticipantPatch,
+  UpdateUserProfilePatch,
   UpdatedParticipant,
   UpdateSessionRequest,
   UploadAttachmentResponse,
+  UserProfile,
 } from "@f-mark/shared";
+
+import { createHttpClient } from "./client/core.js";
+import { createDiscoveryMethods } from "./client/discovery.js";
+import { createEventMethods } from "./client/events.js";
+import { createFileMethods } from "./client/files.js";
+import { createGitMethods } from "./client/git.js";
+import { createIdentityMethods } from "./client/identity.js";
+import { createPathMethods } from "./client/paths.js";
+import { createSessionMethods } from "./client/sessions.js";
+import type { RootScope } from "./rootScope.js";
 
 export interface ClientConfig {
   baseUrl: string;
   token: string | null;
 }
+
+export interface ListAllSessionEventsOptions {
+  incremental?: boolean;
+  since?: string;
+  withResponse?: boolean;
+}
+
+export type { RootScope } from "./rootScope.js";
+export { GitRevertError } from "./client/core.js";
 
 export type {
   EventListParams,
@@ -45,9 +75,11 @@ export type {
   SessionMeta,
   TodoListResponse,
   UpdateParticipantPatch,
+  UpdateUserProfilePatch,
   UpdatedParticipant,
   UpdateSessionRequest,
   UploadAttachmentResponse,
+  UserProfile,
 } from "@f-mark/shared";
 
 export interface UploadAttachmentInput {
@@ -61,6 +93,7 @@ export interface HealthInfo {
   status: string;
   version: string;
   processApiEnabled?: boolean;
+  devKernelRestartEnabled?: boolean;
 }
 
 export interface FsListEntry {
@@ -79,12 +112,18 @@ export interface PathFavorite {
   path: string;
 }
 
+export interface PathRegistryEntry {
+  path: string;
+  path_id: string;
+  favorite?: string;
+  registered: boolean;
+}
+
 export interface FilesTreeEntry {
   index: number;
   parent: number | null;
   name: string;
   relPath: string;
-  absPath: string;
   isDir: boolean;
   isSymlink: boolean;
   ext: string | null;
@@ -115,28 +154,39 @@ export interface FileTextResponse {
 }
 
 export interface PathsResponse {
+  paths?: PathRegistryEntry[];
+  fallbackPath?: string | null;
+  fallbackPathId?: string | null;
   activePath: string | null;
-  /** sha256(realpath)[0..11] of the active path; null when activePath is null. */
+  /** @deprecated sha256(realpath)[0..11] of the fallback path. */
   activePathId: string | null;
+  /** @deprecated legacy active-root revision. */
   activeRevision: number;
   knownPaths: string[];
   favorites: PathFavorite[];
 }
 
 export interface Client {
-  listSessions(): Promise<SessionMeta[]>;
+  listSessions(scope?: RootScope): Promise<SessionMeta[]>;
   listAllSessions(): Promise<SessionMeta[]>;
   createSession(input: CreateSessionRequest): Promise<SessionMeta>;
   updateSession(
     sessionId: string,
-    input: UpdateSessionRequest,
+    input: UpdateSessionRequest & { path_id?: string; root?: string },
   ): Promise<SessionMeta>;
-  deleteSession(sessionId: string, path?: string): Promise<void>;
+  deleteSession(sessionId: string, pathOrScope?: string | RootScope): Promise<void>;
   forkSession(
     sourceSessionId: string,
     input: ForkSessionRequest,
   ): Promise<ForkSessionResponse>;
-  listAllSessionEvents(kinds?: EventKind[]): Promise<SessionEventGroup[]>;
+  listAllSessionEvents(
+    kinds?: EventKind[],
+    opts?: ListAllSessionEventsOptions & { withResponse: true },
+  ): Promise<ListSessionEventsResponse>;
+  listAllSessionEvents(
+    kinds?: EventKind[],
+    opts?: ListAllSessionEventsOptions,
+  ): Promise<SessionEventGroup[]>;
   /** Browse a folder on the kernel host. Used by the session-folder picker. */
   fsList(path: string): Promise<FsListResponse>;
   /** Default starting points for the folder picker. */
@@ -145,6 +195,8 @@ export interface Client {
   getPaths(): Promise<PathsResponse>;
   /** Switch the active path. Kernel validates + persists + bumps revision. */
   setActivePath(path: string): Promise<PathsResponse>;
+  /** Register/MRU-promote a known path without switching kernel active root. */
+  registerKnownPath(path: string): Promise<PathsResponse>;
   /** Clear the active path (renderer goes to empty state). */
   clearActivePath(): Promise<PathsResponse>;
   /** Remove an entry from knownPaths (e.g., user moved a folder). */
@@ -152,29 +204,105 @@ export interface Client {
   addFavorite(input: { name: string; path: string }): Promise<{ favorites: PathFavorite[] }>;
   removeFavorite(path: string): Promise<{ favorites: PathFavorite[] }>;
   renameFavorite(input: { path: string; newName: string }): Promise<{ favorites: PathFavorite[] }>;
-  /** Walk the project filesystem and return a flat entry tree. */
-  fetchFilesTree(root: string): Promise<FilesTreeResponse>;
+  /** Walk a known project root's filesystem and return a flat entry tree.
+      Root scope is required (X4b) — pass {pathId} or {root}. */
+  fetchFilesTree(scope: RootScope): Promise<FilesTreeResponse>;
+  /** `root` scopes the favorites to a known project root — required by the
+      standalone /file-tree tab (X6); omitted in-app, where the server falls
+      back to the active project. */
   fetchFilesFavorites(
     scope: FilesFavoritesScope,
     sessionId?: string,
+    root?: RootScope,
   ): Promise<FilesFavoritesResponse>;
   addFilesFavorite(input: {
     scope: FilesFavoritesScope;
     sessionId?: string;
     path: string;
+    root?: RootScope;
   }): Promise<FilesFavoritesResponse>;
   removeFilesFavorite(input: {
     scope: FilesFavoritesScope;
     sessionId?: string;
     path: string;
+    root?: RootScope;
   }): Promise<FilesFavoritesResponse>;
   /** Absolute URL for streaming a file's binary content (with auth token).
       Used by <img>, <video>, <audio>, and the office viewers. Range-aware
-      so the browser's media controls can seek. */
-  fileContentUrl(absPath: string): string;
-  /** Fetch a file as UTF-8 text (truncated to maxBytes). For Monaco/Cherry. */
-  fetchFileText(absPath: string, maxBytes?: number): Promise<FileTextResponse>;
-  listParticipants(): Promise<Record<string, Participant>>;
+      so the browser's media controls can seek. Root scope + root-relative
+      path are required (X4b). */
+  fileContentUrl(scope: RootScope, relPath: string): string;
+  /** Fetch a file as UTF-8 text (truncated to maxBytes). For Monaco/Cherry.
+      Root scope + root-relative path are required (X4b). */
+  fetchFileText(
+    scope: RootScope,
+    relPath: string,
+    maxBytes?: number,
+  ): Promise<FileTextResponse>;
+  saveFileText(
+    scope: RootScope,
+    relPath: string,
+    content: string,
+  ): Promise<FileTextResponse>;
+  /* ── read-only git diff (design §8) ─────────────────────────────────── */
+  /** List changed files (diff ∪ untracked). `mode=session` filters to the
+      session's tool-use-touched files; `mode=branch` is whole-branch. */
+  gitChangedFiles(input: {
+    scope: RootScope;
+    mode: GitDiffMode;
+    sessionId?: string;
+    base?: string;
+  }): Promise<GitChangedFilesResponse>;
+  gitBranchRefs(scope: RootScope): Promise<GitBranchRefsResponse>;
+  /** Per-file unified diff with parsed server hunks. */
+  gitDiff(input: {
+    scope: RootScope;
+    relPath: string;
+    mode: GitDiffMode;
+    sessionId?: string;
+    base?: string;
+  }): Promise<GitDiffResponse>;
+  /** Base + working text for the Monaco DiffEditor. */
+  gitFileVersion(input: {
+    scope: RootScope;
+    relPath: string;
+    mode: GitDiffMode;
+    sessionId?: string;
+    base?: string;
+  }): Promise<GitFileVersionResponse>;
+  /** Absolute URL for streaming a base/working binary blob (auth token in the
+      query) — used by image/audio/video before/after previews. */
+  gitBlobVersionUrl(input: {
+    scope: RootScope;
+    relPath: string;
+    version: "base" | "working";
+    mode: GitDiffMode;
+    base?: string;
+  }): string;
+  /** Read the effective base-ref diff settings (X5). */
+  gitDiffSettings(scope: RootScope): Promise<GitDiffSettingsResponse>;
+  /** Set/clear the per-project base-ref override (X5). */
+  putGitDiffSettings(input: {
+    pathId: string;
+    diffBaseRefOverride: string | null;
+  }): Promise<GitDiffSettingsResponse>;
+  /** Reverse-apply a single recomputed hunk, or revert the whole file /
+      rename (X3). The server recomputes the diff and never trusts client
+      patch text. Throws a {@link GitRevertError} carrying the server `code`
+      (notably `HUNK_CONFLICT`) on failure. */
+  gitRevertHunk(
+    scope: RootScope,
+    input: {
+      relPath: string;
+      mode: GitDiffMode;
+      hunkId?: string;
+      action?: GitRevertAction;
+      oldPath?: string;
+      base?: string;
+      sessionId?: string;
+    },
+  ): Promise<GitRevertHunkResponse>;
+  listParticipants(scope?: RootScope): Promise<Record<string, Participant>>;
   registerAgent(input: {
     name: string;
     suggested_id?: string;
@@ -182,31 +310,76 @@ export interface Client {
   updateParticipant(
     id: string,
     patch: UpdateParticipantPatch,
+    scope?: RootScope,
   ): Promise<UpdatedParticipant>;
+  getUserProfile(): Promise<UserProfile>;
+  updateUserProfile(patch: UpdateUserProfilePatch): Promise<UserProfile>;
   health(): Promise<HealthInfo>;
-  listEvents(sessionId: string, params: EventListParams): Promise<AnyEventRecord[]>;
-  postProse(sessionId: string, body: PostProseBody): Promise<{ filename: string }>;
+  restartKernel(): Promise<{ status: string }>;
+  listEvents(
+    sessionId: string,
+    scope: RootScope,
+    params?: EventListParams,
+  ): Promise<AnyEventRecord[]>;
+  postProse(
+    sessionId: string,
+    body: PostProseBody,
+    scope: RootScope,
+  ): Promise<{ filename: string }>;
   postTurnEnd(
     sessionId: string,
     participantId: string,
+    scope: RootScope,
   ): Promise<{ filename: string }>;
   postChoice(
     sessionId: string,
     body: { participant_id: string; choices_id: string; selected: string[] },
+    scope: RootScope,
   ): Promise<{ filename: string }>;
-  postTodo(sessionId: string, body: PostTodoBody): Promise<{ filename: string }>;
-  postHtml(sessionId: string, body: PostHtmlBody): Promise<{ filename: string }>;
-  postFlow(sessionId: string, body: PostFlowBody): Promise<{ filename: string }>;
-  postFile(sessionId: string, body: PostFileBody): Promise<{ filename: string }>;
+  postTodo(
+    sessionId: string,
+    body: PostTodoBody,
+    scope: RootScope,
+  ): Promise<{ filename: string }>;
+  postHtml(
+    sessionId: string,
+    body: PostHtmlBody,
+    scope: RootScope,
+  ): Promise<{ filename: string }>;
+  postFlow(
+    sessionId: string,
+    body: PostFlowBody,
+    scope: RootScope,
+  ): Promise<{ filename: string }>;
+  postFile(
+    sessionId: string,
+    body: PostFileBody,
+    scope: RootScope,
+  ): Promise<{ filename: string }>;
+  ensureManagedAgents(
+    sessionId: string,
+    scope: RootScope,
+    body?: Omit<EnsureManagedAgentsRequest, "path_id" | "root">,
+  ): Promise<EnsureManagedAgentsResponse>;
   uploadAttachment(
     sessionId: string,
     input: UploadAttachmentInput,
+    scope?: RootScope,
   ): Promise<UploadAttachmentResponse>;
   /** Remove a staged (un-committed) attachment from disk. Resolves on
    *  204 (deleted) or on 409 (already committed — chip should still
    *  drop locally, the file remains on disk for the committed event). */
-  deleteAttachment(sessionId: string, fileId: string): Promise<void>;
+  deleteAttachment(
+    sessionId: string,
+    fileId: string,
+    scope?: RootScope,
+  ): Promise<void>;
   listTodos(sessionId: string, assignedTo?: string): Promise<TodoListResponse>;
+  listTodos(
+    sessionId: string,
+    scope?: RootScope,
+    assignedTo?: string,
+  ): Promise<TodoListResponse>;
   search(
     query: string,
     sessionId?: string,
@@ -219,345 +392,25 @@ export interface Client {
      server's CWD. When `agent` is set, only that agent's directory + the
      generic `.skills` are scanned. See kernel/skills/scanner.ts. */
   listSkills(agent?: string): Promise<{ skills: SkillRef[] }>;
-}
-
-function buildHeaders(token: string | null): Record<string, string> {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (token !== null) h.Authorization = `Bearer ${token}`;
-  return h;
-}
-
-function buildAuthHeaders(token: string | null): Record<string, string> {
-  if (token === null) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
-async function jsonOrThrow(res: Response): Promise<unknown> {
-  if (res.ok) return res.json();
-  let body: unknown = {};
-  try {
-    body = await res.json();
-  } catch {
-    /* ignore */
-  }
-  const msg =
-    typeof body === "object" && body !== null && "error" in body
-      ? String((body as { error: unknown }).error)
-      : `HTTP ${res.status}`;
-  throw new Error(msg);
+  getSkillFile(path: string): Promise<SkillFile>;
+  saveSkillFile(input: {
+    path: string;
+    name: string;
+    description: string;
+    args?: string;
+    body: string;
+  }): Promise<SkillFile>;
 }
 
 export function createClient(cfg: ClientConfig): Client {
-  const url = (path: string): string => `${cfg.baseUrl}${path}`;
-
-  async function get(path: string): Promise<unknown> {
-    const res = await fetch(url(path), { headers: buildHeaders(cfg.token) });
-    return jsonOrThrow(res);
-  }
-  async function post(path: string, body: unknown): Promise<unknown> {
-    const res = await fetch(url(path), {
-      method: "POST",
-      headers: buildHeaders(cfg.token),
-      body: JSON.stringify(body),
-    });
-    return jsonOrThrow(res);
-  }
-  async function patch(path: string, body: unknown): Promise<unknown> {
-    const res = await fetch(url(path), {
-      method: "PATCH",
-      headers: buildHeaders(cfg.token),
-      body: JSON.stringify(body),
-    });
-    return jsonOrThrow(res);
-  }
-  async function del(path: string): Promise<unknown> {
-    /* No body on DELETE → use auth-only headers. Fastify rejects requests
-       with Content-Type: application/json + empty body
-       (FST_ERR_CTP_EMPTY_JSON_BODY) so we must omit Content-Type here. */
-    const res = await fetch(url(path), {
-      method: "DELETE",
-      headers: buildAuthHeaders(cfg.token),
-    });
-    return jsonOrThrow(res);
-  }
-
+  const http = createHttpClient(cfg);
   return {
-    async listSessions() {
-      const body = (await get("/sessions")) as ListSessionsResponse;
-      return Array.isArray(body.sessions) ? body.sessions : [];
-    },
-    async listAllSessions() {
-      const body = (await get("/sessions?scope=all")) as ListSessionsResponse;
-      return Array.isArray(body.sessions) ? body.sessions : [];
-    },
-    async createSession(input) {
-      return (await post("/sessions", input)) as SessionMeta;
-    },
-    async updateSession(sessionId, input) {
-      return (await patch(
-        `/sessions/${encodeURIComponent(sessionId)}`,
-        input,
-      )) as SessionMeta;
-    },
-    async deleteSession(sessionId, path) {
-      const qs = new URLSearchParams();
-      if (path !== undefined && path.length > 0) qs.set("path", path);
-      const suffix = qs.toString();
-      const res = await fetch(
-        url(
-          `/sessions/${encodeURIComponent(sessionId)}${suffix ? `?${suffix}` : ""}`,
-        ),
-        { method: "DELETE", headers: buildAuthHeaders(cfg.token) },
-      );
-      if (res.status === 204) return;
-      await jsonOrThrow(res);
-    },
-    async forkSession(sourceSessionId, input) {
-      return (await post(
-        `/sessions/${encodeURIComponent(sourceSessionId)}/fork`,
-        input,
-      )) as ForkSessionResponse;
-    },
-    async listAllSessionEvents(kinds) {
-      const qs = new URLSearchParams({ scope: "all" });
-      if (kinds !== undefined && kinds.length > 0) {
-        qs.set("kinds", kinds.join(","));
-      }
-      const body = (await get(
-        `/sessions/events?${qs.toString()}`,
-      )) as ListSessionEventsResponse;
-      return Array.isArray(body.groups) ? body.groups : [];
-    },
-    async fsList(path) {
-      return (await get(
-        `/fs/list?path=${encodeURIComponent(path)}`,
-      )) as FsListResponse;
-    },
-    async fsHome() {
-      return (await get("/fs/home")) as { home: string; xdgConfigHome: string | null };
-    },
-    async getPaths() {
-      return (await get("/paths")) as PathsResponse;
-    },
-    async setActivePath(path) {
-      return (await post("/paths/active", { path })) as PathsResponse;
-    },
-    async clearActivePath() {
-      return (await del("/paths/active")) as PathsResponse;
-    },
-    async removeKnownPath(path) {
-      return (await del(
-        `/paths/known?path=${encodeURIComponent(path)}`,
-      )) as { knownPaths: string[] };
-    },
-    async addFavorite(input) {
-      return (await post("/paths/favorites", input)) as {
-        favorites: PathFavorite[];
-      };
-    },
-    async removeFavorite(path) {
-      return (await del(
-        `/paths/favorites?path=${encodeURIComponent(path)}`,
-      )) as { favorites: PathFavorite[] };
-    },
-    async renameFavorite(input) {
-      return (await patch("/paths/favorites", input)) as {
-        favorites: PathFavorite[];
-      };
-    },
-    async fetchFilesTree(root) {
-      return (await get(
-        `/files/tree?root=${encodeURIComponent(root)}`,
-      )) as FilesTreeResponse;
-    },
-    async fetchFilesFavorites(scope, sessionId) {
-      const qs = new URLSearchParams({ scope });
-      if (sessionId !== undefined && sessionId.length > 0) {
-        qs.set("sessionId", sessionId);
-      }
-      return (await get(
-        `/files/favorites?${qs.toString()}`,
-      )) as FilesFavoritesResponse;
-    },
-    async addFilesFavorite(input) {
-      return (await post(
-        "/files/favorites",
-        input,
-      )) as FilesFavoritesResponse;
-    },
-    async removeFilesFavorite(input) {
-      const qs = new URLSearchParams({ scope: input.scope, path: input.path });
-      if (input.sessionId !== undefined && input.sessionId.length > 0) {
-        qs.set("sessionId", input.sessionId);
-      }
-      return (await del(
-        `/files/favorites?${qs.toString()}`,
-      )) as FilesFavoritesResponse;
-    },
-    fileContentUrl(absPath) {
-      const qs = new URLSearchParams({ path: absPath });
-      if (cfg.token !== null && cfg.token.length > 0) {
-        qs.set("token", cfg.token);
-      }
-      return `${cfg.baseUrl}/files/content?${qs.toString()}`;
-    },
-    async fetchFileText(absPath, maxBytes) {
-      const qs = new URLSearchParams({ path: absPath });
-      if (maxBytes !== undefined) qs.set("maxBytes", String(maxBytes));
-      return (await get(`/files/text?${qs.toString()}`)) as FileTextResponse;
-    },
-    async listParticipants() {
-      const body = (await get("/participants")) as {
-        participants: Record<string, Participant>;
-      };
-      return body.participants;
-    },
-    async registerAgent(input) {
-      return (await post("/participants/register", {
-        kind: "agent",
-        ...input,
-      })) as RegisteredAgent;
-    },
-    async updateParticipant(id, body) {
-      return (await patch(
-        `/participants/${encodeURIComponent(id)}`,
-        body,
-      )) as UpdatedParticipant;
-    },
-    async health() {
-      return (await get("/health")) as HealthInfo;
-    },
-    async listEvents(sessionId, params) {
-      const qs = new URLSearchParams();
-      if (params.since !== undefined) qs.set("since", params.since);
-      if (params.kinds !== undefined) qs.set("kinds", params.kinds.join(","));
-      if (params.participant !== undefined)
-        qs.set("participant", params.participant);
-      if (params.path !== undefined) qs.set("path", params.path);
-      const suffix = qs.toString();
-      const path = `/sessions/${sessionId}/events${suffix ? `?${suffix}` : ""}`;
-      const body = (await get(path)) as ListEventsResponse;
-      return body.events;
-    },
-    async postProse(sessionId, body) {
-      return (await post(
-        `/sessions/${sessionId}/events/prose`,
-        body,
-      )) as { filename: string };
-    },
-    async postTurnEnd(sessionId, participantId) {
-      return (await post(`/sessions/${sessionId}/events/turn-end`, {
-        participant_id: participantId,
-      })) as { filename: string };
-    },
-    async postChoice(sessionId, body) {
-      return (await post(
-        `/sessions/${sessionId}/events/choice`,
-        body,
-      )) as { filename: string };
-    },
-    async postTodo(sessionId, body) {
-      return (await post(
-        `/sessions/${sessionId}/events/todo`,
-        body,
-      )) as { filename: string };
-    },
-    async postHtml(sessionId, body) {
-      return (await post(
-        `/sessions/${sessionId}/events/html`,
-        body,
-      )) as { filename: string };
-    },
-    async postFlow(sessionId, body) {
-      return (await post(
-        `/sessions/${sessionId}/events/flow`,
-        body,
-      )) as { filename: string };
-    },
-    async postFile(sessionId, body) {
-      return (await post(
-        `/sessions/${sessionId}/events/file`,
-        body,
-      )) as { filename: string };
-    },
-    async uploadAttachment(sessionId, input) {
-      const form = new FormData();
-      if (input.participant_id !== undefined) {
-        form.set("participant_id", input.participant_id);
-      }
-      if (input.display_name !== undefined) {
-        form.set("display_name", input.display_name);
-      }
-      if (input.description !== undefined) {
-        form.set("description", input.description);
-      }
-      form.set("file", input.file);
-      const res = await fetch(url(`/sessions/${sessionId}/attachments`), {
-        method: "POST",
-        headers: buildAuthHeaders(cfg.token),
-        body: form,
-      });
-      return (await jsonOrThrow(res)) as UploadAttachmentResponse;
-    },
-    async deleteAttachment(sessionId, fileId) {
-      const res = await fetch(
-        url(`/sessions/${sessionId}/attachments/${fileId}`),
-        { method: "DELETE", headers: buildAuthHeaders(cfg.token) },
-      );
-      /* 409 means the file is referenced by a committed event — the
-         chip should still drop locally, the bytes stay. Anything else
-         non-2xx is a real failure to surface. */
-      if (res.status === 204 || res.status === 409) return;
-      let body: unknown = {};
-      try {
-        body = await res.json();
-      } catch {
-        /* ignore */
-      }
-      const msg =
-        typeof body === "object" && body !== null && "error" in body
-          ? String((body as { error: unknown }).error)
-          : `HTTP ${res.status}`;
-      throw new Error(msg);
-    },
-    async listTodos(sessionId, assignedTo) {
-      const qs = new URLSearchParams();
-      if (assignedTo !== undefined && assignedTo.length > 0) {
-        qs.set("assigned_to", assignedTo);
-      }
-      const suffix = qs.toString();
-      const path = `/sessions/${sessionId}/todos${suffix ? `?${suffix}` : ""}`;
-      return (await get(path)) as TodoListResponse;
-    },
-    async search(query, sessionId, scope, limit) {
-      const qs = new URLSearchParams({ q: query });
-      if (sessionId !== undefined && sessionId.length > 0) {
-        qs.set("session", sessionId);
-      }
-      if (scope !== undefined) qs.set("scope", scope);
-      if (limit !== undefined) qs.set("limit", String(limit));
-      const body = (await get(`/search?${qs.toString()}`)) as {
-        hits: SearchHit[];
-      };
-      return Array.isArray(body.hits) ? body.hits : [];
-    },
-    async listPresets(sessionId) {
-      const qs = new URLSearchParams();
-      if (sessionId !== undefined && sessionId.length > 0) {
-        qs.set("session", sessionId);
-      }
-      const suffix = qs.toString();
-      const path = `/presets${suffix ? `?${suffix}` : ""}`;
-      return (await get(path)) as { builtin: Preset[]; project: Preset[] };
-    },
-    async listSkills(agent) {
-      const qs = new URLSearchParams();
-      if (agent !== undefined && agent.length > 0) {
-        qs.set("agent", agent);
-      }
-      const suffix = qs.toString();
-      const path = `/skills${suffix ? `?${suffix}` : ""}`;
-      return (await get(path)) as { skills: SkillRef[] };
-    },
+    ...createSessionMethods(http),
+    ...createPathMethods(http),
+    ...createFileMethods(http),
+    ...createGitMethods(http),
+    ...createIdentityMethods(http),
+    ...createEventMethods(http),
+    ...createDiscoveryMethods(http),
   };
 }

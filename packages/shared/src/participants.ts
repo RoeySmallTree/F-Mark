@@ -1,25 +1,20 @@
 export type ParticipantKind = "user" | "agent" | "sys" | "grp";
 
-export const PARTICIPANT_AVATAR_IMAGE_MAX_BYTES = 256 * 1024;
-export const PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH =
-  "data:image/jpeg;base64,".length +
-  Math.ceil(PARTICIPANT_AVATAR_IMAGE_MAX_BYTES / 3) * 4;
-export const PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-] as const;
-export type ParticipantAvatarDataUrlMimeType =
-  (typeof PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES)[number];
+export const PARTICIPANT_KINDS = {
+  user: "user",
+  agent: "agent",
+  sys: "sys",
+  group: "grp",
+} as const satisfies Record<string, ParticipantKind>;
 
 export interface Participant {
   kind: "user" | "agent" | "sys";
   name: string;
   color: string;
-  /* Optional project-local profile image for user participants. Stored as a
-     bounded data URL so profile identity travels with participants.json. */
-  avatar_data_url?: string;
+  /* User avatar glyph preset id ("01"–"55"). The machine user profile is the
+     source of truth; participant lists overlay it at read time. Omitted agents
+     resolve a deterministic default from participant id at render time. */
+  avatar_preset?: string;
   /* Runtime id (e.g. "claude", "codex", "opencode") for managed agents.
      Set on register/spawn; omitted for user participants and for legacy
      agents recorded before this field existed. Renderers map this to a
@@ -56,7 +51,19 @@ export interface RegisterAgentRequest {
 export interface UpdateParticipantPatch {
   name?: string;
   color?: string;
-  avatar_data_url?: string | null;
+  avatar_preset?: string | null;
+}
+
+export interface UserProfile {
+  name: string;
+  color: string;
+  avatar_preset?: string;
+}
+
+export interface UpdateUserProfilePatch {
+  name?: string;
+  color?: string;
+  avatar_preset?: string | null;
 }
 
 export interface UpdatedParticipant {
@@ -64,7 +71,7 @@ export interface UpdatedParticipant {
   kind: "user" | "agent" | "sys";
   name: string;
   color: string;
-  avatar_data_url?: string;
+  avatar_preset?: string;
 }
 
 export interface LinkAgentRequest {

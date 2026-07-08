@@ -38,6 +38,43 @@ describe("runtimes registry", () => {
     });
   });
 
+  it("initRuntimesFile backfills built-in runtimes in legacy registries", async () => {
+    await withTmpFmark(async (fmarkDir) => {
+      await mkdir(fmarkDir, { recursive: true });
+      await writeFile(
+        join(fmarkDir, "runtimes.json"),
+        JSON.stringify(
+          {
+            version: "1.0",
+            runtimes: {
+              claude: {
+                displayName: "Claude Code",
+                executable: "claude",
+                args: ["--model", "haiku"],
+              },
+              gemini: {
+                displayName: "Gemini",
+                executable: "gemini",
+                args: [],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      await initRuntimesFile(fmarkDir);
+
+      const after = await loadRuntimes(fmarkDir);
+      expect(after.runtimes.claude!.args).toEqual(["--model", "haiku"]);
+      expect(after.runtimes.codex).toEqual(DEFAULT_RUNTIMES.codex);
+      expect(after.runtimes.opencode).toEqual(DEFAULT_RUNTIMES.opencode);
+      expect(after.runtimes.gemini?.displayName).toBe("Gemini");
+    });
+  });
+
   it("loads historical retired runtimes but excludes them from the offerable view", async () => {
     await withTmpFmark(async (fmarkDir) => {
       await saveRuntimes(fmarkDir, {

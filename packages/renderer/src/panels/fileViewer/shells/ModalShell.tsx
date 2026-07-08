@@ -43,6 +43,7 @@ export function ModalShell(): JSX.Element {
         aria-label="File viewer"
       >
         <FileViewer
+          canPopOut={false}
           trailingControls={
             <button
               type="button"

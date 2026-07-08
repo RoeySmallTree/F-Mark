@@ -1,8 +1,9 @@
 /* proseRoles — enumerated role union for a `ProsePayload`, plus the
-   shape-normaliser `getProseRole`. The helper maps legacy `target` onto
-   the new `append_to`/`mode`/`lines` shape **without walking the
-   supersedes chain** — live-parent resolution is the aggregate's job
-   (review_2 finding C). */
+   shape-classifier `getProseRole`. Classifies a payload into its role from
+   its frontmatter shape (`file_path` → file-comment; `append_to`+`mode`/etc.)
+   **without walking the supersedes chain** — live-parent resolution is the
+   aggregate's job (review_2 finding C). There is no legacy `target` mapping;
+   that field was removed. */
 
 import type { ProsePayload } from "./events.js";
 
@@ -31,11 +32,21 @@ export type ProseRole =
     }
   | { kind: "tombstone"; anchor: string };
 
+export const PROSE_ROLE_KINDS = {
+  message: "message",
+  anchor: "anchor",
+  namedBlock: "named-block",
+  unnamedBlock: "unnamed-block",
+  comment: "comment",
+  fileComment: "file-comment",
+  tombstone: "tombstone",
+} as const satisfies Record<string, ProseRole["kind"]>;
+
 /**
  * Classify a `ProsePayload` into its role.
  *
- * **Shape-only:** maps legacy `target` if `append_to` absent. Does NOT
- * walk supersession — the aggregate owns live-parent resolution.
+ * **Shape-only:** classifies from frontmatter fields. Does NOT walk
+ * supersession — the aggregate owns live-parent resolution.
  *
  * Precedence:
  * 1. `file_path` → `file-comment` (a comment on a repo file/diff hunk)

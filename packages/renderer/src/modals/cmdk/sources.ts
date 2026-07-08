@@ -113,6 +113,57 @@ export interface QuickAction {
   icon: CmdkIcon;
 }
 
+const cmdkRowKinds = {
+  session: "session",
+  named: "named",
+  search: "search",
+  agent: "agent",
+  action: "action",
+} as const;
+
+const cmdkIcons = {
+  folder: "Folder",
+  fileText: "FileText",
+  search: "Search",
+  plus: "Plus",
+  settings: "Settings",
+  zap: "Zap",
+  palette: "Palette",
+} as const;
+
+const cmdkDefaults = {
+  currentPathKey: "current",
+  untitledName: "(untitled)",
+  noActiveSession: "no active session",
+} as const;
+
+const cmdkGroups = {
+  recentSessions: {
+    key: "recent-sessions",
+    label: "Recent sessions",
+  },
+  quickActions: {
+    key: "quick-actions",
+    label: "Quick actions",
+  },
+  sessions: {
+    key: "sessions",
+    label: "Sessions",
+  },
+  named: {
+    key: "named",
+    label: "Named contributions",
+  },
+  search: {
+    key: "search",
+    label: "Search results",
+  },
+  agents: {
+    key: "agents",
+    label: "Agents",
+  },
+} as const;
+
 /**
  * Static list of quick actions. The CmdKModal binds `actionId` → callback at
  * render time (so `applyTheme`, `openModal`, etc. can be injected with the
@@ -138,21 +189,21 @@ const THEME_ACTIONS: QuickAction[] = THEMES.map((t) => ({
   id: `theme-${t.name}`,
   label: `Theme: ${t.label}`,
   sub: t.description,
-  icon: THEME_ICONS[t.name] ?? "Palette",
+  icon: THEME_ICONS[t.name] ?? cmdkIcons.palette,
 }));
 
-export const QUICK_ACTIONS: QuickAction[] = [
+const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "new-session",
     label: "New session",
     sub: "Create a fresh session",
-    icon: "Plus",
+    icon: cmdkIcons.plus,
   },
   {
     id: "settings",
     label: "Open settings",
     sub: "Profile, agents, appearance, shortcuts",
-    icon: "Settings",
+    icon: cmdkIcons.settings,
   },
   ...THEME_ACTIONS,
 ];
@@ -183,11 +234,11 @@ export function defaultGroups(sessions: SessionMeta[]): CmdkGroup[] {
     .slice(0, 6)
     .map(
       (s): CmdkRowSession => ({
-        id: `session:${s.path ?? "current"}:${s.id}`,
-        kind: "session",
+        id: `${cmdkRowKinds.session}:${s.path ?? cmdkDefaults.currentPathKey}:${s.id}`,
+        kind: cmdkRowKinds.session,
         label: s.slug,
         sub: sessionSub(s),
-        icon: "Folder",
+        icon: cmdkIcons.folder,
         sessionId: s.id,
         path: s.path,
       }),
@@ -195,8 +246,8 @@ export function defaultGroups(sessions: SessionMeta[]): CmdkGroup[] {
 
   const actions = QUICK_ACTIONS.slice(0, 4).map(
     (a): CmdkRowAction => ({
-      id: `action:${a.id}`,
-      kind: "action",
+      id: `${cmdkRowKinds.action}:${a.id}`,
+      kind: cmdkRowKinds.action,
       label: a.label,
       sub: a.sub,
       icon: a.icon,
@@ -206,9 +257,9 @@ export function defaultGroups(sessions: SessionMeta[]): CmdkGroup[] {
 
   const groups: CmdkGroup[] = [];
   if (recent.length > 0) {
-    groups.push({ key: "recent-sessions", label: "Recent sessions", rows: recent });
+    groups.push({ ...cmdkGroups.recentSessions, rows: recent });
   }
-  groups.push({ key: "quick-actions", label: "Quick actions", rows: actions });
+  groups.push({ ...cmdkGroups.quickActions, rows: actions });
   return groups;
 }
 
@@ -248,17 +299,17 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
     .slice(0, 8)
     .map(
       (s): CmdkRowSession => ({
-        id: `session:${s.path ?? "current"}:${s.id}`,
-        kind: "session",
+        id: `${cmdkRowKinds.session}:${s.path ?? cmdkDefaults.currentPathKey}:${s.id}`,
+        kind: cmdkRowKinds.session,
         label: s.slug,
         sub: sessionSub(s),
-        icon: "Folder",
+        icon: cmdkIcons.folder,
         sessionId: s.id,
         path: s.path,
       }),
     );
   if (sessionRows.length > 0) {
-    groups.push({ key: "sessions", label: "Sessions", rows: sessionRows });
+    groups.push({ ...cmdkGroups.sessions, rows: sessionRows });
   }
 
   // 2) Named contributions.
@@ -280,11 +331,11 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
       .slice(0, 8)
       .map(
         (it): CmdkRowNamed => ({
-          id: `named:${it.path ?? "current"}:${it.session.id}:${
+          id: `${cmdkRowKinds.named}:${it.path ?? cmdkDefaults.currentPathKey}:${it.session.id}:${
             it.event.filename
           }`,
-          kind: "named",
-          label: it.name || "(untitled)",
+          kind: cmdkRowKinds.named,
+          label: it.name || cmdkDefaults.untitledName,
           sub: truncate(
             `${
               it.path !== undefined ? `${basename(it.path)} / ` : ""
@@ -293,7 +344,7 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
             }`,
             72,
           ),
-          icon: "FileText",
+          icon: cmdkIcons.fileText,
           filename: it.event.filename,
           sessionId: it.session.id,
           path: it.path,
@@ -301,8 +352,7 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
       );
   if (namedRows.length > 0) {
     groups.push({
-      key: "named",
-      label: "Named contributions",
+      ...cmdkGroups.named,
       rows: namedRows,
     });
   }
@@ -313,20 +363,20 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
     const labelBase =
       payload.name ?? `${h.event.kind} · ${h.event.filename.slice(0, 24)}`;
     return {
-      id: `search:${h.session_id}:${h.event.filename}`,
-      kind: "search",
+      id: `${cmdkRowKinds.search}:${h.session_id}:${h.event.filename}`,
+      kind: cmdkRowKinds.search,
       label: labelBase,
       sub: `${h.path !== undefined ? `${basename(h.path)} / ` : ""}${
         h.session_slug ?? h.session_id
       } - ${truncate(h.snippet, 80)}`,
-      icon: "Search",
+      icon: cmdkIcons.search,
       filename: h.event.filename,
       sessionId: h.session_id,
       path: h.path,
     };
   });
   if (searchRows.length > 0) {
-    groups.push({ key: "search", label: "Search results", rows: searchRows });
+    groups.push({ ...cmdkGroups.search, rows: searchRows });
   }
 
   const agentRows = fuzzyFilter(
@@ -337,20 +387,22 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
     .slice(0, 8)
     .map(
       (a): CmdkRowAgent => ({
-        id: `agent:${a.path ?? "current"}:${a.participantId}`,
-        kind: "agent",
+        id: `${cmdkRowKinds.agent}:${a.path ?? cmdkDefaults.currentPathKey}:${a.participantId}`,
+        kind: cmdkRowKinds.agent,
         label: a.participant.name,
         sub: `${a.path !== undefined ? `${basename(a.path)} / ` : ""}${
-          a.session?.slug ?? a.participant.active_session ?? "no active session"
+          a.session?.slug ??
+          a.participant.active_session ??
+          cmdkDefaults.noActiveSession
         }`,
-        icon: "Zap",
+        icon: cmdkIcons.zap,
         participantId: a.participantId,
         sessionId: a.participant.active_session ?? undefined,
         path: a.path,
       }),
     );
   if (agentRows.length > 0) {
-    groups.push({ key: "agents", label: "Agents", rows: agentRows });
+    groups.push({ ...cmdkGroups.agents, rows: agentRows });
   }
 
   // 4) Quick actions matching the query.
@@ -358,8 +410,8 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
     .slice(0, 8)
     .map(
       (a): CmdkRowAction => ({
-        id: `action:${a.id}`,
-        kind: "action",
+        id: `${cmdkRowKinds.action}:${a.id}`,
+        kind: cmdkRowKinds.action,
         label: a.label,
         sub: a.sub,
         icon: a.icon,
@@ -367,7 +419,7 @@ export function queryGroups(input: QueryGroupsInput): CmdkGroup[] {
       }),
     );
   if (actionRows.length > 0) {
-    groups.push({ key: "quick-actions", label: "Quick actions", rows: actionRows });
+    groups.push({ ...cmdkGroups.quickActions, rows: actionRows });
   }
 
   return groups;

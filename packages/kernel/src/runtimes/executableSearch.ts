@@ -13,7 +13,7 @@ function addDir(seen: Set<string>, dirs: string[], dir: string | undefined): voi
   dirs.push(dir);
 }
 
-export function executableSearchDirs(env: NodeJS.ProcessEnv): string[] {
+function executableSearchDirs(env: NodeJS.ProcessEnv): string[] {
   const seen = new Set<string>();
   const dirs: string[] = [];
   for (const dir of (env.PATH ?? "").split(delimiter)) {
@@ -41,7 +41,7 @@ export function envWithExecutableSearchPath(
   return { ...env, PATH: dirs.join(delimiter) };
 }
 
-export function executableCandidates(
+function executableCandidates(
   executable: string,
   env: NodeJS.ProcessEnv,
 ): string[] {

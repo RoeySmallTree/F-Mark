@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../../src/server.js";
 import { initProject } from "../../src/project.js";
 import { paths } from "../../src/paths.js";
 import { createSession } from "../../src/sessions.js";
 import { listParticipants } from "../../src/participants.js";
+import { activePaths } from "../../src/paths/active.js";
+import { globalPaths } from "../../src/paths/global.js";
+import { registerProjectPath } from "../../src/paths/registry.js";
+import { PathContextRef } from "../../src/paths/contextRef.js";
 import { withTempProject } from "../helpers/tempdir.js";
 
 async function setup(root: string) {
@@ -14,7 +20,10 @@ async function setup(root: string) {
   const session = await createSession(p, { slug: "x" });
   const [pid] = Object.keys(await listParticipants(p));
   const { app } = createServer({ token: null, paths: p });
-  return { p, app, sessionId: session.id, pid: pid! };
+  /* X2: every event POST now carries a required root scope. With no
+     multi-path ref wired, the fallback root is the only known root, so
+     `root` resolves to it. Tests pass `root` in each payload. */
+  return { p, app, sessionId: session.id, pid: pid!, root };
 }
 
 describe("POST /sessions/:id/events/prose", () => {
@@ -24,7 +33,7 @@ describe("POST /sessions/:id/events/prose", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "hello" },
+        payload: { root, participant_id: pid, content: "hello" },
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -40,7 +49,7 @@ describe("POST /sessions/:id/events/prose", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Launch" },
+        payload: { root, participant_id: pid, content: "body", name: "Launch" },
       });
       expect(res.statusCode).toBe(200);
       await app.close();
@@ -66,7 +75,7 @@ describe("POST /sessions/:id/events/prose", () => {
       const res = await app.inject({
         method: "POST",
         url: "/sessions/no-such/events/prose",
-        payload: { participant_id: pid, content: "hi" },
+        payload: { root, participant_id: pid, content: "hi" },
       });
       expect(res.statusCode).toBe(404);
       await app.close();
@@ -83,6 +92,7 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "a comment",
           file_path: "src/app.ts",
@@ -112,6 +122,7 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "whole-file note",
           file_path: "src/app.ts",
@@ -134,13 +145,14 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
       const anchorRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Doc" },
+        payload: { root, participant_id: pid, content: "body", name: "Doc" },
       });
       const anchorFilename = anchorRes.json().filename;
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "x",
           file_path: "src/app.ts",
@@ -158,7 +170,7 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
       const anchorRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Doc" },
+        payload: { root, participant_id: pid, content: "body", name: "Doc" },
       });
       const anchorFilename = anchorRes.json().filename;
 
@@ -166,6 +178,7 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "block body",
           append_to: anchorFilename,
@@ -188,13 +201,14 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
       const anchorRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Doc" },
+        payload: { root, participant_id: pid, content: "body", name: "Doc" },
       });
       const anchorFilename = anchorRes.json().filename;
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "x",
           append_to: anchorFilename,
@@ -212,13 +226,14 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
       const anchorRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "body", name: "Doc" },
+        payload: { root, participant_id: pid, content: "body", name: "Doc" },
       });
       const anchorFilename = anchorRes.json().filename;
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "x",
           append_to: anchorFilename,
@@ -244,6 +259,7 @@ describe("POST /sessions/:id/events/prose — file comments", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "hi",
           mood: "happy",
@@ -268,6 +284,7 @@ describe("POST /sessions/:id/events/prose with arbitrary", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "mid-turn output",
           arbitrary: true,
@@ -293,6 +310,7 @@ describe("POST /sessions/:id/events/prose with arbitrary", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
         payload: {
+          root,
           participant_id: pid,
           content: "explicit false",
           arbitrary: false,
@@ -308,7 +326,7 @@ describe("POST /sessions/:id/events/prose with arbitrary", () => {
       const resOmitted = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "omitted" },
+        payload: { root, participant_id: pid, content: "omitted" },
       });
       expect(resOmitted.statusCode).toBe(200);
       const onDiskOmitted = await readFile(
@@ -327,7 +345,7 @@ describe("POST /sessions/:id/events/prose with arbitrary", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "hi", arbitrary: 1 },
+        payload: { root, participant_id: pid, content: "hi", arbitrary: 1 },
       });
       expect(res.statusCode).toBe(400);
       await app.close();
@@ -343,6 +361,7 @@ describe("POST /sessions/:id/events/choices", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/choices`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_1",
           question: "Pick?",
@@ -356,6 +375,30 @@ describe("POST /sessions/:id/events/choices", () => {
       await app.close();
     });
   });
+
+  it("rejects a multi-select question sent with multi false", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/choices`,
+        payload: {
+          root,
+          participant_id: pid,
+          id: "ch_mix",
+          question: "Which ideas should we combine?",
+          options: [
+            { id: "a", label: "A" },
+            { id: "b", label: "B" },
+          ],
+          multi: false,
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain("multi is false");
+      await app.close();
+    });
+  });
 });
 
 describe("POST /sessions/:id/events/choice", () => {
@@ -366,6 +409,7 @@ describe("POST /sessions/:id/events/choice", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/choice`,
         payload: {
+          root,
           participant_id: pid,
           choices_id: "ch_1",
           selected: ["a"],
@@ -385,7 +429,7 @@ describe("POST /sessions/:id/events/turn-end", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/turn-end`,
-        payload: { participant_id: pid },
+        payload: { root, participant_id: pid },
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().filename).toMatch(/\.turn-end\.json$/);
@@ -402,6 +446,7 @@ describe("POST /sessions/:id/events/tool-use", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/tool-use`,
         payload: {
+          root,
           participant_id: pid,
           tool_name: "Bash",
           tool_use_id: "tu_01",
@@ -437,6 +482,7 @@ describe("POST /sessions/:id/events/tool-use", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/tool-use`,
         payload: {
+          root,
           participant_id: pid,
           tool_use_id: "tu_01",
           input: {},
@@ -459,6 +505,7 @@ describe("POST /sessions/:id/events/tool-use", () => {
         method: "POST",
         url: `/sessions/${session.id}/events/tool-use`,
         payload: {
+          root,
           participant_id: pid!,
           tool_name: "x",
           tool_use_id: "y",
@@ -478,6 +525,7 @@ describe("POST /sessions/:id/events/tool-use", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/tool-use`,
         payload: {
+          root,
           participant_id: pid,
           tool_name: "Read",
           tool_use_id: "tu_err",
@@ -512,16 +560,16 @@ describe("GET /sessions/:id/events", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "hi" },
+        payload: { root, participant_id: pid, content: "hi" },
       });
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/turn-end`,
-        payload: { participant_id: pid },
+        payload: { root, participant_id: pid },
       });
       const res = await app.inject({
         method: "GET",
-        url: `/sessions/${sessionId}/events`,
+        url: `/sessions/${sessionId}/events?root=${encodeURIComponent(root)}`,
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -538,23 +586,23 @@ describe("GET /sessions/:id/events", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/prose`,
-        payload: { participant_id: pid, content: "hi" },
+        payload: { root, participant_id: pid, content: "hi" },
       });
       await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/turn-end`,
-        payload: { participant_id: pid },
+        payload: { root, participant_id: pid },
       });
       const res = await app.inject({
         method: "GET",
-        url: `/sessions/${sessionId}/events?kinds=turn-end`,
+        url: `/sessions/${sessionId}/events?root=${encodeURIComponent(root)}&kinds=turn-end`,
       });
       expect(res.json().events).toHaveLength(1);
       await app.close();
     });
   });
 
-  it("reads from the explicit path query instead of the server fallback path", async () => {
+  it("reads from an explicit KNOWN background root via ?root= (X2)", async () => {
     await withTempProject(async (fallbackRoot) => {
       await withTempProject(async (eventRoot) => {
         const eventProject = paths(eventRoot);
@@ -565,22 +613,51 @@ describe("GET /sessions/:id/events", () => {
         await writer.inject({
           method: "POST",
           url: `/sessions/${session.id}/events/prose`,
-          payload: { participant_id: pid!, content: "from explicit path" },
+          payload: { root: eventRoot, participant_id: pid!, content: "from explicit path" },
         });
         await writer.close();
 
-        const fallbackProject = paths(fallbackRoot);
-        await initProject(fallbackProject);
-        const { app } = createServer({ token: null, paths: fallbackProject });
-        const res = await app.inject({
-          method: "GET",
-          url: `/sessions/${session.id}/events?path=${encodeURIComponent(eventRoot)}`,
-        });
-        expect(res.statusCode).toBe(200);
-        expect(res.json().events).toHaveLength(1);
-        expect(res.json().events[0].payload.content).toBe("from explicit path");
-        await app.close();
+        const cfg = mkdtempSync(join(tmpdir(), "fmark-ev-cfg-"));
+        try {
+          const fallbackProject = paths(fallbackRoot);
+          await initProject(fallbackProject);
+          const g = globalPaths(cfg);
+          // Register the event root so it is a KNOWN root for the reader.
+          await registerProjectPath(g, eventRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePaths(fallbackRoot),
+          });
+          const { app } = createServer({
+            token: null,
+            paths: fallbackProject,
+            pathContextRef: ref,
+          });
+          const res = await app.inject({
+            method: "GET",
+            url: `/sessions/${session.id}/events?root=${encodeURIComponent(eventRoot)}`,
+          });
+          expect(res.statusCode).toBe(200);
+          expect(res.json().events).toHaveLength(1);
+          expect(res.json().events[0].payload.content).toBe("from explicit path");
+          await app.close();
+        } finally {
+          rmSync(cfg, { recursive: true, force: true });
+        }
       });
+    });
+  });
+
+  it("400 ROOT_SCOPE_REQUIRED on GET without a root scope", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId } = await setup(root);
+      const res = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/events`,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe("ROOT_SCOPE_REQUIRED");
+      await app.close();
     });
   });
 });

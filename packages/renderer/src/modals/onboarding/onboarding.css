@@ -147,6 +147,10 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  flex: 1 1 auto;
+}
+.ob-profile-photo .avatar-preset-picker {
+  width: 100%;
 }
 .ob-profile-photo-actions {
   display: flex;

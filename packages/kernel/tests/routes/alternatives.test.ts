@@ -25,6 +25,7 @@ describe("POST /sessions/:id/events/alternatives", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/alternatives`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_design",
           question: "Which layout?",
@@ -77,6 +78,7 @@ describe("POST /sessions/:id/events/alternatives", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/alternatives`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_dup",
           question: "Which?",
@@ -101,6 +103,7 @@ describe("POST /sessions/:id/events/alternatives", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/alternatives`,
         payload: {
+          root,
           participant_id: pid,
           id: "x",
           question: "?",
@@ -109,6 +112,56 @@ describe("POST /sessions/:id/events/alternatives", () => {
         },
       });
       expect(res.statusCode).toBe(400);
+      await app.close();
+    });
+  });
+
+  it("rejects a multi-select question sent with multi false before writing bundles", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/alternatives`,
+        payload: {
+          root,
+          participant_id: pid,
+          id: "ch_mismatch",
+          question: "Pick one (or more to mix):",
+          multi: false,
+          options: [
+            { id: "a", label: "Alpha", html: "<h1>A</h1>" },
+            { id: "b", label: "Beta", html: "<h1>B</h1>" },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain("multi is false");
+      const entries = await readdir(p.sessionDir(sessionId));
+      expect(entries.filter((e) => e.endsWith(".html"))).toHaveLength(0);
+      expect(entries.filter((e) => e.endsWith(".choices.json"))).toHaveLength(0);
+      await app.close();
+    });
+  });
+
+  it("rejects (400) ROOT_SCOPE_REQUIRED when no scope is supplied (X2)", async () => {
+    await withTempProject(async (root) => {
+      const { p, app, sessionId, pid } = await setup(root);
+      const res = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/alternatives`,
+        payload: {
+          participant_id: pid,
+          id: "ch_noscope",
+          question: "Which?",
+          multi: false,
+          options: [{ id: "a", label: "Alpha", html: "<h1>A</h1>" }],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe("ROOT_SCOPE_REQUIRED");
+      /* No bundle written when scope resolution fails before the writer. */
+      const entries = await readdir(p.sessionDir(sessionId));
+      expect(entries.filter((e) => e.endsWith(".html"))).toHaveLength(0);
       await app.close();
     });
   });
@@ -121,13 +174,14 @@ describe("POST /sessions/:id/events/choices — option.html refs", () => {
       const htmlRes = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/html`,
-        payload: { participant_id: pid, html: "<p>hi</p>" },
+        payload: { root, participant_id: pid, html: "<p>hi</p>"  },
       });
       const htmlFilename = htmlRes.json().filename;
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/choices`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_ref",
           question: "Pick?",
@@ -147,6 +201,7 @@ describe("POST /sessions/:id/events/choices — option.html refs", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/choices`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_bad",
           question: "Pick?",
@@ -168,6 +223,7 @@ describe("POST /sessions/:id/events/choices — option.html refs", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/choices`,
         payload: {
+          root,
           participant_id: pid,
           id: "ch_bad2",
           question: "Pick?",

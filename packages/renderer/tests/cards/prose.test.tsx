@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { AnyEventRecord } from "@f-mark/shared";
 import { ProseCard } from "../../src/cards/ProseCard.js";
 import { useStore } from "../../src/state/store.js";
 import {
@@ -61,6 +62,67 @@ describe("ProseCard", () => {
     await user.click(renderedBtn);
     expect(container.querySelector(".fm-accordion")).toBeNull();
     expect(container.querySelector(".fm-prose")).not.toBeNull();
+  });
+
+  test("accordion mode collapses composed blocks and titles folds from block content", async () => {
+    const user = userEvent.setup();
+    const anchor = makeProse(
+      "20260522T120150Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Refactor Plan", content: "" },
+    );
+    const proseBlock = makeProse(
+      "20260522T120151Z_ag-c92e.prose.md",
+      "ag-c92e",
+      {
+        append_to: anchor.filename,
+        content: "# First real section\n\nBody copy that starts collapsed.",
+      },
+    );
+    const flowBlock: AnyEventRecord = {
+      filename: "20260522T120152Z_ag-c92e.flow.json",
+      timestamp: "20260522T120152Z",
+      participant_id: "ag-c92e",
+      kind: "flow",
+      payload: {
+        id: "flow-1",
+        title: "Current docked slab -> Floating capsule",
+        nodes: [],
+        edges: [],
+        append_to: anchor.filename,
+      },
+    };
+
+    const { container } = render(
+      <ProseCard
+        event={anchor}
+        participants={PARTICIPANTS}
+        comments={[]}
+        blocks={[proseBlock, flowBlock]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /accordion view/i }));
+
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button.fm-accordion-h1"),
+    );
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((button) => button.getAttribute("aria-expanded"))).toEqual([
+      "false",
+      "false",
+    ]);
+    expect(screen.getByRole("button", { name: /First real section/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Current docked slab -> Floating capsule/,
+      }),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".fm-accordion-body")).toBeNull();
+    expect(container.textContent).not.toContain("Section 1");
+    expect(container.textContent).not.toContain("Flow chart 1");
+    const chips = Array.from(container.querySelectorAll(".fm-accordion-icon-chip"));
+    expect(chips).toHaveLength(2);
+    expect(chips.map((chip) => chip.textContent)).toEqual(["", ""]);
   });
 
   test("comment with target on this event renders a line marker and click dispatches commentTarget", async () => {

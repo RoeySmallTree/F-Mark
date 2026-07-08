@@ -15,6 +15,8 @@ export interface ModelDescriptor {
   displayName: string;
   description?: string;
   provider?: string;
+  contextWindowTokens?: number;
+  maxContextWindowTokens?: number;
   efforts?: EffortDescriptor[];
   defaultEffort?: EffortLevel;
 }
@@ -31,10 +33,23 @@ export type RuntimeStateSource =
   | "override"     // just-written override; not yet observed live
   | "unknown";
 
+export const RUNTIME_STATE_SOURCES = {
+  rollout: "rollout",
+  transcript: "transcript",
+  opencodeDb: "opencode-db",
+  export: "export",
+  sqlite: "sqlite",
+  config: "config",
+  override: "override",
+  unknown: "unknown",
+} as const satisfies Record<string, RuntimeStateSource>;
+
 export interface CurrentRuntimeState {
   model?: string;
   effort?: EffortLevel;
   provider?: string;
+  contextUsedTokens?: number;
+  contextWindowTokens?: number;
   source: RuntimeStateSource;
   observedAt: number;
   /* Override the user pinned via /managed-agents/:id/runtime. Persisted
@@ -45,6 +60,6 @@ export interface CurrentRuntimeState {
 }
 
 export interface RuntimeOverridePatch {
-  model?: string;
-  effort?: EffortLevel;
+  model?: string | null;
+  effort?: EffortLevel | null;
 }

@@ -1,5 +1,7 @@
-import { cp, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { PLACEHOLDER_SESSION_SLUG } from "@f-mark/shared";
 import type { Paths } from "./paths.js";
 
 export interface SessionMeta {
@@ -34,8 +36,13 @@ export interface ForkSessionResult {
   metadata: ForkMetadata;
 }
 
-const DEFAULT_SLUG = "untitled";
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
+
+export {
+  isPlaceholderSessionId,
+  isPlaceholderSessionSlug,
+  PLACEHOLDER_SESSION_SLUG,
+} from "@f-mark/shared";
 
 function todayUtc(): string {
   const d = new Date();
@@ -70,25 +77,75 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/* The session id is IMMUTABLE once minted: it is the storage key everything
+   else holds (agent env pins, pollers, cursors, clients). A slug given at
+   creation seeds a readable id; placeholder sessions get a random suffix so
+   the id carries no name to outgrow. Renames only ever touch the meta slug. */
 async function allocateSessionId(p: Paths, slug: string): Promise<string> {
   await mkdir(p.sessionsDir(), { recursive: true });
   const date = todayUtc();
-  const base = `${date}-${slug}`;
+  const seed =
+    slug === PLACEHOLDER_SESSION_SLUG
+      ? randomBytes(3).toString("hex")
+      : slug;
+  const base = `${date}-${seed}`;
   let id = base;
   let suffix = 2;
   while (await exists(p.sessionDir(id))) {
-    id = `${base}-${suffix++}`;
+    id =
+      slug === PLACEHOLDER_SESSION_SLUG
+        ? `${date}-${randomBytes(3).toString("hex")}`
+        : `${base}-${suffix++}`;
   }
   return id;
+}
+
+const SESSION_META_FILENAME = ".meta.json";
+
+interface SessionMetaFile {
+  schema: "fmark.session-meta.v1";
+  slug: string;
+}
+
+async function writeSessionSlug(
+  p: Paths,
+  id: string,
+  slug: string,
+): Promise<void> {
+  const meta: SessionMetaFile = { schema: "fmark.session-meta.v1", slug };
+  await writeFile(
+    join(p.sessionDir(id), SESSION_META_FILENAME),
+    `${JSON.stringify(meta, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+/** The session's display slug: meta file when present, otherwise derived
+ *  from the id (legacy sessions created before the meta file existed). */
+export async function readSessionSlug(p: Paths, id: string): Promise<string> {
+  try {
+    const raw = await readFile(
+      join(p.sessionDir(id), SESSION_META_FILENAME),
+      "utf8",
+    );
+    const parsed = JSON.parse(raw) as Partial<SessionMetaFile>;
+    if (typeof parsed.slug === "string" && parsed.slug.length > 0) {
+      return parsed.slug;
+    }
+  } catch {
+    // Fall through to the id-derived legacy slug.
+  }
+  return id.replace(/^\d{4}-\d{2}-\d{2}-/, "");
 }
 
 export async function createSession(
   p: Paths,
   input: CreateSessionInput,
 ): Promise<SessionMeta> {
-  const slug = normalizeSlug(input.slug ?? DEFAULT_SLUG);
+  const slug = normalizeSlug(input.slug ?? PLACEHOLDER_SESSION_SLUG);
   const id = await allocateSessionId(p, slug);
   await mkdir(p.sessionDir(id), { recursive: true });
+  await writeSessionSlug(p, id, slug);
   const s = await stat(p.sessionDir(id));
   return { id, slug, created_at: s.birthtime.toISOString() };
 }
@@ -181,6 +238,7 @@ export async function forkSessionFolder(
     await rm(tempDir, { recursive: true, force: true });
     throw err;
   }
+  await writeSessionSlug(p, id, slug);
 
   const s = await stat(targetDir);
   return {
@@ -198,15 +256,22 @@ export async function listSessions(p: Paths): Promise<SessionMeta[]> {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
-  const sessions: SessionMeta[] = [];
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith(".")) continue;
-    const id = e.name;
-    const slug = id.replace(/^\d{4}-\d{2}-\d{2}-/, "");
-    const s = await stat(p.sessionDir(id));
-    sessions.push({ id, slug, created_at: s.birthtime.toISOString() });
-  }
+  const dirs = entries.filter(
+    (e) => e.isDirectory() && !e.name.startsWith("."),
+  );
+  /* stat() every session dir in parallel — this runs per known root, so the
+     old sequential await-in-loop multiplied across ~100 roots on a scoped
+     all-sessions listing. */
+  const sessions = await Promise.all(
+    dirs.map(async (e) => {
+      const id = e.name;
+      const [slug, s] = await Promise.all([
+        readSessionSlug(p, id),
+        stat(p.sessionDir(id)),
+      ]);
+      return { id, slug, created_at: s.birthtime.toISOString() };
+    }),
+  );
   sessions.sort((a, b) => b.created_at.localeCompare(a.created_at));
   return sessions;
 }
@@ -216,6 +281,10 @@ export async function sessionExists(p: Paths, id: string): Promise<boolean> {
   return exists(p.sessionDir(id));
 }
 
+/* Renaming touches ONLY the display slug in the session's meta file. The id
+   (and therefore the directory, event storage, agent env pins, pollers,
+   cursors, and every client's current-session pointer) never changes — the
+   whole class of rename races is unrepresentable by construction. */
 export async function renameSession(
   p: Paths,
   id: string,
@@ -225,18 +294,9 @@ export async function renameSession(
     throw new Error(`session not found: ${id}`);
   }
   const slug = normalizeSlug(input.slug);
-  const date = /^\d{4}-\d{2}-\d{2}/.exec(id)?.[0] ?? todayUtc();
-  const nextId = `${date}-${slug}`;
-  if (nextId === id) {
-    const s = await stat(p.sessionDir(id));
-    return { id, slug, created_at: s.birthtime.toISOString() };
-  }
-  if (await exists(p.sessionDir(nextId))) {
-    throw new Error(`session already exists: ${nextId}`);
-  }
-  await rename(p.sessionDir(id), p.sessionDir(nextId));
-  const s = await stat(p.sessionDir(nextId));
-  return { id: nextId, slug, created_at: s.birthtime.toISOString() };
+  await writeSessionSlug(p, id, slug);
+  const s = await stat(p.sessionDir(id));
+  return { id, slug, created_at: s.birthtime.toISOString() };
 }
 
 export async function deleteSession(p: Paths, id: string): Promise<void> {

@@ -14,6 +14,23 @@ export type EventKind =
   | "flow"
   | "fork-link";
 
+export const EVENT_KINDS = {
+  prose: "prose",
+  choices: "choices",
+  choice: "choice",
+  turnEnd: "turn-end",
+  todo: "todo",
+  html: "html",
+  file: "file",
+  toolUse: "tool-use",
+  subagentRun: "subagent-run",
+  subagentOutput: "subagent-output",
+  accessRequest: "access-request",
+  accessResponse: "access-response",
+  flow: "flow",
+  forkLink: "fork-link",
+} as const satisfies Record<string, EventKind>;
+
 /** Diff mode a file/hunk comment was made against — the UI mode names, plus an
  *  optional resolved base commit sha string. */
 export type DiffBase =
@@ -21,6 +38,12 @@ export type DiffBase =
   | "current-session"
   | "whole-branch"
   | (string & {});
+
+export const DIFF_BASES = {
+  working: "working",
+  currentSession: "current-session",
+  wholeBranch: "whole-branch",
+} as const satisfies Record<string, DiffBase>;
 
 /** Fuzzy re-anchor context for a file comment so its line range can be
  *  recovered after the file is edited (line-drift repair). */
@@ -74,7 +97,10 @@ export interface ProseFrontmatter {
   /** Fuzzy re-anchor context for line-drift repair. */
   line_context?: LineContext;
   in_reply_to?: string;
-  supersedes?: string;
+  /** Filename(s) this prose supersedes. A scalar marks one revision dead;
+   *  an array lets one coalesced assistant message hide all the streamed
+   *  delta files it replaces (written in run order). */
+  supersedes?: string | string[];
   mentions?: ProseMention[];
   source?: EventSourceKind;
   /**
@@ -119,11 +145,21 @@ export interface TurnEndPayload {
   source?: EventSourceKind;
 }
 
+export type TodoStatus = "open" | "done" | "wip" | "removed";
+export type TodoTreeStatus = Exclude<TodoStatus, "removed">;
+
+export const TODO_STATUSES = {
+  open: "open",
+  done: "done",
+  wip: "wip",
+  removed: "removed",
+} as const satisfies Record<string, TodoStatus>;
+
 export interface TodoPayload {
   id: string;
   title: string;
   body?: string;
-  status: "open" | "done" | "wip" | "removed";
+  status: TodoStatus;
   assigned_to?: string;
   parent_id?: string;
   supersedes?: string;
@@ -136,7 +172,7 @@ export interface TodoTreeNode {
   id: string;
   title: string;
   body?: string;
-  status: "open" | "done" | "wip";
+  status: TodoTreeStatus;
   assigned_to?: string;
   parent_id?: string;
   children: TodoTreeNode[];
@@ -144,6 +180,8 @@ export interface TodoTreeNode {
 
 export type FilePreviewKind =
   | "image"
+  | "video"
+  | "audio"
   | "text"
   | "pdf"
   | "csv"
@@ -151,6 +189,19 @@ export type FilePreviewKind =
   | "xlsx"
   | "pptx"
   | "file";
+
+export const FILE_PREVIEW_KINDS = {
+  image: "image",
+  video: "video",
+  audio: "audio",
+  text: "text",
+  pdf: "pdf",
+  csv: "csv",
+  docx: "docx",
+  xlsx: "xlsx",
+  pptx: "pptx",
+  file: "file",
+} as const satisfies Record<string, FilePreviewKind>;
 
 export interface FileRefPayload {
   schema?: "fmark.file.v1";
@@ -368,6 +419,7 @@ export interface AccessResponsePayload {
   delivery: AccessResponseChannel;
   option_id?: string;
   terminal_input?: string;
+  scope?: AccessRequestSuggestion["scope"];
   message?: string;
   error?: string;
   responded_at: string;

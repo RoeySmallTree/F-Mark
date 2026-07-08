@@ -105,25 +105,103 @@ describe("<AccessRequestCard>", () => {
       .toBeInTheDocument();
   });
 
-  it("renders Bash approvals with description, command, cwd, and mode", () => {
+  it("renders Bash approvals with reason, command breakdown, file access, cwd, and mode", () => {
     renderCard(
       makeRequest({
         tool_name: "Bash",
         tool_input: {
-          description: "List project files",
-          command: "ls -la",
+          description: "Find fmark MCP server config and URL",
+          command:
+            "grep -rl fmark ~/.claude.json /workspace/F-Mark/.mcp.json 2>/dev/null | head",
         },
         cwd: "/workspace/F-Mark",
         permission_mode: "ask",
       }),
     );
 
-    expect(screen.getByText("List project files")).toBeInTheDocument();
+    expect(screen.getByText("Find fmark MCP server config and URL")).toBeInTheDocument();
+    const reasonSection = screen.getByRole("heading", { name: "Reason" }).closest("section");
+    expect(reasonSection).not.toBeNull();
     const commandSection = screen.getByRole("heading", { name: "Command" }).closest("section");
     expect(commandSection).not.toBeNull();
-    expect(within(commandSection as HTMLElement).getByText("ls -la")).toBeInTheDocument();
+    expect((commandSection as HTMLElement).querySelector(".tool-command-card")).not.toBeNull();
+    expect(within(commandSection as HTMLElement).getByText(/grep -rl fmark/))
+      .toBeInTheDocument();
+    expect(within(commandSection as HTMLElement).getAllByText("grep").length).toBeGreaterThan(0);
+    expect(
+      (commandSection as HTMLElement).querySelector(
+        '[data-command="grep"][title="Search text for matching lines."]',
+      ),
+    ).not.toBeNull();
+    expect(within(commandSection as HTMLElement).getAllByText("head").length).toBeGreaterThan(0);
+    expect(
+      (commandSection as HTMLElement).querySelector(
+        '[data-command="head"][title="Show the first lines of output."]',
+      ),
+    ).not.toBeNull();
+    expect(commandSection).toHaveTextContent("search text for");
+    expect(commandSection).toHaveTextContent("search recursively");
+    expect(commandSection).toHaveTextContent("list matching files");
+    expect(commandSection).toHaveTextContent("Take the previous command's output");
+    expect(screen.queryByRole("heading", { name: "Access" })).not.toBeInTheDocument();
+    expect(
+      (commandSection as HTMLElement).querySelector(
+        '.tool-path-chip[data-access="read"] code',
+      ),
+    ).toHaveTextContent("~/.claude.json");
+    expect(screen.getByText("/workspace/F-Mark/.mcp.json")).toBeInTheDocument();
     expect(screen.getByText(/cwd/)).toBeInTheDocument();
     expect(screen.getByText(/ask/)).toBeInTheDocument();
+  });
+
+  it("splits a terminal-captured trailing reason out of the command block", () => {
+    renderCard(
+      makeRequest({
+        tool_name: "Bash",
+        command: [
+          "ss -ltnp 2>/dev/null | grep -iE 'pid=' | awk '{print $4}' | sort -u",
+          "List listening ports and F-Mark daemon processes",
+        ].join("\n"),
+      }),
+    );
+
+    expect(screen.getByText("List listening ports and F-Mark daemon processes"))
+      .toBeInTheDocument();
+    const commandSection = screen.getByRole("heading", { name: "Command" }).closest("section");
+    expect(commandSection).not.toBeNull();
+    const pre = (commandSection as HTMLElement).querySelector("pre");
+    expect(pre).not.toBeNull();
+    expect(pre).toHaveTextContent("ss -ltnp");
+    expect(pre).not.toHaveTextContent("List listening ports");
+    expect(within(commandSection as HTMLElement).getAllByText("ss").length).toBeGreaterThan(0);
+    expect(
+      (commandSection as HTMLElement).querySelector(
+        '[data-command="ss"][title="Inspect listening sockets and connections."]',
+      ),
+    ).not.toBeNull();
+    expect(commandSection).toHaveTextContent("Take the previous command's output");
+    expect(commandSection).toHaveTextContent("Feeds output forward");
+  });
+
+  it("renders inline runtime invocations with the shared code block component", () => {
+    renderCard(
+      makeRequest({
+        tool_name: "Bash",
+        command: 'python3 -c "print(123)"',
+      }),
+    );
+
+    const commandSection = screen.getByRole("heading", { name: "Command" }).closest("section");
+    expect(commandSection).not.toBeNull();
+    expect(within(commandSection as HTMLElement).getByText("Python code")).toHaveClass("io-label");
+    const inlineCode = (commandSection as HTMLElement).querySelector(".tool-command-story .io-raw");
+    expect(inlineCode).not.toBeNull();
+    expect(inlineCode).toHaveTextContent("print(123)");
+    expect(commandSection).not.toHaveTextContent(
+      "run inline Python code (run inline Python code)",
+    );
+    expect((commandSection as HTMLElement).querySelector(".tool-command-inline-source"))
+      .toBeNull();
   });
 
   it("renders provider-specific options and sends the selected option id", async () => {
@@ -162,14 +240,12 @@ describe("<AccessRequestCard>", () => {
       }),
     );
 
-    expect(screen.getByRole("button", { name: "Approve: Yes" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Deny: No" })).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Approve: Yes, and allow access to .bin/ and timeout 10 commands",
-      }),
-    );
+    // "Yes" → once, "Yes, and allow …" → always, "No" → cancel. Pick the
+    // "always" scope, then Allow, and confirm its option id is sent.
+    expect(screen.getByRole("button", { name: /allow once/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /always/i }));
+    expect(screen.getByRole("button", { name: /allow always/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /allow always/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0]!;
@@ -179,16 +255,16 @@ describe("<AccessRequestCard>", () => {
     });
   });
 
-  it("renders explicit prominent default decision labels", () => {
+  it("renders a single Allow and a single Cancel button", () => {
     renderCard(makeRequest({ tool_name: "Bash", command: "ls -la" }));
 
-    const approve = screen.getByRole("button", { name: "Approve access request" });
-    const deny = screen.getByRole("button", { name: "Deny access request" });
+    const allow = screen.getByRole("button", { name: /^Allow/i });
+    const cancel = screen.getByRole("button", { name: /Cancel/i });
 
-    expect(approve).toHaveTextContent("Approve");
-    expect(approve).toHaveAttribute("data-decision", "approve");
-    expect(deny).toHaveTextContent("Deny");
-    expect(deny).toHaveAttribute("data-decision", "deny");
+    expect(allow).toHaveTextContent("Allow");
+    expect(allow).toHaveAttribute("data-decision", "approve");
+    expect(cancel).toHaveTextContent("Cancel");
+    expect(cancel).toHaveAttribute("data-decision", "deny");
   });
 
   it("keeps access request raw details on readable theme-tokenized colors", () => {
@@ -209,6 +285,13 @@ describe("<AccessRequestCard>", () => {
     expect(cardRule).toContain("--tool-card-pre-bg:");
     expect(cardRule).toContain("--tool-card-pre-fg: var(--ink-2);");
     expect(cardRule).toContain("--tool-card-muted: var(--ink-3);");
+    expect(cardRule).toContain("color: var(--ink-2);");
+
+    const bodyRule = cssRule(".approval-body");
+    expect(bodyRule).toContain("color: var(--ink-2);");
+
+    const ioParagraphRule = cssRule(".io p");
+    expect(ioParagraphRule).toContain("color: var(--ink-2);");
 
     const rawRule = cssRule(".tool-raw-details pre");
     expect(rawRule).toContain("background: var(--tool-card-pre-bg, var(--panel));");
@@ -229,13 +312,13 @@ describe("<AccessRequestCard>", () => {
     );
 
     renderCard(makeRequest({ tool_name: "Bash", command: "ls -la" }));
-    fireEvent.click(screen.getByRole("button", { name: "Approve access request" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Allow/i }));
 
     expect(await screen.findByText("Request already closed")).toBeInTheDocument();
     expect(screen.getByText(/no longer pending/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.queryByRole("button", { name: "Approve access request" }),
+        screen.queryByRole("button", { name: /^Allow/i }),
       ).not.toBeInTheDocument();
     });
     expect(screen.getByText("Technical details")).toBeInTheDocument();

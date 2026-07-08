@@ -1,5 +1,4 @@
-/* Theme tokens — CSS variable definitions for the 6 themes.
-   Ported verbatim from planning/redesign/design.html (lines 11–111). */
+/* Theme tokens - CSS variable definitions for the 6 themes. */
 
 :root {
   --bg: #f4efe6;          /* outer chrome */

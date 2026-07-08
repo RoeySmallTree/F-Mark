@@ -1,23 +1,20 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { PostAlternativesBody } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
-import { sessionExists } from "../sessions.js";
 import type { Bus } from "../ws/bus.js";
-import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
+import { normaliseDeps, type PathDeps } from "./pathDeps.js";
+import type { RootScope } from "./rootScope.js";
 import { writeAlternativesEvent } from "../services/events.js";
-import { publishEventWrites } from "../services/eventPublisher.js";
+import { createScopedWriteRunner } from "./events/scopedWrite.js";
 
-async function ensureSession(
-  p: Paths,
-  sessionId: string,
-  reply: FastifyReply,
-): Promise<boolean> {
-  if (!(await sessionExists(p, sessionId))) {
-    reply.code(404).send({ error: `session not found: ${sessionId}` });
-    return false;
-  }
-  return true;
-}
+/* Required root scope (expansion-decisions.md X2) — every event write carries
+   a `path_id` or `root`, resolved through known roots. No active-root fallback. */
+const ROOT_SCOPE_PROPS = {
+  path_id: { type: "string" },
+  root: { type: "string" },
+} as const;
+
+type AlternativesBody = PostAlternativesBody & RootScope;
 
 /* POST /sessions/:id/events/alternatives — atomic visual-alternatives write.
    Writes one html bundle per option, then a single `choices` event whose
@@ -29,8 +26,9 @@ export function registerAlternativesRoutes(
   getBus: () => Bus,
 ): void {
   const deps = normaliseDeps(pOrDeps);
+  const runScopedWrite = createScopedWriteRunner(deps, getBus);
 
-  app.post<{ Params: { id: string }; Body: PostAlternativesBody }>(
+  app.post<{ Params: { id: string }; Body: AlternativesBody }>(
     "/sessions/:id/events/alternatives",
     {
       schema: {
@@ -68,21 +66,15 @@ export function registerAlternativesRoutes(
             multi: { type: "boolean" },
             supersedes: { type: "string" },
             append_to: { type: "string", minLength: 1 },
+            ...ROOT_SCOPE_PROPS,
           },
         },
       },
     },
     async (req, reply) => {
-      const p = resolvePaths(deps);
-      if (!(await ensureSession(p, req.params.id, reply))) return;
-      try {
-        const written = await writeAlternativesEvent(p, req.params.id, req.body);
-        publishEventWrites(getBus(), req.params.id, written.publish);
-        return written.response;
-      } catch (err) {
-        reply.code(400);
-        return { error: err instanceof Error ? err.message : String(err) };
-      }
+      return runScopedWrite(req.body, req.params.id, reply, (p) =>
+        writeAlternativesEvent(p, req.params.id, req.body),
+      );
     },
   );
 }

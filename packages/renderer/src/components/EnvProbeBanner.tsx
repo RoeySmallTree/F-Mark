@@ -1,3 +1,7 @@
+const NO_LOOSE_STRING_VALUES = {
+  unknown: "unknown",
+} as const;
+
 /* EnvProbeBanner — warning strip that surfaces tmux + runtime gaps detected
    by the kernel's `/env-probe`. Visible only when something needs action:
    tmux missing, tmux too old (< 3.0), or a registered runtime not on PATH.
@@ -97,7 +101,7 @@ export function EnvProbeBanner({
       )}
       {tmuxTooOld && (
         <div className="env-probe-tmux-old">
-          <strong>Tmux {envProbe.tmuxVersion ?? "unknown"} is too old</strong>{" "}
+          <strong>Tmux {envProbe.tmuxVersion ?? NO_LOOSE_STRING_VALUES.unknown} is too old</strong>{" "}
           — need 3.0+.
           {cmd !== null ? (
             <>

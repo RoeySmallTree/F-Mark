@@ -1,7 +1,8 @@
-/* NewSessionModal v0.5 — two-field flow (Folder picker + Name).
-   Covers: modal opens via store, /fs/home is fetched to populate Folder,
-   slug validation gates submit, char-strip on slug, Browse opens picker
-   and picked path replaces Folder, submit posts /sessions with { slug, path }
+/* NewSessionModal — folder-only flow. Sessions are created with the
+   placeholder slug ("new-session"); the agent renames them later via
+   fmark_rename_session. Covers: modal opens via store, /fs/home is fetched
+   to populate Folder, folder gates submit, Browse opens picker and picked
+   path replaces Folder, submit posts /sessions with the placeholder slug
    then refreshes /sessions, close interactions (X / backdrop / Escape),
    "+ NEW" in Sessions panel. */
 
@@ -13,7 +14,14 @@ import {
   test,
   vi,
 } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Participant } from "@f-mark/shared";
 import { ModalRoot } from "../../src/modals/ModalRoot.js";
@@ -146,7 +154,6 @@ describe("NewSessionModal (v0.5)", () => {
     expect(screen.getByText("/workspace/F-Mark")).toBeInTheDocument();
     expect(mock.mock.calls.some(([u]) => String(u).endsWith("/fs/home"))).toBe(false);
 
-    await user.type(screen.getByLabelText(/session name/i), "demo");
     await user.click(screen.getByRole("button", { name: /create session/i }));
 
     await waitFor(() => {
@@ -158,7 +165,7 @@ describe("NewSessionModal (v0.5)", () => {
       });
       expect(createCall).toBeDefined();
       const body = JSON.parse((createCall![1] as RequestInit).body as string);
-      expect(body).toEqual({ slug: "demo", path: "/workspace/F-Mark" });
+      expect(body).toEqual({ slug: "new-session", path: "/workspace/F-Mark" });
     });
   });
 
@@ -171,28 +178,49 @@ describe("NewSessionModal (v0.5)", () => {
     expect(screen.queryByText(/Path:/)).toBeNull();
   });
 
-  test("submit disabled until a valid slug is typed AND folder is set", async () => {
+  test("no session-name input; submit enables once the folder resolves", async () => {
     stubFetch();
-    const user = userEvent.setup();
     render(<ModalRoot />);
     act(() => { useStore.getState().openModal("new-session"); });
+    expect(screen.queryByLabelText(/session name/i)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText("/home/me")).toBeInTheDocument();
     });
-    const submit = screen.getByRole("button", { name: /create session/i });
-    expect(submit).toBeDisabled();
-    await user.type(screen.getByLabelText(/session name/i), "demo");
-    expect(submit).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /create session/i }),
+    ).not.toBeDisabled();
   });
 
-  test("invalid characters get stripped from the slug input", async () => {
+  test("folder presets show favorites plus only the first four recents", async () => {
     stubFetch();
-    const user = userEvent.setup();
     render(<ModalRoot />);
-    act(() => { useStore.getState().openModal("new-session"); });
-    const slugInput = screen.getByLabelText(/session name/i) as HTMLInputElement;
-    await user.type(slugInput, "Launch Planning!");
-    expect(slugInput.value).toBe("launchplanning");
+    act(() => {
+      useStore.setState({
+        knownPaths: [
+          "/work/alpha",
+          "/work/beta",
+          "/work/gamma",
+          "/work/delta",
+          "/work/epsilon",
+          "/work/zeta",
+        ],
+        favorites: [{ name: "Beta saved", path: "/work/beta" }],
+      });
+      useStore.getState().openModal("new-session");
+    });
+
+    const presets = screen.getByLabelText("Folder presets");
+    const labels = within(presets)
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(labels).toEqual([
+      "Beta saved",
+      "alpha",
+      "gamma",
+      "delta",
+      "epsilon",
+    ]);
+    expect(within(presets).queryByRole("button", { name: "zeta" })).toBeNull();
   });
 
   test("Browse opens the folder picker; picking replaces the Folder", async () => {
@@ -221,7 +249,7 @@ describe("NewSessionModal (v0.5)", () => {
     expect(screen.getByText("/home/me")).toBeInTheDocument();
   });
 
-  test("submit POSTs /sessions with { slug, path } and refreshes the list", async () => {
+  test("submit POSTs /sessions with the placeholder slug and refreshes the list", async () => {
     const mock = stubFetch();
     const user = userEvent.setup();
     render(<ModalRoot />);
@@ -229,7 +257,6 @@ describe("NewSessionModal (v0.5)", () => {
     await waitFor(() => {
       expect(screen.getByText("/home/me")).toBeInTheDocument();
     });
-    await user.type(screen.getByLabelText(/session name/i), "demo");
     await user.click(screen.getByRole("button", { name: /create session/i }));
 
     await waitFor(() => {
@@ -241,7 +268,7 @@ describe("NewSessionModal (v0.5)", () => {
       });
       expect(createCall).toBeDefined();
       const body = JSON.parse((createCall![1] as RequestInit).body as string);
-      expect(body).toEqual({ slug: "demo", path: "/home/me" });
+      expect(body).toEqual({ slug: "new-session", path: "/home/me" });
     });
 
     // Modal closed on success.

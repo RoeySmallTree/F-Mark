@@ -1,7 +1,29 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { createClient } from "../../../api/client.js";
-import { useStore } from "../../../state/store.js";
+import { lazy, Suspense, useCallback, useMemo, useRef, type JSX } from "react";
+import type { OnMount } from "@monaco-editor/react";
+import { FvLoading } from "../FileViewerLoading.js";
+import { FileEditBar } from "./FileEditBar.js";
 import { extOf, monacoLanguage } from "./pickRenderer.js";
+import { MonacoCommentOverlay } from "./monaco/MonacoCommentOverlay.js";
+import { MonacoLineCommentDraft } from "./monaco/MonacoLineCommentDraft.js";
+import {
+  monacoEditorTheme,
+  useMonacoThemeMode,
+} from "./monaco/theme.js";
+import { useMonacoCommentedLines } from "./monaco/useMonacoCommentedLines.js";
+import { useMonacoCommentDraft } from "./monaco/useMonacoCommentDraft.js";
+import { useMonacoEditorInteractions } from "./monaco/useMonacoEditorInteractions.js";
+import { useMonacoEditorRefs } from "./monaco/useMonacoEditorRefs.js";
+import { useMonacoFileText } from "./monaco/useMonacoFileText.js";
+import { useMonacoReveal } from "./monaco/useMonacoReveal.js";
+import { useFileAutosave } from "../useFileAutosave.js";
+import { useScopedFile } from "../fileScope.js";
+import { buildFileCommentAnchors } from "../lineComment/renderedRail/commentAnchors.js";
+import { useRenderedRailStoreBindings } from "../lineComment/renderedRail/useRenderedRailStoreBindings.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  on: "on",
+  none: "none",
+} as const;
 
 const Editor = lazy(async () => {
   const mod = await import("@monaco-editor/react");
@@ -12,98 +34,133 @@ export interface MonacoRendererProps {
   path: string;
 }
 
-function readThemeMode(): "light" | "dark" {
-  const root = document.documentElement;
-  const theme = root.getAttribute("data-theme") ?? "";
-  /* F-Mark themes whose name implies dark backgrounds; fall back to
-     prefers-color-scheme otherwise. */
-  if (/dark|midnight|noir|matrix|aubergine/i.test(theme)) return "dark";
-  if (/light|paper|cream|day/i.test(theme)) return "light";
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
 export function MonacoRenderer({ path }: MonacoRendererProps): JSX.Element {
-  const token = useStore((s) => s.token);
-  const client = useMemo(
-    () => createClient({ baseUrl: "", token }),
-    [token],
+  const [autosave, setAutosave] = useFileAutosave();
+  const file = useMonacoFileText(path, { autosave });
+  const { text, error, truncated } = file;
+  const theme = useMonacoThemeMode();
+  const { events, activeTarget, setCommentTarget } = useRenderedRailStoreBindings();
+  const scoped = useScopedFile(path);
+  const scopedPath = scoped?.relPath ?? null;
+  const lineCount = Math.max(1, (text ?? "").split(/\r?\n/).length);
+  const anchors = useMemo(
+    () =>
+      scopedPath === null
+        ? []
+        : buildFileCommentAnchors({ events, scopedPath, lineCount }),
+    [events, scopedPath, lineCount],
   );
-
-  const [text, setText] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [truncated, setTruncated] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">(() =>
-    typeof document !== "undefined" ? readThemeMode() : "light",
-  );
-
-  /* Re-read theme when the html `data-theme` attr changes. */
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const root = document.documentElement;
-    const obs = new MutationObserver(() => setTheme(readThemeMode()));
-    obs.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => obs.disconnect();
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setText(null);
-    setError(null);
-    setTruncated(false);
-    client
-      .fetchFileText(path, 8 * 1024 * 1024)
-      .then((res) => {
-        if (cancelled) return;
-        setText(res.content);
-        setTruncated(res.truncated);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+  const { editorRef, monacoRef, wrapRef } = useMonacoEditorRefs();
+  const draft = useMonacoCommentDraft({ path, text, editorRef });
+  const interactions = useMonacoEditorInteractions({
+    editorRef,
+    monacoRef,
+    canPost: draft.canPost,
+    openDraft: draft.openDraft,
+    updateDraftTop: draft.updateDraftTop,
+  });
+  useMonacoCommentedLines({ anchors, editorRef, ready: interactions.ready });
+  const reveal = useMonacoReveal({
+    path,
+    text,
+    ready: interactions.ready,
+    editorRef,
+    monacoRef,
+  });
+  const saveRef = useRef(file.save);
+  saveRef.current = file.save;
+  const onMount = useCallback<OnMount>(
+    (editor, monaco) => {
+      interactions.onMount(editor, monaco);
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        void saveRef.current();
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [path, client]);
+    },
+    [interactions],
+  );
 
   if (error !== null) {
     return <div className="fv-error">failed to load file: {error}</div>;
   }
   if (text === null) {
-    return <div className="fv-loading">loading…</div>;
+    return <FvLoading />;
   }
 
   const language = monacoLanguage(extOf(path));
   return (
-    <div className="fv-monaco-wrap">
+    <div className="fv-monaco-wrap" ref={wrapRef}>
+      <FileEditBar
+        path={path}
+        dirty={file.dirty}
+        saving={file.saving}
+        saveError={file.saveError}
+        savedAt={file.savedAt}
+        truncated={truncated}
+        saveLabel="Save file"
+        autosave={autosave}
+        onAutosaveChange={setAutosave}
+        onSave={() => void file.save()}
+      />
       {truncated ? (
         <div className="fv-loading">
-          file truncated to first 8 MB — open externally for the full file
+          file truncated to first 8 MB, editing is disabled for this preview
         </div>
       ) : null}
-      <Suspense
-        fallback={<div className="fv-loading">loading editor…</div>}
-      >
-        <Editor
-          height="100%"
-          width="100%"
-          path={path}
-          language={language}
-          value={text}
-          theme={theme === "dark" ? "vs-dark" : "vs"}
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            fontSize: 12,
-            wordWrap: "on",
-            scrollBeyondLastLine: false,
-            renderLineHighlight: "none",
-            automaticLayout: true,
-          }}
-        />
+      {reveal.driftHint ? (
+        <div className="fv-drift-hint" role="status" data-testid="fv-drift-hint">
+          comment location drifted — showing best match
+        </div>
+      ) : null}
+      <Suspense fallback={<FvLoading />}>
+        <div className="fv-monaco-editor-frame">
+          <Editor
+            height="100%"
+            width="100%"
+            path={path}
+            language={language}
+            value={text}
+            theme={monacoEditorTheme(theme)}
+            onMount={onMount}
+            onChange={(value) => file.setText(value ?? "")}
+            options={{
+              readOnly: truncated,
+              minimap: { enabled: false },
+              fontSize: 12,
+              wordWrap: NO_LOOSE_STRING_VALUES.on,
+              scrollBeyondLastLine: false,
+              renderLineHighlight: NO_LOOSE_STRING_VALUES.none,
+              automaticLayout: true,
+              glyphMargin: true,
+            }}
+          />
+          {scopedPath !== null ? (
+            <MonacoCommentOverlay
+              path={path}
+              text={text}
+              scopedPath={scopedPath}
+              events={events}
+              anchors={anchors}
+              activeTarget={activeTarget}
+              lineCount={lineCount}
+              editorRef={editorRef}
+              monacoRef={monacoRef}
+              ready={interactions.ready}
+              setCommentTarget={setCommentTarget}
+            />
+          ) : null}
+        </div>
       </Suspense>
+      <MonacoLineCommentDraft
+        path={path}
+        draft={draft.draft}
+        snippet={draft.draftSnippet}
+        busy={draft.busy}
+        defaultMentions={draft.defaultMentions}
+        onSubmit={(content, mentions) => void draft.submitDraft(content, mentions)}
+        onClose={draft.closeDraft}
+      />
     </div>
   );
 }
+
+export { normalizeSelectionLines } from "./monaco/selection.js";

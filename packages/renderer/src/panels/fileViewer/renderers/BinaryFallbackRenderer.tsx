@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, File } from "lucide-react";
 import { createClient } from "../../../api/client.js";
 import { useStore } from "../../../state/store.js";
+import { useScopedFile } from "../fileScope.js";
 import { basenameOf } from "./pickRenderer.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  bytes00: "bytes=0-0",
+} as const;
 
 export interface BinaryFallbackRendererProps {
   path: string;
@@ -25,15 +30,18 @@ export function BinaryFallbackRenderer({
     () => createClient({ baseUrl: "", token }),
     [token],
   );
-  const url = client.fileContentUrl(path);
+  const scoped = useScopedFile(path);
+  const url =
+    scoped !== null ? client.fileContentUrl(scoped.scope, scoped.relPath) : "";
 
   /* HEAD probe so we can show the size; falls back to an unknown-size
      card if the HEAD fails (server doesn't currently respond to HEAD,
      but the GET response headers carry Content-Length too). */
   const [size, setSize] = useState<number | null>(null);
   useEffect(() => {
+    if (url.length === 0) return;
     let cancelled = false;
-    fetch(url, { method: "GET", headers: { Range: "bytes=0-0" } })
+    fetch(url, { method: "GET", headers: { Range: NO_LOOSE_STRING_VALUES.bytes00 } })
       .then((res) => {
         if (cancelled) return;
         const cr = res.headers.get("content-range");
@@ -57,6 +65,10 @@ export function BinaryFallbackRenderer({
       cancelled = true;
     };
   }, [url]);
+
+  if (scoped === null) {
+    return <div className="fv-error">file is outside the project root</div>;
+  }
 
   return (
     <div className="fv-binary">

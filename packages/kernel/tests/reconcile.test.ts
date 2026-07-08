@@ -13,6 +13,7 @@ import {
 } from "../src/agents/managed.js";
 import { autoStreamHookCommand } from "../src/hooksInstall/command.js";
 import { createPresenceTracker } from "../src/presence/tracker.js";
+import { createAgentStateStore } from "../src/services/agentState.js";
 
 interface FakeSession {
   sessionName: string;
@@ -128,7 +129,7 @@ describe("reconcile", () => {
     await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "claude");
 
     // Stand up a fake HOME with a ~/.claude/settings.json that records the
-    // generic f-mark Stop hook so detectClaudeHooks reports installed=true.
+    // generic f-mark hooks so detectClaudeHooks reports installed=true.
     const fakeHome = await mkdtemp(join(tmpdir(), "fmark-home-"));
     await mkdir(join(fakeHome, ".claude"), { recursive: true });
     await writeFile(
@@ -155,9 +156,19 @@ describe("reconcile", () => {
               ],
             },
           ],
-          /* `managed-only-v2` requires PostToolUse for the install to
-             be reported as `installed`. */
+          /* `managed-only-v3` requires live hooks for the install to be
+             reported as `installed`. */
           PostToolUse: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: autoStreamHookCommand(),
+                },
+              ],
+            },
+          ],
+          MessageDisplay: [
             {
               hooks: [
                 {
@@ -191,14 +202,23 @@ describe("reconcile", () => {
     expect(s?.state).toBe("stale");
   });
 
-  it("CASE B: agent dir without live tmux session → clear siblings + pane-died log + tracker pane cleared", async () => {
+  it("CASE B: agent dir without live tmux session → preserve resume state + mark pane dead", async () => {
     const { paths: p } = await makeFixture();
+    const state = createAgentStateStore({ fallback: p });
     await writeTmuxSession(
       join(p.fmarkDir(), "agents"),
       "ag-claude",
       "fmark-x-12345678-ag-ag-claude",
     );
     await writeRuntime(join(p.fmarkDir(), "agents"), "ag-claude", "claude");
+    await state.writeActiveSession("ag-claude", "sess-1");
+    await state.writeRuntimeSession("ag-claude", {
+      desired_name: "sess-1",
+      native_name_applied: true,
+      native_session_id: "claude-native-1",
+      native_transcript_path: "/tmp/claude.jsonl",
+      native_id_source: "hook",
+    });
     // Pre-write a log entry so we can check that it's preserved (not wiped)
     await writeFile(
       join(p.fmarkDir(), "agents", "ag-claude", "log.jsonl"),
@@ -210,9 +230,21 @@ describe("reconcile", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await reconcile({ paths: p, tmux: tmux as any, tracker });
 
-    // tmux-session and runtime should be cleared
-    expect(await readTmuxSession(join(p.fmarkDir(), "agents"), "ag-claude")).toBeNull();
-    expect(await readRuntime(join(p.fmarkDir(), "agents"), "ag-claude")).toBeNull();
+    // Resume-critical pointers are preserved for provider-native resume.
+    expect(await readTmuxSession(join(p.fmarkDir(), "agents"), "ag-claude")).toBe(
+      "fmark-x-12345678-ag-ag-claude",
+    );
+    expect(await readRuntime(join(p.fmarkDir(), "agents"), "ag-claude")).toBe(
+      "claude",
+    );
+    expect(await state.readRuntimeSession("ag-claude")).toMatchObject({
+      native_session_id: "claude-native-1",
+      native_transcript_path: "/tmp/claude.jsonl",
+    });
+    expect(await state.readControlState("ag-claude")).toMatchObject({
+      pane_lifecycle: "dead",
+      last_tmux_session: "fmark-x-12345678-ag-ag-claude",
+    });
     // log.jsonl should still exist and contain pane-died entry alongside original
     const logTxt = await readFile(
       join(p.fmarkDir(), "agents", "ag-claude", "log.jsonl"),

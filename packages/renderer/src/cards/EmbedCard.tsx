@@ -1,3 +1,12 @@
+const NO_LOOSE_STRING_VALUES = {
+  standalone: "standalone",
+  html: "html",
+  embedded: "embedded",
+  embedFrame: "embed-frame",
+  preview: "preview",
+  source: "source",
+} as const;
+
 /* EmbedCard — sandbox-iframes an html-event bundle. If the same id has
    been superseded multiple times we surface them as variant chips so a
    user can flip between versions inline. */
@@ -19,8 +28,9 @@ import { useStore } from "../state/store.js";
 import { copyToClipboard } from "../render/copy.js";
 import { htmlBundleUrl } from "../render/htmlBundle.js";
 import { HtmlPreviewFrame } from "../components/HtmlPreviewFrame.js";
-import { formatWhen, whoOf } from "./format.js";
-import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
+import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
+import { whoOf } from "./format.js";
+import { EventCardHeader } from "./EventCardHeader.js";
 
 interface Props {
   event: AnyEventRecord;
@@ -35,12 +45,13 @@ export function EmbedCard({
   event,
   participants,
   allEvents,
-  variant = "standalone",
+  variant = NO_LOOSE_STRING_VALUES.standalone,
 }: Props): JSX.Element {
   const payload = event.payload as HtmlManifest;
   const who = whoOf(event.participant_id, participants);
   const sessionId = useStore((s) => s.currentSessionId);
   const token = useStore((s) => s.token);
+  const scope = useCurrentSessionRootScope(sessionId);
   const openHtmlPreview = useStore((s) => s.openHtmlPreview);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -49,7 +60,7 @@ export function EmbedCard({
       allEvents
         .filter(
           (e): e is AnyEventRecord =>
-            e.kind === "html" &&
+            e.kind === NO_LOOSE_STRING_VALUES.html &&
             (e.payload as HtmlManifest).id === payload.id,
         )
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
@@ -64,27 +75,21 @@ export function EmbedCard({
     typeof payload.title === "string" && payload.title.length > 0
       ? payload.title
       : payload.id;
-  const src = htmlBundleUrl(sessionId, activeFilename, token);
+  const src = htmlBundleUrl(sessionId, activeFilename, token, scope);
 
-  const isEmbedded = variant === "embedded";
+  const isEmbedded = variant === NO_LOOSE_STRING_VALUES.embedded;
   return (
     <div
       className={isEmbedded ? "embed-card embed-card-embedded" : "embed-card"}
       data-event-kind="html"
     >
       {!isEmbedded && (
-        <div className="embed-head">
-          <ParticipantAvatar
-            participantId={who.id}
-            kind={who.isUser ? "user" : "agent"}
-            name={who.name}
-            color={who.color}
-            runtimeId={who.runtimeId}
-            size="sm"
-          />
-          <span className="who">{who.name}</span>
-          <span className="when">{formatWhen(event.timestamp)}</span>
-          <span className="badge">
+        <EventCardHeader
+          className="embed-head"
+          who={who}
+          timestamp={event.timestamp}
+        >
+          <span className="embed-chip">
             <ImageIcon size={10} aria-hidden /> EMBED
           </span>
           <button
@@ -104,7 +109,7 @@ export function EmbedCard({
           >
             <MoreHorizontal size={14} aria-hidden />
           </button>
-        </div>
+        </EventCardHeader>
       )}
       <div className="embed-title">{title}</div>
       {variants.length > 1 && (
@@ -129,7 +134,7 @@ export function EmbedCard({
         sessionId={sessionId}
         filename={activeFilename}
         title={title}
-        frameClassName="embed-frame"
+        frameClassName={NO_LOOSE_STRING_VALUES.embedFrame}
         reloadKey={reloadKey}
       />
       <div className="embed-foot">
@@ -142,7 +147,7 @@ export function EmbedCard({
                 sessionId,
                 filename: activeFilename,
                 title,
-                mode: "preview",
+                mode: NO_LOOSE_STRING_VALUES.preview,
               });
             }
           }}
@@ -165,7 +170,7 @@ export function EmbedCard({
                 sessionId,
                 filename: activeFilename,
                 title,
-                mode: "source",
+                mode: NO_LOOSE_STRING_VALUES.source,
               });
             }
           }}

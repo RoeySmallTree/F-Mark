@@ -10,6 +10,7 @@ import { RightLog } from "../../src/panels/right/RightLog.js";
 import { useStore } from "../../src/state/store.js";
 import { DEFAULT_FILTER } from "../../src/popovers/log-filter-types.js";
 import {
+  makeChoices,
   makeProse,
   makeTodo,
   makeTurnEnd,
@@ -43,7 +44,7 @@ describe("RightLog — base rendering", () => {
   test("renders empty-state when there are no events", () => {
     render(<RightLog />);
     expect(
-      screen.getByText(/No events in this session\./i),
+      screen.getByText(/No events yet/i),
     ).toBeInTheDocument();
   });
 
@@ -83,11 +84,7 @@ describe("RightLog — base rendering", () => {
     /* The grid children, in document order: identity, time, kind-tag,
        summary, jump chevron. */
     expect(cells[0]!.classList.contains("log-who")).toBe(true);
-    const mask = cells[0]!.querySelector(".avatar .icon-mask") as HTMLElement | null;
-    expect(mask).not.toBeNull();
-    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
-      "human-icon.png",
-    );
+    expect(cells[0]!.querySelector(".avatar .avatar-art-glyph")).not.toBeNull();
     expect(cells[1]!.classList.contains("ts")).toBe(true);
     expect(cells[2]!.classList.contains("kind-tag")).toBe(true);
     expect(cells[2]!.getAttribute("data-kind")).toBe("prose");
@@ -97,6 +94,45 @@ describe("RightLog — base rendering", () => {
       "prose",
     );
     expect(cells[3]!.classList.contains("summary")).toBe(true);
+  });
+
+  test("renders a long prose summary in full — no JS length cap, no ellipsis", () => {
+    const longText =
+      "This is a deliberately long prose message that comfortably exceeds " +
+      "the sixty-character cap the activity log used to enforce, so it must " +
+      "render in full and wrap rather than being sliced with an ellipsis.";
+    setEvents([
+      makeProse("20260522T100000Z_us-a7f3.prose.md", "us-a7f3", {
+        content: longText,
+      }),
+    ]);
+    render(<RightLog />);
+    const [row] = screen.getAllByRole("listitem");
+    const summary = row!.querySelector(".summary");
+    expect(summary).not.toBeNull();
+    expect(summary!.textContent).toBe(longText);
+    expect(summary!.textContent).not.toContain("…");
+  });
+
+  test("renders a long choices question in full — no JS length cap, no ellipsis", () => {
+    const longQuestion =
+      "Which of these many carefully considered options would you like to " +
+      "proceed with, given that the question itself runs well past sixty " +
+      "characters and should no longer be truncated in the activity log?";
+    setEvents([
+      makeChoices("20260522T100000Z_us-a7f3.choices.json", "us-a7f3", {
+        id: "q1",
+        question: longQuestion,
+        options: [{ id: "a", label: "A" }],
+        multi: false,
+      }),
+    ]);
+    render(<RightLog />);
+    const [row] = screen.getAllByRole("listitem");
+    const summary = row!.querySelector(".summary");
+    expect(summary).not.toBeNull();
+    expect(summary!.textContent).toContain(longQuestion);
+    expect(summary!.textContent).not.toContain("…");
   });
 
   test("user vs agent dot color is signaled via .log-who.user / .log-who.agent", () => {

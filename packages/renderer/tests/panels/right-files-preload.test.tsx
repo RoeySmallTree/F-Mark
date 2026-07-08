@@ -1,5 +1,4 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../../src/App.js";
 import { DEFAULT_FILES_SEARCH, useStore } from "../../src/state/store.js";
@@ -63,7 +62,6 @@ const TREE_RESPONSE = {
       parent: null,
       name: "README.md",
       relPath: "README.md",
-      absPath: `${ACTIVE_PATH}/README.md`,
       isDir: false,
       isSymlink: false,
       ext: ".md",
@@ -82,6 +80,8 @@ function resetStore(): void {
     token: null,
     sessions: [],
     currentSessionId: null,
+    selectedPath: null,
+    selectedPathId: null,
     participants: {},
     currentUserId: null,
     events: [],
@@ -103,7 +103,14 @@ function resetStore(): void {
   });
 }
 
-function installFetch(treeResponse: Promise<Response> | Response): ReturnType<typeof vi.fn> {
+function installFetch(input: {
+  treeResponse?: Promise<Response> | Response;
+  eventsResponse?: Promise<Response> | Response;
+} = {}): ReturnType<typeof vi.fn> {
+  const {
+    treeResponse = jsonResponse(TREE_RESPONSE),
+    eventsResponse = jsonResponse({ events: [] }),
+  } = input;
   const fetchMock = vi.fn((url: string | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/paths")) {
@@ -117,7 +124,7 @@ function installFetch(treeResponse: Promise<Response> | Response): ReturnType<ty
         }),
       );
     }
-    if (u.endsWith("/sessions") && init?.method !== "POST") {
+    if (u.endsWith("/sessions?scope=all") && init?.method !== "POST") {
       return Promise.resolve(
         jsonResponse({
           sessions: [
@@ -125,12 +132,14 @@ function installFetch(treeResponse: Promise<Response> | Response): ReturnType<ty
               id: SESSION_ID,
               slug: "session-1",
               created_at: "2026-06-11T08:00:00.000Z",
+              path: ACTIVE_PATH,
+              path_id: "active-path-id",
             },
           ],
         }),
       );
     }
-    if (u.endsWith("/participants")) {
+    if (u.endsWith("/participants?path_id=active-path-id")) {
       return Promise.resolve(
         jsonResponse({
           participants: {
@@ -145,8 +154,10 @@ function installFetch(treeResponse: Promise<Response> | Response): ReturnType<ty
         }),
       );
     }
-    if (u.endsWith(`/sessions/${SESSION_ID}/events?path=%2Fworkspace%2FF-Mark`)) {
-      return Promise.resolve(jsonResponse({ events: [] }));
+    if (u.endsWith(`/sessions/${SESSION_ID}/events?path_id=active-path-id`)) {
+      return eventsResponse instanceof Response
+        ? Promise.resolve(eventsResponse)
+        : eventsResponse;
     }
     if (u.endsWith("/health")) {
       return Promise.resolve(
@@ -159,10 +170,15 @@ function installFetch(treeResponse: Promise<Response> | Response): ReturnType<ty
     if (u.endsWith("/env-probe")) {
       return Promise.resolve(jsonResponse({ runtimes: {}, tmux: false }));
     }
-    if (u.endsWith("/files/tree?root=%2Fworkspace%2FF-Mark")) {
+    if (u.endsWith("/files/tree?path_id=active-path-id")) {
       return treeResponse instanceof Response
         ? Promise.resolve(treeResponse)
         : treeResponse;
+    }
+    if (u.endsWith("/git/changed-files?path_id=active-path-id&mode=branch")) {
+      return Promise.resolve(
+        jsonResponse({ status: "ok", path_id: "active-path-id", files: [] }),
+      );
     }
     if (u.startsWith("/files/favorites?")) {
       return Promise.resolve(jsonResponse({ paths: [] }));
@@ -175,11 +191,23 @@ function installFetch(treeResponse: Promise<Response> | Response): ReturnType<ty
 
 function treeFetchCount(fetchMock: ReturnType<typeof vi.fn>): number {
   return fetchMock.mock.calls.filter(([url]) =>
-    String(url).endsWith("/files/tree?root=%2Fworkspace%2FF-Mark"),
+    String(url).endsWith("/files/tree?path_id=active-path-id"),
   ).length;
 }
 
-describe("files tree preloading", () => {
+function gitChangedFetchCount(fetchMock: ReturnType<typeof vi.fn>): number {
+  return fetchMock.mock.calls.filter(([url]) =>
+    String(url).endsWith("/git/changed-files?path_id=active-path-id&mode=branch"),
+  ).length;
+}
+
+function eventsFetchCount(fetchMock: ReturnType<typeof vi.fn>): number {
+  return fetchMock.mock.calls.filter(([url]) =>
+    String(url).endsWith(`/sessions/${SESSION_ID}/events?path_id=active-path-id`),
+  ).length;
+}
+
+describe("files tree loading", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
     resetStore();
@@ -192,42 +220,64 @@ describe("files tree preloading", () => {
     globalThis.localStorage?.clear();
   });
 
-  test("starts the file tree fetch from the app path lifecycle before Files is opened", async () => {
-    const fetchMock = installFetch(jsonResponse(TREE_RESPONSE));
+  test("does NOT eagerly fetch the file tree while session events are still loading", async () => {
+    const eventsResponse = new Promise<Response>(() => {
+      /* left pending */
+    });
+    const fetchMock = installFetch({ eventsResponse });
 
     render(<App />);
 
     await waitFor(() => {
-      expect(useStore.getState().activePath).toBe(ACTIVE_PATH);
-      expect(treeFetchCount(fetchMock)).toBe(1);
+      expect(useStore.getState().currentSessionId).toBe(SESSION_ID);
+      expect(eventsFetchCount(fetchMock)).toBe(1);
     });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(useStore.getState().eventsLoadingSessionId).toBe(SESSION_ID);
+    expect(treeFetchCount(fetchMock)).toBe(0);
+    expect(gitChangedFetchCount(fetchMock)).toBe(0);
     expect(useStore.getState().rightTab).toBe("log");
     expect(screen.queryByRole("tree")).toBeNull();
-
-    await waitFor(() => {
-      expect(useStore.getState().filesTreeByPath[ACTIVE_PATH]).toEqual(
-        TREE_RESPONSE,
-      );
-    });
   });
 
-  test("opening Files during an in-flight preload does not duplicate the initial tree fetch", async () => {
+  test("eagerly fetches the tree after events load without opening Files", async () => {
+    let resolveEvents: ((response: Response) => void) | null = null;
+    const eventsResponse = new Promise<Response>((resolve) => {
+      resolveEvents = resolve;
+    });
     let resolveTree: ((response: Response) => void) | null = null;
     const treeResponse = new Promise<Response>((resolve) => {
       resolveTree = resolve;
     });
-    const fetchMock = installFetch(treeResponse);
-    const user = userEvent.setup();
+    const fetchMock = installFetch({ eventsResponse, treeResponse });
 
     render(<App />);
 
     await waitFor(() => {
+      expect(useStore.getState().currentSessionId).toBe(SESSION_ID);
+      expect(eventsFetchCount(fetchMock)).toBe(1);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(treeFetchCount(fetchMock)).toBe(0);
+    expect(gitChangedFetchCount(fetchMock)).toBe(0);
+
+    await act(async () => {
+      resolveEvents?.(jsonResponse({ events: [] }));
+      await eventsResponse;
+    });
+    await waitFor(() => {
+      expect(useStore.getState().eventsLoadingSessionId).toBeNull();
       expect(treeFetchCount(fetchMock)).toBe(1);
+      expect(gitChangedFetchCount(fetchMock)).toBe(1);
       expect(useStore.getState().filesTreeLoadingByPath[ACTIVE_PATH]).toBe(true);
     });
-
-    await user.click(screen.getByRole("tab", { name: /Files/i }));
-    expect(treeFetchCount(fetchMock)).toBe(1);
+    expect(useStore.getState().rightTab).toBe("log");
+    expect(screen.queryByRole("tree")).toBeNull();
 
     await act(async () => {
       resolveTree?.(jsonResponse(TREE_RESPONSE));
@@ -236,8 +286,11 @@ describe("files tree preloading", () => {
 
     await waitFor(() => {
       expect(useStore.getState().filesTreeLoadingByPath[ACTIVE_PATH]).toBe(false);
-      expect(screen.getByRole("tree")).toBeTruthy();
+      expect(useStore.getState().filesTreeByPath[ACTIVE_PATH]).toEqual(
+        TREE_RESPONSE,
+      );
     });
     expect(treeFetchCount(fetchMock)).toBe(1);
+    expect(gitChangedFetchCount(fetchMock)).toBe(1);
   });
 });

@@ -26,7 +26,7 @@ describe("websocket /ws", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
-        payload: { participant_id: pid, content: "hello" },
+        payload: { root, participant_id: pid, content: "hello"  },
       });
       // Collect for a window long enough that any stray duplicate publisher
       // (e.g. the legacy chokidar watcher) would have surfaced.

@@ -1,5 +1,5 @@
 /* Component-local styles for AgentChip, TerminalChip, PlusButton, and the
-   AgentActionMenu dropdown (Phase 12). Colors resolve through the theme
+   AgentActionMenu dropdown. Colors resolve through the theme
    tokens in tokens.css so all six themes render correctly.
 
    The chips are designed to live in the top bar alongside `.avatar` and
@@ -11,37 +11,98 @@
 .terminal-chip {
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+  isolation: isolate;
+  flex-shrink: 0;
+}
+
+.agent-chip {
+  gap: 7px;
+  min-height: 30px;
+  padding: 3px 7px 3px 4px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--canvas) 72%, transparent), transparent 48%),
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 76%, var(--panel)), color-mix(in srgb, var(--panel) 88%, var(--canvas)));
+  border: var(--border-w) solid color-mix(in srgb, var(--agent-color, var(--agent)) 16%, var(--line));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 76%, transparent),
+    0 10px 28px color-mix(in srgb, var(--ink) 7%, transparent);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 680;
+  color: var(--ink-2);
+  transform: translateZ(0);
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo),
+    border-color var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo),
+    box-shadow var(--dur-base) var(--ease-out-expo);
+}
+
+.agent-chip::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  border: var(--border-w) solid color-mix(in srgb, var(--canvas) 48%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 72%, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.agent-chip > * {
+  position: relative;
+  z-index: 1;
+}
+
+.terminal-chip {
   gap: 6px;
   padding: 3px 8px 3px 4px;
   height: 24px;
   border-radius: 999px;
   background: var(--panel);
-  border: 1px solid var(--line);
-  font-family: var(--mono);
+  border: var(--border-w) solid var(--line);
+  font-family: var(--sans);
   font-size: 11.5px;
   color: var(--ink-2);
-  white-space: nowrap;
-  cursor: pointer;
-  position: relative;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    transform var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo),
+    border-color var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo);
 }
-.agent-chip {
-  font-family: var(--sans);
-  font-weight: 500;
+
+.agent-chip:hover {
+  transform: translateY(-1px) translateZ(0);
+  background:
+    radial-gradient(circle at 24% 0%, color-mix(in srgb, var(--agent-color, var(--agent)) 12%, transparent), transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 86%, var(--panel)), color-mix(in srgb, var(--panel) 78%, var(--canvas)));
+  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 34%, var(--line));
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 82%, transparent),
+    0 14px 34px color-mix(in srgb, var(--agent-color, var(--agent)) 12%, transparent);
 }
-.agent-chip:hover,
+
 .terminal-chip:hover {
+  transform: translateY(-1px);
   background: var(--bg);
   border-color: var(--ink-4);
   color: var(--ink);
 }
+
+.agent-chip:active {
+  transform: translateY(0) scale(0.985);
+}
+
 .agent-chip:focus-visible,
 .terminal-chip:focus-visible {
-  outline: 2px solid var(--ink-4);
-  outline-offset: 2px;
+  outline: 2px solid color-mix(in srgb, var(--agent-color, var(--agent)) 62%, var(--ink));
+  outline-offset: 3px;
 }
 /* Resetting button affordances so the chip looks identical whether
    rendered as <button> or <div>. */
@@ -61,24 +122,37 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   box-sizing: border-box;
-  border-radius: 50%;
-  background: var(--canvas);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 18%, color-mix(in srgb, var(--canvas) 88%, transparent), transparent 46%),
+    color-mix(in srgb, var(--canvas) 78%, var(--panel));
   border: 0;
-  padding: 2px;
+  padding: 3px;
   flex-shrink: 0;
   overflow: visible;
   position: relative;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 82%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--agent-color, var(--agent)) 8%, transparent);
 }
 .agent-chip.active {
-  border-color: var(--agent-color, var(--agent));
-  background: color-mix(
-    in srgb,
-    var(--agent-color, var(--agent)) 10%,
-    var(--panel)
-  );
+  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 52%, var(--line));
+  background:
+    radial-gradient(circle at 18% -10%, color-mix(in srgb, var(--agent-color, var(--agent)) 22%, transparent), transparent 54%),
+    color-mix(in srgb, var(--agent-color, var(--agent)) 10%, var(--panel));
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 74%, transparent),
+    0 12px 30px color-mix(in srgb, var(--agent-color, var(--agent)) 16%, transparent);
+}
+.agent-chip.expanded {
+  background:
+    radial-gradient(circle at 84% 0%, color-mix(in srgb, var(--user) 12%, transparent), transparent 48%),
+    color-mix(in srgb, var(--canvas) 84%, var(--panel));
+  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 58%, var(--line));
   color: var(--ink);
 }
 .agent-chip-runtime::before,
@@ -92,11 +166,34 @@
   opacity: 0.6;
   pointer-events: none;
 }
-/* Icon-as-mask: the source PNGs are white-on-transparent, so rendering
-   them as <img> made the brand mark invisible on the default light
-   theme. Treating the icon as a CSS mask lets us paint it with whatever
-   color the parent sets via `--icon-color` (falling back to currentColor),
-   so the same asset stays legible across every theme. */
+.agent-chip-runtime .avatar-art-mark,
+.terminal-chip-icon .avatar-art-mark,
+.plus-menu-icon .avatar-art-mark {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.agent-chip-runtime .avatar-art-glyph,
+.terminal-chip-icon .avatar-art-glyph,
+.plus-menu-icon .avatar-art-glyph {
+  --avatar-art-size: 7px;
+  --avatar-art-line: 6.5px;
+  --avatar-art-scale: 0.52;
+}
+.provider-logo-art.avatar-art-mark {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.provider-logo-art .avatar-art-glyph {
+  --avatar-art-size: 8px;
+  --avatar-art-line: 7px;
+  --avatar-art-scale: 0.58;
+}
+/* Legacy mask icons — kept for any surfaces still on image masks. */
 .icon-mask {
   display: block;
   width: 100%;
@@ -119,26 +216,48 @@
 }
 
 .agent-chip-name {
-  letter-spacing: 0.01em;
+  max-width: 116px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
   color: inherit;
 }
 
-/* State dot — rendered after the name. Color resolves through the theme. */
+/* State dot — rendered after the name. The outer ring becomes a tiny context
+   donut when token usage is known; otherwise it stays a quiet outline. */
+.agent-chip-dot-ring {
+  --agent-chip-context: 0%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background:
+    conic-gradient(
+      var(--agent-color, var(--agent)) var(--agent-chip-context),
+      color-mix(in srgb, var(--ink) 8%, transparent) 0
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--canvas) 44%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--canvas) 26%, transparent);
+}
 .agent-chip-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  flex-shrink: 0;
   background: var(--ink-4);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--canvas) 74%, transparent);
 }
 .agent-chip-dot.online {
   background: var(--green);
-  box-shadow: 0 0 0 2px var(--green-tint);
 }
 .agent-chip-dot.stale,
-.agent-chip-dot.launching {
+.agent-chip-dot.launching,
+.agent-chip-dot.running,
+.agent-chip-dot.notified {
   background: var(--agent);
-  box-shadow: 0 0 0 2px var(--agent-tint);
 }
 .agent-chip-dot.offline {
   background: var(--ink-4);
@@ -153,55 +272,605 @@
 }
 .agent-chip-dot.access-pending {
   background: var(--agent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent) 22%, transparent);
 }
 
 /* Model + effort badge — sits to the right of the state dot. Compact,
    typography-driven, no background fill so it stays quiet next to the
    livelier state colors. */
 .agent-chip-model {
+  appearance: none;
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
-  margin-left: 4px;
-  font-family: var(--mono);
+  gap: 5px;
+  margin-left: 1px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: var(--border-w) solid color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--canvas) 54%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
+  font-family: var(--sans);
   font-size: 10px;
-  color: var(--ink-low, var(--ink, currentColor));
-  opacity: 0.75;
+  line-height: 1;
+  color: var(--ink-3);
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo),
+    border-color var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo);
 }
 .agent-chip-model.interactive {
   cursor: pointer;
 }
-.agent-chip-model.interactive:hover {
-  opacity: 1;
+.agent-chip-model.interactive:hover,
+.agent-chip-model.interactive:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--user) 34%, var(--line));
+  background: color-mix(in srgb, var(--user-tint) 44%, var(--canvas));
+  color: var(--ink);
+  outline: 0;
 }
 .agent-chip-model-name {
   letter-spacing: 0.01em;
 }
 .agent-chip-model-effort {
   font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.7;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.78;
   padding: 0 3px;
-  border: 1px solid currentColor;
-  border-radius: 3px;
+  border: var(--border-w) solid color-mix(in srgb, currentColor 42%, transparent);
+  border-radius: 999px;
+}
+
+.agent-chip-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 1px;
+  color: var(--ink-4);
+}
+
+.agent-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--canvas) 42%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 54%, transparent);
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo);
+}
+
+.agent-chip:hover .agent-chip-icon,
+.agent-chip:focus-visible .agent-chip-icon {
+  color: var(--ink-2);
+}
+
+.agent-chip-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--canvas);
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 2%, transparent);
+}
+
+.agent-chip-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-chip-select > span {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.agent-chip-select select {
+  height: 20px;
+  min-width: 68px;
+  max-width: 132px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  padding: 0 18px 0 5px;
+}
+
+.agent-chip-select select:disabled,
+.agent-chip-compact:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.agent-chip-compact {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.agent-chip-compact:hover:not(:disabled),
+.agent-chip-compact:focus-visible {
+  background: var(--bg);
+  color: var(--ink);
+  outline: 0;
+}
+
+.agent-chip-editor-note {
+  max-width: 94px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-4);
+}
+
+.agent-chip-editor-note.error {
+  color: var(--rose);
+}
+
+/* Runtime editor popover — opened from the model badge in the composer row.
+   This is the production version of the glass-dashboard agent popup: nested
+   sections, haptic controls, compact context telemetry, and a proper action. */
+.agent-runtime-pop {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  background:
+    radial-gradient(
+      circle at 16% -14%,
+      color-mix(in srgb, var(--user) 22%, transparent),
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 96% 8%,
+      color-mix(in srgb, var(--agent) 12%, transparent),
+      transparent 42%
+    ),
+    var(--canvas);
+}
+
+.agent-runtime-pop-glow {
+  position: absolute;
+  inset: -64px auto auto 50%;
+  width: 240px;
+  height: 240px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--user) 16%, transparent);
+  filter: blur(38px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.agent-runtime-pop-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 15px 13px;
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+}
+
+.agent-runtime-pop-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: calc(var(--radius-lg) + 2px);
+  border: 1px solid color-mix(in srgb, var(--user) 30%, var(--line-2));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--user) 34%, var(--canvas)), var(--panel));
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 850;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 14%, transparent),
+    0 10px 24px color-mix(in srgb, var(--user) 11%, transparent);
+  flex-shrink: 0;
+}
+
+.agent-runtime-pop-title {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.agent-runtime-pop-title > span,
+.agent-runtime-section-head > span,
+.agent-runtime-field > span,
+.agent-runtime-mini-card > span {
+  color: var(--ink-4);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 680;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.agent-runtime-pop-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 780;
+  letter-spacing: -0.025em;
+}
+
+.agent-runtime-pop-title p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.agent-runtime-pop-state {
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line-2));
+  background: color-mix(in srgb, var(--green-tint) 48%, var(--panel));
+  color: var(--green);
+  padding: 4px 8px;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.agent-runtime-pop-section {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.agent-runtime-pop-section:last-child {
+  border-bottom: 0;
+}
+
+.agent-runtime-section-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-runtime-section-head em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-style: normal;
+}
+
+.agent-runtime-field,
+.agent-runtime-mini-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px;
+  border-radius: calc(var(--radius-lg) + 3px);
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, var(--line-2));
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.agent-runtime-field-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-runtime-field > span,
+.agent-runtime-mini-card > span {
+  padding: 7px 8px 0;
+}
+
+.agent-runtime-field select {
+  width: 100%;
+  height: 37px;
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, var(--line-2));
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  padding: 0 30px 0 10px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  cursor: pointer;
+  transition:
+    border-color 170ms var(--ease-out-quart),
+    background 170ms var(--ease-out-quart),
+    transform 170ms var(--ease-out-quart);
+}
+
+.agent-runtime-field select:hover:not(:disabled),
+.agent-runtime-field select:focus-visible {
+  border-color: color-mix(in srgb, var(--user) 38%, var(--line-2));
+  background: var(--panel-2);
+  outline: 0;
+}
+
+.agent-runtime-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.agent-runtime-mini-card {
+  align-content: center;
+  background: color-mix(in srgb, var(--panel) 72%, var(--canvas));
+}
+
+.agent-runtime-mini-card strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 8px 8px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 760;
+}
+
+.agent-runtime-skeleton-stack {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 0.74fr;
+  gap: 8px;
+  padding: 4px;
+  border-radius: calc(var(--radius-lg) + 4px);
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, var(--line-2));
+  background: color-mix(in srgb, var(--panel) 56%, transparent);
+}
+
+.agent-runtime-skeleton {
+  display: block;
+  height: 38px;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 58%, transparent), transparent),
+    color-mix(in srgb, var(--ink) 8%, var(--panel));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
+  opacity: 0.48;
+  animation: agent-runtime-skeleton-pulse 1.1s cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
+}
+
+.agent-runtime-skeleton-wide {
+  grid-column: 1 / -1;
+}
+
+.agent-runtime-skeleton-mid {
+  animation-delay: 90ms;
+}
+
+.agent-runtime-skeleton-short {
+  animation-delay: 160ms;
+}
+
+@keyframes agent-runtime-skeleton-pulse {
+  from {
+    opacity: 0.36;
+  }
+  to {
+    opacity: 0.72;
+  }
+}
+
+.agent-runtime-context-meter {
+  grid-column: 1 / -1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, var(--line-2));
+  background: color-mix(in srgb, var(--panel) 70%, var(--canvas));
+}
+
+.agent-runtime-context-meter span {
+  display: block;
+  width: var(--agent-runtime-context, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--user), var(--agent));
+  transition: width 420ms var(--ease-out-expo);
+}
+
+.agent-runtime-note,
+.agent-runtime-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.agent-runtime-error {
+  color: var(--rose);
+}
+
+.agent-runtime-pop-section-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.agent-runtime-actions-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.agent-runtime-action-tile {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 64px;
+  padding: 8px 6px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, var(--line-2));
+  background: color-mix(in srgb, var(--panel) 72%, var(--canvas));
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  transition:
+    transform 170ms var(--ease-out-quart),
+    border-color 170ms var(--ease-out-quart),
+    background 170ms var(--ease-out-quart),
+    color 170ms var(--ease-out-quart);
+}
+
+.agent-runtime-action-tile i {
+  color: var(--ink-4);
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 170ms var(--ease-out-quart), color 170ms var(--ease-out-quart);
+}
+
+.agent-runtime-action-tile:hover:not(:disabled),
+.agent-runtime-action-tile:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
+  background: color-mix(in srgb, var(--user-tint) 42%, var(--panel));
+  color: var(--ink);
+  outline: 0;
+}
+
+.agent-runtime-action-tile:hover:not(:disabled) i,
+.agent-runtime-action-tile:focus-visible i {
+  transform: translate(1px, -1px);
+  color: var(--user);
+}
+
+.agent-runtime-action-strong {
+  background: color-mix(in srgb, var(--agent-tint) 46%, var(--panel));
+  color: var(--ink-2);
+}
+
+.agent-runtime-action-tile:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.agent-runtime-pop-section-advanced {
+  grid-template-columns: 1fr;
+}
+
+.agent-runtime-row-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--panel) 72%, var(--canvas));
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 170ms var(--ease-out-quart),
+    border-color 170ms var(--ease-out-quart),
+    color 170ms var(--ease-out-quart),
+    transform 170ms var(--ease-out-quart);
+}
+
+.agent-runtime-row-action i {
+  color: var(--ink-4);
+  font-style: normal;
+}
+
+.agent-runtime-row-action:hover:not(:disabled),
+.agent-runtime-row-action:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--line-2);
+  background: var(--panel-2);
+  color: var(--ink);
+  outline: 0;
+}
+
+.agent-runtime-row-action:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.agent-runtime-row-danger {
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 8%, var(--panel));
+}
+
+.agent-runtime-row-danger:hover:not(:disabled),
+.agent-runtime-row-danger:focus-visible {
+  color: var(--rose);
+  border-color: color-mix(in srgb, var(--rose) 28%, var(--line-2));
+  background: color-mix(in srgb, var(--rose) 12%, var(--panel-2));
+}
+
+@media (max-width: 520px) {
+  .agent-runtime-pop-section {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* "exited" pill — sits to the right of the chip for pane-dead state. */
 .agent-chip-pill {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--rose);
-  color: var(--canvas);
-  font-family: var(--mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-left: 2px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rose) 14%, var(--canvas));
+  color: var(--rose);
+  border: var(--border-w) solid color-mix(in srgb, var(--rose) 26%, transparent);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 720;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 1px;
 }
 .agent-chip-wrench {
   display: inline-flex;
@@ -214,16 +883,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 14px;
-  height: 14px;
+  min-width: 17px;
+  height: 17px;
   border-radius: 999px;
-  background: var(--agent);
-  color: var(--canvas);
-  font-family: var(--mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  margin-left: 1px;
-  padding: 0 4px;
+  background: color-mix(in srgb, var(--agent-color, var(--agent)) 22%, var(--canvas));
+  color: var(--agent-color, var(--agent));
+  border: var(--border-w) solid color-mix(in srgb, var(--agent-color, var(--agent)) 32%, transparent);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 780;
+  margin-left: 0;
+  padding: 0 5px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
 }
 
 /* ============ TerminalChip ============ */
@@ -249,39 +920,61 @@
 
 /* ============ PlusButton ============ */
 .plus-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
-  background: var(--panel);
-  border: 1px dashed var(--line);
-  color: var(--ink-3);
+  background:
+    radial-gradient(circle at 30% 12%, color-mix(in srgb, var(--canvas) 72%, transparent), transparent 48%),
+    color-mix(in srgb, var(--panel) 76%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--line) 74%, var(--ink) 9%);
+  color: var(--ink-2);
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
   padding: 0;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 80%, transparent),
+    0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent);
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    transform var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo),
+    border-color var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo),
+    box-shadow var(--dur-base) var(--ease-out-expo);
+}
+.plus-btn::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--agent) 18%, transparent);
+  pointer-events: none;
 }
 .plus-btn:hover {
-  background: var(--bg);
-  border-style: solid;
-  border-color: var(--ink-4);
+  transform: translateY(-1px);
+  background:
+    radial-gradient(circle at 30% 12%, color-mix(in srgb, var(--agent) 13%, transparent), transparent 52%),
+    color-mix(in srgb, var(--canvas) 78%, var(--panel));
+  border-color: color-mix(in srgb, var(--agent) 34%, var(--line));
   color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 88%, transparent),
+    var(--shadow-2);
 }
 .plus-btn:focus-visible {
-  outline: 2px solid var(--ink-4);
-  outline-offset: 2px;
+  outline: 2px solid color-mix(in srgb, var(--agent) 68%, var(--ink));
+  outline-offset: 3px;
 }
 .plus-btn[aria-expanded="true"] {
-  background: var(--bg);
-  border-style: solid;
-  border-color: var(--ink-4);
+  transform: rotate(45deg);
+  background: color-mix(in srgb, var(--agent) 14%, var(--canvas));
+  border-color: color-mix(in srgb, var(--agent) 46%, var(--line));
   color: var(--ink);
 }
 
@@ -291,32 +984,166 @@
 .plus-menu {
   position: fixed;
   margin-top: 0;
-  min-width: 320px;
-  background: var(--canvas);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  width: min(468px, calc(100vw - 20px));
+  min-width: min(388px, calc(100vw - 20px));
+  max-height: calc(100vh - 20px);
+  overflow: auto;
+  scrollbar-width: thin;
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--agent) 10%, transparent), transparent 34%),
+    radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--user) 9%, transparent), transparent 38%),
+    color-mix(in srgb, var(--canvas) 88%, var(--panel));
+  border: var(--border-w) solid color-mix(in srgb, var(--line) 78%, var(--ink) 7%);
+  border-radius: 18px;
   box-shadow:
-    0 12px 40px rgba(40, 30, 15, 0.18),
-    0 2px 8px rgba(40, 30, 15, 0.06);
+    var(--shadow-2),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 82%, transparent);
   z-index: 80;
-  padding: 4px;
+  padding: 7px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  animation: plus-menu-in var(--dur-slow) var(--ease-out-expo) both;
+}
+.plus-menu[data-placement="above"] {
+  transform-origin: 86% 100%;
+}
+.plus-menu[data-placement="below"] {
+  transform-origin: 86% 0%;
+}
+.plus-menu[data-placement="below"] {
+  animation-name: plus-menu-in-below;
+}
+@keyframes plus-menu-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes plus-menu-in-below {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.plus-menu-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "kicker count"
+    "title count";
+  gap: 2px 12px;
+  padding: 12px 13px 11px;
+  border: var(--border-w) solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--canvas) 78%, transparent), transparent 58%),
+    color-mix(in srgb, var(--panel) 54%, var(--canvas));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 78%, transparent);
+}
+.plus-menu-kicker {
+  grid-area: kicker;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.plus-menu-head strong {
+  grid-area: title;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+}
+.plus-menu-head > span:last-child {
+  grid-area: count;
+  align-self: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--agent) 10%, var(--canvas));
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.plus-menu-section {
+  display: grid;
+  gap: 5px;
+  padding: 2px;
+}
+.plus-menu-section-label {
+  padding: 3px 9px 1px;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.plus-menu-section-utilities {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.plus-menu-section-utilities .plus-menu-section-label {
+  grid-column: 1 / -1;
 }
 .plus-menu-runtime {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px;
-  gap: 4px;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px;
+  border: var(--border-w) solid color-mix(in srgb, var(--line) 54%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--canvas) 52%, transparent);
+  transition:
+    border-color var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo),
+    box-shadow var(--dur-base) var(--ease-out-expo);
+}
+.plus-menu-runtime.is-expanded {
+  border-color: color-mix(in srgb, var(--agent) 28%, var(--line));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--canvas) 76%, transparent), transparent 58%),
+    color-mix(in srgb, var(--panel) 52%, var(--canvas));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 78%, transparent);
+}
+.plus-menu-runtime-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
   align-items: center;
+}
+.plus-menu-runtime-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 7px;
+  padding: 3px 4px 5px;
+  animation: plus-runtime-options-in var(--dur-base) var(--ease-out-expo) both;
+}
+@keyframes plus-runtime-options-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.plus-menu-runtime-select {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .plus-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 7px 10px;
-  border-radius: 5px;
-  background: none;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 8px;
+  border-radius: 11px;
+  background: transparent;
   border: 0;
   font-family: var(--sans);
   font-size: 12.5px;
@@ -324,17 +1151,30 @@
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo);
 }
 .plus-menu-access {
   min-width: 0;
-  height: 28px;
-  border: 1px solid var(--line-2);
-  border-radius: 5px;
-  background: var(--panel);
+  height: 32px;
+  appearance: none;
+  border: var(--border-w) solid color-mix(in srgb, var(--line-2) 72%, var(--ink) 9%);
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 82%, transparent), transparent),
+    color-mix(in srgb, var(--canvas) 82%, var(--panel));
   color: var(--ink-2);
   font-family: var(--mono);
   font-size: 10.5px;
-  padding: 0 5px;
+  padding: 0 9px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 72%, transparent);
+}
+.plus-menu-access:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--user) 64%, var(--ink));
+  outline-offset: 2px;
 }
 .plus-menu-access:disabled {
   opacity: 0.45;
@@ -342,10 +1182,54 @@
 }
 .plus-menu-item:hover:not(:disabled),
 .plus-menu-item:focus-visible {
-  background: var(--panel);
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--canvas) 70%, var(--panel));
   outline: 0;
 }
 .plus-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.plus-menu-options-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 9px 0 11px;
+  border: var(--border-w) solid color-mix(in srgb, var(--line) 78%, var(--ink) 7%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--canvas) 76%, var(--panel));
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 720;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    border-color var(--dur-base) var(--ease-out-expo),
+    color var(--dur-base) var(--ease-out-expo),
+    background var(--dur-base) var(--ease-out-expo);
+}
+.plus-menu-options-toggle svg {
+  transition: transform var(--dur-base) var(--ease-out-expo);
+}
+.plus-menu-options-toggle[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--agent) 42%, var(--line));
+  background: color-mix(in srgb, var(--agent) 10%, var(--canvas));
+  color: var(--ink);
+}
+.plus-menu-options-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.plus-menu-options-toggle:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--agent) 36%, var(--line));
+  color: var(--ink);
+}
+.plus-menu-options-toggle:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -354,8 +1238,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   box-sizing: border-box;
   border-radius: 50%;
   background: var(--canvas);
@@ -363,10 +1247,10 @@
   color: var(--ink-2);
   font-family: var(--mono);
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 700;
   flex-shrink: 0;
   overflow: visible;
-  padding: 2px;
+  padding: 3px;
   position: relative;
 }
 .plus-menu-icon {
@@ -375,8 +1259,25 @@
 .plus-menu-icon .icon-mask {
   border-radius: 50%;
 }
-.plus-menu-label {
+.plus-menu-label-wrap {
+  display: grid;
+  gap: 1px;
   flex: 1;
+  min-width: 0;
+}
+.plus-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+  font-weight: 720;
+}
+.plus-menu-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-4);
+  font-size: 10.5px;
 }
 .plus-menu-hint {
   font-family: var(--mono);
@@ -384,14 +1285,41 @@
   color: var(--ink-4);
   letter-spacing: 0.02em;
 }
+.plus-menu-hint-ready {
+  color: var(--green);
+}
+.plus-menu-launch-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--agent) 10%, var(--canvas));
+  color: var(--agent);
+  font-family: var(--mono);
+  font-size: 12px;
+  transition: transform var(--dur-base) var(--ease-out-expo);
+}
+.plus-menu-item:hover:not(:disabled) .plus-menu-launch-mark {
+  transform: translateX(2px) translateY(-1px) scale(1.04);
+}
+.plus-menu-utility-item {
+  min-height: 54px;
+  border: var(--border-w) solid color-mix(in srgb, var(--line) 60%, transparent);
+  background: color-mix(in srgb, var(--canvas) 56%, transparent);
+}
+.plus-menu-utility-item:hover:not(:disabled),
+.plus-menu-utility-item:focus-visible {
+  border-color: color-mix(in srgb, var(--agent) 28%, var(--line));
+}
 .plus-menu-sep {
   height: 1px;
-  background: var(--line-3);
-  margin: 4px 6px;
+  background: color-mix(in srgb, var(--line-3) 82%, transparent);
+  margin: 2px 8px;
 }
 
-/* PlusButton wrapper — relative so the absolutely-positioned dropdown
-   anchors next to the button itself. */
+/* PlusButton wrapper — relative so the fixed dropdown can still measure from
+   the button itself before escaping scroll containers. */
 .plus-btn-wrap {
   position: relative;
   display: inline-flex;

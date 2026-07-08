@@ -20,8 +20,8 @@ import type { SessionMeta } from "../../src/api/client.js";
 import { renderWithAgentSpawn } from "../agentSpawnProvider.js";
 
 const SESSION_A: SessionMeta = {
-  id: "2026-05-22-launch-planning",
-  slug: "launch-planning",
+  id: "2026-05-22-launch-review",
+  slug: "launch-review",
   created_at: "2026-05-22T10:00:00Z",
 };
 
@@ -98,6 +98,7 @@ function resetStore(overrides: Record<string, unknown> = {}): void {
     participants: PARTICIPANTS,
     currentUserId: "us-a7f3",
     events: ALL_EVENTS,
+    eventsLoadingSessionId: null,
     composeMode: "message",
     commentTarget: null,
     composeDraft: null,
@@ -241,7 +242,25 @@ describe("View toggle — empty-state messages match the active view", () => {
     resetStore({ events: [], viewMode: "document" });
     renderWithAgentSpawn(<Feed />);
     const empty = screen.getByText(/no named contributions yet/i);
-    expect(empty.closest(".empty-state")?.getAttribute("data-view")).toBe(
+    expect(empty.closest("[data-view]")?.getAttribute("data-view")).toBe(
+      "document",
+    );
+  });
+
+  test("Document: shows loading instead of empty copy while events load", () => {
+    resetStore({
+      events: [],
+      eventsLoadingSessionId: SESSION_A.id,
+      viewMode: "document",
+    });
+    renderWithAgentSpawn(<Feed />);
+
+    expect(
+      screen.queryByText(/no named contributions yet/i),
+    ).not.toBeInTheDocument();
+    const loading = screen.getByRole("status", { name: /loading/i });
+    expect(loading).toHaveClass("loading-animation");
+    expect(loading.closest(".empty-state")?.getAttribute("data-view")).toBe(
       "document",
     );
   });
@@ -250,7 +269,7 @@ describe("View toggle — empty-state messages match the active view", () => {
     resetStore({ events: [], viewMode: "conversation" });
     renderWithAgentSpawn(<Feed />);
     const empty = screen.getByText(/no messages yet/i);
-    expect(empty.closest(".empty-state")?.getAttribute("data-view")).toBe(
+    expect(empty.closest("[data-view]")?.getAttribute("data-view")).toBe(
       "conversation",
     );
   });

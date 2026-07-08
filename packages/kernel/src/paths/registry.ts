@@ -24,17 +24,22 @@ export async function listRegisteredProjectPaths(
     throw err;
   }
 
-  const out: string[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    try {
-      const raw = await readFile(g.projectPathFile(entry.name), "utf8");
-      const path = raw.trim();
-      if (path.length > 0) out.push(path);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw err;
-    }
-  }
-  return out;
+  /* Read every registered project's path file in parallel. This list grows
+     once per project ever opened (84+ here), and was previously read with a
+     sequential await-in-loop on the hot path of every all-roots enumeration. */
+  const reads = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        try {
+          const raw = await readFile(g.projectPathFile(entry.name), "utf8");
+          const path = raw.trim();
+          return path.length > 0 ? path : null;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+          throw err;
+        }
+      }),
+  );
+  return reads.filter((path): path is string => path !== null);
 }

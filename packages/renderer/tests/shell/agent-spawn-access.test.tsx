@@ -4,7 +4,6 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AgentLauncher } from "../../src/shell/AgentLauncher.js";
 import { useStore } from "../../src/state/store.js";
-import { KEY_AGENT_ACCESS_MODES } from "../../src/state/settings.js";
 import { renderWithAgentSpawn } from "../agentSpawnProvider.js";
 
 describe("agent spawn access mode", () => {
@@ -34,6 +33,19 @@ describe("agent spawn access mode", () => {
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
         const url = String(input);
+        if (url.includes("/runtimes/") && url.endsWith("/models")) {
+          return json({
+            models: [{ id: "provider-model", displayName: "Provider model" }],
+            default_model: "provider-model",
+            default_effort: "high",
+            default_access_mode: url.includes("/codex/") ? "never" : "default",
+          });
+        }
+        if (url.includes("/runtimes/") && url.includes("/efforts")) {
+          return json({
+            efforts: [{ id: "high", displayName: "High" }],
+          });
+        }
         if (url.endsWith("/managed-agents/preflight")) {
           const body = JSON.parse(String(init?.body ?? "{}")) as {
             runtime_id?: string;
@@ -66,6 +78,7 @@ describe("agent spawn access mode", () => {
                 },
               ],
             },
+            chosen_scope: "user",
             can_apply: true,
           });
         }
@@ -103,10 +116,6 @@ describe("agent spawn access mode", () => {
       "never",
     );
 
-    expect(
-      JSON.parse(globalThis.localStorage?.getItem(KEY_AGENT_ACCESS_MODES) ?? "{}"),
-    ).toMatchObject({ codex: "never" });
-
     await user.click(
       within(card as HTMLElement).getByRole("button", { name: /connect/i }),
     );
@@ -115,6 +124,34 @@ describe("agent spawn access mode", () => {
       expect(spawnBody).toMatchObject({
         runtime_id: "codex",
         access_mode: "never",
+      });
+    });
+  });
+
+  test("opencode exposes its skip-permissions launch option", async () => {
+    const user = userEvent.setup();
+    renderWithAgentSpawn(<AgentLauncher />);
+
+    const card = screen.getByText("Opencode").closest(".agent-launcher-card");
+    expect(card).not.toBeNull();
+    const select = within(card as HTMLElement).getByLabelText(
+      "Opencode permission mode",
+    );
+    expect(
+      within(select as HTMLElement).getByRole("option", {
+        name: "Skip permissions",
+      }),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(select, "dangerously-skip-permissions");
+    await user.click(
+      within(card as HTMLElement).getByRole("button", { name: /connect/i }),
+    );
+
+    await waitFor(() => {
+      expect(spawnBody).toMatchObject({
+        runtime_id: "opencode",
+        access_mode: "dangerously-skip-permissions",
       });
     });
   });

@@ -1,3 +1,8 @@
+const NO_LOOSE_STRING_VALUES = {
+  allowScripts: "allow-scripts",
+  lazy: "lazy",
+} as const;
+
 /* HtmlPreviewFrame — sandboxed iframe for an html-event bundle, reused by the
    standalone EmbedCard and by visual choice-option previews. Sandbox stays
    `allow-scripts` only: the bundle is served same-origin, so adding
@@ -8,6 +13,7 @@ import { type JSX } from "react";
 import { Image as ImageIcon } from "lucide-react";
 import { useStore } from "../state/store.js";
 import { htmlBundleUrl } from "../render/htmlBundle.js";
+import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
 
 interface Props {
   sessionId: string | null;
@@ -28,10 +34,12 @@ export function HtmlPreviewFrame({
   reloadKey,
 }: Props): JSX.Element {
   const token = useStore((s) => s.token);
+  const scope = useCurrentSessionRootScope(sessionId);
   const src = htmlBundleUrl(
     sessionId,
     filename,
     token,
+    scope,
     reloadKey !== undefined && reloadKey > 0
       ? { reload: String(reloadKey) }
       : undefined,
@@ -42,8 +50,8 @@ export function HtmlPreviewFrame({
         <iframe
           title={title}
           src={src}
-          sandbox="allow-scripts"
-          loading="lazy"
+          sandbox={NO_LOOSE_STRING_VALUES.allowScripts}
+          loading={NO_LOOSE_STRING_VALUES.lazy}
         />
       ) : (
         <div className="placeholder">

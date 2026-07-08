@@ -40,7 +40,7 @@ describe("POST /agents/:id/link", () => {
     });
   });
 
-  it("writes active-session through the global store when an active path is set", async () => {
+  it("400s without an explicit root scope when a path context is set", async () => {
     await withTempProject(async (fallbackRoot) => {
       await withTempProject(async (activeRoot) => {
         await withTempProject(async (configRoot) => {
@@ -65,6 +65,47 @@ describe("POST /agents/:id/link", () => {
             method: "POST",
             url: "/agents/ag-claude/link",
             payload: { session_id: session.id },
+          });
+
+          expect(res.statusCode).toBe(400);
+          expect(res.json()).toMatchObject({ code: "ROOT_SCOPE_REQUIRED" });
+          expect(
+            await readActiveSession(
+              g.projectAgentsDir(activePath.pathId()),
+              "ag-claude",
+            ),
+          ).toBeNull();
+          await app.close();
+        });
+      });
+    });
+  });
+
+  it("writes active-session through the global store when a path_id is provided", async () => {
+    await withTempProject(async (fallbackRoot) => {
+      await withTempProject(async (activeRoot) => {
+        await withTempProject(async (configRoot) => {
+          const fallback = paths(fallbackRoot);
+          const active = paths(activeRoot);
+          await initProject(fallback);
+          await initProject(active);
+          const session = await createSession(active, { slug: "active" });
+          const activePath = activePaths(activeRoot);
+          const g = globalPaths(configRoot);
+          const ref = new PathContextRef({
+            global: g,
+            active: activePath,
+          });
+          const { app } = createServer({
+            token: null,
+            paths: fallback,
+            pathContextRef: ref,
+          });
+
+          const res = await app.inject({
+            method: "POST",
+            url: "/agents/ag-claude/link",
+            payload: { session_id: session.id, path_id: activePath.pathId() },
           });
 
           expect(res.statusCode).toBe(200);

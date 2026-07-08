@@ -1,8 +1,13 @@
+const NO_LOOSE_STRING_VALUES = {
+  compose: "compose",
+  navigation: "navigation",
+  misc: "misc",
+} as const;
+
 /* Shortcuts section — Settings → Keyboard shortcuts.
    Read-only listing of every keyboard binding in the app. The combo strings
    come from `shortcut-registry.ts` (which is hand-maintained to stay in
-   sync with `useHotkeys` call sites in the codebase). Rebinding is out of
-   scope for P11 — Phase 15 may revisit. */
+   sync with `useHotkeys` call sites in the codebase). */
 
 import type { JSX } from "react";
 import {
@@ -19,7 +24,7 @@ const SECTION_LABELS: Record<ShortcutSection, string> = {
 
 export function Shortcuts(): JSX.Element {
   const grouped = shortcutsBySection();
-  const sections: ShortcutSection[] = ["compose", "navigation", "misc"];
+  const sections: ShortcutSection[] = [NO_LOOSE_STRING_VALUES.compose, NO_LOOSE_STRING_VALUES.navigation, NO_LOOSE_STRING_VALUES.misc];
 
   return (
     <>

@@ -89,7 +89,7 @@ function mainEvents(): EventRecord[] {
           command: "ls -la",
         },
         result: {
-          stdout: "package.json\npackages\nplanning\n",
+          stdout: "package.json\npackages\nREADME.md\n",
           stderr: "dry-run warning\n",
         },
         success: false,
@@ -110,10 +110,10 @@ function mainEvents(): EventRecord[] {
         runtime_session_id: "claude-session-1",
         hook_event_name: "PermissionRequest",
         title: "Edit access request",
-        message: "Allow Claude to edit planning/chat-issues-mitigation-tasks.md?",
+        message: "Allow Claude to edit packages/renderer/src/App.tsx?",
         tool_name: "Edit",
         tool_input: {
-          file_path: "planning/chat-issues-mitigation-tasks.md",
+          file_path: "packages/renderer/src/App.tsx",
           old_string: "old",
           new_string: "new",
         },

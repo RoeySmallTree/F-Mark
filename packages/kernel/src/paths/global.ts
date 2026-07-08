@@ -6,6 +6,8 @@ export interface GlobalPaths {
   tokenFile(): string;
   stateFile(): string;
   configFile(): string;
+  kernelInstanceFile(): string;
+  kernelStartupLockDir(): string;
   defaultRuntimesFile(): string;
   projectsDir(): string;
   projectDir(pathId: string): string;
@@ -20,7 +22,8 @@ export interface GlobalPaths {
    subdir is appended in both cases. */
 export function resolveConfigRoot(env: NodeJS.ProcessEnv = process.env): string {
   const xdg = env.XDG_CONFIG_HOME;
-  const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".config");
+  const home = env.HOME && env.HOME.length > 0 ? env.HOME : homedir();
+  const base = xdg && xdg.length > 0 ? xdg : join(home, ".config");
   return join(base, "f-mark");
 }
 
@@ -30,6 +33,8 @@ export function globalPaths(configRoot: string = resolveConfigRoot()): GlobalPat
     tokenFile: () => join(configRoot, ".token"),
     stateFile: () => join(configRoot, "state.json"),
     configFile: () => join(configRoot, "config.json"),
+    kernelInstanceFile: () => join(configRoot, "kernel-instance.json"),
+    kernelStartupLockDir: () => join(configRoot, "kernel-startup.lock"),
     defaultRuntimesFile: () => join(configRoot, "runtimes.json"),
     projectsDir: () => join(configRoot, "projects"),
     projectDir: (pathId: string) => join(configRoot, "projects", pathId),

@@ -2,6 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkBook } from "xlsx";
 import { createClient } from "../../../api/client.js";
 import { useStore } from "../../../state/store.js";
+import { useScopedFile } from "../fileScope.js";
+import { FvLoading } from "../FileViewerLoading.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  xlsx: "xlsx",
+  docx: "docx",
+  array: "array",
+} as const;
 
 /* Wraps the three office viewers. They follow the same dynamic-import +
    fetch pattern that FileCard uses for compose-attachment previews —
@@ -22,10 +30,14 @@ export function OfficeRenderer({
     () => createClient({ baseUrl: "", token }),
     [token],
   );
-  const url = client.fileContentUrl(path);
+  const scoped = useScopedFile(path);
+  if (scoped === null) {
+    return <div className="fv-error">file is outside the project root</div>;
+  }
+  const url = client.fileContentUrl(scoped.scope, scoped.relPath);
 
-  if (kind === "xlsx") return <XlsxView url={url} />;
-  if (kind === "docx") return <DocxView url={url} />;
+  if (kind === NO_LOOSE_STRING_VALUES.xlsx) return <XlsxView url={url} />;
+  if (kind === NO_LOOSE_STRING_VALUES.docx) return <DocxView url={url} />;
   return <PptxView url={url} />;
 }
 
@@ -57,7 +69,7 @@ function DocxView({ url }: { url: string }): JSX.Element {
     };
   }, [url]);
   if (error !== null) return <div className="fv-error">{error}</div>;
-  if (html === null) return <div className="fv-loading">loading DOCX…</div>;
+  if (html === null) return <FvLoading />;
   return (
     <div
       className="file-docx-preview"
@@ -85,7 +97,7 @@ function XlsxView({ url }: { url: string }): JSX.Element {
         ]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
-        const next = xlsxMod.read(arrayBuffer, { type: "array" });
+        const next = xlsxMod.read(arrayBuffer, { type: NO_LOOSE_STRING_VALUES.array });
         if (!cancelled) {
           xlsxRef.current = xlsxMod;
           setBook(next);
@@ -103,7 +115,7 @@ function XlsxView({ url }: { url: string }): JSX.Element {
   }, [url]);
   if (error !== null) return <div className="fv-error">{error}</div>;
   if (book === null || sheetName === null || xlsxRef.current === null) {
-    return <div className="fv-loading">loading workbook…</div>;
+    return <FvLoading />;
   }
   const sheet = book.Sheets[sheetName];
   const rows =

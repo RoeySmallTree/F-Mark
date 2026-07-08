@@ -11,6 +11,8 @@ import {
   ManagedAgentsApiError,
   createManagedAgentsClient,
 } from "../api/managedAgents.js";
+import { scopeToBody } from "../api/rootScope.js";
+import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
 import { useStore } from "../state/store.js";
 import { ErrorNotice, type StructuredError } from "./ToolPresentationParts.js";
 import {
@@ -18,14 +20,25 @@ import {
   renderPresentationSections,
   renderRawDetails,
 } from "./toolPresentation.js";
+import { ApprovalActions } from "./ApprovalActions.js";
 
-export function latestAccessResponse(
+const NO_LOOSE_STRING_VALUES = {
+  accessResponse: "access-response",
+  accessRequest: "access-request",
+  open: "open",
+  approve: "approve",
+  deny: "deny",
+  resolved: "resolved",
+  card: "card",
+} as const;
+
+function latestAccessResponse(
   requestId: string,
   events: AnyEventRecord[],
 ): AccessResponsePayload | null {
   return (
     events
-      .filter((event) => event.kind === "access-response")
+      .filter((event) => event.kind === NO_LOOSE_STRING_VALUES.accessResponse)
       .map((event) => event.payload as AccessResponsePayload)
       .filter((payload) => payload.request_id === requestId)
       .sort((a, b) => a.responded_at.localeCompare(b.responded_at))
@@ -37,9 +50,9 @@ export function accessRequestOpen(
   event: AnyEventRecord,
   events: AnyEventRecord[],
 ): boolean {
-  if (event.kind !== "access-request") return false;
+  if (event.kind !== NO_LOOSE_STRING_VALUES.accessRequest) return false;
   const payload = event.payload as AccessRequestPayload;
-  if (payload.status !== "open") return false;
+  if (payload.status !== NO_LOOSE_STRING_VALUES.open) return false;
   return latestAccessResponse(payload.request_id, events) === null;
 }
 
@@ -129,12 +142,8 @@ function requestSuggestions(
       typeof suggestion === "object" &&
       typeof suggestion.id === "string" &&
       typeof suggestion.label === "string" &&
-      (suggestion.decision === "approve" || suggestion.decision === "deny"),
+      (suggestion.decision === NO_LOOSE_STRING_VALUES.approve || suggestion.decision === NO_LOOSE_STRING_VALUES.deny),
   );
-}
-
-function decisionLabel(decision: "approve" | "deny"): string {
-  return decision === "approve" ? "Approve" : "Deny";
 }
 
 interface AccessRequestCardProps {
@@ -150,11 +159,12 @@ export function AccessRequestCard({
   allEvents,
   compact = false,
 }: AccessRequestCardProps): JSX.Element | null {
-  if (event.kind !== "access-request") return null;
+  if (event.kind !== NO_LOOSE_STRING_VALUES.accessRequest) return null;
   const request = event.payload as AccessRequestPayload;
   const token = useStore((s) => s.token);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const currentUserId = useStore((s) => s.currentUserId);
+  const scope = useCurrentSessionRootScope(currentSessionId);
   const api = useMemo(
     () => createManagedAgentsClient({ baseUrl: "", token }),
     [token],
@@ -163,18 +173,22 @@ export function AccessRequestCard({
   const [error, setError] = useState<StructuredError | null>(null);
   const [staleClosed, setStaleClosed] = useState(false);
   const response = latestAccessResponse(request.request_id, allEvents);
-  const open = response === null && request.status === "open" && !staleClosed;
-  const visibleStatus = staleClosed ? "resolved" : statusLabel(request, response);
+  const open = response === null && request.status === NO_LOOSE_STRING_VALUES.open && !staleClosed;
+  const visibleStatus = staleClosed ? NO_LOOSE_STRING_VALUES.resolved : statusLabel(request, response);
   const actor = participants[event.participant_id]?.name ?? event.participant_id;
   const presentation = presentAccessRequest(request);
   const canRespond =
-    open && currentSessionId !== null && currentUserId !== null && busy === null;
+    open &&
+    currentSessionId !== null &&
+    currentUserId !== null &&
+    scope !== null &&
+    busy === null;
 
   async function respond(
     decision: "approve" | "deny",
     option?: AccessRequestSuggestion,
   ): Promise<void> {
-    if (currentSessionId === null || currentUserId === null) return;
+    if (currentSessionId === null || currentUserId === null || scope === null) return;
     setBusy(decision);
     setError(null);
     try {
@@ -183,6 +197,7 @@ export function AccessRequestCard({
         participant_id: currentUserId,
         decision,
         ...(option !== undefined ? { option_id: option.id } : {}),
+        ...scopeToBody(scope),
       });
     } catch (err) {
       const normalized = normalizeAccessError(err);
@@ -218,48 +233,13 @@ export function AccessRequestCard({
       {error !== null ? <ErrorNotice error={error} /> : null}
       {open ? (
         <div className="approval-foot">
-          <span className="spacer" />
-          {suggestions.length > 0 ? (
-            suggestions.map((suggestion) => (
-              <button
-                type="button"
-                key={suggestion.id}
-                title={suggestion.label}
-                aria-label={`${decisionLabel(suggestion.decision)}: ${suggestion.label}`}
-                disabled={!canRespond}
-                data-decision={suggestion.decision}
-                className={suggestion.decision === "approve" ? "btn-approve" : "btn-deny"}
-                onClick={() => void respond(suggestion.decision, suggestion)}
-              >
-                {suggestion.label}
-              </button>
-            ))
-          ) : (
-            <>
-              <button
-                type="button"
-                title="Deny"
-                aria-label="Deny access request"
-                disabled={!canRespond}
-                data-decision="deny"
-                className="btn-deny"
-                onClick={() => void respond("deny")}
-              >
-                Deny
-              </button>
-              <button
-                type="button"
-                title="Approve"
-                aria-label="Approve access request"
-                disabled={!canRespond}
-                data-decision="approve"
-                className="btn-approve"
-                onClick={() => void respond("approve")}
-              >
-                Approve
-              </button>
-            </>
-          )}
+          <ApprovalActions
+            suggestions={suggestions}
+            disabled={!canRespond}
+            busy={busy}
+            variant={NO_LOOSE_STRING_VALUES.card}
+            onRespond={(decision, option) => void respond(decision, option)}
+          />
         </div>
       ) : null}
     </section>

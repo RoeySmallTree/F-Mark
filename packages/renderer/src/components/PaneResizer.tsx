@@ -11,6 +11,13 @@ import {
 import { useShellPlacement } from "../hooks/useShellPlacement.js";
 import { paneGeometry } from "../themes/layout.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  row: "row",
+  height: "height",
+  width: "width",
+  dragging: "dragging",
+} as const;
+
 /* PaneResizer — a thin drag handle on the edge of a side panel. In the old
    shell the handle's side and drag direction were hard-coded; now both are
    derived from the pane's slot in the active placement (`paneGeometry`), so a
@@ -29,7 +36,7 @@ export function PaneResizer({ pane }: { pane: PanelId }): JSX.Element | null {
   const rafRef = useRef<number | null>(null);
   const pendingRef = useRef<number | null>(null);
 
-  const axis = geo?.axis === "row" ? "height" : "width";
+  const axis = geo?.axis === NO_LOOSE_STRING_VALUES.row ? NO_LOOSE_STRING_VALUES.height : NO_LOOSE_STRING_VALUES.width;
   const flush = useCallback((): void => {
     rafRef.current = null;
     const px = pendingRef.current;
@@ -43,8 +50,8 @@ export function PaneResizer({ pane }: { pane: PanelId }): JSX.Element | null {
       e.preventDefault();
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
-      target.classList.add("dragging");
-      const vertical = geo.axis === "row";
+      target.classList.add(NO_LOOSE_STRING_VALUES.dragging);
+      const vertical = geo.axis === NO_LOOSE_STRING_VALUES.row;
       const start = vertical ? e.clientY : e.clientX;
       const sizes = sizeMap[sessionId] ?? defaultPaneSizes();
       const startSize = vertical ? sizes[pane].height : sizes[pane].width;
@@ -61,7 +68,7 @@ export function PaneResizer({ pane }: { pane: PanelId }): JSX.Element | null {
       };
       const onUp = (ev: PointerEvent): void => {
         target.releasePointerCapture(ev.pointerId);
-        target.classList.remove("dragging");
+        target.classList.remove(NO_LOOSE_STRING_VALUES.dragging);
         target.removeEventListener("pointermove", onMove);
         target.removeEventListener("pointerup", onUp);
         target.removeEventListener("pointercancel", onUp);

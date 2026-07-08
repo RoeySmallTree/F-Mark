@@ -2,11 +2,9 @@ import { isAbsolute, join, sep, normalize as normPath } from "node:path";
 import { realpath } from "node:fs/promises";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { Paths } from "../paths.js";
-import {
-  normaliseDeps,
-  resolvePaths,
-  type PathDeps,
-} from "./pathDeps.js";
+import { paths as makePaths } from "../paths.js";
+import { normaliseDeps, type PathDeps } from "./pathDeps.js";
+import { resolveKnownRootScope } from "./rootScope.js";
 import {
   readFavoritesFile,
   updateFavoritesFile,
@@ -115,7 +113,40 @@ export function registerFilesFavoritesRoutes(
 ): void {
   const deps = normaliseDeps(depsArg);
 
-  app.get<{ Querystring: { scope?: string; sessionId?: string } }>(
+  /* Resolve the project Paths for a favorites request. When an explicit root
+     scope (path_id|root) is supplied — e.g. by the standalone /file-tree tab
+     (X6) — it is validated through known roots; otherwise fall back to the
+     active/fallback root so the in-app Files panel keeps working. */
+  async function resolveFavoritesPaths(
+    src: { path_id?: string; root?: string },
+    reply: FastifyReply,
+  ): Promise<Paths | null> {
+    const hasScope =
+      (typeof src.path_id === "string" && src.path_id.length > 0) ||
+      (typeof src.root === "string" && src.root.length > 0);
+    if (!hasScope) {
+      const active = deps.ref?.get().active ?? null;
+      return active !== null ? makePaths(active.root()) : deps.fallback;
+    }
+    const scope = await resolveKnownRootScope(deps, {
+      path_id: src.path_id,
+      root: src.root,
+    });
+    if (!scope.ok) {
+      reply.code(scope.status).send(scope.body);
+      return null;
+    }
+    return scope.known.paths;
+  }
+
+  app.get<{
+    Querystring: {
+      scope?: string;
+      sessionId?: string;
+      path_id?: string;
+      root?: string;
+    };
+  }>(
     "/files/favorites",
     async (req, reply) => {
       const scope = parseScope(req.query.scope);
@@ -125,7 +156,8 @@ export function registerFilesFavoritesRoutes(
           message: "scope must be 'project' or 'session'",
         });
       }
-      const paths = resolvePaths(deps);
+      const paths = await resolveFavoritesPaths(req.query, reply);
+      if (paths === null) return reply;
       const file = favoritesFile(paths, scope, req.query.sessionId ?? null);
       if (!file.ok) return send(reply, file.status, file.body);
       const data: FilesFavoritesFile = await readFavoritesFile(file.file);
@@ -134,7 +166,13 @@ export function registerFilesFavoritesRoutes(
   );
 
   app.post<{
-    Body: { scope?: string; sessionId?: string; path?: string };
+    Body: {
+      scope?: string;
+      sessionId?: string;
+      path?: string;
+      path_id?: string;
+      root?: string;
+    };
   }>("/files/favorites", async (req, reply) => {
     const scope = parseScope(req.body?.scope);
     if (scope === null) {
@@ -143,7 +181,8 @@ export function registerFilesFavoritesRoutes(
         message: "scope must be 'project' or 'session'",
       });
     }
-    const paths = resolvePaths(deps);
+    const paths = await resolveFavoritesPaths(req.body ?? {}, reply);
+    if (paths === null) return reply;
     const projectRoot = normPath(paths.root());
     const file = favoritesFile(paths, scope, req.body?.sessionId ?? null);
     if (!file.ok) return send(reply, file.status, file.body);
@@ -168,7 +207,13 @@ export function registerFilesFavoritesRoutes(
   });
 
   app.delete<{
-    Querystring: { scope?: string; sessionId?: string; path?: string };
+    Querystring: {
+      scope?: string;
+      sessionId?: string;
+      path?: string;
+      path_id?: string;
+      root?: string;
+    };
   }>("/files/favorites", async (req, reply) => {
     const scope = parseScope(req.query.scope);
     if (scope === null) {
@@ -184,7 +229,8 @@ export function registerFilesFavoritesRoutes(
         message: "path query param is required",
       });
     }
-    const paths = resolvePaths(deps);
+    const paths = await resolveFavoritesPaths(req.query, reply);
+    if (paths === null) return reply;
     const file = favoritesFile(paths, scope, req.query.sessionId ?? null);
     if (!file.ok) return send(reply, file.status, file.body);
     /* DELETE does not require the path to canonicalize/exist — the caller

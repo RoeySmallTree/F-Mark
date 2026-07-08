@@ -7,6 +7,7 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  height: 100%;
   min-height: 0;
   min-width: 0;
   isolation: isolate;
@@ -44,8 +45,54 @@
   text-align: center;
   gap: 6px;
 }
-.fv-empty p { margin: 0; }
-.fv-empty-hint { font-size: 11px; color: var(--ink-4); }
+.fv-empty p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--ink-2); }
+.fv-empty-hint { font-size: 11px; color: var(--ink-4); font-family: var(--mono); font-style: normal; }
+
+/* Double-bezel icon shell for the file-viewer empty state. */
+.fv-empty-icon-outer {
+  width: 64px;
+  height: 64px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  background: color-mix(in srgb, var(--agent) 5%, transparent);
+  border-radius: calc(var(--radius-lg) + 7px);
+  margin-bottom: 6px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent),
+    0 4px 14px color-mix(in srgb, var(--agent) 8%, transparent);
+  animation: fv-icon-float 4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform;
+}
+
+.fv-empty-icon-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--agent) 9%, var(--canvas));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 6%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--agent);
+}
+
+.fv-empty-icon-inner svg {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+@keyframes fv-icon-float {
+  0%,  100% { transform: translateY(0); }
+  50%        { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fv-empty-icon-outer { animation: none !important; }
+}
 
 /* Tabs row — pinned and unpinned share a single horizontal flex row.
    Overflow scrolls horizontally with a thin scrollbar. */
@@ -65,6 +112,7 @@
 }
 
 .fv-tab {
+  position: relative;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -80,19 +128,37 @@
   user-select: none;
   transition: background var(--dur-base) var(--ease-out-quart),
     color var(--dur-base) var(--ease-out-quart),
-    border-color var(--dur-base) var(--ease-out-quart);
+    border-color var(--dur-base) var(--ease-out-quart),
+    transform 160ms var(--ease-out-quart);
 }
 .fv-tab:hover {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
 }
 .fv-tab.is-active {
-  background: var(--canvas);
-  border-color: var(--line-2);
+  background: color-mix(in srgb, var(--agent) 12%, var(--canvas));
+  border-color: color-mix(in srgb, var(--agent) 46%, var(--line-2));
   color: var(--ink);
+  box-shadow:
+    inset 0 -2px 0 var(--agent),
+    0 0 0 1px color-mix(in srgb, var(--agent) 10%, transparent);
 }
 .fv-tab.is-pinned {
   border-color: color-mix(in srgb, var(--agent) 30%, var(--line));
+}
+.fv-tab[data-drop-before="true"] {
+  transform: translateX(9px);
+}
+.fv-tab[data-drop-before="true"]::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--agent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent) 14%, transparent);
 }
 .fv-tab-icon {
   flex: 0 0 auto;
@@ -136,11 +202,57 @@
   color: var(--agent);
 }
 
-/* Layout toggle (chrome button + popup) */
-.fv-layout-toggle {
-  position: relative;
+/* Pop-out (maximize) button in the file-viewer chrome — reveals the viewer in
+   the full-screen ModalShell. */
+.fv-popout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
   flex: 0 0 auto;
+  transition: background var(--dur-base) var(--ease-out-quart),
+    color var(--dur-base) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart);
 }
+.fv-popout-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+
+/* Placeholder shown in the docked File pane while the viewer is popped out, so
+   only one live viewer instance mounts at a time. */
+.fv-popped-out {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.fv-popped-out-restore {
+  padding: 5px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background var(--dur-base) var(--ease-out-quart);
+}
+.fv-popped-out-restore:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* Shared chrome dropdown (button + popup) — used by the diff-mode toggle. */
 .fv-layout-btn {
   display: inline-flex;
   align-items: center;
@@ -207,13 +319,262 @@
 .fv-layout-pop-icon { grid-area: icon; color: var(--ink-2); }
 .fv-layout-pop-label { grid-area: label; font-weight: 500; }
 .fv-layout-pop-hint { grid-area: hint; font-size: 11px; color: var(--ink-3); }
+.fv-layout-pop-select {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  padding: 7px 8px 8px;
+  border-top: 1px solid var(--line-3);
+}
+.fv-layout-pop-select select {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+}
+
+/* ── Diff mode toggle (read-only diff, design §8) ─────────────────────── */
+.fv-diff-toggle { position: relative; display: inline-flex; }
+
+/* Inline ⇄ side-by-side: an icon-only segmented control that sits BESIDE the
+   diff selector in the chrome (it used to be a row inside the dropdown). */
+.fv-diff-style-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.fv-diff-style-ibtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out-quart),
+    color var(--dur-base) var(--ease-out-quart);
+}
+.fv-diff-style-ibtn + .fv-diff-style-ibtn { border-left: 1px solid var(--line-2); }
+.fv-diff-style-ibtn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.fv-diff-style-ibtn.is-current {
+  background: color-mix(in srgb, var(--agent) 16%, transparent);
+  color: var(--ink);
+}
+
+/* "No diff" chip — shown beside the diff selector when the active file is
+   unchanged for the selected mode (the file itself is shown, not an empty
+   state). Green, matching the design system's success tokens. */
+.fv-diff-nochip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+  color: var(--green);
+  background: var(--green-tint);
+  border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+}
+
+.fv-diff-settings-link { border-top: 1px solid var(--line-3); }
+
+/* ── Line diff (markdown / csv) ───────────────────────────────────────── */
+.fv-line-diff { height: 100%; overflow: auto; }
+.fv-line-diff .diff-body { max-height: none; }
+
+/* ── Per-hunk actions ─────────────────────────────────────────────────── */
+.fv-hunk-block { position: relative; }
+.fv-hunk-block + .fv-hunk-block { margin-top: 8px; }
+.fv-hunk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border-top: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.fv-hunk-header-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+.fv-hunk-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  position: relative;
+}
+.fv-hunk-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fv-hunk-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, var(--panel));
+  color: var(--ink);
+}
+.fv-hunk-action:disabled { opacity: 0.45; cursor: default; }
+.fv-hunk-action.is-file {
+  border-color: color-mix(in srgb, var(--agent) 40%, var(--line-2));
+  color: var(--agent);
+}
+.fv-hunk-conflict {
+  font-size: 11px;
+  color: var(--danger, #c0392b);
+  margin-left: 4px;
+}
+/* The comment draft popover anchors inside the actions bar. */
+.fv-hunk-comment-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+}
+
+/* Monaco per-hunk actions strip (DiffEditor has no native per-hunk buttons). */
+.fv-monaco-hunks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 30%;
+  overflow: auto;
+  border-bottom: 1px solid var(--line-2);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  flex: 0 0 auto;
+}
+.fv-monaco-hunk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+}
+.fv-monaco-hunk-row .fv-hunk-header-text { flex: 1; }
+.fv-monaco-wrap:has(.fv-monaco-hunks),
+.fv-monaco-wrap:has(.fv-file-actions) { display: flex; flex-direction: column; }
+
+/* File-level action strip (should-fix 6) — Restore/Delete file + Undo rename,
+   rendered once at the diff header, INDEPENDENT of hunks (so a pure rename and
+   a file-with-hunks both expose it). Slightly emphasized vs a hunk head. */
+.fv-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--agent) 7%, transparent);
+  border-bottom: 1px solid var(--line-2);
+  flex: 0 0 auto;
+}
+.fv-file-actions .fv-hunk-header-text { flex: 1; }
+.fv-file-actions .fv-hunk-actions { flex: 0 0 auto; }
+/* Inline "no textual changes" note shown beneath the file strip when a file has
+   only metadata changes (e.g. a pure rename) but its whole-file actions still
+   need to be reachable. */
+.fv-empty-inline {
+  padding: 12px;
+  min-height: 0;
+  height: auto;
+}
+
+/* ── Media before/after diff ──────────────────────────────────────────── */
+.fv-media-diff { padding: 16px; }
+.fv-media-diff-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--agent);
+  margin-bottom: 12px;
+}
+.fv-media-diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.fv-media-side {
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.fv-media-side.is-empty { opacity: 0.6; align-items: center; justify-content: center; }
+.fv-media-side-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.fv-media-side img,
+.fv-media-side video { max-width: 100%; max-height: 360px; object-fit: contain; }
+.fv-media-side audio { width: 100%; }
+.fv-media-absent { font-size: 12px; color: var(--ink-4); padding: 24px 0; }
+.fv-media-meta { font-size: 11px; color: var(--ink-3); font-family: var(--mono); }
+
+/* ── Binary / office "changed" badge ──────────────────────────────────── */
+.fv-binary-diff {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  text-align: center;
+  padding: 24px;
+}
+.fv-binary-diff-icon { color: var(--ink-3); }
+.fv-binary-diff-name { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.fv-binary-diff-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--agent);
+}
 
 /* Body */
 .fv-body {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   position: relative;
   background: var(--canvas);
 }
@@ -251,6 +612,14 @@
   width: 80%;
   max-width: 480px;
 }
+.fv-pdf-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  border: 0;
+  background: var(--canvas);
+}
 .fv-loading,
 .fv-error {
   padding: 30px;
@@ -259,6 +628,52 @@
   font-size: 11.5px;
 }
 .fv-error { color: #b54848; }
+
+/* Loading placeholder — the chat pane's PixelBlast ambient animation
+   (LoadingAnimation), filling the viewer body. Replaces the old "loading …"
+   text for editor / diff / preview load states. fv-body is position:relative,
+   so inset:0 covers it; the --canvas backdrop hides any half-mounted editor. */
+.fv-loading-anim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--canvas);
+}
+/* Size the animation HERE (this file is in the always-loaded main CSS).
+   PixelBlast.css — which sizes .loading-animation / .pixel-blast-container —
+   is code-split into a lazy chunk, so relying on it leaves the canvas 0×0 and
+   the loader renders blank. `.fv-loading-anim` is absolute+inset:0 (a definite
+   height), so these percentages resolve and the WebGL canvas measures non-zero. */
+.fv-loading-anim .loading-animation,
+.fv-loading-anim .pixel-blast-container {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.fv-loading-anim canvas {
+  display: block;
+}
+
+/* X6 line-drift hint — a subtle pill floated over the top of the editor when a
+   revealed comment's line could only be located by best-effort fallback (or
+   not at all). Non-blocking; auto-clears after a few seconds. */
+.fv-drift-hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2, var(--bg-2, #2a2a2a));
+  border: 1px solid var(--line-3, rgba(255, 255, 255, 0.14));
+  color: var(--ink-2, #d0d0d0);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+  opacity: 0.94;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
 
 .fv-render-error {
   display: flex;
@@ -313,6 +728,226 @@
 .fv-markdown-wrap {
   height: 100%;
   width: 100%;
+}
+.fv-monaco-wrap,
+.fv-markdown-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.fv-editbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 31px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--panel);
+  box-sizing: border-box;
+}
+.fv-editbar-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.fv-editbar-path-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.fv-editbar-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.fv-editbar-copy:hover {
+  background: color-mix(in srgb, var(--ink) 6%, var(--canvas));
+  color: var(--ink);
+}
+.fv-editbar-copy.is-copied {
+  color: var(--agent);
+}
+.fv-editbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+.fv-editbar-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.fv-editbar-save:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, var(--canvas));
+}
+.fv-editbar-save:disabled {
+  opacity: 0.52;
+  cursor: default;
+}
+.fv-editbar-status {
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fv-editbar-status.is-dirty {
+  color: var(--agent);
+}
+.fv-editbar-status.is-error {
+  color: var(--rose, #b54848);
+}
+.fv-editbar-autosave {
+  flex-shrink: 0;
+}
+.fv-editbar-autosave .toggle-label {
+  font-size: 11px;
+}
+.fv-editbar-autosave input[type="checkbox"] {
+  width: 28px;
+  height: 16px;
+}
+.fv-editbar-autosave input[type="checkbox"]::before {
+  width: 12px;
+  height: 12px;
+}
+.fv-editbar-autosave input[type="checkbox"]:checked::before {
+  transform: translateX(12px);
+}
+.fv-monaco-editor-frame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+.fv-monaco-comment-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 4;
+}
+.fv-monaco-comment-overlay .fv-line-comment-rail {
+  pointer-events: none;
+}
+.fv-monaco-comment-overlay .line-comment-hit {
+  pointer-events: auto;
+}
+.fv-markdown-wrap {
+  background: var(--canvas);
+}
+.fv-markdown-surface {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  border-top: 1px solid var(--line-2);
+}
+.fv-markdown-surface--side-by-side {
+  grid-template-columns: minmax(220px, 1fr) minmax(240px, 1fr);
+}
+.fv-markdown-surface--preview,
+.fv-markdown-surface--interactive,
+.fv-markdown-surface--source {
+  grid-template-columns: 1fr;
+}
+.fv-markdown-surface--source .fv-markdown-editor-pane {
+  border-right: 0;
+}
+.fv-markdown-editor-pane,
+.fv-markdown-preview-pane {
+  min-height: 0;
+  min-width: 0;
+}
+.fv-markdown-editor-pane {
+  border-right: 1px solid var(--line-2);
+}
+.fv-markdown-preview-pane {
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.fv-markdown-doc {
+  max-width: 82ch;
+  padding: 18px 22px 28px;
+}
+.fv-markdown-surface--interactive .fv-markdown-doc {
+  width: min(920px, calc(100% - 44px));
+  max-width: none;
+}
+@media (max-width: 920px) {
+  .fv-markdown-surface--side-by-side {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 44%) minmax(220px, 56%);
+  }
+  .fv-markdown-surface--side-by-side .fv-markdown-editor-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-2);
+  }
+}
+.fv-markdown-view-toggle {
+  flex-shrink: 0;
+}
+
+.fv-json-wrap {
+  background: var(--canvas);
+}
+.fv-json-view-toggle {
+  flex-shrink: 0;
+}
+.fv-json-preview-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background: var(--canvas);
+}
+.fv-json-preview-pane > .fm-json-tree,
+.fv-json-preview-pane > .fm-json-table,
+.fv-json-preview-pane > .fm-source {
+  min-width: min-content;
+}
+.fv-json-parse-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 840px;
+  color: var(--ink-3);
+}
+.fv-json-parse-error p {
+  margin: 0;
+}
+.fv-json-error-source {
+  max-height: min(56vh, 560px);
 }
 
 .fv-csv-table-wrap {
@@ -380,127 +1015,8 @@
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
-/* Extra pane shell */
-.fv-extra-pane {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  /* Flex child of `.chat-region` — keep the inline width, don't shrink. */
-  flex: 0 0 auto;
-  min-width: 0;
-  border-left: 1px solid var(--line-2);
-  background: var(--panel);
-}
-.fv-extra-resizer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -3px;
-  width: 6px;
-  cursor: col-resize;
-  z-index: 5;
-}
 
-/* Collapsed extra-pane reopen button */
-.fv-floating-btn {
-  position: fixed;
-  top: 50%;
-  z-index: 60;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--panel);
-  color: var(--ink);
-  border: 1px solid var(--line-2);
-  border-right: 0;
-  border-radius: var(--radius) 0 0 var(--radius);
-  cursor: pointer;
-  box-shadow: -2px 4px 12px rgba(0, 0, 0, 0.12);
-  transform: translateY(-50%);
-  font-size: 11.5px;
-}
-.fv-floating-btn:hover { background: color-mix(in srgb, var(--ink) 5%, var(--panel)); }
-.fv-floating-btn.is-extra { right: var(--right-panel-w, 340px); }
-.fv-floating-btn.is-modal {
-  right: 16px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-pill);
-  padding: 0 14px;
-  top: auto;
-  bottom: 20px;
-  transform: none;
-}
-
-/* Replace-chat shell */
-.fv-replace-chat {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-.fv-center-switcher {
-  display: inline-flex;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border-radius: var(--radius);
-  padding: 2px;
-  gap: 2px;
-}
-.fv-center-switcher button {
-  height: 20px;
-  padding: 0 8px;
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
-  border-radius: calc(var(--radius) - 2px);
-  cursor: pointer;
-  font-size: 11px;
-  transition: background var(--dur-base) var(--ease-out-quart);
-}
-.fv-center-switcher button.is-on {
-  background: var(--panel);
-  color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-.fv-compose-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 22px;
-  background: color-mix(in srgb, var(--ink) 3%, var(--canvas));
-  border: 0;
-  border-top: 1px solid var(--line-2);
-  color: var(--ink-3);
-  cursor: pointer;
-  font-size: 10.5px;
-  transition: background var(--dur-base) var(--ease-out-quart);
-}
-.fv-compose-toggle:hover {
-  background: color-mix(in srgb, var(--ink) 6%, var(--canvas));
-  color: var(--ink);
-}
-
-/* Lower-split shell — used inside RightFiles when layout=lower */
-.fv-lower {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-.fv-lower-resizer {
-  height: 6px;
-  cursor: row-resize;
-  background: var(--line-2);
-  flex: 0 0 auto;
-  transition: background var(--dur-base) var(--ease-out-quart);
-}
-.fv-lower-resizer:hover {
-  background: color-mix(in srgb, var(--agent) 50%, var(--line-2));
-}
-
-/* Modal shell */
+/* Modal shell (pop-out viewer) */
 .fv-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -536,25 +1052,6 @@
     color var(--dur-base) var(--ease-out-quart);
 }
 .fv-modal-close:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
-
-.fv-extra-collapse,
-.fv-extra-expand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
-  border-radius: var(--radius);
-  cursor: pointer;
-}
-.fv-extra-collapse:hover,
-.fv-extra-expand:hover {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
 }

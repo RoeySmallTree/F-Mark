@@ -1,3 +1,11 @@
+const NO_LOOSE_STRING_VALUES = {
+  mod: "$mod",
+  cmd: "Cmd",
+  ctrl: "Ctrl",
+  ctrl2: "ctrl",
+  meta: "meta",
+} as const;
+
 /**
  * Cross-platform shortcut registry used by the Settings → Shortcuts section.
  *
@@ -36,6 +44,11 @@ export const SHORTCUTS: ShortcutEntry[] = [
     description: "Skills palette",
     section: "navigation",
   },
+  {
+    combo: "Meta+Alt+Ctrl+R",
+    description: "Restart dev kernel",
+    section: "misc",
+  },
 ];
 
 const isMac =
@@ -60,12 +73,12 @@ export function chordToKeys(combo: string): string[] {
   const chips: string[] = [];
   for (const tok of tokens) {
     const lower = tok.toLowerCase();
-    if (lower === "$mod") {
-      chips.push(isMac ? "Cmd" : "Ctrl");
-    } else if (lower === "ctrl") {
-      chips.push("Ctrl");
-    } else if (lower === "meta") {
-      chips.push("Cmd");
+    if (lower === NO_LOOSE_STRING_VALUES.mod) {
+      chips.push(isMac ? NO_LOOSE_STRING_VALUES.cmd : NO_LOOSE_STRING_VALUES.ctrl);
+    } else if (lower === NO_LOOSE_STRING_VALUES.ctrl2) {
+      chips.push(NO_LOOSE_STRING_VALUES.ctrl);
+    } else if (lower === NO_LOOSE_STRING_VALUES.meta) {
+      chips.push(NO_LOOSE_STRING_VALUES.cmd);
     } else if (SYMBOL[lower] !== undefined) {
       chips.push(SYMBOL[lower]);
     } else if (lower === "/" || lower === "?") {

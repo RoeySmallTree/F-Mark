@@ -1,42 +1,51 @@
+import { useLayoutEffect, useRef } from "react";
 import { useStore } from "../state/store.js";
-import { Sessions } from "../panels/Sessions.js";
-import { Named } from "../panels/Named.js";
-import { Todos } from "../panels/Todos.js";
-import { Comments } from "../panels/Comments.js";
-import { Search } from "../panels/Search.js";
 import { PaneResizer } from "../components/PaneResizer.js";
+import { useShellPlacement } from "../hooks/useShellPlacement.js";
+import { paneGeometry } from "../themes/layout.js";
+import { useDockLayout } from "../hooks/useDockLayout.js";
+import { DockAreaView } from "./DockAreaView.js";
+import {
+  applyDockLayout,
+  hasStoredDockLayout,
+  moveDockPane,
+  type DockPaneId,
+} from "./dockLayout.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  leftpanel: "leftPanel",
+  sessions: "sessions",
+  left: "left",
+} as const;
 
 export function LeftPanel(): JSX.Element {
   const leftRail = useStore((s) => s.leftRail);
+  const layout = useDockLayout();
+  const previousLeftRailRef = useRef(leftRail);
+  const initializedRef = useRef(false);
+  /* Divider side faces chat/another pane (same edge the resizer grabs); CSS
+     keys `.left-panel[data-border-edge]` off it. */
+  const borderEdge = paneGeometry(useShellPlacement(), NO_LOOSE_STRING_VALUES.leftpanel)?.edge;
 
-  /* `.left-panel-host` fills its `leftPanel` grid area; the cell size comes
-     from the `--pane-w-leftPanel` / `--pane-h-leftPanel` vars on `.main`. The
-     resizer's edge + axis are derived from the active placement. */
-  let child: JSX.Element;
-  switch (leftRail) {
-    case "sessions":
-      child = <Sessions />;
-      break;
-    case "named":
-      child = <Named />;
-      break;
-    case "todos":
-      child = <Todos />;
-      break;
-    case "comments":
-      child = <Comments />;
-      break;
-    case "search":
-      child = <Search />;
-      break;
-    default:
-      child = <Sessions />;
-  }
+  useLayoutEffect(() => {
+    const firstRun = !initializedRef.current;
+    initializedRef.current = true;
+    if (firstRun && hasStoredDockLayout() && leftRail === NO_LOOSE_STRING_VALUES.sessions) return;
+    if (!firstRun && previousLeftRailRef.current === leftRail) return;
+    previousLeftRailRef.current = leftRail;
+    applyDockLayout(moveDockPane(layout, leftRail as DockPaneId, NO_LOOSE_STRING_VALUES.left));
+  }, [layout, leftRail]);
 
   return (
-    <div className="left-panel-host">
-      {child}
-      <PaneResizer pane="leftPanel" />
+    <div className="left-panel-host" data-border-edge={borderEdge}>
+      <DockAreaView
+        area={NO_LOOSE_STRING_VALUES.left}
+        label="Left pane tabs"
+        tabsClassName="dock-tabs left-dock-tabs"
+        contentClassName="left-dock-content"
+        alwaysShowTabs
+      />
+      <PaneResizer pane={NO_LOOSE_STRING_VALUES.leftpanel} />
     </div>
   );
 }

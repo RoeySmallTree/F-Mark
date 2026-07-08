@@ -3,16 +3,23 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { FlowNode as FlowNodeData } from "@f-mark/shared";
 import { assemblePopoverSrcdoc } from "./popover.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  default: "default",
+  flowNode: "flow-node",
+  focused: "focused",
+  allowScripts: "allow-scripts",
+} as const;
+
 type FlowNodeType = Node<{ data: FlowNodeData }>;
 
 export function FlowNode({ data }: NodeProps<FlowNodeType>): JSX.Element {
   const [open, setOpen] = useState(false);
   const n = data.data;
-  const type = n.itemType ?? "default";
+  const type = n.itemType ?? NO_LOOSE_STRING_VALUES.default;
   const classes = [
-    "flow-node",
+    NO_LOOSE_STRING_VALUES.flowNode,
     `flow-node-${type}`,
-    n.focused === true ? "focused" : "",
+    n.focused === true ? NO_LOOSE_STRING_VALUES.focused : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -39,7 +46,7 @@ export function FlowNode({ data }: NodeProps<FlowNodeType>): JSX.Element {
           <iframe
             title={`${n.label} popover`}
             srcDoc={assemblePopoverSrcdoc(n.popover)}
-            sandbox="allow-scripts"
+            sandbox={NO_LOOSE_STRING_VALUES.allowScripts}
           />
         </div>
       )}

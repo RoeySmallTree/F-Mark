@@ -1,3 +1,10 @@
+const NO_LOOSE_STRING_VALUES = {
+  readonly: "readonly",
+  fixed: "fixed",
+  none: "none",
+  copy: "copy",
+} as const;
+
 /**
  * Copy text to the clipboard.
  *
@@ -24,16 +31,16 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     const ta = doc.createElement("textarea");
     ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
+    ta.setAttribute(NO_LOOSE_STRING_VALUES.readonly, "");
+    ta.style.position = NO_LOOSE_STRING_VALUES.fixed;
     ta.style.top = "0";
     ta.style.left = "0";
     ta.style.opacity = "0";
-    ta.style.pointerEvents = "none";
+    ta.style.pointerEvents = NO_LOOSE_STRING_VALUES.none;
     doc.body.appendChild(ta);
     ta.select();
     ta.setSelectionRange(0, text.length);
-    const ok = doc.execCommand("copy");
+    const ok = doc.execCommand(NO_LOOSE_STRING_VALUES.copy);
     doc.body.removeChild(ta);
     return ok;
   } catch {

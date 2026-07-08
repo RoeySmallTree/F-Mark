@@ -42,6 +42,31 @@ function accessRequest(participant: string, ts = "20260523T100002Z"): AnyEventRe
   };
 }
 
+function choices(participant: string, ts = "20260523T100002Z"): AnyEventRecord {
+  return {
+    filename: `${ts}_${participant}.choices.json`,
+    timestamp: ts,
+    participant_id: participant,
+    kind: "choices",
+    payload: {
+      id: "mock-options",
+      question: "Pick a mock",
+      options: [{ id: "a", label: "A" }],
+      multi: false,
+    },
+  };
+}
+
+function html(participant: string, ts = "20260523T100002Z"): AnyEventRecord {
+  return {
+    filename: `${ts}_${participant}.html`,
+    timestamp: ts,
+    participant_id: participant,
+    kind: "html",
+    payload: { id: "preview-1", title: "Preview" },
+  };
+}
+
 function turnEnd(participant: string, ts = "20260523T100005Z"): AnyEventRecord {
   return {
     filename: `${ts}_${participant}.turn-end.json`,
@@ -108,8 +133,9 @@ describe("projectFeed", () => {
       turnEnd("ag-claude"),
     ];
     const out = projectFeed(ev);
-    expect(out).toHaveLength(1);
+    expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({ type: "group", status: "ended" });
+    expect(out[1]).toEqual({ type: "event", event: ev[2] });
   });
 
   it("keeps access requests inside same-participant mid-turn groups", () => {
@@ -120,7 +146,7 @@ describe("projectFeed", () => {
       turnEnd("ag-claude", "20260523T100003Z"),
     ];
     const out = projectFeed(ev);
-    expect(out).toHaveLength(1);
+    expect(out).toHaveLength(2);
     expect(out[0]!.type).toBe("group");
     if (out[0]!.type !== "group") return;
     expect(out[0]!.items.map((event) => event.kind)).toEqual([
@@ -130,6 +156,7 @@ describe("projectFeed", () => {
     ]);
     expect(out[0]!.accessRequestCount).toBe(1);
     expect(out[0]!.status).toBe("ended");
+    expect(out[1]).toEqual({ type: "event", event: ev[3] });
   });
 
   it("two separate groups when participant emits two distinct turns", () => {
@@ -155,6 +182,31 @@ describe("projectFeed", () => {
     ]);
   });
 
+  it("closes the current group before same-participant standalone events", () => {
+    const ev = [
+      prose("ag-claude", "I'll make mocks.", true, "20260523T100000Z"),
+      tool("ag-claude", "Read", "20260523T100001Z"),
+      choices("ag-claude", "20260523T100002Z"),
+      prose("ag-claude", "Checking one more thing.", true, "20260523T100003Z"),
+      tool("ag-claude", "Bash", "20260523T100004Z"),
+    ];
+    const out = projectFeed(ev);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toMatchObject({
+      type: "group",
+      participant_id: "ag-claude",
+      items: [ev[0], ev[1]],
+      status: "concluded",
+    });
+    expect(out[1]).toEqual({ type: "event", event: ev[2] });
+    expect(out[2]).toMatchObject({
+      type: "group",
+      participant_id: "ag-claude",
+      items: [ev[3], ev[4]],
+      status: "streaming",
+    });
+  });
+
   it("flow events surface as standalone feed items (not absorbed into arbitrary groups)", () => {
     const events: AnyEventRecord[] = [
       tool("ag-claude", "Bash", "20260523T100000Z"),
@@ -171,5 +223,69 @@ describe("projectFeed", () => {
       (i) => i.type === "event" && i.event.kind === "flow",
     );
     expect(flowItem).toBeDefined();
+  });
+
+  it("places a late pure self-comment before the nearby result it prefaced", () => {
+    const ev = [
+      html("ag-claude", "20260523T100001Z"),
+      prose(
+        "ag-claude",
+        "Now I'll build the visualization.",
+        true,
+        "20260523T100002Z",
+      ),
+    ];
+    const out = projectFeed(ev);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({
+      type: "group",
+      participant_id: "ag-claude",
+      items: [ev[1]],
+    });
+    expect(out[1]).toEqual({ type: "event", event: ev[0] });
+  });
+
+  it("does not reorder later self-comments that are not near the result", () => {
+    const ev = [
+      html("ag-claude", "20260523T100001Z"),
+      prose(
+        "ag-claude",
+        "Checking another thing.",
+        true,
+        "20260523T100030Z",
+      ),
+    ];
+    const out = projectFeed(ev);
+    expect(out[0]).toEqual({ type: "event", event: ev[0] });
+    expect(out[1]).toMatchObject({
+      type: "group",
+      participant_id: "ag-claude",
+      items: [ev[1]],
+    });
+  });
+});
+
+describe("projectFeed — consumed-block stubs", () => {
+  const stub = {
+    anchorFilename: "20260523T090000Z_ag-c.prose.md",
+    docName: "Redesign Doc",
+    newestBlockFilename: "20260523T100001Z_ag-c.prose.md",
+    blockCount: 1,
+  };
+
+  it("emits a stub marker as a standalone row, flushing the buffered group", () => {
+    const events = [
+      tool("ag-c", "search", "20260523T100000Z"),
+      { type: "stub" as const, stub, sortKey: stub.newestBlockFilename },
+      prose("ag-c", "done", false, "20260523T100002Z"),
+    ];
+
+    const items = projectFeed(events);
+
+    expect(items.map((i) => i.type)).toEqual(["group", "stub", "event"]);
+    const stubItem = items[1]!;
+    expect(stubItem.type === "stub" && stubItem.stub.docName).toBe(
+      "Redesign Doc",
+    );
   });
 });

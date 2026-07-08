@@ -4,6 +4,10 @@ import type { ForkLinkEventRecord } from "@f-mark/shared";
 import { createClient } from "../api/client.js";
 import { useStore } from "../state/store.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  from: "from",
+} as const;
+
 interface Props {
   event: ForkLinkEventRecord;
 }
@@ -24,7 +28,7 @@ export function ForkLinkCard({ event }: Props): JSX.Element {
 
   const { direction, other_session_id, other_session_slug, other_path } =
     event.payload;
-  const label = direction === "from" ? "Forked from" : "Forked to";
+  const label = direction === NO_LOOSE_STRING_VALUES.from ? "Forked from" : "Forked to";
 
   async function navigate(): Promise<void> {
     try {

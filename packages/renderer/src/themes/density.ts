@@ -1,3 +1,8 @@
+const NO_LOOSE_STRING_VALUES = {
+  comfortable: "comfortable",
+  density: "density-",
+} as const;
+
 /**
  * Density manager — mirrors `themes/index.ts`. Adds a body class
  * `density-compact|comfortable|spacious` and persists the choice to
@@ -58,20 +63,23 @@ function safeStorageSet(value: string): void {
 
 export function getCurrentDensity(): DensityName {
   const raw = safeStorageGet();
-  return isDensityName(raw) ? raw : "comfortable";
+  return isDensityName(raw) ? raw : NO_LOOSE_STRING_VALUES.comfortable;
 }
 
-export function applyDensity(name: DensityName): void {
+export function applyDensity(
+  name: DensityName,
+  opts: { persist?: boolean } = {},
+): void {
   const body = globalThis.document?.body;
   if (body !== undefined) {
     const toRemove: string[] = [];
     body.classList.forEach((cls) => {
-      if (cls.startsWith("density-")) toRemove.push(cls);
+      if (cls.startsWith(NO_LOOSE_STRING_VALUES.density)) toRemove.push(cls);
     });
     for (const cls of toRemove) body.classList.remove(cls);
     body.classList.add(`density-${name}`);
   }
-  safeStorageSet(name);
+  if (opts.persist !== false) safeStorageSet(name);
   for (const cb of subscribers) {
     try {
       cb(name);
@@ -85,5 +93,23 @@ export function subscribeDensity(cb: (n: DensityName) => void): () => void {
   subscribers.add(cb);
   return () => {
     subscribers.delete(cb);
+  };
+}
+
+/** Live-apply density changes from OTHER tabs (X6). Mirrors
+ *  `startThemeStorageSync`: re-apply without persisting, notify subscribers. */
+let densityStorageListening = false;
+export function startDensityStorageSync(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (densityStorageListening) return () => {};
+  densityStorageListening = true;
+  const onStorage = (e: StorageEvent): void => {
+    if (e.key !== STORAGE_KEY) return;
+    applyDensity(getCurrentDensity(), { persist: false });
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    densityStorageListening = false;
   };
 }

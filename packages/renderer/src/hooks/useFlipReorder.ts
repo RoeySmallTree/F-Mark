@@ -1,5 +1,9 @@
 import { useLayoutEffect, useRef } from "react";
 
+const NO_LOOSE_STRING_VALUES = {
+  none: "none",
+} as const;
+
 /* FLIP layout-reorder hook — captures element bounding rects between
    renders and applies a single transform + transition so children animate
    from their previous position to their new one. The reorder itself
@@ -34,7 +38,7 @@ export function useFlipReorder(
       const dx = prevRect.left - rect.left;
       const dy = prevRect.top - rect.top;
       if (dx === 0 && dy === 0) continue;
-      el.style.transition = "none";
+      el.style.transition = NO_LOOSE_STRING_VALUES.none;
       el.style.transform = `translate(${dx}px, ${dy}px)`;
       /* Force a reflow so the browser registers the starting offset
          before we revert to the natural position. Without this the

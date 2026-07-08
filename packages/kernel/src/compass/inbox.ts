@@ -1,5 +1,5 @@
 import type { AnyEventRecord, GetInboxResponse } from "@f-mark/shared";
-import { readEvents } from "../events/reader.js";
+import { readVisibleEvents } from "../events/visible.js";
 import type { Paths } from "../paths.js";
 import type { AgentStateStore } from "../services/agentState.js";
 import {
@@ -21,7 +21,7 @@ export interface InboxSnapshot extends GetInboxResponse {
   all_event_count: number;
 }
 
-export function eventsForInbox(
+function eventsForInbox(
   events: AnyEventRecord[],
   participantId: string,
   limit?: number,
@@ -37,7 +37,7 @@ export async function readInbox(input: InboxReadInput): Promise<InboxSnapshot> {
     input.participantId,
     input.sessionId,
   );
-  const allEvents = await readEvents(input.paths, input.sessionId, {
+  const allEvents = await readVisibleEvents(input.paths, input.sessionId, {
     since: cursorBefore ?? undefined,
   });
   const events = eventsForInbox(allEvents, input.participantId, input.limit);
@@ -78,7 +78,7 @@ export async function markInboxSeen(input: {
 }): Promise<string | null> {
   const cursor =
     input.timestamp ??
-    latestEventTimestamp(await readEvents(input.paths, input.sessionId, {}));
+    latestEventTimestamp(await readVisibleEvents(input.paths, input.sessionId, {}));
   if (cursor !== null) {
     await writeCompassCursor(
       input.state,

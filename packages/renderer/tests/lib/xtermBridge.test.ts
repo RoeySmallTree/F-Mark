@@ -4,11 +4,61 @@
    that records sent JSON and a fake Terminal that records write() calls
    and exposes a `simulateTyping` helper to drive `onData`. */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createXtermBridge,
+  paneKeyFor,
   type PaneSocketLike,
 } from "../../src/lib/xtermBridge.js";
+
+describe("paneKeyFor — control keys map to named tmux keys (not literal text)", () => {
+  const key = (k: string) => ({ type: "pane.key", key: k });
+  const ch = (code: number) => String.fromCharCode(code);
+
+  it("Backspace (DEL 0x7f and BS 0x08) → BSpace", () => {
+    // Regression: an un-translated 0x7f reaches pane.input and the kernel
+    // rejects it as "message contains control char at index 0".
+    expect(paneKeyFor(ch(0x7f))).toEqual(key("BSpace"));
+    expect(paneKeyFor(ch(0x08))).toEqual(key("BSpace"));
+  });
+
+  it("standalone Escape (0x1b) → Escape", () => {
+    expect(paneKeyFor(ch(0x1b))).toEqual(key("Escape"));
+  });
+
+  it("Enter (0x0d) → C-m", () => {
+    expect(paneKeyFor(ch(0x0d))).toEqual(key("C-m"));
+  });
+
+  it("Tab (0x09) stays literal text (the one allowed control byte)", () => {
+    expect(paneKeyFor(ch(0x09))).toBeNull();
+  });
+
+  it("every Ctrl-<letter> → C-<letter> (0x01→C-a … 0x1a→C-z)", () => {
+    expect(paneKeyFor(ch(0x01))).toEqual(key("C-a"));
+    expect(paneKeyFor(ch(0x03))).toEqual(key("C-c"));
+    expect(paneKeyFor(ch(0x15))).toEqual(key("C-u")); // line-kill
+    expect(paneKeyFor(ch(0x17))).toEqual(key("C-w")); // word-erase
+    expect(paneKeyFor(ch(0x1a))).toEqual(key("C-z"));
+  });
+
+  it("nav cluster escape sequences → named keys", () => {
+    expect(paneKeyFor("\x1b[A")).toEqual(key("Up"));
+    expect(paneKeyFor("\x1bOA")).toEqual(key("Up")); // application-cursor form
+    expect(paneKeyFor("\x1b[3~")).toEqual(key("DC")); // Delete
+    expect(paneKeyFor("\x1b[H")).toEqual(key("Home"));
+    expect(paneKeyFor("\x1b[F")).toEqual(key("End"));
+    expect(paneKeyFor("\x1b[5~")).toEqual(key("PPage"));
+    expect(paneKeyFor("\x1b[6~")).toEqual(key("NPage"));
+    expect(paneKeyFor("\x1b[Z")).toEqual(key("BTab"));
+  });
+
+  it("printable text returns null (sent as literal input)", () => {
+    expect(paneKeyFor("a")).toBeNull();
+    expect(paneKeyFor("hello")).toBeNull();
+    expect(paneKeyFor(" ")).toBeNull();
+  });
+});
 
 interface RecordingSocket extends PaneSocketLike {
   sent: string[];
@@ -76,6 +126,10 @@ function fakeTerm(): FakeTerm {
 }
 
 describe("xtermBridge", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("writes pane.snapshot data into the terminal", () => {
     const sock = fakeSocket();
     const term = fakeTerm();
@@ -130,6 +184,21 @@ describe("xtermBridge", () => {
     ]);
   });
 
+  it("flushes pending text before sending Enter", () => {
+    vi.useFakeTimers();
+    const sock = fakeSocket();
+    const term = fakeTerm();
+    const bridge = createXtermBridge(sock);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bridge.attach(term as any);
+    term.simulateTyping("git status");
+    term.simulateTyping("\r");
+    expect(sock.sent).toEqual([
+      JSON.stringify({ type: "pane.input", data: "git status" }),
+      JSON.stringify({ type: "pane.key", key: "C-m" }),
+    ]);
+  });
+
   it("sends Ctrl-C (\\u0003) as pane.key C-c", () => {
     const sock = fakeSocket();
     const term = fakeTerm();
@@ -168,16 +237,38 @@ describe("xtermBridge", () => {
     ]);
   });
 
-  it("sends arbitrary text via pane.input", () => {
+  it("coalesces rapid arbitrary text into one pane.input", () => {
+    vi.useFakeTimers();
     const sock = fakeSocket();
     const term = fakeTerm();
     const bridge = createXtermBridge(sock);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     bridge.attach(term as any);
-    term.simulateTyping("hello");
-    expect(sock.sent).toContain(
+    term.simulateTyping("h");
+    term.simulateTyping("e");
+    term.simulateTyping("l");
+    term.simulateTyping("l");
+    term.simulateTyping("o");
+    expect(sock.sent).toEqual([]);
+    vi.runOnlyPendingTimers();
+    expect(sock.sent).toEqual([
       JSON.stringify({ type: "pane.input", data: "hello" }),
-    );
+    ]);
+  });
+
+  it("detach() flushes pending text before disposing the data subscription", () => {
+    vi.useFakeTimers();
+    const sock = fakeSocket();
+    const term = fakeTerm();
+    const bridge = createXtermBridge(sock);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bridge.attach(term as any);
+    term.simulateTyping("pending");
+    bridge.detach();
+    expect(sock.sent).toEqual([
+      JSON.stringify({ type: "pane.input", data: "pending" }),
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("resize() sends pane.resize with cols/rows", () => {

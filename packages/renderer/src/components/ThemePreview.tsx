@@ -8,9 +8,18 @@
 import { type JSX } from "react";
 import { Bot, Check, User } from "lucide-react";
 
-export function ThemePreview(): JSX.Element {
+export function ThemePreview({
+  themeLabel,
+}: {
+  themeLabel: string;
+}): JSX.Element {
   return (
     <div className="tp-preview" aria-hidden="true">
+      <div className="tp-preview-head">
+        <span>Selected theme</span>
+        <strong>{themeLabel}</strong>
+      </div>
+
       {/* Agent message with markdown-ish content */}
       <div className="tp-row">
         <span className="tp-avatar tp-avatar-agent">

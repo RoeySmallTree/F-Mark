@@ -29,6 +29,17 @@ describe("EmbedCard footer", () => {
     ).toBeInTheDocument();
   });
 
+  test("uses the dedicated embed chip instead of the generic badge", () => {
+    const e = make();
+    const { container } = render(
+      <EmbedCard event={e} participants={PARTICIPANTS} allEvents={[e]} />,
+    );
+    const chip = container.querySelector(".embed-head .embed-chip");
+    expect(chip).not.toBeNull();
+    expect(chip).toHaveTextContent("EMBED");
+    expect(container.querySelector(".embed-head .badge")).toBeNull();
+  });
+
   test("Fullscreen opens preview modal; View source opens source mode", async () => {
     const user = userEvent.setup();
     const e = make();

@@ -1,6 +1,17 @@
 import { useMemo, useState, type JSX } from "react";
 import { ChevronRight } from "lucide-react";
-import { MarkdownRenderer } from "./MarkdownRenderer.js";
+import { JsonRenderer } from "./JsonRenderer.js";
+import { RenderedView } from "./MarkdownViews.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  fmAccordion: "fm-accordion",
+  tree: "tree",
+} as const;
+
+export interface InteractiveJsonSection {
+  title: string;
+  colname?: string;
+}
 
 interface SubSection {
   title: string;
@@ -23,7 +34,7 @@ interface ParsedMarkdown {
  * Headings inside fenced code blocks (```) are ignored. Adapted from CABAL's
  * `AccordionMarkdown.tsx` — same parser logic, no UI coupling.
  */
-export function parseMarkdownSections(content: string): ParsedMarkdown {
+function parseMarkdownSections(content: string): ParsedMarkdown {
   const lines = content.split("\n");
   const sections: Section[] = [];
   let preamble = "";
@@ -109,6 +120,7 @@ export function parseMarkdownSections(content: string): ParsedMarkdown {
 interface Props {
   content: string;
   className?: string;
+  interactiveJsonSections?: readonly InteractiveJsonSection[];
 }
 
 /**
@@ -117,18 +129,22 @@ interface Props {
  * subsections). Themed via our `fm-accordion*` classes, which resolve to CSS
  * variables defined in `render.css`.
  */
-export function AccordionMarkdown({ content, className }: Props): JSX.Element {
+export function AccordionMarkdown({
+  content,
+  className,
+  interactiveJsonSections,
+}: Props): JSX.Element {
   const { preamble, sections } = useMemo(
     () => parseMarkdownSections(content),
     [content],
   );
 
-  const cls = "fm-accordion" + (className ? " " + className : "");
+  const cls = NO_LOOSE_STRING_VALUES.fmAccordion + (className ? " " + className : "");
 
   if (sections.length === 0) {
     return (
       <div className={cls}>
-        <MarkdownRenderer content={content} mode="rendered" />
+        <RenderedView content={content} />
       </div>
     );
   }
@@ -137,21 +153,38 @@ export function AccordionMarkdown({ content, className }: Props): JSX.Element {
     <div className={cls}>
       {preamble && (
         <div className="fm-accordion-preamble">
-          <MarkdownRenderer content={preamble} mode="rendered" />
+          <RenderedView content={preamble} />
         </div>
       )}
       <div className="fm-accordion-sections">
         {sections.map((section, i) => (
-          <SectionAccordion key={i} section={section} />
+          <SectionAccordion
+            key={i}
+            section={section}
+            interactiveJsonSections={interactiveJsonSections}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function SectionAccordion({ section }: { section: Section }): JSX.Element {
+function SectionAccordion({
+  section,
+  interactiveJsonSections,
+}: {
+  section: Section;
+  interactiveJsonSections?: readonly InteractiveJsonSection[];
+}): JSX.Element {
   const [open, setOpen] = useState(false);
   const hasContent = Boolean(section.body) || section.subsections.length > 0;
+  const jsonValue = useMemo(
+    () =>
+      section.body.length > 0
+        ? parseInteractiveJsonSection(section, interactiveJsonSections)
+        : null,
+    [interactiveJsonSections, section],
+  );
 
   return (
     <div className="fm-accordion-section">
@@ -179,7 +212,13 @@ function SectionAccordion({ section }: { section: Section }): JSX.Element {
       {open && hasContent && (
         <div className="fm-accordion-body">
           {section.body && (
-            <MarkdownRenderer content={section.body} mode="rendered" />
+            jsonValue === null ? (
+              <RenderedView content={section.body} />
+            ) : (
+              <div className="fm-accordion-json">
+                <JsonRenderer value={jsonValue} mode={NO_LOOSE_STRING_VALUES.tree} />
+              </div>
+            )
           )}
           {section.subsections.length > 0 && (
             <div className="fm-accordion-subsections">
@@ -192,6 +231,34 @@ function SectionAccordion({ section }: { section: Section }): JSX.Element {
       )}
     </div>
   );
+}
+
+function parseInteractiveJsonSection(
+  section: Section,
+  interactiveJsonSections: readonly InteractiveJsonSection[] | undefined,
+): unknown | null {
+  const title = section.title.trim();
+  if (
+    interactiveJsonSections !== undefined &&
+    !interactiveJsonSections.some(
+      (jsonSection) =>
+        title === jsonSection.title || title.startsWith(`${jsonSection.title} (`),
+    )
+  ) {
+    return null;
+  }
+  const text = section.body.trim();
+  if (
+    (!text.startsWith("{") || !text.endsWith("}")) &&
+    (!text.startsWith("[") || !text.endsWith("]"))
+  ) {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function SubSectionAccordion({ sub }: { sub: SubSection }): JSX.Element {
@@ -218,7 +285,7 @@ function SubSectionAccordion({ sub }: { sub: SubSection }): JSX.Element {
       </button>
       {open && sub.body && (
         <div className="fm-accordion-body">
-          <MarkdownRenderer content={sub.body} mode="rendered" />
+          <RenderedView content={sub.body} />
         </div>
       )}
     </div>

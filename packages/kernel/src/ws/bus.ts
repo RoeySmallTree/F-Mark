@@ -65,6 +65,12 @@ export interface ManagedAgentTerminalSpawnedMessage extends BusEnvelope {
   type: "managed-agent.terminal-spawned";
   tmux_session: string;
   label: string;
+  index: number;
+}
+
+export interface ManagedAgentTerminalClosedMessage extends BusEnvelope {
+  type: "managed-agent.terminal-closed";
+  tmux_session: string;
 }
 
 export interface EnvProbeUpdatedMessage extends BusEnvelope {
@@ -80,16 +86,26 @@ export interface SessionForkedMessage extends BusEnvelope {
   warnings: string[];
 }
 
+export interface SessionRenamedMessage extends BusEnvelope {
+  type: "session.renamed";
+  /* The session id is immutable; a rename only changes the display slug in
+     the session meta. Clients refresh labels — nothing is keyed by name. */
+  session: SessionWithPath;
+}
+
 export interface FilesChangedMessage extends BusEnvelope {
   type: "files.changed";
   root: string;
 }
 
-/* path-switched — broadcast on every successful /paths/active or
-   /paths/active DELETE. Carries the new activePath + pathId + revision
-   so clients can clear their per-session caches and refetch /sessions
-   for the new path. Multi-tab: every connected tab receives this and
-   resyncs. */
+export interface PathsUpdatedMessage {
+  type: "paths-updated";
+  paths: Array<{ path: string; path_id: string }>;
+}
+
+/* path-switched — deprecated compatibility broadcast for old clients that
+   still call /paths/active. New clients consume paths-updated and keep their
+   selected session/root local instead of treating this as a tab-wide switch. */
 export interface PathSwitchedMessage {
   type: "path-switched";
   activePath: string | null;
@@ -105,9 +121,12 @@ export type BusMessage =
   | ManagedAgentKilledMessage
   | ManagedAgentUpdatedMessage
   | ManagedAgentTerminalSpawnedMessage
+  | ManagedAgentTerminalClosedMessage
   | EnvProbeUpdatedMessage
   | SessionForkedMessage
+  | SessionRenamedMessage
   | FilesChangedMessage
+  | PathsUpdatedMessage
   | PathSwitchedMessage;
 
 export interface Bus {

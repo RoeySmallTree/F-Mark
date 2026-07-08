@@ -1,23 +1,10 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { PostHtmlBody } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
-import { sessionExists } from "../sessions.js";
 import type { Bus } from "../ws/bus.js";
-import { normaliseDeps, resolvePaths, type PathDeps } from "./pathDeps.js";
+import { normaliseDeps, type PathDeps } from "./pathDeps.js";
 import { writeHtmlEvent } from "../services/events.js";
-import { publishEventWrites } from "../services/eventPublisher.js";
-
-async function ensureSession(
-  p: Paths,
-  sessionId: string,
-  reply: FastifyReply,
-): Promise<boolean> {
-  if (!(await sessionExists(p, sessionId))) {
-    reply.code(404).send({ error: `session not found: ${sessionId}` });
-    return false;
-  }
-  return true;
-}
+import { createScopedWriteRunner } from "./events/scopedWrite.js";
 
 export function registerHtmlRoutes(
   app: FastifyInstance,
@@ -25,8 +12,12 @@ export function registerHtmlRoutes(
   getBus: () => Bus,
 ): void {
   const deps = normaliseDeps(pOrDeps);
+  const runScopedWrite = createScopedWriteRunner(deps, getBus);
 
-  app.post<{ Params: { id: string }; Body: PostHtmlBody }>(
+  app.post<{
+    Params: { id: string };
+    Body: PostHtmlBody & { path_id?: string; root?: string };
+  }>(
     "/sessions/:id/events/html",
     {
       schema: {
@@ -51,21 +42,17 @@ export function registerHtmlRoutes(
             },
             supersedes: { type: "string" },
             append_to: { type: "string", minLength: 1 },
+            /* Required root scope (X2). */
+            path_id: { type: "string" },
+            root: { type: "string" },
           },
         },
       },
     },
     async (req, reply) => {
-      const p = resolvePaths(deps);
-      if (!(await ensureSession(p, req.params.id, reply))) return;
-      try {
-        const written = await writeHtmlEvent(p, req.params.id, req.body);
-        publishEventWrites(getBus(), req.params.id, written.publish);
-        return written.response;
-      } catch (err) {
-        reply.code(400);
-        return { error: err instanceof Error ? err.message : String(err) };
-      }
+      return runScopedWrite(req.body, req.params.id, reply, (p) =>
+        writeHtmlEvent(p, req.params.id, req.body),
+      );
     },
   );
 }

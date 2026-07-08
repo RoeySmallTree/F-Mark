@@ -21,6 +21,7 @@
   flex-direction: column;
   font-size: 12px;
   color: var(--ink);
+  min-height: 100%;
   /* Local stacking context so the sticky chrome's high z-indexes
      (header/search/chips and folder rows) compete only against each
      other, not against globally-positioned UI like modals (z=100),
@@ -32,30 +33,6 @@
      `top:` math lands below the chrome rather than under it. */
   --files-chrome-h: 35px;
 }
-/* When the lower-split layout is active, the pane must fill the parent
-   scrollport so the percentage-based split between tree (top) and
-   viewer (bottom) has a known total to split. Without an explicit
-   height the children fall back to their natural content size and the
-   split ratio becomes meaningless. */
-.files-pane.fv-lower {
-  height: 100%;
-  min-height: 0;
-}
-/* In lower-split mode the top half is its own scroll container so the
-   chrome can stick at its top (sticky top:0 resolves to the nearest
-   scrolling ancestor). The chrome stays pinned while the tree scrolls
-   independently of the viewer below. */
-.files-pane.fv-lower .files-pane-top {
-  overflow: auto;
-  min-height: 0;
-  display: block;
-}
-.files-pane.fv-lower .files-pane-bottom {
-  overflow: hidden;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
 
 .files-empty,
 .files-loading,
@@ -64,6 +41,34 @@
   color: var(--ink-3);
   font-size: 11.5px;
 }
+
+/* Spinner + muted label for transient load states */
+.files-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px;
+  color: var(--ink-4);
+}
+
+.files-loading::before {
+  content: "";
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid color-mix(in srgb, var(--agent) 28%, transparent);
+  border-top-color: var(--agent);
+  border-radius: 50%;
+  animation: files-spin 0.7s linear infinite;
+}
+
+@keyframes files-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .files-loading::before { animation: none; border-top-color: var(--agent); }
+}
 .files-truncated {
   background: color-mix(in srgb, var(--agent) 8%, transparent);
   border-bottom: 1px solid var(--line-2);
@@ -71,16 +76,19 @@
 
 .files-header {
   display: flex;
+  align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--line-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
   position: sticky;
   top: 0;
   z-index: 200;
   background: var(--panel);
-  height: 35px;
+  height: 38px;
   box-sizing: border-box;
 }
+
+/* Icon buttons: search, X, refresh */
 .files-header-btn {
   display: inline-flex;
   align-items: center;
@@ -89,24 +97,25 @@
   height: 22px;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background var(--dur-base) var(--ease-out-quart),
-    color var(--dur-base) var(--ease-out-quart),
-    border-color var(--dur-base) var(--ease-out-quart);
+  transition:
+    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .files-header-btn:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink);
 }
 .files-header-btn.is-on {
-  border-color: var(--line-2);
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 22%, transparent);
+  background: color-mix(in srgb, var(--agent) 10%, transparent);
+  color: var(--ink-2);
 }
 .files-header-btn[disabled] {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: default;
 }
 .files-header-btn .is-spinning {
@@ -116,15 +125,94 @@
   to { transform: rotate(360deg); }
 }
 
+/* ── Diff tree header extras ─────────────────────────────────────────── */
+.diff-tree-header {
+  gap: 6px;
+}
+
+/* This session | This branch segmented control — same double-bezel pill
+   as the terminal-mode-toggle. */
+.diff-tree-segment {
+  display: inline-flex;
+  min-width: 0;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--agent) 5%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent);
+  overflow: visible;
+}
+.diff-tree-segment button {
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.diff-tree-segment button:hover {
+  color: var(--ink-2);
+}
+.diff-tree-segment button:last-child {
+  /* no divider needed with pill design */
+}
+.diff-tree-segment button.is-on {
+  background: color-mix(in srgb, var(--agent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 24%, transparent);
+  color: var(--ink);
+}
+
+/* Branch ref select (git base comparison) */
+.diff-tree-refs {
+  display: flex;
+  align-items: center;
+  height: 37px;
+  padding: 5px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
+  position: sticky;
+  top: 38px;
+  z-index: 199;
+  background: var(--panel);
+  box-sizing: border-box;
+}
+.diff-tree-refs select {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--agent) 5%, var(--panel));
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.diff-tree-refs select:hover,
+.diff-tree-refs select:focus {
+  border-color: color-mix(in srgb, var(--agent) 40%, transparent);
+}
+
 /* Search row */
 .files-search {
   display: flex;
   gap: 4px;
   align-items: center;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--line-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
   position: sticky;
-  top: 35px;
+  top: 38px;
   z-index: 199;
   background: var(--panel);
   height: 37px;
@@ -134,21 +222,21 @@
   flex: 1;
   min-width: 0;
   height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--canvas);
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--agent) 5%, var(--panel));
   color: var(--ink);
-  font: inherit;
+  font-family: var(--mono);
   font-size: 12px;
   outline: none;
-  transition: border-color var(--dur-base) var(--ease-out-quart);
+  transition: border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .files-search-input:focus {
-  border-color: color-mix(in srgb, var(--agent) 50%, var(--line));
+  border-color: color-mix(in srgb, var(--agent) 45%, transparent);
 }
 .files-search-input.is-invalid {
-  border-color: #b54848;
+  border-color: var(--rose);
 }
 .files-search-toggle {
   display: inline-flex;
@@ -158,12 +246,13 @@
   height: 22px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background var(--dur-base) var(--ease-out-quart),
-    color var(--dur-base) var(--ease-out-quart),
-    border-color var(--dur-base) var(--ease-out-quart);
+  transition:
+    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .files-search-toggle:hover {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
@@ -226,12 +315,10 @@
 .file-tree {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
 }
 .file-tree-empty {
-  padding: 16px;
-  color: var(--ink-3);
-  font-size: 11.5px;
-  text-align: center;
+  flex: 1 1 auto;
 }
 
 /* Each folder + its descendants live in a `.folder-section` wrapper.
@@ -263,7 +350,7 @@
      one by DOM order, which gives the user a clean "current folder at
      top" view instead of stacked breadcrumbs. */
   top: var(--files-chrome-h);
-  z-index: 50;
+  z-index: 120;
   background: var(--panel);
   padding-left: calc(var(--depth) * var(--file-indent) + 8px);
   padding-right: 8px;
@@ -346,6 +433,38 @@
   color: var(--agent);
 }
 
+/* Per-file "changed" badge (read-only diff, design §8.3). */
+.file-row-changed {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--mono);
+  line-height: 1;
+  margin-left: 2px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.file-row-changed.is-added,
+.file-row-changed.is-untracked {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+}
+.file-row-changed.is-deleted {
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 16%, transparent);
+}
+.file-row-changed.is-modified,
+.file-row-changed.is-renamed {
+  color: var(--agent);
+  background: color-mix(in srgb, var(--agent) 16%, transparent);
+}
+
 /* Star button — single star = session, double star = project */
 .file-row-star {
   flex: 0 0 auto;
@@ -386,4 +505,63 @@
 }
 .file-row-star-second {
   margin-left: -3px;
+}
+
+/* "Changed (not in tree)" — deleted / renamed-away paths that no longer have
+   a tree row to carry a badge (review §6). */
+.files-changed-absent {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+.files-changed-absent-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  padding: 2px 8px;
+}
+.files-changed-absent-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.files-changed-absent-row:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.files-changed-absent-icon {
+  flex: 0 0 auto;
+  color: var(--rose);
+}
+.files-changed-absent-row.is-renamed .files-changed-absent-icon {
+  color: var(--agent);
+}
+.files-changed-absent-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.files-changed-absent-badge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--rose);
+}
+.files-changed-absent-row.is-renamed .files-changed-absent-badge {
+  color: var(--agent);
 }

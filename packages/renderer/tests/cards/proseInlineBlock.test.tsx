@@ -9,9 +9,8 @@ describe("ProseInlineBlock registry dispatcher", () => {
     cleanup();
   });
 
-  test("renders real markdown for a prose block (no longer a stub)", () => {
-    /* Phase 7 replaced the prose stub with the real markdown renderer.
-       A prose block now shows its actual content via fm-prose, with an
+  test("renders real markdown for a prose block", () => {
+    /* A prose block shows its actual content via fm-prose, with an
        optional sub-section header above when `name` is set. */
     const ev = makeProse(
       "20260522T120000Z_ag-c92e.prose.md",
@@ -29,8 +28,7 @@ describe("ProseInlineBlock registry dispatcher", () => {
     expect(container.querySelector(".prose-inline-prose")).not.toBeNull();
     expect(container.querySelector(".fm-prose")).not.toBeNull();
     expect(container.textContent).toContain("hello");
-    // Phase 7's prose block is NOT a stub anymore.
-    expect(container.querySelector(".prose-embed-stub")).toBeNull();
+    expect(container.querySelector(".prose-embed-unsupported")).toBeNull();
   });
 
   test("named prose block renders its name as an h3 sub-section header", () => {
@@ -57,9 +55,8 @@ describe("ProseInlineBlock registry dispatcher", () => {
     expect(h3?.textContent).toBe("Data flow");
   });
 
-  test("registered non-prose kinds render their real embedded card (not stubs)", () => {
-    /* Phases 9+10 replaced the remaining stubs with the real cards.
-       Each kind renders its corresponding card class — no `.prose-embed-stub`. */
+  test("registered non-prose kinds render their embedded cards", () => {
+    /* Each kind renders its corresponding card class, not a fallback. */
     const cases: { kind: AnyEventRecord["kind"]; cardClass: string; payload: object }[] = [
       {
         kind: "html",
@@ -128,16 +125,15 @@ describe("ProseInlineBlock registry dispatcher", () => {
       );
       expect(container.querySelector(cardClass), `${kind} card`).not.toBeNull();
       expect(
-        container.querySelector(".prose-embed-stub"),
-        `${kind} not a stub`,
+        container.querySelector(".prose-embed-unsupported"),
+        `${kind} supported`,
       ).toBeNull();
       cleanup();
     }
   });
 
-  test("flow block renders real embedded FlowCard (no longer a stub)", async () => {
-    /* Phase 8 replaced the flow stub with FlowCard variant="embedded".
-       The embedded variant drops the .flow-head chrome but keeps the
+  test("flow block renders embedded FlowCard", async () => {
+    /* The embedded variant drops the .flow-head chrome but keeps the
        canvas and (optional) title.
        FlowCard is loaded lazily (React.lazy) to keep @xyflow/react +
        dagre out of the main bundle — so the "Pipeline" title only appears
@@ -165,7 +161,7 @@ describe("ProseInlineBlock registry dispatcher", () => {
     );
     expect(container.querySelector(".flow-card-embedded")).not.toBeNull();
     expect(container.querySelector(".flow-head")).toBeNull();
-    expect(container.querySelector(".prose-embed-stub")).toBeNull();
+    expect(container.querySelector(".prose-embed-unsupported")).toBeNull();
     await waitFor(() =>
       expect(container.textContent).toContain("Pipeline"),
     );
@@ -174,7 +170,7 @@ describe("ProseInlineBlock registry dispatcher", () => {
   test("unknown kind falls back to UnsupportedBlock", () => {
     /* `turn-end` isn't in the inline registry — its top-level dispatch
        renders a divider, but as an embedded block it falls through to
-       the quiet unsupported stub. */
+       the quiet unsupported block. */
     const ev: AnyEventRecord = {
       filename: "20260522T120200Z_ag-c92e.turn-end.json",
       timestamp: "20260522T120200Z",
@@ -190,10 +186,10 @@ describe("ProseInlineBlock registry dispatcher", () => {
         mode="rendered"
       />,
     );
-    const stub = container.querySelector(".prose-embed-stub");
-    expect(stub).not.toBeNull();
-    expect(stub?.getAttribute("data-unsupported")).not.toBeNull();
-    expect(stub?.textContent).toContain("unsupported");
+    const unsupported = container.querySelector(".prose-embed-unsupported");
+    expect(unsupported).not.toBeNull();
+    expect(unsupported?.getAttribute("data-unsupported")).not.toBeNull();
+    expect(unsupported?.textContent).toContain("unsupported");
   });
 
   test("wrapper carries data-event-filename + data-block-kind", () => {

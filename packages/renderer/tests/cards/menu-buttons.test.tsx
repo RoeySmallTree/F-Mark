@@ -1,7 +1,4 @@
-/* Phase 15 — dead-button audit. Verifies that the `.menu` (•••) button on
-   each card kind has a real onClick handler that copies the relevant content
-   to the clipboard. Prior to this audit these buttons existed visually but
-   were inert. */
+/* Verifies that card menu buttons perform their clipboard actions. */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -26,7 +23,7 @@ function getClipboardSpy(): ReturnType<typeof vi.fn> {
   return writeText;
 }
 
-describe("Card .menu buttons are wired (Phase 15)", () => {
+describe("Card menu buttons are wired", () => {
   beforeEach(() => {
     resetStore();
   });
@@ -93,7 +90,7 @@ describe("Card .menu buttons are wired (Phase 15)", () => {
     await user.click(menuBtn);
     expect(writeText).toHaveBeenCalled();
     const arg = (writeText.mock.calls[0]?.[0] ?? "") as string;
-    expect(arg).toContain("/sessions/2026-05-22-launch-planning/raw/");
+    expect(arg).toContain("/sessions/2026-05-22-launch-review/raw/");
     expect(arg).toContain("/index.html");
   });
 });

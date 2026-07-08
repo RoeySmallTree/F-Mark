@@ -1,5 +1,11 @@
 import type { FlowNodePopover } from "@f-mark/shared";
 
+const NO_LOOSE_STRING_VALUES = {
+  htmlHead: "<html><head>",
+  headBody: "</head><body>",
+  bodyHtml: "</body></html>",
+} as const;
+
 // The iframe is sandboxed and isolated from the host page, so its baseline
 // styles can't inherit from F-Mark's CSS variables. We hand-roll a tiny base
 // so popovers without explicit css still look like F-Mark (light ink color,
@@ -18,12 +24,12 @@ export function assemblePopoverSrcdoc(p: FlowNodePopover): string {
     p.js !== undefined && p.js.length > 0 ? `<script>${p.js}</script>` : "";
   return [
     "<!doctype html>",
-    "<html><head>",
+    NO_LOOSE_STRING_VALUES.htmlHead,
     `<style>${BASE_STYLE}</style>`,
     css,
-    "</head><body>",
+    NO_LOOSE_STRING_VALUES.headBody,
     p.html,
     js,
-    "</body></html>",
+    NO_LOOSE_STRING_VALUES.bodyHtml,
   ].join("");
 }

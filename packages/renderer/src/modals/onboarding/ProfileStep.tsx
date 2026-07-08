@@ -1,80 +1,33 @@
+const NO_LOOSE_STRING_VALUES = {
+  usYou: "us-you",
+  user: "user",
+  you: "You",
+  xl: "xl",
+} as const;
+
 /* ProfileStep — the opener. Headline does the "who the f**k are you?" bit (in
-   the modal head); this body softens it and collects a display name + avatar.
-   Reuses the avatar plumbing from Settings → Profile (shared size/mime/byte
-   limits + ParticipantAvatar). The values are applied to the chosen project's
-   user participant at finish. */
+   the modal head); this body softens it and collects a display name + avatar
+   preset. Values are applied to the machine-wide F-Mark user profile at finish. */
 
-import { useRef, useState, type JSX } from "react";
-import { ImagePlus, Trash2 } from "lucide-react";
-import {
-  PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH,
-  PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES,
-  PARTICIPANT_AVATAR_IMAGE_MAX_BYTES,
-} from "@f-mark/shared";
+import type { JSX } from "react";
+import { AvatarPresetPicker } from "../../components/AvatarPresetPicker.js";
 import { ParticipantAvatar } from "../../components/ParticipantAvatar.js";
-
-const AVATAR_MIME = new Set<string>(PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES);
-const AVATAR_ACCEPT = PARTICIPANT_AVATAR_DATA_URL_MIME_TYPES.join(",");
-
-function avatarLimitLabel(): string {
-  return `${Math.floor(PARTICIPANT_AVATAR_IMAGE_MAX_BYTES / 1024)} KB`;
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("Could not read image file."));
-    });
-    reader.addEventListener("error", () =>
-      reject(new Error("Could not read image file.")),
-    );
-    reader.readAsDataURL(file);
-  });
-}
 
 export interface ProfileStepProps {
   name: string;
-  avatarDataUrl: string | undefined;
+  avatarPreset: string | undefined;
   color: string;
   onNameChange(name: string): void;
-  onAvatarChange(dataUrl: string | undefined): void;
+  onAvatarPresetChange(id: string): void;
 }
 
 export function ProfileStep({
   name,
-  avatarDataUrl,
+  avatarPreset,
   color,
   onNameChange,
-  onAvatarChange,
+  onAvatarPresetChange,
 }: ProfileStepProps): JSX.Element {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function choose(file: File | undefined): Promise<void> {
-    if (file === undefined) return;
-    if (!AVATAR_MIME.has(file.type)) {
-      setError("Choose a PNG, JPEG, WebP, or GIF image.");
-      return;
-    }
-    if (file.size > PARTICIPANT_AVATAR_IMAGE_MAX_BYTES) {
-      setError(`Image must be ${avatarLimitLabel()} or smaller.`);
-      return;
-    }
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      if (dataUrl.length > PARTICIPANT_AVATAR_DATA_URL_MAX_LENGTH) {
-        setError(`Image must be ${avatarLimitLabel()} or smaller.`);
-        return;
-      }
-      setError(null);
-      onAvatarChange(dataUrl);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
   return (
     <div className="ob-profile">
       <p className="ob-profile-lead">
@@ -85,53 +38,23 @@ export function ProfileStep({
 
       <div className="ob-profile-card">
         <ParticipantAvatar
-          participantId="us-you"
+          participantId={NO_LOOSE_STRING_VALUES.usYou}
           participant={{
-            kind: "user",
-            name: name.length > 0 ? name : "You",
+            kind: NO_LOOSE_STRING_VALUES.user,
+            name: name.length > 0 ? name : NO_LOOSE_STRING_VALUES.you,
             color,
-            avatar_data_url: avatarDataUrl,
+            avatar_preset: avatarPreset,
           }}
-          size="xl"
+          size={NO_LOOSE_STRING_VALUES.xl}
           title={name.length > 0 ? name : "You"}
         />
         <div className="ob-profile-photo">
-          <div className="ob-profile-photo-actions">
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => inputRef.current?.click()}
-            >
-              <ImagePlus size={14} aria-hidden /> Choose image
-            </button>
-            {avatarDataUrl !== undefined ? (
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => {
-                  onAvatarChange(undefined);
-                  setError(null);
-                }}
-              >
-                <Trash2 size={14} aria-hidden /> Remove
-              </button>
-            ) : null}
-          </div>
-          <span className="ob-hint">
-            PNG, JPEG, WebP, or GIF up to {avatarLimitLabel()}. Optional.
-          </span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={AVATAR_ACCEPT}
-            aria-label="Upload profile image"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.currentTarget.files?.[0];
-              e.currentTarget.value = "";
-              void choose(file);
-            }}
+          <AvatarPresetPicker
+            seed={NO_LOOSE_STRING_VALUES.usYou}
+            value={avatarPreset}
+            onChange={onAvatarPresetChange}
           />
+          <span className="ob-hint">Pick a character avatar. Optional.</span>
         </div>
       </div>
 
@@ -152,12 +75,6 @@ export function ProfileStep({
           Shown on everything you post. Leave blank to stay “You”.
         </div>
       </div>
-
-      {error !== null ? (
-        <div className="form-error" role="alert">
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }

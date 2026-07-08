@@ -177,6 +177,16 @@ export async function resolveWriteContext(
   return { ...ctx, participantId: ctx.participantId };
 }
 
+/* Required root scope (expansion-decisions.md X2) — every event read/write
+   carries the resolved project root. The kernel resolves it through known
+   roots; the MCP context root is always one of them, so we send `root`
+   (not a `path_id` we'd have to recompute). Used for both event POST bodies
+   and the event-list GET querystring so no MCP tool relies on the active
+   root anymore. */
+export function scopeForContext(ctx: FmarkMcpContext): { root: string } {
+  return { root: ctx.projectRoot };
+}
+
 export async function fmarkFetch(
   ctx: FmarkMcpContext,
   path: string,

@@ -1,5 +1,4 @@
-/* Theme structural overrides — radius, borders, shadows, gradients, scanlines, glows.
-   Ported verbatim from planning/redesign/design.html (lines 112–173). */
+/* Theme structural overrides - radius, borders, shadows, gradients, scanlines, glows. */
 
 /* === THEME structural overrides === */
 body.theme-brutalist *, body.theme-brutalist *::before, body.theme-brutalist *::after { transition:none !important; }
@@ -18,7 +17,7 @@ body.theme-brutalist .card .stripe{ width:5px; background:var(--ink) }
 body.theme-brutalist .feed-inner h1, body.theme-brutalist .feed-inner h2, body.theme-brutalist .feed-inner h3{ text-transform:uppercase; letter-spacing:.02em }
 body.theme-brutalist .prose-pin{ background:var(--ink); color:var(--canvas); border-color:var(--ink) }
 body.theme-brutalist .prose-pin .dot{ background:var(--canvas) }
-body.theme-brutalist .rail-btn.active::before, body.theme-brutalist .session-item.active::before{ background:var(--ink); width:5px }
+body.theme-brutalist .session-item.active::before{ background:var(--ink); width:5px }
 body.theme-brutalist .form-input:focus, body.theme-brutalist .compose-box:focus-within{ box-shadow:0 0 0 2px var(--ink) !important; border-color:var(--ink) !important }
 
 body.theme-terminal{ font-feature-settings: "tnum" }
@@ -42,7 +41,6 @@ body.theme-cyber .prose-card{ box-shadow:0 0 24px rgba(255,43,214,.06), 0 4px 14
 body.theme-cyber .primary-action{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000; font-weight:600; border-color:transparent }
 body.theme-cyber .btn-solid{ background:linear-gradient(135deg, var(--user), var(--agent)); color:#000 }
 body.theme-cyber .choice-opt.chosen{ box-shadow:0 0 16px rgba(125,255,90,.2) }
-body.theme-cyber .rail-btn.active::before{ background:linear-gradient(180deg, var(--user), var(--agent)) }
 body.theme-cyber .topbar, body.theme-cyber .left-panel, body.theme-cyber .right-panel{ border-color:var(--line) }
 body.theme-cyber .prose-title{ background:linear-gradient(90deg, var(--ink), var(--user) 80%); -webkit-background-clip:text; background-clip:text; color:transparent }
 
@@ -179,6 +177,64 @@ body.theme-ember .prose-title{
 }
 body.theme-ember .prose-content .num{ color:#ff8a7a }
 body.theme-ember .prose-content blockquote{ border-left-color:#ff5d72; color:#d7b4ac }
+
+/* Ember tool-use boxes — the base cards.css paints these from the generic dark
+   tokens, which collapse to a flat brown-black slab (command pre = --bg #070608)
+   with no theme accent. Lift the surfaces off the floor and thread the signature
+   coral through them, matching the prose/button vocabulary above. */
+body.theme-ember .tool-command-card{
+  background:
+    radial-gradient(130% 120% at 0% 0%, rgba(255,93,114,.05), transparent 58%),
+    color-mix(in oklch, var(--canvas) 88%, var(--bg) 12%);
+  border-color: color-mix(in oklch, var(--rose) 15%, var(--line));
+  border-radius: 10px;
+}
+/* the command itself — the "brownish box": a raised plum slab, coral-tinted edge,
+   a faint coral top-sheen and ambient depth, with crisp high-contrast text */
+body.theme-ember .tool-command-code{
+  background:
+    linear-gradient(180deg, rgba(255,93,114,.07), transparent 64px),
+    color-mix(in oklch, var(--panel-2) 58%, var(--canvas) 42%);
+  border-color: color-mix(in oklch, var(--rose) 20%, var(--line));
+  border-radius: 9px;
+  color: var(--ink);
+  box-shadow:
+    0 1px 0 rgba(255,141,150,.06) inset,
+    0 0 0 1px rgba(255,93,114,.04),
+    0 10px 22px rgba(8,4,10,.45);
+}
+/* pipeline chips → coral command tokens */
+body.theme-ember .tool-command-chip{
+  background: color-mix(in oklch, var(--canvas) 82%, var(--rose) 8%);
+  border-color: color-mix(in oklch, var(--rose) 22%, var(--line));
+}
+body.theme-ember .tool-command-chip.compact{
+  background: color-mix(in oklch, var(--bg) 72%, var(--rose) 7%);
+  color: var(--ink-2);
+}
+body.theme-ember .tool-command-chip:hover,
+body.theme-ember .tool-command-chip:focus-visible{
+  border-color:#ff5d72; color:var(--ink);
+  box-shadow: 0 0 12px rgba(255,93,114,.22);
+}
+body.theme-ember .tool-command-chip:focus-visible{ outline-color:#ff5d72 }
+/* the pipe arrow → coral */
+body.theme-ember .tool-command-flow-join{ background: color-mix(in oklch, var(--rose) 38%, var(--line)) }
+body.theme-ember .tool-command-flow-join::after{ border-left-color: color-mix(in oklch, var(--rose) 52%, var(--line)) }
+/* story rows — recessed plum cards that read clearly under the slab */
+body.theme-ember .tool-command-story li{
+  background: color-mix(in oklch, var(--canvas) 64%, var(--bg) 36%);
+  border-color: color-mix(in oklch, var(--rose) 9%, var(--line-2));
+}
+/* inline code + access chips — coral-leaning, drop the muddy amber-brown execute tint */
+body.theme-ember .tool-inline-code{ border-color: color-mix(in oklch, var(--rose) 14%, var(--line)) }
+body.theme-ember .tool-path-chip[data-access="execute"] > span{
+  color:#ffb13e; background: color-mix(in oklch, #ffb13e 16%, var(--panel));
+}
+/* the expanded card is the active surface — give it a hairline coral edge */
+body.theme-ember .tool-call.open, body.theme-ember .tool-call[open]{
+  border-color: color-mix(in oklch, var(--rose) 18%, var(--line));
+}
 
 /* All dark themes — swap the rgba(0,0,0,.012) gradient overlay on sticky heads/
    foots for a faint white-tint wash, but keep the opaque var(--canvas) base so a

@@ -48,15 +48,18 @@ describe("<ToolUseCard>", () => {
     cleanup();
   });
 
-  it("renders Bash tools with command name plus muted remainder", () => {
+  it("renders Bash tools with a command icon plus English intro", () => {
     render(<ToolUseCard event={makeEvent()} />);
     expect(screen.getByText("Bash", { selector: ".tool-type" })).toBeInTheDocument();
-    expect(screen.getByText("ls", { selector: ".tool-summary-primary" })).toBeInTheDocument();
-    expect(screen.getByText("-la", { selector: ".tool-summary-muted" })).toBeInTheDocument();
+    const icon = document.querySelector(".tool-summary-icon");
+    expect(icon).not.toBeNull();
+    expect(icon?.classList.contains("lucide-list")).toBe(true);
+    expect(screen.getByText("List files", { selector: ".tool-summary-primary" })).toBeInTheDocument();
+    expect(document.querySelector(".tool-summary-muted")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Command" })).not.toBeInTheDocument();
   });
 
-  it("keeps long Bash summaries constrained with muted overflow text", () => {
+  it("keeps long Bash English summaries constrained", () => {
     render(
       <ToolUseCard
         event={makeEvent({
@@ -68,21 +71,40 @@ describe("<ToolUseCard>", () => {
       />,
     );
 
-    expect(screen.getByText("find", { selector: ".tool-summary-primary" })).toBeInTheDocument();
     expect(
-      screen.getByText(/\/home\/roey\/workspace\/ides\/t3code/, {
-        selector: ".tool-summary-muted",
+      screen.getByText(/Find matching paths in chat and 1 more step/, {
+        selector: ".tool-summary-primary",
       }),
     ).toBeInTheDocument();
+    const icon = document.querySelector(".tool-summary-icon");
+    expect(icon?.classList.contains("lucide-folder-search")).toBe(true);
+    expect(document.querySelector(".tool-summary-muted")).toBeNull();
 
     const summaryRule = cssRule(".tool-summary");
     expect(summaryRule).toContain("flex: 0 1 auto;");
     expect(summaryRule).toContain("max-width: min(68ch, 100%);");
+    const iconRule = cssRule(".tool-summary-icon");
+    expect(iconRule).toContain("margin-right: .55ch;");
     const mutedRule = cssRule(".tool-summary-muted");
     expect(mutedRule).toContain("color: var(--ink-4);");
+    expect(mutedRule).toContain("margin-left: .9ch;");
     expect(mutedRule).toContain("text-overflow: ellipsis;");
     const statusRule = cssRule(".tool-head > .spin, .tool-head > .ok-dot, .tool-head > .err-dot");
     expect(statusRule).toContain("margin-left: auto;");
+  });
+
+  it("uses a code icon and fallback intro for unknown Bash commands", () => {
+    render(
+      <ToolUseCard
+        event={makeEvent({
+          input: { command: "custom-runner --with detail" },
+        })}
+      />,
+    );
+
+    const icon = document.querySelector(".tool-summary-icon");
+    expect(icon?.classList.contains("lucide-code")).toBe(true);
+    expect(screen.getByText("Run shell command custom-runner", { selector: ".tool-summary-primary" })).toBeInTheDocument();
   });
 
   it("expands input + result on click", () => {
@@ -94,6 +116,54 @@ describe("<ToolUseCard>", () => {
     expect(stdoutSection).not.toBeNull();
     expect(within(commandSection as HTMLElement).getByText("ls -la")).toBeInTheDocument();
     expect(within(stdoutSection as HTMLElement).getByText(/total 0/)).toBeInTheDocument();
+  });
+
+  it("caps oversized opened tool bodies until the reveal arrow is clicked", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight",
+    );
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this instanceof HTMLElement && this.classList.contains("tool-body")
+          ? 520
+          : 0;
+      },
+    });
+
+    try {
+      render(
+        <ToolUseCard
+          event={makeEvent({
+            result: { stdout: Array.from({ length: 80 }, (_, i) => `line ${i}`).join("\n") },
+          })}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /toggle tool details/i }));
+
+      const viewport = document.querySelector(".tool-body-viewport");
+      expect(viewport).toHaveClass("capped");
+      const reveal = screen.getByRole("button", { name: /show full tool output/i });
+      expect(reveal.querySelector("svg")).not.toBeNull();
+
+      const viewportRule = cssRule(".tool-body-viewport.capped");
+      expect(viewportRule).toContain("max-height: 360px;");
+      expect(viewportRule).toContain("overflow: hidden;");
+      const buttonRule = cssRule(".tool-body-expand");
+      expect(buttonRule).toContain("display: inline-flex;");
+
+      fireEvent.click(reveal);
+
+      expect(viewport).not.toHaveClass("capped");
+      expect(screen.queryByRole("button", { name: /show full tool output/i })).not.toBeInTheDocument();
+    } finally {
+      if (descriptor !== undefined) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", descriptor);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+      }
+    }
   });
 
   it("shows an error state when success=false", () => {
@@ -126,7 +196,7 @@ describe("<ToolUseCard>", () => {
       />,
     );
     expect(screen.getByText("Read", { selector: ".tool-type" })).toBeInTheDocument();
-    expect(screen.getByText("App.tsx", { selector: ".tool-summary-primary" })).toBeInTheDocument();
+    expect(screen.getByText("Read file App.tsx", { selector: ".tool-summary-primary" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /toggle tool details/i }));
     const fileButton = screen.getByRole("button", { name: /App\.tsx/i });
     expect(fileButton).toBeInTheDocument();

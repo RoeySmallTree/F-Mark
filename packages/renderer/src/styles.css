@@ -10,8 +10,11 @@
 @import "./components/theme-picker.css";
 @import "./popovers/popovers.css";
 @import "./overlays/overlays.css";
+@import "./panels/right/tabEmpty.css";
 @import "./panels/right/files/files.css";
 @import "./panels/fileViewer/fileViewer.css";
+@import "./panels/fileViewer/lineComment/lineComment.css";
+@import "./pages/fileTreePage.css";
 @import "./agent-components.css";
 
 @tailwind base;

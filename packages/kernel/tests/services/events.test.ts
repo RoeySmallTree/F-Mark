@@ -7,7 +7,12 @@ import { createSession } from "../../src/sessions.js";
 import { listParticipants } from "../../src/participants.js";
 import { withTempProject } from "../helpers/tempdir.js";
 import {
+  writeAccessRequestEvent,
+  writeChoiceEvent,
+  writeChoicesEvent,
+  writeFlowEvent,
   writeProseEvent,
+  writeSubagentRunEvent,
   writeTodoEvent,
 } from "../../src/services/events.js";
 import { publishEventWrites } from "../../src/services/eventPublisher.js";
@@ -127,5 +132,87 @@ describe("event services", () => {
         supersedes: "20260525T000000Z_us-1234.prose.md",
       },
     ]);
+  });
+
+  /* X2 / review finding 7: scope routing fields (root, path_id, legacy path)
+     are transport-only and must never land in durable event JSON, even though
+     route bodies now carry them and several serializers spread the remainder
+     of the body. */
+  it("strips root/path_id/path from persisted event JSON", async () => {
+    await withTempProject(async (root) => {
+      const { p, sessionId, pid } = await setup(root);
+      const scope = {
+        root,
+        path_id: "deadbeef0000",
+        path: root,
+      } as const;
+
+      const readJson = async (filename: string): Promise<string> =>
+        readFile(join(p.sessionDir(sessionId), filename), "utf8");
+      const assertNoScope = (raw: string, label: string): void => {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        expect(parsed.root, `${label}.root`).toBeUndefined();
+        expect(parsed.path_id, `${label}.path_id`).toBeUndefined();
+        expect(parsed.path, `${label}.path`).toBeUndefined();
+      };
+
+      const choices = await writeChoicesEvent(p, sessionId, {
+        ...scope,
+        participant_id: pid,
+        id: "ch1",
+        question: "Q",
+        options: [{ id: "o1", label: "A" }],
+        multi: false,
+      } as Parameters<typeof writeChoicesEvent>[2]);
+      assertNoScope(await readJson(choices.response.filename), "choices");
+
+      const choice = await writeChoiceEvent(p, sessionId, {
+        ...scope,
+        participant_id: pid,
+        choices_id: "ch1",
+        selected: ["o1"],
+      } as Parameters<typeof writeChoiceEvent>[2]);
+      assertNoScope(await readJson(choice.response.filename), "choice");
+
+      const flow = await writeFlowEvent(p, sessionId, {
+        ...scope,
+        participant_id: pid,
+        id: "f1",
+        nodes: [],
+        edges: [],
+      } as Parameters<typeof writeFlowEvent>[2]);
+      assertNoScope(await readJson(flow.response.filename), "flow");
+
+      const subagent = await writeSubagentRunEvent(p, sessionId, {
+        ...scope,
+        participant_id: pid,
+        schema: "fmark.subagent-run.v1",
+        parent_participant_id: pid,
+        parent_runtime_id: null,
+        subagent_id: "sa1",
+        name: "Sub",
+        status: "started",
+        correlation_id: "c1",
+        sequence: 0,
+        source: "hook",
+        source_confidence: "high",
+      } as Parameters<typeof writeSubagentRunEvent>[2]);
+      assertNoScope(await readJson(subagent.response.filename), "subagent-run");
+
+      const access = await writeAccessRequestEvent(p, sessionId, {
+        ...scope,
+        participant_id: pid,
+        schema: "fmark.access-request.v1",
+        request_id: "r1",
+        status: "open",
+        request_type: "permission",
+        runtime_id: null,
+        hook_event_name: "PreToolUse",
+        title: "Allow?",
+        response_channel: "hook",
+        created_at: "20260613T000000Z",
+      } as Parameters<typeof writeAccessRequestEvent>[2]);
+      assertNoScope(await readJson(access.response.filename), "access-request");
+    });
   });
 });

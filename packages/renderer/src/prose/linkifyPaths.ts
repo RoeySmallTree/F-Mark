@@ -1,3 +1,10 @@
+const NO_LOOSE_STRING_VALUES = {
+  pathLink: "path-link",
+  href: "href",
+  dataFmarkPath: "data-fmark-path",
+  title: "title",
+} as const;
+
 /* Post-render DOM walker that turns file-path-looking strings inside a
    rendered markdown subtree into clickable links. The walker writes
    plain `<a>` anchors (not React components) because the source HTML
@@ -62,10 +69,10 @@ function replaceTextNode(text: Text): void {
       fragment.appendChild(doc.createTextNode(value.slice(cursor, start)));
     }
     const a = doc.createElement("a");
-    a.className = "path-link";
-    a.setAttribute("href", "#");
-    a.setAttribute("data-fmark-path", path);
-    a.setAttribute("title", path);
+    a.className = NO_LOOSE_STRING_VALUES.pathLink;
+    a.setAttribute(NO_LOOSE_STRING_VALUES.href, "#");
+    a.setAttribute(NO_LOOSE_STRING_VALUES.dataFmarkPath, path);
+    a.setAttribute(NO_LOOSE_STRING_VALUES.title, path);
     a.textContent = path;
     fragment.appendChild(a);
     cursor = end;

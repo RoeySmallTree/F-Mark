@@ -2,19 +2,53 @@ import { describe, it, expect } from "vitest";
 import { stat } from "node:fs/promises";
 import { initProject } from "../src/project.js";
 import { paths } from "../src/paths.js";
-import { createSession, listSessions } from "../src/sessions.js";
+import {
+  createSession,
+  isPlaceholderSessionId,
+  isPlaceholderSessionSlug,
+  listSessions,
+  renameSession,
+} from "../src/sessions.js";
 import { withTempProject } from "./helpers/tempdir.js";
 
 describe("sessions", () => {
-  it("createSession with no slug uses 'untitled' and today's date", async () => {
+  it("createSession with no slug mints a random-suffixed id with the placeholder slug", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
       const meta = await createSession(p, {});
-      expect(meta.id).toMatch(/^\d{4}-\d{2}-\d{2}-untitled$/);
+      // The id must carry no name to outgrow: date + random suffix only.
+      expect(meta.id).toMatch(/^\d{4}-\d{2}-\d{2}-[0-9a-f]{6}$/);
+      expect(meta.slug).toBe("new-session");
       const s = await stat(p.sessionDir(meta.id));
       expect(s.isDirectory()).toBe(true);
     });
+  });
+
+  it("renameSession keeps the id immutable and only updates the slug", async () => {
+    await withTempProject(async (root) => {
+      const p = paths(root);
+      await initProject(p);
+      const created = await createSession(p, {});
+      const renamed = await renameSession(p, created.id, {
+        slug: "Fix Login Flow!",
+      });
+      expect(renamed.id).toBe(created.id);
+      expect(renamed.slug).toBe("fix-login-flow");
+      const listed = await listSessions(p);
+      const entry = listed.find((s) => s.id === created.id);
+      expect(entry?.slug).toBe("fix-login-flow");
+    });
+  });
+
+  it("placeholder detection covers collision suffixes but not real names", () => {
+    expect(isPlaceholderSessionSlug("new-session")).toBe(true);
+    expect(isPlaceholderSessionSlug("new-session-2")).toBe(true);
+    expect(isPlaceholderSessionSlug("fix-login-flow")).toBe(false);
+    expect(isPlaceholderSessionSlug("new-session-extras")).toBe(false);
+    expect(isPlaceholderSessionId("2026-07-04-new-session")).toBe(true);
+    expect(isPlaceholderSessionId("2026-07-04-new-session-3")).toBe(true);
+    expect(isPlaceholderSessionId("2026-07-04-launch-plan")).toBe(false);
   });
 
   it("createSession with slug normalises and uses it", async () => {

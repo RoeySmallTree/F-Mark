@@ -104,4 +104,46 @@ describe("AgentStateStore", () => {
       ).rejects.toThrow();
     });
   });
+
+  it("round-trips lifecycle fields and merges runtime-session without dropping native ids", async () => {
+    await withScratch(async (root) => {
+      const p = paths(root);
+      const store = createAgentStateStore({ fallback: p });
+
+      await store.writeRuntimeSession("ag-managed", {
+        desired_name: "sess-old",
+        native_name_applied: true,
+        native_session_id: "native-1",
+        native_transcript_path: "/tmp/transcript.jsonl",
+        native_id_source: "hook",
+      });
+      await store.mergeRuntimeSession("ag-managed", {
+        desired_name: "sess-new",
+      });
+      expect(await store.readRuntimeSession("ag-managed")).toEqual({
+        desired_name: "sess-new",
+        native_name_applied: true,
+        native_session_id: "native-1",
+        native_transcript_path: "/tmp/transcript.jsonl",
+        native_id_source: "hook",
+      });
+
+      await store.updateControlState("ag-managed", {
+        last_activity_at: "2026-06-18T10:00:00.000Z",
+        last_tmux_activity_at: "2026-06-18T09:59:00.000Z",
+        idle_stopped_at: "2026-06-18T11:00:00.000Z",
+        idle_stop_reason: "idle-timeout",
+        last_tmux_session: "fmark-x-ag-ag-managed",
+        pane_lifecycle: "idle-stopped",
+      });
+      expect(await store.readControlState("ag-managed")).toMatchObject({
+        last_activity_at: "2026-06-18T10:00:00.000Z",
+        last_tmux_activity_at: "2026-06-18T09:59:00.000Z",
+        idle_stopped_at: "2026-06-18T11:00:00.000Z",
+        idle_stop_reason: "idle-timeout",
+        last_tmux_session: "fmark-x-ag-ag-managed",
+        pane_lifecycle: "idle-stopped",
+      });
+    });
+  });
 });

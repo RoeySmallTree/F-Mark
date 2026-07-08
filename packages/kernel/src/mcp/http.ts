@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { createFmarkMcpServer, type FmarkMcpServerOptions } from "./server.js";
+import { createFmarkMcpServer } from "./server.js";
 
 interface HttpMcpSession {
+  projectRoot: string;
   server: ReturnType<typeof createFmarkMcpServer>;
   transport: StreamableHTTPServerTransport;
   close(): Promise<void>;
@@ -14,6 +15,10 @@ export interface McpHttpRouteOptions {
   token: string | null;
   getProjectRoot(): string;
   env?: NodeJS.ProcessEnv;
+}
+
+export interface McpHttpController {
+  closeAllSessionsForRoot(root: string): Promise<number>;
 }
 
 function headerValue(value: string | string[] | undefined): string | undefined {
@@ -88,20 +93,10 @@ async function handOffToTransport(
   await transport.handleRequest(req.raw, reply.raw, req.body);
 }
 
-function createMcpServerOptions(options: McpHttpRouteOptions): FmarkMcpServerOptions {
-  const projectRoot = options.getProjectRoot();
-  return {
-    path: projectRoot,
-    cwd: projectRoot,
-    env: options.env,
-    includeProcessSpawningTools: false,
-  };
-}
-
 export function registerMcpHttpRoute(
   app: FastifyInstance,
   options: McpHttpRouteOptions,
-): void {
+): McpHttpController {
   const sessions = new Map<string, HttpMcpSession>();
 
   app.addHook("onClose", async () => {
@@ -132,6 +127,7 @@ export function registerMcpHttpRoute(
     let closing = false;
     let server: ReturnType<typeof createFmarkMcpServer> | null = null;
     let sessionEntry: HttpMcpSession | null = null;
+    const projectRoot = options.getProjectRoot();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (createdSessionId) => {
@@ -139,7 +135,12 @@ export function registerMcpHttpRoute(
         if (sessionEntry !== null) sessions.set(createdSessionId, sessionEntry);
       },
     });
-    server = createFmarkMcpServer(createMcpServerOptions(options));
+    server = createFmarkMcpServer({
+      path: projectRoot,
+      cwd: projectRoot,
+      env: options.env,
+      includeProcessSpawningTools: false,
+    });
     const closeSession = async (): Promise<void> => {
       if (closing) return;
       closing = true;
@@ -147,7 +148,7 @@ export function registerMcpHttpRoute(
       await server?.close().catch(() => {});
       await transport.close().catch(() => {});
     };
-    sessionEntry = { server, transport, close: closeSession };
+    sessionEntry = { projectRoot, server, transport, close: closeSession };
     transport.onclose = () => {
       void closeSession();
     };
@@ -186,4 +187,14 @@ export function registerMcpHttpRoute(
     }
     await handOffToTransport(existing.transport, req, reply);
   });
+
+  return {
+    async closeAllSessionsForRoot(root: string): Promise<number> {
+      const matching = [...sessions.values()].filter(
+        (session) => session.projectRoot === root,
+      );
+      await Promise.all(matching.map((session) => session.close()));
+      return matching.length;
+    },
+  };
 }

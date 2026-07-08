@@ -2,6 +2,38 @@ import { useMemo, useState, type JSX } from "react";
 
 export type JsonMode = "tree" | "source" | "table";
 
+export const JSON_MODES = {
+  tree: "tree",
+  source: "source",
+  table: "table",
+} as const satisfies Record<string, JsonMode>;
+
+const expandKeys = {
+  default: "default",
+  all: "all",
+  none: "none",
+} as const satisfies Record<string, ExpandKey>;
+
+const jsonClassNames = {
+  source: "fm-source",
+  tree: "fm-json-tree",
+  table: "fm-json-table",
+  details: "fm-json-details",
+  openFragment: " open",
+  joiner: " ",
+  empty: "",
+} as const;
+
+const jsonLabelKinds = {
+  key: "key",
+  index: "index",
+} as const;
+
+const collectionKinds = {
+  array: "array",
+  object: "object",
+} as const;
+
 interface Props {
   value: unknown;
   mode?: JsonMode;
@@ -19,11 +51,15 @@ interface Props {
  */
 export function JsonRenderer({
   value,
-  mode = "tree",
+  mode = JSON_MODES.tree,
   className,
 }: Props): JSX.Element {
-  if (mode === "source") return <JsonSourceView value={value} className={className} />;
-  if (mode === "table") return <JsonTableView value={value} className={className} />;
+  if (mode === JSON_MODES.source) {
+    return <JsonSourceView value={value} className={className} />;
+  }
+  if (mode === JSON_MODES.table) {
+    return <JsonTableView value={value} className={className} />;
+  }
   return <JsonTreeView value={value} className={className} />;
 }
 
@@ -33,7 +69,9 @@ interface ViewProps {
 }
 
 function JsonSourceView({ value, className }: ViewProps): JSX.Element {
-  const cls = "fm-source" + (className ? " " + className : "");
+  const cls =
+    jsonClassNames.source +
+    (className ? jsonClassNames.joiner + className : jsonClassNames.empty);
   const text = useMemo(() => safeStringify(value), [value]);
   return (
     <pre className={cls}>
@@ -57,8 +95,10 @@ function safeStringify(value: unknown): string {
 type ExpandKey = "default" | "all" | "none";
 
 function JsonTreeView({ value, className }: ViewProps): JSX.Element {
-  const [expandKey, setExpandKey] = useState<ExpandKey>("default");
-  const cls = "fm-json-tree" + (className ? " " + className : "");
+  const [expandKey, setExpandKey] = useState<ExpandKey>(expandKeys.default);
+  const cls =
+    jsonClassNames.tree +
+    (className ? jsonClassNames.joiner + className : jsonClassNames.empty);
 
   return (
     <div className={cls}>
@@ -66,14 +106,14 @@ function JsonTreeView({ value, className }: ViewProps): JSX.Element {
         <button
           type="button"
           className="fm-json-toolbar-btn"
-          onClick={() => setExpandKey("all")}
+          onClick={() => setExpandKey(expandKeys.all)}
         >
           expand all
         </button>
         <button
           type="button"
           className="fm-json-toolbar-btn"
-          onClick={() => setExpandKey("none")}
+          onClick={() => setExpandKey(expandKeys.none)}
         >
           collapse all
         </button>
@@ -136,7 +176,7 @@ function JsonNode({
   if (Array.isArray(value)) {
     return (
       <CollectionNode
-        kind="array"
+        kind={collectionKinds.array}
         value={value}
         depth={depth}
         expandKey={expandKey}
@@ -147,7 +187,7 @@ function JsonNode({
   if (t === "object") {
     return (
       <CollectionNode
-        kind="object"
+        kind={collectionKinds.object}
         value={value as Record<string, unknown>}
         depth={depth}
         expandKey={expandKey}
@@ -177,7 +217,7 @@ function Leaf({ label, className, text }: LeafProps): JSX.Element {
 }
 
 function LabelSpan({ label }: { label: NonNullable<JsonNodeProps["label"]> }): JSX.Element {
-  if (label.kind === "key") {
+  if (label.kind === jsonLabelKinds.key) {
     return (
       <span className="fm-json-key">
         {JSON.stringify(label.text)}
@@ -207,12 +247,12 @@ function CollectionNode({
   expandKey,
   label,
 }: CollectionNodeProps): JSX.Element {
-  const entries: Array<[string, unknown]> = kind === "array"
+  const entries: Array<[string, unknown]> = kind === collectionKinds.array
     ? (value as unknown[]).map((v, i) => [String(i), v])
     : Object.entries(value as Record<string, unknown>);
   const count = entries.length;
   const summary =
-    kind === "array"
+    kind === collectionKinds.array
       ? `[ ${count} item${count === 1 ? "" : "s"} ]`
       : `{ ${count} key${count === 1 ? "" : "s"} }`;
 
@@ -221,8 +261,8 @@ function CollectionNode({
   // - "none" -> always closed
   // - "default" -> open at the root (depth 0), closed elsewhere
   const initialOpen = useMemo(() => {
-    if (expandKey === "all") return true;
-    if (expandKey === "none") return false;
+    if (expandKey === expandKeys.all) return true;
+    if (expandKey === expandKeys.none) return false;
     return depth === 0;
   }, [expandKey, depth]);
 
@@ -236,7 +276,10 @@ function CollectionNode({
 
   return (
     <details
-      className={"fm-json-details" + (open ? " open" : "")}
+      className={
+        jsonClassNames.details +
+        (open ? jsonClassNames.openFragment : jsonClassNames.empty)
+      }
       open={open}
     >
       <summary
@@ -257,9 +300,9 @@ function CollectionNode({
             depth={depth + 1}
             expandKey={expandKey}
             label={
-              kind === "array"
-                ? { kind: "index", text: k }
-                : { kind: "key", text: k }
+              kind === collectionKinds.array
+                ? { kind: jsonLabelKinds.index, text: k }
+                : { kind: jsonLabelKinds.key, text: k }
             }
           />
         ))}
@@ -278,7 +321,9 @@ function JsonTableView({ value, className }: ViewProps): JSX.Element {
     return <JsonTreeView value={value} className={className} />;
   }
   const { columns, rows } = tableData;
-  const cls = "fm-json-table" + (className ? " " + className : "");
+  const cls =
+    jsonClassNames.table +
+    (className ? jsonClassNames.joiner + className : jsonClassNames.empty);
   return (
     <table className={cls}>
       <thead>

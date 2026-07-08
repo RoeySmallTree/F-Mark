@@ -1,39 +1,67 @@
 import { useState, type JSX } from "react";
-import type {
-  SubagentOutputEventRecord,
-  SubagentRunEventRecord,
+import {
+  EVENT_KINDS,
+  type SubagentOutputEventRecord,
+  type SubagentRunEventRecord,
 } from "@f-mark/shared";
 import type { GroupStatus } from "../feed/projectFeed.js";
 
 type SubagentEvent = SubagentRunEventRecord | SubagentOutputEventRecord;
+
+const subagentStatuses = {
+  unknown: "unknown",
+  failed: "failed",
+  cancelled: "cancelled",
+  started: "started",
+  running: "running",
+  streaming: "streaming",
+} as const;
+
+const subagentPillKinds = {
+  run: "run",
+  done: "done",
+  fail: "fail",
+} as const;
+
+const subagentFallbacks = {
+  initials: "SA",
+  name: "Sub-agent",
+} as const;
 
 function statusOf(events: SubagentEvent[]): string {
   for (let i = events.length - 1; i >= 0; i--) {
     const status = events[i]?.payload.status;
     if (typeof status === "string") return status;
   }
-  return "unknown";
+  return subagentStatuses.unknown;
 }
 
 function isFailed(status: string): boolean {
-  return status === "failed" || status === "cancelled";
+  return (
+    status === subagentStatuses.failed ||
+    status === subagentStatuses.cancelled
+  );
 }
 
 /** Initials for the sub-agent avatar, e.g. "Code Reviewer" → "CR". */
 export function subagentInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "SA";
+  if (words.length === 0) return subagentFallbacks.initials;
   if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
   return `${words[0]![0]}${words[words.length - 1]![0]}`.toUpperCase();
 }
 
 /** Map a runtime status to one of the reference sub-agent pill variants. */
-export function subagentPillKind(status: string): "run" | "done" | "fail" {
-  if (isFailed(status)) return "fail";
-  if (status === "started" || status === "running" || status === "streaming") {
-    return "run";
+function subagentPillKind(status: string): "run" | "done" | "fail" {
+  if (isFailed(status)) return subagentPillKinds.fail;
+  if (
+    status === subagentStatuses.started ||
+    status === subagentStatuses.running ||
+    status === subagentStatuses.streaming
+  ) {
+    return subagentPillKinds.run;
   }
-  return "done";
+  return subagentPillKinds.done;
 }
 
 /** Reference `.sa-pill` (run shows the pulsing dot). */
@@ -41,7 +69,9 @@ export function SubagentPill({ status }: { status: string }): JSX.Element {
   const kind = subagentPillKind(status);
   return (
     <span className={`sa-pill ${kind}`}>
-      {kind === "run" ? <span className="run-dot" aria-hidden /> : null}
+      {kind === subagentPillKinds.run ? (
+        <span className="run-dot" aria-hidden />
+      ) : null}
       {status}
     </span>
   );
@@ -50,17 +80,17 @@ export function SubagentPill({ status }: { status: string }): JSX.Element {
 function nameOf(events: SubagentEvent[]): string {
   for (const event of events) {
     const name =
-      event.kind === "subagent-run"
+      event.kind === EVENT_KINDS.subagentRun
         ? event.payload.name
         : event.payload.name ?? event.payload.subagent_id;
     if (name.length > 0) return name;
   }
-  return "Sub-agent";
+  return subagentFallbacks.name;
 }
 
 function sourceOf(events: SubagentEvent[]): string {
   const event = events[0];
-  if (event === undefined) return "unknown";
+  if (event === undefined) return subagentStatuses.unknown;
   return `${event.payload.source}/${event.payload.source_confidence}`;
 }
 
@@ -70,7 +100,12 @@ function idDetails(events: SubagentEvent[]): {
   parentTool?: string;
 } {
   const event = events[0];
-  if (event === undefined) return { id: "unknown", correlation: "unknown" };
+  if (event === undefined) {
+    return {
+      id: subagentStatuses.unknown,
+      correlation: subagentStatuses.unknown,
+    };
+  }
   return {
     id: event.payload.subagent_id,
     correlation: event.payload.correlation_id,
@@ -80,7 +115,10 @@ function idDetails(events: SubagentEvent[]): {
 
 function sortedOutputs(events: SubagentEvent[]): SubagentOutputEventRecord[] {
   return events
-    .filter((event): event is SubagentOutputEventRecord => event.kind === "subagent-output")
+    .filter(
+      (event): event is SubagentOutputEventRecord =>
+        event.kind === EVENT_KINDS.subagentOutput,
+    )
     .sort((a, b) => {
       const seq = a.payload.sequence - b.payload.sequence;
       return seq !== 0 ? seq : a.filename.localeCompare(b.filename);
@@ -89,7 +127,8 @@ function sortedOutputs(events: SubagentEvent[]): SubagentOutputEventRecord[] {
 
 function firstRun(events: SubagentEvent[]): SubagentRunEventRecord | undefined {
   return events.find(
-    (event): event is SubagentRunEventRecord => event.kind === "subagent-run",
+    (event): event is SubagentRunEventRecord =>
+      event.kind === EVENT_KINDS.subagentRun,
   );
 }
 
@@ -102,7 +141,10 @@ export function SubagentBox({ events, parentStatus }: Props): JSX.Element {
   const status = statusOf(events);
   const failed = isFailed(status);
   const [open, setOpen] = useState(
-    failed || parentStatus === "streaming" || status === "started" || status === "running",
+    failed ||
+      parentStatus === subagentStatuses.streaming ||
+      status === subagentStatuses.started ||
+      status === subagentStatuses.running,
   );
   const run = firstRun(events);
   const outputs = sortedOutputs(events);

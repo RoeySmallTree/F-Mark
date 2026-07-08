@@ -8,13 +8,42 @@ export type RendererKind =
   | "image"
   | "video"
   | "audio"
+  | "json"
   | "markdown"
   | "csv"
+  | "pdf"
   | "office-xlsx"
   | "office-docx"
   | "office-pptx"
   | "monaco"
   | "binary";
+
+export const RENDERER_KINDS = {
+  image: "image",
+  video: "video",
+  audio: "audio",
+  json: "json",
+  markdown: "markdown",
+  csv: "csv",
+  pdf: "pdf",
+  officeXlsx: "office-xlsx",
+  officeDocx: "office-docx",
+  officePptx: "office-pptx",
+  monaco: "monaco",
+  binary: "binary",
+} as const satisfies Record<string, RendererKind>;
+
+const officeExtensions = {
+  xlsx: "xlsx",
+  xls: "xls",
+  docx: "docx",
+  pptx: "pptx",
+  ppt: "ppt",
+} as const;
+
+const monacoLanguageIds = {
+  plaintext: "plaintext",
+} as const;
 
 /* Extensions that should render via Monaco (text/code). */
 const MONACO_EXTS = new Set([
@@ -35,7 +64,9 @@ const IMAGE_EXTS = new Set([
 const VIDEO_EXTS = new Set(["mp4", "m4v", "webm", "mov", "mkv", "avi", "ogv"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "oga", "flac", "m4a", "opus", "aac"]);
 const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
+const JSON_EXTS = new Set(["json", "jsonc"]);
 const CSV_EXTS = new Set(["csv", "tsv"]);
+const PDF_EXTS = new Set(["pdf"]);
 
 /* Monaco knows these as language IDs. Anything outside the table falls
    back to "plaintext" which still renders text content correctly. */
@@ -97,23 +128,29 @@ const LANG_BY_EXT: Record<string, string> = {
 };
 
 export function pickRenderer(ext: string | null): RendererKind {
-  if (ext === null) return "monaco"; /* dotfiles like .gitignore */
+  if (ext === null) return RENDERER_KINDS.monaco; /* dotfiles like .gitignore */
   const e = ext.toLowerCase();
-  if (IMAGE_EXTS.has(e)) return "image";
-  if (VIDEO_EXTS.has(e)) return "video";
-  if (AUDIO_EXTS.has(e)) return "audio";
-  if (MARKDOWN_EXTS.has(e)) return "markdown";
-  if (CSV_EXTS.has(e)) return "csv";
-  if (e === "xlsx" || e === "xls") return "office-xlsx";
-  if (e === "docx") return "office-docx";
-  if (e === "pptx" || e === "ppt") return "office-pptx";
-  if (MONACO_EXTS.has(e)) return "monaco";
-  return "binary";
+  if (IMAGE_EXTS.has(e)) return RENDERER_KINDS.image;
+  if (VIDEO_EXTS.has(e)) return RENDERER_KINDS.video;
+  if (AUDIO_EXTS.has(e)) return RENDERER_KINDS.audio;
+  if (JSON_EXTS.has(e)) return RENDERER_KINDS.json;
+  if (MARKDOWN_EXTS.has(e)) return RENDERER_KINDS.markdown;
+  if (CSV_EXTS.has(e)) return RENDERER_KINDS.csv;
+  if (PDF_EXTS.has(e)) return RENDERER_KINDS.pdf;
+  if (e === officeExtensions.xlsx || e === officeExtensions.xls) {
+    return RENDERER_KINDS.officeXlsx;
+  }
+  if (e === officeExtensions.docx) return RENDERER_KINDS.officeDocx;
+  if (e === officeExtensions.pptx || e === officeExtensions.ppt) {
+    return RENDERER_KINDS.officePptx;
+  }
+  if (MONACO_EXTS.has(e)) return RENDERER_KINDS.monaco;
+  return RENDERER_KINDS.binary;
 }
 
 export function monacoLanguage(ext: string | null): string {
-  if (ext === null) return "plaintext";
-  return LANG_BY_EXT[ext.toLowerCase()] ?? "plaintext";
+  if (ext === null) return monacoLanguageIds.plaintext;
+  return LANG_BY_EXT[ext.toLowerCase()] ?? monacoLanguageIds.plaintext;
 }
 
 export function extOf(absPath: string): string | null {

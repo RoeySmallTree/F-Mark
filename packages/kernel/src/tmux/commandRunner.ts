@@ -55,11 +55,14 @@ export interface FakeCommandRunner extends CommandRunner {
    */
   verifyExpectationsConsumed(): void;
   readonly calls: string[][];
+  /** Stdin passed to each call, index-aligned with `calls` (undefined when none). */
+  readonly inputs: (string | undefined)[];
 }
 
 export function fakeCommandRunner(): FakeCommandRunner {
   const queue: { prefix: string[]; result: CommandResult }[] = [];
   const calls: string[][] = [];
+  const inputs: (string | undefined)[] = [];
   return {
     expect(prefix, result) { queue.push({ prefix, result }); },
     verifyExpectationsConsumed() {
@@ -69,8 +72,10 @@ export function fakeCommandRunner(): FakeCommandRunner {
       }
     },
     get calls() { return calls; },
-    async run(argv) {
+    get inputs() { return inputs; },
+    async run(argv, opts) {
       calls.push(argv);
+      inputs.push(opts?.input);
       // First entry whose prefix matches the start of argv.
       const idx = queue.findIndex((q) =>
         q.prefix.every((p, i) => argv[i] === p),

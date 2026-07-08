@@ -1,0 +1,694 @@
+/**
+ * Theme token registry — the server-readable mirror of the renderer's
+ * `packages/renderer/src/themes/tokens.css`.
+ *
+ * Why a structured copy?
+ *   The kernel has no DOM, so it cannot read CSS custom properties from a
+ *   live `:root`/`body.theme-*` rule. The `fmark_get_theme` MCP tool needs
+ *   the resolved token values to build an on-brand design document for
+ *   connected agents. Rather than parse CSS at runtime (the renderer isn't a
+ *   kernel dependency and CSS isn't importable in Node), we keep a typed copy
+ *   here in `@f-mark/shared`, consumed by the kernel theme service.
+ *
+ *   Drift is guarded by a kernel test that re-parses the actual tokens.css
+ *   file and asserts every value here matches — so this registry can never
+ *   silently diverge from what the app ships.
+ *
+ * Values are copied VERBATIM from tokens.css. `THEME_BASE_TOKENS` is the
+ * `:root` block (the default `light` theme); each `THEME_OVERRIDES[name]` is
+ * the delta applied by `body.theme-<name>`. Resolve a theme by spreading the
+ * base then the overrides (see `resolveThemeTokens`).
+ */
+
+export type ThemeTokenName =
+  | "light"
+  | "ember"
+  | "terminal"
+  | "ide"
+  | "solarized"
+  | "brutalist"
+  | "cyber"
+  | "amber"
+  | "dracula"
+  | "catppuccin"
+  | "tokyo"
+  | "gruvbox"
+  | "nord"
+  | "monokai"
+  | "borland"
+  | "sepia"
+  | "contrast";
+
+/** The canonical default theme — the `:root` block, rendered with no body class. */
+export const DEFAULT_THEME: ThemeTokenName = "light";
+
+/** Display metadata for each theme, mirrored from the renderer THEMES registry. */
+export interface ThemeMeta {
+  name: ThemeTokenName;
+  label: string;
+  description: string;
+}
+
+export const THEME_META: Record<ThemeTokenName, ThemeMeta> = {
+  light: {
+    name: "light",
+    label: "Light",
+    description: "Warm paper canvas with soft ink, the default daytime look.",
+  },
+  ember: {
+    name: "ember",
+    label: "Ember",
+    description:
+      "Plum-black with bright coral-red and warm amber, soft corners and a gentle glow. Matches the landing page.",
+  },
+  terminal: {
+    name: "terminal",
+    label: "Terminal",
+    description: "Phosphor green on near-black with subtle scanline overlay.",
+  },
+  ide: {
+    name: "ide",
+    label: "IDE Dark",
+    description: "GitHub-style dark editor palette with cool greys and blues.",
+  },
+  solarized: {
+    name: "solarized",
+    label: "Solarized",
+    description: "Classic Solarized Dark with a teal base and warm accents.",
+  },
+  brutalist: {
+    name: "brutalist",
+    label: "Brutalist",
+    description:
+      "Pure black & white, monospace everywhere, thick borders, zero radius.",
+  },
+  cyber: {
+    name: "cyber",
+    label: "Cyberpunk",
+    description: "Deep purple base with cyan/magenta neon gradients and glow.",
+  },
+  amber: {
+    name: "amber",
+    label: "Amber CRT",
+    description:
+      "Monochrome amber phosphor on black, glow text and double-rule borders.",
+  },
+  dracula: {
+    name: "dracula",
+    label: "Dracula",
+    description: "Muted purple base with cyan, pink and green accents.",
+  },
+  catppuccin: {
+    name: "catppuccin",
+    label: "Catppuccin Mocha",
+    description:
+      "Pastel mocha palette with soft lavender and pillowy rounded corners.",
+  },
+  tokyo: {
+    name: "tokyo",
+    label: "Tokyo Night",
+    description: "Inky blue-violet base with calm blue and purple roles.",
+  },
+  gruvbox: {
+    name: "gruvbox",
+    label: "Gruvbox",
+    description: "Retro warm browns with mustard and orange, vintage contrast.",
+  },
+  nord: {
+    name: "nord",
+    label: "Nord",
+    description:
+      "Arctic blue-grey polar night with frost cyan and aurora accents.",
+  },
+  monokai: {
+    name: "monokai",
+    label: "Monokai",
+    description:
+      "Olive-charcoal base with punchy pink, green and cyan. The Sublime classic.",
+  },
+  borland: {
+    name: "borland",
+    label: "Borland Blue",
+    description:
+      "Turbo Pascal blue with yellow text, double borders and zero radius.",
+  },
+  sepia: {
+    name: "sepia",
+    label: "Sepia Paper",
+    description:
+      "Light parchment, all-serif and academic calm. The light alternative.",
+  },
+  contrast: {
+    name: "contrast",
+    label: "High Contrast",
+    description:
+      "Pure black with white, cyan and yellow, thick borders. The accessibility target.",
+  },
+};
+
+/** Ordered list of theme names, matching the renderer THEMES order. */
+export const THEME_NAMES: ThemeTokenName[] = [
+  "light",
+  "ember",
+  "terminal",
+  "ide",
+  "solarized",
+  "brutalist",
+  "cyber",
+  "amber",
+  "dracula",
+  "catppuccin",
+  "tokyo",
+  "gruvbox",
+  "nord",
+  "monokai",
+  "borland",
+  "sepia",
+  "contrast",
+];
+
+/**
+ * The complete set of token keys tracked here (without the leading `--`).
+ * Every theme resolves to a value for each of these.
+ */
+export type ThemeTokenKey =
+  | "bg"
+  | "canvas"
+  | "panel"
+  | "panel-2"
+  | "ink"
+  | "ink-2"
+  | "ink-3"
+  | "ink-4"
+  | "line"
+  | "line-2"
+  | "line-3"
+  | "user"
+  | "user-tint"
+  | "user-tint-2"
+  | "agent"
+  | "agent-tint"
+  | "agent-tint-2"
+  | "green"
+  | "green-tint"
+  | "rose"
+  | "shadow"
+  | "shadow-2"
+  | "sans"
+  | "serif"
+  | "mono"
+  | "radius"
+  | "radius-lg"
+  | "radius-pill"
+  | "border-w";
+
+export type ThemeTokens = Record<ThemeTokenKey, string>;
+
+/**
+ * The `:root` block from tokens.css — the default `light` theme. Every other
+ * theme is expressed as a partial override of these values.
+ */
+export const THEME_BASE_TOKENS: ThemeTokens = {
+  bg: "#f4efe6",
+  canvas: "#faf6ed",
+  panel: "#efe9dc",
+  "panel-2": "#e8e1d0",
+  ink: "#1a1714",
+  "ink-2": "#4a443a",
+  "ink-3": "#807868",
+  "ink-4": "#a89e88",
+  line: "#d9d1bc",
+  "line-2": "#e6dec9",
+  "line-3": "#ece5d2",
+  user: "#2a5fa8",
+  "user-tint": "#e8eef7",
+  "user-tint-2": "#d4dff1",
+  agent: "#b86a1f",
+  "agent-tint": "#f6ead9",
+  "agent-tint-2": "#ecd9b5",
+  green: "#3d7a4f",
+  "green-tint": "#dbe9de",
+  rose: "#a83a3a",
+  shadow: "0 1px 0 rgba(40,30,15,.04), 0 1px 2px rgba(40,30,15,.04)",
+  "shadow-2": "0 1px 0 rgba(40,30,15,.06), 0 4px 16px rgba(40,30,15,.06)",
+  sans: "'DM Sans', system-ui, sans-serif",
+  serif: "'Source Serif 4', Georgia, serif",
+  mono: "'JetBrains Mono', ui-monospace, monospace",
+  radius: "6px",
+  "radius-lg": "10px",
+  "radius-pill": "999px",
+  "border-w": "1px",
+};
+
+/**
+ * Per-theme deltas applied on top of `THEME_BASE_TOKENS`. Copied verbatim from
+ * each `body.theme-<name>` block in tokens.css. `light` has no overrides.
+ */
+export const THEME_OVERRIDES: Record<
+  ThemeTokenName,
+  Partial<ThemeTokens>
+> = {
+  light: {},
+  terminal: {
+    bg: "#050605",
+    canvas: "#0a0c0a",
+    panel: "#0d100d",
+    "panel-2": "#161a16",
+    ink: "#cfe8c5",
+    "ink-2": "#8fb585",
+    "ink-3": "#5f7a58",
+    "ink-4": "#3d5238",
+    line: "#1d2a1d",
+    "line-2": "#152015",
+    "line-3": "#0f180f",
+    user: "#4ec0ff",
+    "user-tint": "#0a1622",
+    "user-tint-2": "#142a40",
+    agent: "#ffb13e",
+    "agent-tint": "#1d1407",
+    "agent-tint-2": "#3a2710",
+    green: "#3aff7b",
+    "green-tint": "#0a1f12",
+    rose: "#ff5577",
+    shadow: "none",
+    "shadow-2": "0 0 0 1px rgba(58,255,123,.05)",
+    serif: "'JetBrains Mono', ui-monospace, monospace",
+    sans: "'JetBrains Mono', ui-monospace, monospace",
+    radius: "2px",
+    "radius-lg": "3px",
+  },
+  ide: {
+    bg: "#0e1014",
+    canvas: "#14171c",
+    panel: "#1a1d23",
+    "panel-2": "#22262e",
+    ink: "#e6e8eb",
+    "ink-2": "#b4b8c0",
+    "ink-3": "#7d828c",
+    "ink-4": "#525762",
+    line: "#262a32",
+    "line-2": "#1f232a",
+    "line-3": "#1a1e25",
+    user: "#5b9dff",
+    "user-tint": "#0f1a2e",
+    "user-tint-2": "#1c3358",
+    agent: "#ffa657",
+    "agent-tint": "#2a1d10",
+    "agent-tint-2": "#4a3318",
+    green: "#3fb950",
+    "green-tint": "#0e2418",
+    rose: "#f85149",
+    shadow: "0 1px 0 rgba(0,0,0,.3)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.3)",
+    radius: "5px",
+    "radius-lg": "8px",
+  },
+  solarized: {
+    bg: "#002b36",
+    canvas: "#073642",
+    panel: "#062a33",
+    "panel-2": "#0a3d4a",
+    ink: "#fdf6e3",
+    "ink-2": "#93a1a1",
+    "ink-3": "#657b83",
+    "ink-4": "#586e75",
+    line: "#0a4150",
+    "line-2": "#0a3a48",
+    "line-3": "#073642",
+    user: "#268bd2",
+    "user-tint": "#0a2638",
+    "user-tint-2": "#13456a",
+    agent: "#cb4b16",
+    "agent-tint": "#2a1108",
+    "agent-tint-2": "#4a1f10",
+    green: "#859900",
+    "green-tint": "#1a2008",
+    rose: "#dc322f",
+    shadow: "0 1px 0 rgba(0,0,0,.3)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.4)",
+    radius: "4px",
+    "radius-lg": "6px",
+  },
+  brutalist: {
+    bg: "#000000",
+    canvas: "#0a0a0a",
+    panel: "#141414",
+    "panel-2": "#1f1f1f",
+    ink: "#ffffff",
+    "ink-2": "#d4d4d4",
+    "ink-3": "#888888",
+    "ink-4": "#555555",
+    line: "#404040",
+    "line-2": "#2a2a2a",
+    "line-3": "#1a1a1a",
+    user: "#ffffff",
+    "user-tint": "#1a1a1a",
+    "user-tint-2": "#333333",
+    agent: "#ffffff",
+    "agent-tint": "#1a1a1a",
+    "agent-tint-2": "#333333",
+    green: "#ffffff",
+    "green-tint": "#1a1a1a",
+    rose: "#ff0000",
+    shadow: "none",
+    "shadow-2": "none",
+    serif: "'JetBrains Mono', ui-monospace, monospace",
+    sans: "'JetBrains Mono', ui-monospace, monospace",
+    radius: "0px",
+    "radius-lg": "0px",
+    "radius-pill": "0px",
+    "border-w": "2px",
+  },
+  cyber: {
+    bg: "#0a0716",
+    canvas: "#100b22",
+    panel: "#150e2e",
+    "panel-2": "#1d143d",
+    ink: "#e8e3ff",
+    "ink-2": "#a99bd4",
+    "ink-3": "#7a6ba8",
+    "ink-4": "#544675",
+    line: "#2a1f4d",
+    "line-2": "#1f1638",
+    "line-3": "#170f28",
+    user: "#00e5ff",
+    "user-tint": "#001e2a",
+    "user-tint-2": "#003a52",
+    agent: "#ff2bd6",
+    "agent-tint": "#2a0824",
+    "agent-tint-2": "#4d1342",
+    green: "#7dff5a",
+    "green-tint": "#0e2008",
+    rose: "#ff3370",
+    shadow: "0 1px 0 rgba(0,0,0,.4)",
+    "shadow-2": "0 0 24px rgba(255,43,214,.12), 0 4px 14px rgba(0,0,0,.4)",
+    radius: "3px",
+    "radius-lg": "5px",
+  },
+  amber: {
+    bg: "#080500",
+    canvas: "#0c0800",
+    panel: "#120c00",
+    "panel-2": "#1a1200",
+    ink: "#ffb000",
+    "ink-2": "#cc8800",
+    "ink-3": "#8a5b00",
+    "ink-4": "#523600",
+    line: "#3a2700",
+    "line-2": "#2a1c00",
+    "line-3": "#1a1100",
+    user: "#ffd060",
+    "user-tint": "#1a1000",
+    "user-tint-2": "#332100",
+    agent: "#ff7a00",
+    "agent-tint": "#1a0c00",
+    "agent-tint-2": "#331a00",
+    green: "#ffb000",
+    "green-tint": "#1a1100",
+    rose: "#ff3300",
+    shadow: "0 0 0 1px rgba(255,176,0,.03)",
+    "shadow-2": "0 0 14px rgba(255,176,0,.06)",
+    serif: "'JetBrains Mono', ui-monospace, monospace",
+    sans: "'JetBrains Mono', ui-monospace, monospace",
+    radius: "2px",
+    "radius-lg": "3px",
+  },
+  dracula: {
+    bg: "#1b1c25",
+    canvas: "#282a36",
+    panel: "#21222c",
+    "panel-2": "#343746",
+    ink: "#f8f8f2",
+    "ink-2": "#c8c8c0",
+    "ink-3": "#6272a4",
+    "ink-4": "#44475a",
+    line: "#3d4053",
+    "line-2": "#2e3142",
+    "line-3": "#252734",
+    user: "#8be9fd",
+    "user-tint": "#16242a",
+    "user-tint-2": "#1f3a47",
+    agent: "#ff79c6",
+    "agent-tint": "#2a0e22",
+    "agent-tint-2": "#4a1a3c",
+    green: "#50fa7b",
+    "green-tint": "#0d2515",
+    rose: "#ff5555",
+    shadow: "0 1px 0 rgba(0,0,0,.3)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.4)",
+    radius: "5px",
+    "radius-lg": "8px",
+  },
+  catppuccin: {
+    bg: "#181825",
+    canvas: "#1e1e2e",
+    panel: "#313244",
+    "panel-2": "#45475a",
+    ink: "#cdd6f4",
+    "ink-2": "#a6adc8",
+    "ink-3": "#7f849c",
+    "ink-4": "#585b70",
+    line: "#45475a",
+    "line-2": "#313244",
+    "line-3": "#272838",
+    user: "#89b4fa",
+    "user-tint": "#161e2e",
+    "user-tint-2": "#1e2a46",
+    agent: "#f5c2e7",
+    "agent-tint": "#251a25",
+    "agent-tint-2": "#3a2438",
+    green: "#a6e3a1",
+    "green-tint": "#162216",
+    rose: "#f38ba8",
+    shadow: "0 1px 0 rgba(0,0,0,.25)",
+    "shadow-2": "0 4px 18px rgba(0,0,0,.35)",
+    radius: "8px",
+    "radius-lg": "12px",
+  },
+  tokyo: {
+    bg: "#16161e",
+    canvas: "#1a1b26",
+    panel: "#24283b",
+    "panel-2": "#2f334d",
+    ink: "#c0caf5",
+    "ink-2": "#a9b1d6",
+    "ink-3": "#565f89",
+    "ink-4": "#414868",
+    line: "#2f334d",
+    "line-2": "#24283b",
+    "line-3": "#1e2030",
+    user: "#7aa2f7",
+    "user-tint": "#13192a",
+    "user-tint-2": "#1d2944",
+    agent: "#bb9af7",
+    "agent-tint": "#1d1729",
+    "agent-tint-2": "#2e2348",
+    green: "#9ece6a",
+    "green-tint": "#152114",
+    rose: "#f7768e",
+    shadow: "0 1px 0 rgba(0,0,0,.3)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.4)",
+    radius: "6px",
+    "radius-lg": "10px",
+  },
+  gruvbox: {
+    bg: "#1d2021",
+    canvas: "#282828",
+    panel: "#3c3836",
+    "panel-2": "#504945",
+    ink: "#ebdbb2",
+    "ink-2": "#d5c4a1",
+    "ink-3": "#a89984",
+    "ink-4": "#7c6f64",
+    line: "#504945",
+    "line-2": "#3c3836",
+    "line-3": "#32302f",
+    user: "#83a598",
+    "user-tint": "#13201c",
+    "user-tint-2": "#1f3530",
+    agent: "#fe8019",
+    "agent-tint": "#241208",
+    "agent-tint-2": "#3d1f0e",
+    green: "#b8bb26",
+    "green-tint": "#1f200a",
+    rose: "#fb4934",
+    shadow: "0 1px 0 rgba(0,0,0,.3)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.4)",
+    radius: "4px",
+    "radius-lg": "6px",
+  },
+  nord: {
+    bg: "#242933",
+    canvas: "#2e3440",
+    panel: "#3b4252",
+    "panel-2": "#434c5e",
+    ink: "#eceff4",
+    "ink-2": "#d8dee9",
+    "ink-3": "#81a1c1",
+    "ink-4": "#4c566a",
+    line: "#434c5e",
+    "line-2": "#3b4252",
+    "line-3": "#353c4a",
+    user: "#88c0d0",
+    "user-tint": "#1a2530",
+    "user-tint-2": "#26384a",
+    agent: "#d08770",
+    "agent-tint": "#2a1810",
+    "agent-tint-2": "#48291c",
+    green: "#a3be8c",
+    "green-tint": "#1f2a16",
+    rose: "#bf616a",
+    shadow: "0 1px 0 rgba(0,0,0,.25)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.35)",
+    radius: "6px",
+    "radius-lg": "8px",
+  },
+  monokai: {
+    bg: "#1e1f1c",
+    canvas: "#272822",
+    panel: "#3e3d32",
+    "panel-2": "#49483e",
+    ink: "#f8f8f2",
+    "ink-2": "#cfcfc2",
+    "ink-3": "#75715e",
+    "ink-4": "#49483e",
+    line: "#49483e",
+    "line-2": "#3e3d32",
+    "line-3": "#33332b",
+    user: "#66d9ef",
+    "user-tint": "#0e2a30",
+    "user-tint-2": "#17434c",
+    agent: "#f92672",
+    "agent-tint": "#2a0a18",
+    "agent-tint-2": "#4a142a",
+    green: "#a6e22e",
+    "green-tint": "#1a230d",
+    rose: "#f92672",
+    shadow: "0 1px 0 rgba(0,0,0,.3)",
+    "shadow-2": "0 4px 16px rgba(0,0,0,.45)",
+    radius: "3px",
+    "radius-lg": "5px",
+  },
+  borland: {
+    bg: "#00007a",
+    canvas: "#0000aa",
+    panel: "#000080",
+    "panel-2": "#0000d0",
+    ink: "#ffff55",
+    "ink-2": "#aaaaaa",
+    "ink-3": "#9090ff",
+    "ink-4": "#5555aa",
+    line: "#aaaaaa",
+    "line-2": "#5555aa",
+    "line-3": "#0000d0",
+    user: "#55ffff",
+    "user-tint": "#001a2a",
+    "user-tint-2": "#003040",
+    agent: "#ff55ff",
+    "agent-tint": "#2a0a2a",
+    "agent-tint-2": "#4a1a4a",
+    green: "#55ff55",
+    "green-tint": "#0a2a0a",
+    rose: "#ff5555",
+    shadow: "none",
+    "shadow-2": "0 0 0 1px rgba(255,255,85,.1)",
+    serif: "'JetBrains Mono', ui-monospace, monospace",
+    sans: "'JetBrains Mono', ui-monospace, monospace",
+    radius: "0px",
+    "radius-lg": "0px",
+    "radius-pill": "0px",
+  },
+  sepia: {
+    bg: "#f0e6d2",
+    canvas: "#f7eed8",
+    panel: "#e8dcc0",
+    "panel-2": "#dccfb0",
+    ink: "#3a2e1f",
+    "ink-2": "#5e4b32",
+    "ink-3": "#8a755a",
+    "ink-4": "#b8a684",
+    line: "#d4c5a0",
+    "line-2": "#dccfb0",
+    "line-3": "#e6daba",
+    user: "#5e4b32",
+    "user-tint": "#e8dcc0",
+    "user-tint-2": "#d4c5a0",
+    agent: "#8c3a1a",
+    "agent-tint": "#ebdcc8",
+    "agent-tint-2": "#d4b89c",
+    green: "#4a5a2e",
+    "green-tint": "#dcdcbe",
+    rose: "#a83a3a",
+    shadow: "0 1px 0 rgba(80,60,30,.06), 0 1px 2px rgba(80,60,30,.04)",
+    "shadow-2": "0 1px 0 rgba(80,60,30,.08), 0 4px 16px rgba(80,60,30,.08)",
+    sans: "'Source Serif 4', Georgia, serif",
+    radius: "3px",
+    "radius-lg": "5px",
+  },
+  contrast: {
+    bg: "#000000",
+    canvas: "#000000",
+    panel: "#000000",
+    "panel-2": "#1a1a1a",
+    ink: "#ffffff",
+    "ink-2": "#ffffff",
+    "ink-3": "#dddddd",
+    "ink-4": "#999999",
+    line: "#ffffff",
+    "line-2": "#aaaaaa",
+    "line-3": "#666666",
+    user: "#00ffff",
+    "user-tint": "#001a1a",
+    "user-tint-2": "#003333",
+    agent: "#ffff00",
+    "agent-tint": "#1a1a00",
+    "agent-tint-2": "#333300",
+    green: "#00ff00",
+    "green-tint": "#001a00",
+    rose: "#ff00ff",
+    shadow: "none",
+    "shadow-2": "none",
+    radius: "0px",
+    "radius-lg": "0px",
+    "border-w": "2px",
+  },
+  ember: {
+    bg: "#070608",
+    canvas: "#16141b",
+    panel: "#0e0c11",
+    "panel-2": "#201d27",
+    ink: "#f0eef2",
+    "ink-2": "#a6a2ae",
+    "ink-3": "#726e7a",
+    "ink-4": "#403d47",
+    line: "#2a2730",
+    "line-2": "#201d26",
+    "line-3": "#17151c",
+    user: "#ff5d72",
+    "user-tint": "#2a0e15",
+    "user-tint-2": "#4d1822",
+    agent: "#ffb13e",
+    "agent-tint": "#2a1c08",
+    "agent-tint-2": "#4a3112",
+    green: "#34e2b0",
+    "green-tint": "#08231b",
+    rose: "#ff4f67",
+    shadow: "0 1px 0 rgba(0,0,0,.4)",
+    "shadow-2": "0 0 26px rgba(255,93,114,.08), 0 6px 18px rgba(0,0,0,.5)",
+    radius: "8px",
+    "radius-lg": "14px",
+  },
+};
+
+/** Type guard for an arbitrary string being a known theme name. */
+export function isThemeName(value: unknown): value is ThemeTokenName {
+  return typeof value === "string" && value in THEME_META;
+}
+
+/**
+ * Resolve the fully-merged token set for a theme: the `:root` base with the
+ * theme's overrides applied on top. Unknown names fall back to the default.
+ */
+export function resolveThemeTokens(name: ThemeTokenName): ThemeTokens {
+  return { ...THEME_BASE_TOKENS, ...THEME_OVERRIDES[name] };
+}

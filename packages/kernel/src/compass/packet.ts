@@ -5,6 +5,8 @@ import type {
   ProsePayload,
   WakeReason,
 } from "@f-mark/shared";
+import { isPlaceholderSessionSlug } from "@f-mark/shared";
+import { markFmarkWakePrompt } from "../launchPrompt.js";
 import { latestEventTimestamp } from "./cursors.js";
 
 const PACKET_EVENT_LIMIT = 8;
@@ -119,6 +121,7 @@ function packetEvent(event: AnyEventRecord): CompassPacketEvent {
 
 export function buildCompassPacket(input: {
   sessionId: string;
+  sessionSlug?: string;
   participantId: string;
   reason?: WakeReason;
   sourceEvent?: string;
@@ -134,6 +137,9 @@ export function buildCompassPacket(input: {
   return {
     type: "fmark.wake",
     session_id: input.sessionId,
+    ...(input.sessionSlug !== undefined
+      ? { session_slug: input.sessionSlug }
+      : {}),
     participant_id: input.participantId,
     ...(input.reason !== undefined ? { reason: input.reason } : {}),
     ...(input.sourceEvent !== undefined ? { source_event: input.sourceEvent } : {}),
@@ -149,13 +155,30 @@ export function buildWakePrompt(packet: CompassPacket): string {
     packet.reason === undefined
       ? "session activity"
       : `${packet.reason.replace(/-/g, " ")} activity`;
-  return [
-    "# F-Mark wake packet",
-    "",
-    `You have new F-Mark ${reason}. Use MCP tools, especially \`fmark_get_inbox\`, to fetch the unread details before responding. Do not use REST or shell commands for F-Mark writes.`,
-    "",
-    "```json",
-    JSON.stringify(packet, null, 2),
-    "```",
-  ].join("\n");
+  const renameNudge =
+    packet.session_slug !== undefined &&
+    isPlaceholderSessionSlug(packet.session_slug)
+      ? [
+          "",
+          sessionRenameNudge(),
+        ]
+      : [];
+  return markFmarkWakePrompt(
+    [
+      "# F-Mark wake packet",
+      "",
+      `You have new F-Mark ${reason}. Use MCP tools, especially \`fmark_get_inbox\`, to fetch the unread details before responding. Do not use REST or shell commands for F-Mark writes.`,
+      ...renameNudge,
+      "",
+      "```json",
+      JSON.stringify(packet, null, 2),
+      "```",
+    ].join("\n"),
+  );
+}
+
+/** Shared placeholder-rename instruction, injected into the launch packet
+ *  and into every wake packet until the session sheds its placeholder name. */
+export function sessionRenameNudge(): string {
+  return "This session still has its placeholder name (`new-session`). Once you know what it is about — usually from the first user request — rename it with the `fmark_rename_session` MCP tool using a short kebab-case slug (e.g. `fix-login-flow`). If no request has arrived yet, leave the placeholder; never invent a name.";
 }

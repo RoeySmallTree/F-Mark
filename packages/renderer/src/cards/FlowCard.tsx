@@ -3,6 +3,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
+  BackgroundVariant,
   Controls,
   type Node as RfNode,
   type Edge as RfEdge,
@@ -14,12 +15,18 @@ import type {
   Participant,
 } from "@f-mark/shared";
 import { copyToClipboard } from "../render/copy.js";
-import { formatWhen, whoOf } from "./format.js";
-import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
+import { whoOf } from "./format.js";
 import { FlowNode } from "./flow/FlowNode.js";
 import { FlowEdge } from "./flow/FlowEdge.js";
 import { layoutFlow } from "./flow/layoutFlow.js";
+import { EventCardHeader } from "./EventCardHeader.js";
 import "@xyflow/react/dist/style.css";
+
+const NO_LOOSE_STRING_VALUES = {
+  flow: "flow",
+  standalone: "standalone",
+  embedded: "embedded",
+} as const;
 
 interface Props {
   event: AnyEventRecord;
@@ -44,7 +51,7 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
         id: n.id,
         position: n.position!,
         data: { data: n },
-        type: "flow",
+        type: NO_LOOSE_STRING_VALUES.flow,
       })),
     [positioned],
   );
@@ -57,7 +64,7 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
         id: e.id,
         source: e.source,
         target: e.target,
-        type: "flow",
+        type: NO_LOOSE_STRING_VALUES.flow,
         data: { data: e },
       })),
     [payload],
@@ -84,7 +91,7 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
       }}
       proOptions={{ hideAttribution: true }}
     >
-      <Background gap={16} />
+      <Background variant={BackgroundVariant.Cross} gap={20} size={5} />
       <Controls showInteractive={false} />
     </ReactFlow>
   );
@@ -93,7 +100,7 @@ function FlowInner({ payload }: { payload: FlowPayload }): JSX.Element {
 export function FlowCard({
   event,
   participants,
-  variant = "standalone",
+  variant = NO_LOOSE_STRING_VALUES.standalone,
 }: Props): JSX.Element {
   const payload = event.payload as FlowPayload;
   const who = whoOf(event.participant_id, participants);
@@ -102,7 +109,7 @@ export function FlowCard({
       ? payload.title
       : payload.id;
 
-  if (variant === "embedded") {
+  if (variant === NO_LOOSE_STRING_VALUES.embedded) {
     /* Embedded variant: drop the head + menu chrome; the surrounding
        prose-embed-frame provides separation. Keep the title because
        a flow chart often *is* its own caption. */
@@ -120,17 +127,11 @@ export function FlowCard({
 
   return (
     <div className="flow-card" data-event-kind="flow">
-      <div className="flow-head">
-        <ParticipantAvatar
-          participantId={who.id}
-          kind={who.isUser ? "user" : "agent"}
-          name={who.name}
-          color={who.color}
-          runtimeId={who.runtimeId}
-          size="sm"
-        />
-        <span className="who">{who.name}</span>
-        <span className="when">{formatWhen(event.timestamp)}</span>
+      <EventCardHeader
+        className="flow-head"
+        who={who}
+        timestamp={event.timestamp}
+      >
         <span className="badge">
           <Workflow size={10} aria-hidden /> FLOW
         </span>
@@ -143,7 +144,7 @@ export function FlowCard({
         >
           <MoreHorizontal size={14} aria-hidden />
         </button>
-      </div>
+      </EventCardHeader>
       <div className="flow-title">{title}</div>
       <div className="flow-canvas">
         <ReactFlowProvider>

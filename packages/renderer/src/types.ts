@@ -18,9 +18,24 @@ export interface PathSwitchedBusMessage {
   revision: number;
 }
 
+export interface PathsUpdatedBusMessage {
+  type: "paths-updated";
+  paths: Array<{ path: string; path_id: string }>;
+}
+
 export interface SessionForkedBusMessage {
   type: "session.forked";
   source_session_id: string;
+  session: unknown;
+  pathId?: string | null;
+  revision?: number;
+}
+
+export interface SessionRenamedBusMessage {
+  type: "session.renamed";
+  /* The session id is immutable; a rename only changes the display slug.
+     Clients refresh the session list so labels update — no state is keyed
+     by the name. */
   session: unknown;
   pathId?: string | null;
   revision?: number;
@@ -36,5 +51,7 @@ export interface FilesChangedBusMessage {
 export type BusMessage =
   | EventBusMessage
   | PathSwitchedBusMessage
+  | PathsUpdatedBusMessage
   | SessionForkedBusMessage
+  | SessionRenamedBusMessage
   | FilesChangedBusMessage;

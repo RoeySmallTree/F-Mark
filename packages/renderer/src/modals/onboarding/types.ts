@@ -1,3 +1,7 @@
+const NO_LOOSE_STRING_VALUES = {
+  agent: "agent",
+} as const;
+
 /* Shared types + small id helpers for the first-launch onboarding wizard. */
 
 export type OnboardingStep =
@@ -32,6 +36,8 @@ export interface AgentIdentity {
 export interface ChosenAgent {
   runtimeId: string;
   identity: AgentIdentity;
+  model?: string;
+  effort?: string;
 }
 
 function randomHex(bytes: number): string {
@@ -54,25 +60,9 @@ function randomHex(bytes: number): string {
     with the same id shape (`ag-<runtime>-<hex>`). */
 export function genParticipantId(runtimeId: string): string {
   const safe = runtimeId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
-  return `ag-${safe.length > 0 ? safe : "agent"}-${randomHex(2)}`;
+  return `ag-${safe.length > 0 ? safe : NO_LOOSE_STRING_VALUES.agent}-${randomHex(2)}`;
 }
 
 export function genTodoId(): string {
   return `td-${randomHex(4)}`;
 }
-
-/** Derive a default session slug from a folder's basename, sanitized to the
-    a–z0–9- charset the session-create route accepts. */
-export function slugFromFolder(absPath: string | null): string {
-  if (absPath === null) return "";
-  const trimmed = absPath.replace(/\/+$/, "");
-  const base = trimmed.slice(trimmed.lastIndexOf("/") + 1);
-  return base
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-}
-
-export const SLUG_RE = /^[a-z0-9-]+$/;

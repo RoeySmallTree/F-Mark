@@ -11,6 +11,15 @@ const PING_TIMEOUT_MS = 2000;
 const ACCESS_RESPONSE_POLL_MS = 250;
 const FMARK_MCP_TOOL_PREFIX = process.env.F_MARK_OPENCODE_MCP_PREFIX ?? "mcp__fmark__";
 
+type ApprovalScope = "once" | "session" | "always" | "default";
+type AccessDecision = "approve" | "deny" | "expired";
+
+interface AccessDecisionResult {
+  decision: AccessDecision;
+  scope?: ApprovalScope;
+  optionId?: string;
+}
+
 interface Ctx {
   fmarkDir: string;
   kernelUrl: string;
@@ -119,7 +128,7 @@ async function awaitAccessResponse(
   sessionId: string,
   requestId: string,
   timeoutMs: number,
-): Promise<"approve" | "deny" | "expired"> {
+): Promise<AccessDecisionResult> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const res = await httpJson<{
@@ -130,12 +139,22 @@ async function awaitAccessResponse(
         e.payload?.request_id === requestId &&
         (e.payload.decision === "approve" || e.payload.decision === "deny")
       ) {
-        return e.payload.decision as "approve" | "deny";
+        return {
+          decision: e.payload.decision as "approve" | "deny",
+          scope:
+            e.payload.scope === "once" ||
+            e.payload.scope === "session" ||
+            e.payload.scope === "always" ||
+            e.payload.scope === "default"
+              ? e.payload.scope
+              : undefined,
+          optionId: asString(e.payload.option_id),
+        };
       }
     }
     await new Promise((r) => setTimeout(r, ACCESS_RESPONSE_POLL_MS));
   }
-  return "expired";
+  return { decision: "expired" };
 }
 
 // messageID → role, populated from event.message.updated. Used to filter
@@ -146,38 +165,41 @@ const messageRole = new Map<string, "user" | "assistant" | "system">();
 const turnHasContent = new Map<string, boolean>();
 
 // Permission request IDs already handled, so the bus event and TUI hook don't double-decide.
-const permissionInFlight = new Map<string, Promise<"approve" | "deny" | "expired">>();
+const permissionInFlight = new Map<string, Promise<AccessDecisionResult>>();
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function pickPermissionResponse(
-  decision: "approve" | "deny" | "expired",
+  result: AccessDecisionResult,
 ): "always" | "once" | "reject" {
-  if (decision === "approve") return "once";
-  return "reject";
+  if (result.decision !== "approve") return "reject";
+  if (result.scope === "always" || result.optionId === "opencode:always") {
+    return "always";
+  }
+  return "once";
 }
 
 async function handlePermissionAsked(
   ctx: Ctx,
   client: any,
   permission: Record<string, unknown>,
-): Promise<"approve" | "deny" | "expired"> {
+): Promise<AccessDecisionResult> {
   const permissionID = asString(permission.id);
   const opencodeSid = asString(permission.sessionID);
-  if (!permissionID || !opencodeSid) return "expired";
+  if (!permissionID || !opencodeSid) return { decision: "expired" };
   const existing = permissionInFlight.get(permissionID);
   if (existing) return existing;
 
-  const work = (async (): Promise<"approve" | "deny" | "expired"> => {
+  const work = (async (): Promise<AccessDecisionResult> => {
     const sid = await resolveValidatedFmarkSessionId(ctx);
-    if (!sid) return "expired";
+    if (!sid) return { decision: "expired" };
     const tool = (permission.tool ?? {}) as Record<string, unknown>;
     const requestId = `ar-${permissionID}`;
     await httpJson(ctx, "POST", `/sessions/${sid}/events/access-request`, {
       participant_id: ctx.agentId,
-      path: ctx.projectPath,
+      root: ctx.projectPath,
       schema: "fmark.access-request.v1",
       request_id: requestId,
       status: "open",
@@ -190,22 +212,42 @@ async function handlePermissionAsked(
         JSON.stringify(permission).slice(0, 800),
       tool_name: asString(tool.messageID) !== undefined ? "opencode-tool" : undefined,
       tool_input: { tool, patterns: permission.patterns, metadata: permission.metadata },
+      suggestions: [
+        {
+          id: "opencode:once",
+          label: "Allow once",
+          decision: "approve",
+          scope: "once",
+        },
+        {
+          id: "opencode:always",
+          label: "Always allow",
+          decision: "approve",
+          scope: "always",
+        },
+        {
+          id: "opencode:reject",
+          label: "Cancel",
+          decision: "deny",
+          scope: "default",
+        },
+      ],
       response_channel: "hook",
       raw: permission,
       created_at: new Date().toISOString(),
     });
     const timeoutMs = Number(process.env.F_MARK_ACCESS_REQUEST_TIMEOUT_MS ?? "300000");
-    const decision = await awaitAccessResponse(
+    const result = await awaitAccessResponse(
       ctx,
       sid,
       requestId,
       Math.max(1000, timeoutMs),
     );
-    if (decision !== "expired") {
+    if (result.decision !== "expired") {
       try {
         await client.postSessionIdPermissionsPermissionId({
           path: { id: opencodeSid, permissionID },
-          body: { response: pickPermissionResponse(decision) },
+          body: { response: pickPermissionResponse(result) },
         });
       } catch (err) {
         process.stderr.write(
@@ -213,7 +255,7 @@ async function handlePermissionAsked(
         );
       }
     }
-    return decision;
+    return result;
   })();
   permissionInFlight.set(permissionID, work);
   work.finally(() => permissionInFlight.delete(permissionID));
@@ -278,7 +320,7 @@ export const FmarkPlugin: Plugin = async (input) => {
           content: text,
           arbitrary: false,
           source: "hook",
-          path: ctx.projectPath,
+          root: ctx.projectPath,
         });
         if (opencodeSid) turnHasContent.set(opencodeSid, true);
         return;
@@ -294,7 +336,7 @@ export const FmarkPlugin: Plugin = async (input) => {
         await httpJson(ctx, "POST", `/sessions/${sid}/events/turn-end`, {
           participant_id: ctx.agentId,
           source: "hook",
-          path: ctx.projectPath,
+          root: ctx.projectPath,
         });
         // Trigger kernel-side runtime-state probe via the OpenCode adapter
         // (queries `opencode db --format json` for this sessionID). Best-effort.
@@ -335,7 +377,7 @@ export const FmarkPlugin: Plugin = async (input) => {
         input: args,
         result: { output, metadata, title },
         success,
-        path: ctx.projectPath,
+        root: ctx.projectPath,
       });
       turnHasContent.set(sessionID, true);
     },
@@ -350,8 +392,8 @@ export const FmarkPlugin: Plugin = async (input) => {
         input.client,
         permission as unknown as Record<string, unknown>,
       );
-      if (decision === "approve") output.status = "allow";
-      else if (decision === "deny" || decision === "expired") output.status = "deny";
+      if (decision.decision === "approve") output.status = "allow";
+      else if (decision.decision === "deny" || decision.decision === "expired") output.status = "deny";
     },
   };
 };

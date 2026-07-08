@@ -43,6 +43,9 @@ function resetStore(): void {
     participants: PARTICIPANTS,
     currentUserId: "us-a7f3",
     events: [],
+    /* Required root scope (X2) for the overlay's postProse/wake. */
+    activePath: "/project",
+    activePathId: "project-id",
     composeMode: "message",
     commentTarget: null,
     leftRail: "sessions",
@@ -471,7 +474,7 @@ describe("CommentThreadOverlay — resolve behavior", () => {
     expect(body.lines).toEqual([2, 3]);
   });
 
-  test("resolved threads render with .thread.resolved class and 'Resolved' label", () => {
+  test("resolved threads render with reopen affordance instead of disabled button", () => {
     const target = makeProse(
       "20260522T120000Z_ag-c92e.prose.md",
       "ag-c92e",
@@ -499,21 +502,94 @@ describe("CommentThreadOverlay — resolve behavior", () => {
       commentTarget: { kind: "event", file: target.filename },
     });
 
-    // Aggregator would hide `root` from the visible feed, but the overlay
-    // surfaces it by reading raw events.
     const { container } = render(
       <CommentThreadOverlay targetFile={target.filename} comments={[]} />,
     );
     const thread = container.querySelector(".thread.resolved");
     expect(thread).not.toBeNull();
     expect(
-      within(thread as HTMLElement).getByText(/✓ Resolved/i),
+      within(thread as HTMLElement).getByRole("button", { name: /reopen/i }),
     ).toBeInTheDocument();
-    const btn = within(thread as HTMLElement).getByRole("button", {
-      name: /resolved/i,
+    expect(
+      within(thread as HTMLElement).queryByRole("button", { name: /^resolve$/i }),
+    ).toBeNull();
+    expect(
+      within(thread as HTMLElement).queryByLabelText(/reply to/i),
+    ).toBeNull();
+  });
+
+  test("clicking Reopen posts an _unresolved_ supersession prose", async () => {
+    const user = userEvent.setup();
+    const target = makeProse(
+      "20260522T120000Z_ag-c92e.prose.md",
+      "ag-c92e",
+      { name: "Plan", content: "body" },
+    );
+    const root = makeProse(
+      "20260522T120100Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "Pin",
+        append_to: target.filename, mode: "comment", lines: [2, 3],
+      },
+    );
+    const resolution = makeProse(
+      "20260522T120200Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "_resolved_",
+        append_to: target.filename, mode: "comment",
+        supersedes: root.filename,
+      },
+    );
+    useStore.setState({
+      events: [target, root, resolution],
+      commentTarget: { kind: "event", file: target.filename, lines: [2, 3] },
     });
-    expect(btn.className).toContain("resolved");
-    expect(btn).toBeDisabled();
+
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u.endsWith("/events/prose") && init?.method === "POST") {
+          return Promise.resolve(
+            jsonResponse({ filename: "20260522T120500Z_us-a7f3.prose.md" }),
+          );
+        }
+        if (u.includes("/events")) {
+          return Promise.resolve(
+            jsonResponse({ events: [target, root, resolution] }),
+          );
+        }
+        return Promise.resolve(jsonResponse({}));
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <CommentThreadOverlay
+        targetFile={target.filename}
+        comments={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /reopen/i }));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const call = fetchMock.mock.calls.find(([url, init]) => {
+      return (
+        String(url).endsWith("/events/prose") &&
+        (init as RequestInit | undefined)?.method === "POST"
+      );
+    });
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.content).toBe("_unresolved_");
+    expect(body.supersedes).toBe(root.filename);
   });
 });
 
@@ -541,17 +617,52 @@ describe("isResolvedComment helper", () => {
     expect(isResolvedComment(a, [a])).toBe(false);
   });
 
-  test("ignores self-supersedes (defensive)", () => {
+  test("returns false after an unresolve marker", () => {
     const a = makeProse(
       "20260522T120100Z_us-a7f3.prose.md",
       "us-a7f3",
+      { content: "Root", append_to: "x", mode: "comment" },
+    );
+    const b = makeProse(
+      "20260522T120200Z_us-a7f3.prose.md",
+      "us-a7f3",
       {
-        content: "Root",
-        append_to: "x", mode: "comment",
-        supersedes: "20260522T120100Z_us-a7f3.prose.md",
+        content: "_resolved_",
+        append_to: "x",
+        mode: "comment",
+        supersedes: a.filename,
       },
     );
-    expect(isResolvedComment(a, [a])).toBe(false);
+    const c = makeProse(
+      "20260522T120300Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "_unresolved_",
+        append_to: "x",
+        mode: "comment",
+        supersedes: a.filename,
+      },
+    );
+    expect(isResolvedComment(a, [a, b, c])).toBe(false);
+  });
+
+  test("ignores edit supersessions (only resolution markers count)", () => {
+    const a = makeProse(
+      "20260522T120100Z_us-a7f3.prose.md",
+      "us-a7f3",
+      { content: "Root", append_to: "x", mode: "comment" },
+    );
+    const edit = makeProse(
+      "20260522T120200Z_us-a7f3.prose.md",
+      "us-a7f3",
+      {
+        content: "Root edited",
+        append_to: "x",
+        mode: "comment",
+        supersedes: a.filename,
+      },
+    );
+    expect(isResolvedComment(a, [a, edit])).toBe(false);
   });
 });
 

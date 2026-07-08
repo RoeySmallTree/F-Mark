@@ -29,5 +29,14 @@ export default defineConfig(({ mode }) => ({
        (b) returns 404 for any request that lands in the empty window. So:
        only empty during a true production build. */
     emptyOutDir: mode === "production",
+    /* Disable esbuild minification. esbuild mis-minifies xterm.js's
+       block-scoped `DECRQMTypes` enum inside `InputHandler.requestMode`: it
+       constant-folds `DECRQMTypes || (DECRQMTypes = {})` to `void 0 || (i = {})`
+       but drops the `var i` declaration, so the very first DECRQM escape from a
+       terminal throws `ReferenceError: i is not defined` and kills the panel.
+       F-Mark is a locally-served kernel UI, not a CDN bundle, so unminified is
+       the right trade: correct + debuggable. Revisit only if bundle weight ever
+       matters (then prefer `minify: "terser"`, which handles the enum). */
+    minify: false,
   },
 }));

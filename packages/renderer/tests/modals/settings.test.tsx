@@ -4,7 +4,7 @@
      - clicking each item swaps the main content (asserted via the section's
        <h3 className="settings-h"> heading);
      - Appearance: clicking a theme card calls applyTheme(name);
-     - Profile: clicking Save calls updateParticipant via the client (fetch
+     - Profile: clicking Save calls updateUserProfile via the client (fetch
        is stubbed);
      - Profile: custom non-preset hex colors get a live preview swatch;
      - About: the ASCII logo is in the DOM;
@@ -17,6 +17,7 @@ import {
   expect,
   test,
   vi,
+  type MockInstance,
 } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -54,14 +55,26 @@ const PARTICIPANTS: Record<string, Participant> = {
   "ag-c92e": { kind: "agent", name: "Claude", color: "#b86a1f" },
 };
 
+const SESSION = {
+  id: "profile-session",
+  slug: "profile-session",
+  created_at: "2026-06-18T10:00:00.000Z",
+  path: "/repo-a",
+  path_id: "repo-a-id",
+};
+
 function resetStore(): void {
   useStore.setState({
     token: null,
-    sessions: [],
-    currentSessionId: null,
+    sessions: [SESSION],
+    currentSessionId: SESSION.id,
+    selectedPath: SESSION.path,
+    selectedPathId: SESSION.path_id,
     participants: PARTICIPANTS,
     currentUserId: "us-a7f3",
     events: [],
+    activePath: "/activated-from-path",
+    activePathId: "activated-from-path-id",
     composeMode: "message",
     commentTarget: null,
     leftRail: "sessions",
@@ -96,8 +109,8 @@ describe("SettingsModal — side nav", () => {
     expect(tabs[0]).toHaveTextContent(/profile/i);
     expect(tabs[1]).toHaveTextContent(/connected agents/i);
     expect(tabs[2]).toHaveTextContent(/runtimes/i);
-    expect(tabs[3]).toHaveTextContent(/hooks/i);
-    expect(tabs[4]).toHaveTextContent(/appearance/i);
+    expect(tabs[3]).toHaveTextContent(/appearance/i);
+    expect(tabs[4]).toHaveTextContent(/git ?\/ ?diff/i);
     expect(tabs[5]).toHaveTextContent(/keyboard shortcuts/i);
     expect(tabs[6]).toHaveTextContent(/about/i);
   });
@@ -119,11 +132,6 @@ describe("SettingsModal — side nav", () => {
     await user.click(screen.getByRole("tab", { name: /^runtimes$/i }));
     expect(
       screen.getByRole("heading", { level: 3, name: /^runtimes$/i }),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /^hooks$/i }));
-    expect(
-      screen.getByRole("heading", { level: 3, name: /hook status/i }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /appearance/i }));
@@ -338,19 +346,99 @@ describe("SettingsModal — Profile save", () => {
     cleanup();
   });
 
-  test("Save → PATCH /participants/:id with name, color, and avatar", async () => {
+  test("renders the populated profile without storage and identity helper copy", () => {
+    render(<SettingsModal />);
+
+    expect(document.querySelector(".settings-sub")).toBeNull();
+    expect(
+      screen.queryByText(/Your identity in this project/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Your identity across F-Mark/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/generated when project initialized/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("us-a7f3")).toBeInTheDocument();
+    expect(document.querySelector(".profile-photo-control")).not.toBeNull();
+    expect(document.querySelector(".profile-name-input")).not.toBeNull();
+    expect(document.querySelector(".avatar-preset-trigger")).not.toBeNull();
+  });
+
+  test("hydrates the form from the machine profile over stale participant state", async () => {
+    useStore.setState({
+      participants: {
+        "us-a7f3": { kind: "user", name: "You", color: "#3b82f6" },
+        "ag-c92e": PARTICIPANTS["ag-c92e"]!,
+      },
+      currentUserId: "us-a7f3",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/profile") {
+          return new Response(
+            JSON.stringify({
+              profile: {
+                name: "Roey Saved",
+                color: "#8a2a8a",
+                avatar_preset: "02",
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<SettingsModal />);
+
+    const nameInput = screen.getByLabelText(/display name/i) as HTMLInputElement;
+    await vi.waitFor(() => {
+      expect(nameInput.value).toBe("Roey Saved");
+    });
+    await user.click(screen.getByRole("button", { name: /avatar/i }));
+    expect(screen.getByLabelText(/custom hex color/i)).toHaveValue("#8a2a8a");
+    expect(
+      document.querySelector(".profile-photo-control [data-avatar-preset]")?.getAttribute(
+        "data-avatar-preset",
+      ),
+    ).toBe("02");
+  });
+
+  test("Save → PATCH /profile with name, color, and avatar preset", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (typeof url === "string" && url.startsWith("/participants/")) {
+      if (
+        typeof url === "string" &&
+        url === "/profile" &&
+        init?.method === "PATCH"
+      ) {
         const reqBody = JSON.parse(
           String(init?.body ?? "{}"),
         ) as Partial<Participant>;
         return new Response(
           JSON.stringify({
-            id: "us-a7f3",
-            kind: "user",
-            name: reqBody.name ?? "Roey Updated",
-            color: reqBody.color ?? "#3d7a4f",
-            avatar_data_url: reqBody.avatar_data_url,
+            profile: {
+              name: reqBody.name ?? "Roey Updated",
+              color: reqBody.color ?? "#3d7a4f",
+              avatar_preset: reqBody.avatar_preset,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (typeof url === "string" && url === "/profile") {
+        return new Response(
+          JSON.stringify({
+            profile: {
+              name: "Roey",
+              color: "#2a5fa8",
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -369,28 +457,19 @@ describe("SettingsModal — Profile save", () => {
     await user.clear(nameInput);
     await user.type(nameInput, "Roey Updated");
 
+    await user.click(screen.getByRole("button", { name: /avatar/i }));
     const greenSwatch = screen.getByLabelText(/color #3d7a4f/i);
     await user.click(greenSwatch);
 
-    const file = new File(["avatar"], "avatar.png", { type: "image/png" });
-    await user.upload(screen.getByLabelText(/upload profile image/i), file);
-
-    await vi.waitFor(() => {
-      const preview = document.querySelector(
-        ".profile-photo-control .avatar-img",
-      ) as HTMLImageElement | null;
-      expect(preview?.getAttribute("src")).toMatch(/^data:image\/png;base64,/);
-    });
+    const presetOption = await screen.findByRole("option", { name: "Star" });
+    await user.click(presetOption);
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
-    // Wait for the call.
     await vi.waitFor(() => {
-      const calls = fetchMock.mock.calls;
-      const patch = calls.find(
+      const patch = fetchMock.mock.calls.find(
         (c) =>
-          typeof c[0] === "string" &&
-          c[0].startsWith("/participants/us-a7f3") &&
+          c[0] === "/profile" &&
           (c[1] as RequestInit | undefined)?.method === "PATCH",
       );
       expect(patch).toBeDefined();
@@ -398,16 +477,19 @@ describe("SettingsModal — Profile save", () => {
 
     const patchCall = fetchMock.mock.calls.find(
       (c) =>
-        typeof c[0] === "string" &&
-        c[0].startsWith("/participants/us-a7f3") &&
+        c[0] === "/profile" &&
         (c[1] as RequestInit | undefined)?.method === "PATCH",
     )!;
     const body = JSON.parse(
       (patchCall[1] as RequestInit).body as string,
-    ) as { name: string; color: string; avatar_data_url?: string };
+    ) as { name: string; color: string; avatar_preset?: string };
+    const patchUrl = new URL(patchCall[0] as string, "http://f-mark.test");
+    expect(patchUrl.pathname).toBe("/profile");
+    expect(patchUrl.searchParams.get("root")).toBeNull();
+    expect(patchUrl.searchParams.get("path_id")).toBeNull();
     expect(body.name).toBe("Roey Updated");
     expect(body.color.toLowerCase()).toBe("#3d7a4f");
-    expect(body.avatar_data_url).toMatch(/^data:image\/png;base64,/);
+    expect(body.avatar_preset).toBe("04");
   });
 
   test("shows a live preview swatch for a valid non-preset custom color", async () => {
@@ -423,6 +505,7 @@ describe("SettingsModal — Profile save", () => {
 
     const user = userEvent.setup();
     render(<SettingsModal />);
+    await user.click(screen.getByRole("button", { name: /avatar/i }));
 
     const hexInput = screen.getByLabelText(
       /custom hex color/i,
@@ -452,6 +535,7 @@ describe("SettingsModal — Profile save", () => {
 
     const user = userEvent.setup();
     render(<SettingsModal />);
+    await user.click(screen.getByRole("button", { name: /avatar/i }));
 
     const hexInput = screen.getByLabelText(
       /custom hex color/i,
@@ -530,59 +614,117 @@ describe("SettingsModal — Shortcuts", () => {
 });
 
 describe("SettingsModal — Agents", () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
   beforeEach(() => {
     resetStore();
+    useStore.setState({
+      token: "tok",
+      settingsSection: "agents",
+      currentSessionId: "profile-session",
+      selectedPath: SESSION.path,
+      selectedPathId: SESSION.path_id,
+    });
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith("/sessions?scope=all") || url.startsWith("/sessions")) {
+        return jsonResponse({
+          sessions: [SESSION],
+        });
+      }
+      if (url.startsWith("/managed-agents/status")) {
+        return jsonResponse({
+          agents: [
+            {
+              participant_id: "ag-c92e",
+              display_name: "Claude",
+              runtime_id: "claude",
+              active_session: SESSION.id,
+              membership_session_id: SESSION.id,
+              membership_state: "active",
+              pane_lifecycle: "live",
+              controllable: true,
+              runtime_session: null,
+              managed: true,
+              paused: false,
+              connection_state: "connected",
+              activity_state: "running",
+              tmux_session: "fmark-ag-c92e",
+              mcp_status: "installed",
+              hook_status: "installed",
+              context: { status: "reported", percent_used: null },
+              access: { mode: "default", status: "reported" },
+              pending_access_count: 0,
+            },
+            {
+              participant_id: "ag-idle",
+              display_name: "Idle",
+              runtime_id: "claude",
+              active_session: SESSION.id,
+              membership_session_id: SESSION.id,
+              membership_state: "active",
+              pane_lifecycle: "no-pane",
+              controllable: false,
+              runtime_session: null,
+              managed: true,
+              paused: false,
+              connection_state: "offline",
+              activity_state: "idle",
+              tmux_session: null,
+              mcp_status: "installed",
+              hook_status: "installed",
+              context: { status: "reported", percent_used: null },
+              access: { mode: "default", status: "reported" },
+              pending_access_count: 0,
+            },
+          ],
+          capabilities: {},
+        });
+      }
+      return jsonResponse({});
+    });
   });
+
   afterEach(() => {
-    delete (navigator as unknown as { clipboard?: unknown }).clipboard;
+    fetchSpy.mockRestore();
     cleanup();
   });
 
-  test("lists existing agents and toggles the +Add form", async () => {
-    const user = userEvent.setup();
+  test("lists connected agents grouped by path and session without add/snippet UI", async () => {
     render(<SettingsModal />);
-    await user.click(screen.getByRole("tab", { name: /connected agents/i }));
 
-    const list = screen.getByTestId("agent-list");
-    // 1 agent (Claude) + 1 + Add button.
-    expect(within(list).getByText(/claude/i)).toBeInTheDocument();
-    expect(within(list).getByText(/· ag-c92e/i)).toBeInTheDocument();
+    const list = await screen.findByTestId("agent-list");
+    expect(within(list).getByRole("heading", { level: 4, name: "repo-a" })).toBeInTheDocument();
     expect(
-      within(list).getByRole("button", { name: /\+ add agent/i }),
+      within(list).getByTestId("agent-session-group"),
+    ).toHaveAttribute("data-session-slug", "profile-session");
+    expect(within(list).getByText(/· ag-c92e/i)).toBeInTheDocument();
+    expect(within(list).queryByText(/idle/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /\+ add agent/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /copy snippet/i })).toBeNull();
+    expect(
+      within(list).getByRole("button", { name: /go to session/i }),
     ).toBeInTheDocument();
-
-    await user.click(
-      within(list).getByRole("button", { name: /\+ add agent/i }),
-    );
-    expect(screen.getByLabelText(/new agent name/i)).toBeInTheDocument();
+    expect(within(list).getByRole("button", { name: /goodbye/i })).toBeInTheDocument();
   });
 
-  test("per-agent copy includes that agent id while project copy stays generic", async () => {
-    useStore.setState({ settingsSection: "agents", token: "tok" });
+  test("go to session switches the current session and closes settings", async () => {
     const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(globalThis.navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
-    });
+    const closeModal = vi.fn();
+    useStore.setState({ closeModal });
 
     render(<SettingsModal />);
+    const list = await screen.findByTestId("agent-list");
+    await user.click(within(list).getByRole("button", { name: /go to session/i }));
 
-    await user.click(screen.getByRole("button", { name: /copy snippet/i }));
-    expect(writeText).toHaveBeenCalledTimes(1);
-    const perAgent = writeText.mock.calls[0]![0] as string;
-    expect(perAgent).toContain("/guide?token=tok&agent_id=ag-c92e");
-    expect(perAgent).toContain("MCP tool guide");
-    expect(perAgent).toContain("first action");
-    expect(perAgent).toContain("fmark MCP tools instead of raw HTTP calls");
-    expect(perAgent.toLowerCase()).not.toContain("bearer token");
-    expect(perAgent.toLowerCase()).not.toContain("event schema");
-    expect(perAgent.toLowerCase()).not.toContain("full protocol");
-
-    await user.click(screen.getByRole("button", { name: /^copy$/i }));
-    expect(writeText).toHaveBeenCalledTimes(2);
-    const projectLevel = writeText.mock.calls[1]![0] as string;
-    expect(projectLevel).toContain("/guide?token=tok");
-    expect(projectLevel).not.toContain("agent_id=");
+    expect(useStore.getState().currentSessionId).toBe(SESSION.id);
+    expect(closeModal).toHaveBeenCalledTimes(1);
   });
 });
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { cachedRealpathSync } from "./realpathCache.js";
 
 /* pathId is a deterministic 48-bit fingerprint derived from the canonical
    absolute path. Used as a partition key across managed-agent state, WS
@@ -18,7 +18,7 @@ export function computePathId(absPath: string): string {
    they're about to create. Throws for everything except ENOENT. */
 function canonicalize(absPath: string): string {
   try {
-    return realpathSync(absPath);
+    return cachedRealpathSync(absPath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return absPath;
     throw err;

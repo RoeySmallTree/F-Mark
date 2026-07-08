@@ -47,7 +47,7 @@ describe("ReconnectModal", () => {
     render(
       <ReconnectModal
         participantId="ag-c92e"
-        sessionId="2026-05-22-launch-planning"
+        sessionId="2026-05-22-launch-review"
         runtimeId="claude"
         baseUrl="http://localhost:7777"
         token={null}
@@ -58,7 +58,7 @@ describe("ReconnectModal", () => {
     const url = String(fetchMock.mock.calls[0]![0]);
     expect(url).toContain("/guide");
     expect(url).toContain("agent_id=ag-c92e");
-    expect(url).toContain("session_id=2026-05-22-launch-planning");
+    expect(url).toContain("session_id=2026-05-22-launch-review");
     expect(url).toContain("runtime_id=claude");
   });
 

@@ -36,47 +36,39 @@ describe("AgentChip — basic rendering", () => {
     expect(screen.getByText("Worker A")).toBeInTheDocument();
   });
 
-  /* The icon now renders as a CSS-mask span (so it can adopt the
-     theme's text color); the runtime URL lives in `--icon-url`. */
-  test("renders the Claude icon for claude runtime", () => {
+  /* Runtime marks render as dense ASCII glyphs (theme ink on canvas). */
+  test("renders the Claude ascii mark for claude runtime", () => {
     const { container } = renderChip({ runtimeId: "claude" });
-    const mask = container.querySelector(
-      ".agent-chip-runtime .icon-mask",
-    ) as HTMLElement | null;
-    expect(mask).not.toBeNull();
-    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
-      "claude-icon.png",
+    const art = container.querySelector(
+      ".agent-chip-runtime [data-agent-kind-art='claude']",
     );
+    expect(art).not.toBeNull();
+    expect(art?.querySelector(".avatar-art-glyph")).not.toBeNull();
   });
 
-  test("renders the GPT icon for codex runtime", () => {
+  test("renders the GPT ascii mark for codex runtime", () => {
     const { container } = renderChip({ runtimeId: "codex" });
-    const mask = container.querySelector(
-      ".agent-chip-runtime .icon-mask",
-    ) as HTMLElement | null;
-    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
-      "gpt-icon.png",
-    );
+    expect(
+      container.querySelector(".agent-chip-runtime [data-agent-kind-art='gpt']"),
+    ).not.toBeNull();
   });
 
-  test("renders the Opencode icon for opencode runtime", () => {
+  test("renders the Opencode ascii mark for opencode runtime", () => {
     const { container } = renderChip({ runtimeId: "opencode" });
-    const mask = container.querySelector(
-      ".agent-chip-runtime .icon-mask",
-    ) as HTMLElement | null;
-    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
-      "opencode-icon.svg",
-    );
+    expect(
+      container.querySelector(
+        ".agent-chip-runtime [data-agent-kind-art='opencode']",
+      ),
+    ).not.toBeNull();
   });
 
-  test("renders the terminal icon for custom (null) runtime", () => {
+  test("renders the terminal ascii mark for custom (null) runtime", () => {
     const { container } = renderChip({ runtimeId: null, name: "Worker" });
-    const mask = container.querySelector(
-      ".agent-chip-runtime .icon-mask",
-    ) as HTMLElement | null;
-    expect(mask!.style.getPropertyValue("--icon-url")).toContain(
-      "terminal-icon.png",
-    );
+    expect(
+      container.querySelector(
+        ".agent-chip-runtime [data-agent-kind-art='terminal']",
+      ),
+    ).not.toBeNull();
   });
 });
 

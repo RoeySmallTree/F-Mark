@@ -44,7 +44,7 @@ describe("POST /sessions/:id/events/flow", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/flow`,
-        payload: { participant_id: pid, ...validPayload },
+        payload: { root, participant_id: pid, ...validPayload  },
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -70,6 +70,7 @@ describe("POST /sessions/:id/events/flow", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/flow`,
         payload: {
+          root,
           participant_id: pid,
           id: "fl_2",
           nodes: [{ label: "no id" }],
@@ -88,6 +89,7 @@ describe("POST /sessions/:id/events/flow", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/flow`,
         payload: {
+          root,
           participant_id: pid,
           id: "fl_3",
           nodes: [{ id: "n1", label: "A" }],
@@ -107,6 +109,7 @@ describe("POST /sessions/:id/events/flow", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/flow`,
         payload: {
+          root,
           participant_id: pid,
           id: "fl_4",
           nodes: [
@@ -128,7 +131,7 @@ describe("POST /sessions/:id/events/flow", () => {
       const res = await app.inject({
         method: "POST",
         url: `/sessions/no-such/events/flow`,
-        payload: { participant_id: pid, ...validPayload },
+        payload: { root, participant_id: pid, ...validPayload  },
       });
       expect(res.statusCode).toBe(404);
       await app.close();
@@ -141,7 +144,7 @@ describe("POST /sessions/:id/events/flow", () => {
       const first = await app.inject({
         method: "POST",
         url: `/sessions/${sessionId}/events/flow`,
-        payload: { participant_id: pid, ...validPayload },
+        payload: { root, participant_id: pid, ...validPayload  },
       });
       const firstFilename = first.json().filename as string;
 
@@ -149,6 +152,7 @@ describe("POST /sessions/:id/events/flow", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/flow`,
         payload: {
+          root,
           participant_id: pid,
           ...validPayload,
           supersedes: firstFilename,

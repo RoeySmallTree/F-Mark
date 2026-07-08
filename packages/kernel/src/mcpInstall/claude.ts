@@ -5,9 +5,13 @@ import {
   getObject,
   readJsonConfig,
   readJsonObjectForWrite,
-  statusFromServer,
   writeJsonObjectIfChanged,
 } from "./json.js";
+import {
+  inspectClaudeFmarkMcpServers,
+  ownedFmarkMcpNames,
+  summarizeFmarkDefinitions,
+} from "./ownership.js";
 import {
   fmarkMcpCommandSpec,
   makeCheck,
@@ -179,11 +183,15 @@ async function detectClaudeJson(
     return { scope, path, status: "missing", safe_auto_apply: safeAutoApply };
   }
   const servers = getObject(loaded.value, "mcpServers");
-  const current = statusFromServer(
-    servers?.fmark,
-    projectRoot !== undefined && env !== undefined
-      ? fmarkMcpCommandSpec(projectRoot, env)
-      : undefined,
+  const current = summarizeFmarkDefinitions(
+    inspectClaudeFmarkMcpServers({
+      servers,
+      projectRoot: projectRoot ?? "",
+      expected:
+        projectRoot !== undefined && env !== undefined
+          ? fmarkMcpCommandSpec(projectRoot, env)
+          : undefined,
+    }),
   );
   if (
     scope === "project" &&
@@ -288,9 +296,12 @@ async function detectClaudeLocalJson(
   const projects = getObject(loaded.value, "projects");
   const project = projects !== null ? getObject(projects, projectRoot) : null;
   const servers = project !== null ? getObject(project, "mcpServers") : null;
-  const current = statusFromServer(
-    servers?.fmark,
-    fmarkMcpCommandSpec(projectRoot, env),
+  const current = summarizeFmarkDefinitions(
+    inspectClaudeFmarkMcpServers({
+      servers,
+      projectRoot,
+      expected: fmarkMcpCommandSpec(projectRoot, env),
+    }),
   );
   if (current.status === "installed") {
     const inspection = await inspectClaudeAllowEntries(projectRoot, env);
@@ -375,6 +386,37 @@ function claudeServer(input: McpApplyInput): Record<string, unknown> {
   };
 }
 
+async function preflightClaudeMcpConfigFiles(input: McpApplyInput): Promise<void> {
+  const userConfig = join(userHome(input.env), ".claude.json");
+  const paths = [
+    join(input.projectRoot, ".mcp.json"),
+    userConfig,
+    join(userHome(input.env), ".mcp.json"),
+  ];
+  for (const path of paths) {
+    const loaded = await readJsonObjectForWrite(path);
+    if (!loaded.ok) {
+      throw new Error(`blocked MCP config ${path}: ${loaded.error}`);
+    }
+  }
+}
+
+function removeOwnedClaudeServers(input: {
+  servers: Record<string, unknown> | null;
+  projectRoot: string;
+  env: NodeJS.ProcessEnv;
+}): string[] {
+  if (input.servers === null) return [];
+  const definitions = inspectClaudeFmarkMcpServers({
+    servers: input.servers,
+    projectRoot: input.projectRoot,
+    expected: fmarkMcpCommandSpec(input.projectRoot, input.env),
+  });
+  const names = ownedFmarkMcpNames(definitions);
+  for (const name of names) delete input.servers[name];
+  return [...names];
+}
+
 async function applyClaudeTopLevel(
   input: McpApplyInput,
   scope: "project" | "user",
@@ -385,10 +427,16 @@ async function applyClaudeTopLevel(
     throw new Error(`blocked MCP config ${path}: ${loaded.error}`);
   }
   const servers = ensureObject(loaded.value, "mcpServers");
+  const removedNames = removeOwnedClaudeServers({
+    servers,
+    projectRoot: input.projectRoot,
+    env: input.env,
+  });
   servers.fmark = claudeServer(input);
   const changed = await writeJsonObjectIfChanged(path, loaded.raw, loaded.value);
   return {
     changed,
+    removedNames,
     location: {
       scope,
       path,
@@ -399,27 +447,38 @@ async function applyClaudeTopLevel(
   };
 }
 
-async function removeClaudeTopLevelFmark(path: string): Promise<boolean> {
+async function removeClaudeTopLevelOwned(
+  input: McpApplyInput,
+  path: string,
+): Promise<{ changed: boolean; removedNames: string[] }> {
   const loaded = await readJsonObjectForWrite(path);
   if (!loaded.ok) {
     throw new Error(`blocked MCP config ${path}: ${loaded.error}`);
   }
   const servers = getObject(loaded.value, "mcpServers");
-  if (servers?.fmark === undefined) return false;
-  delete servers.fmark;
-  return writeJsonObjectIfChanged(path, loaded.raw, loaded.value);
+  const removedNames = removeOwnedClaudeServers({
+    servers,
+    projectRoot: input.projectRoot,
+    env: input.env,
+  });
+  if (removedNames.length === 0) return { changed: false, removedNames };
+  return {
+    changed: await writeJsonObjectIfChanged(path, loaded.raw, loaded.value),
+    removedNames,
+  };
 }
 
-function stringArrayWithout(value: unknown, excluded: string): string[] {
+function stringArrayWithoutMany(value: unknown, excluded: Set<string>): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter(
-    (item): item is string => typeof item === "string" && item !== excluded,
+    (item): item is string => typeof item === "string" && !excluded.has(item),
   );
 }
 
 async function enableClaudeProjectMcpJsonServer(
   projectRoot: string,
   path: string,
+  removedNames: string[] = [],
 ): Promise<boolean> {
   const loaded = await readJsonObjectForWrite(path);
   if (!loaded.ok) {
@@ -427,12 +486,13 @@ async function enableClaudeProjectMcpJsonServer(
   }
   const projects = ensureObject(loaded.value, "projects");
   const project = ensureObject(projects, projectRoot);
-  const enabled = stringArrayWithout(project.enabledMcpjsonServers, "fmark");
+  const excluded = new Set([...removedNames, "fmark"]);
+  const enabled = stringArrayWithoutMany(project.enabledMcpjsonServers, excluded);
   enabled.push("fmark");
   project.enabledMcpjsonServers = enabled;
-  project.disabledMcpjsonServers = stringArrayWithout(
+  project.disabledMcpjsonServers = stringArrayWithoutMany(
     project.disabledMcpjsonServers,
-    "fmark",
+    excluded,
   );
   return writeJsonObjectIfChanged(path, loaded.raw, loaded.value);
 }
@@ -440,6 +500,7 @@ async function enableClaudeProjectMcpJsonServer(
 async function disableClaudeProjectMcpJsonServer(
   projectRoot: string,
   path: string,
+  removedNames: string[] = [],
 ): Promise<boolean> {
   const loaded = await readJsonObjectForWrite(path);
   if (!loaded.ok) {
@@ -448,13 +509,14 @@ async function disableClaudeProjectMcpJsonServer(
   const projects = getObject(loaded.value, "projects");
   const project = projects !== null ? getObject(projects, projectRoot) : null;
   if (project === null) return false;
-  project.enabledMcpjsonServers = stringArrayWithout(
+  const excluded = new Set([...removedNames, "fmark"]);
+  project.enabledMcpjsonServers = stringArrayWithoutMany(
     project.enabledMcpjsonServers,
-    "fmark",
+    excluded,
   );
-  project.disabledMcpjsonServers = stringArrayWithout(
+  project.disabledMcpjsonServers = stringArrayWithoutMany(
     project.disabledMcpjsonServers,
-    "fmark",
+    excluded,
   );
   return writeJsonObjectIfChanged(path, loaded.raw, loaded.value);
 }
@@ -467,10 +529,16 @@ async function applyClaudeLocal(input: McpApplyInput, path: string) {
   const projects = ensureObject(loaded.value, "projects");
   const project = ensureObject(projects, input.projectRoot);
   const servers = ensureObject(project, "mcpServers");
+  const removedNames = removeOwnedClaudeServers({
+    servers,
+    projectRoot: input.projectRoot,
+    env: input.env,
+  });
   servers.fmark = claudeServer(input);
   const changed = await writeJsonObjectIfChanged(path, loaded.raw, loaded.value);
   return {
     changed,
+    removedNames,
     location: {
       scope: "local" as const,
       path,
@@ -482,41 +550,60 @@ async function applyClaudeLocal(input: McpApplyInput, path: string) {
 }
 
 async function removeClaudeLocalFmark(
-  projectRoot: string,
+  input: McpApplyInput,
   path: string,
-): Promise<boolean> {
+): Promise<{ changed: boolean; removedNames: string[] }> {
   const loaded = await readJsonObjectForWrite(path);
   if (!loaded.ok) {
     throw new Error(`blocked MCP config ${path}: ${loaded.error}`);
   }
   const projects = getObject(loaded.value, "projects");
-  const project = projects !== null ? getObject(projects, projectRoot) : null;
+  const project = projects !== null ? getObject(projects, input.projectRoot) : null;
   const servers = project !== null ? getObject(project, "mcpServers") : null;
-  if (servers?.fmark === undefined) return false;
-  delete servers.fmark;
-  return writeJsonObjectIfChanged(path, loaded.raw, loaded.value);
+  const removedNames = removeOwnedClaudeServers({
+    servers,
+    projectRoot: input.projectRoot,
+    env: input.env,
+  });
+  if (removedNames.length === 0) return { changed: false, removedNames };
+  return {
+    changed: await writeJsonObjectIfChanged(path, loaded.raw, loaded.value),
+    removedNames,
+  };
 }
 
 async function cleanupCompetingClaudeMcpScopes(
   input: McpApplyInput,
-): Promise<boolean> {
+): Promise<{ changed: boolean; removedNames: string[] }> {
   const userConfig = join(userHome(input.env), ".claude.json");
   const projectConfig = join(input.projectRoot, ".mcp.json");
   const legacyUserConfig = join(userHome(input.env), ".mcp.json");
   let changed = false;
+  const removedNames: string[] = [];
+
+  function collect(result: { changed: boolean; removedNames: string[] }): void {
+    changed = result.changed || changed;
+    removedNames.push(...result.removedNames);
+  }
 
   if (input.scope !== "project") {
-    changed = (await removeClaudeTopLevelFmark(projectConfig)) || changed;
-    changed = (await disableClaudeProjectMcpJsonServer(input.projectRoot, userConfig)) || changed;
+    const removed = await removeClaudeTopLevelOwned(input, projectConfig);
+    collect(removed);
+    changed =
+      (await disableClaudeProjectMcpJsonServer(
+        input.projectRoot,
+        userConfig,
+        removed.removedNames,
+      )) || changed;
   }
   if (input.scope !== "user") {
-    changed = (await removeClaudeTopLevelFmark(userConfig)) || changed;
+    collect(await removeClaudeTopLevelOwned(input, userConfig));
   }
   if (input.scope !== "local") {
-    changed = (await removeClaudeLocalFmark(input.projectRoot, userConfig)) || changed;
+    collect(await removeClaudeLocalFmark(input, userConfig));
   }
-  changed = (await removeClaudeTopLevelFmark(legacyUserConfig)) || changed;
-  return changed;
+  collect(await removeClaudeTopLevelOwned(input, legacyUserConfig));
+  return { changed, removedNames };
 }
 
 export async function applyClaudeMcp(input: McpApplyInput) {
@@ -526,6 +613,7 @@ export async function applyClaudeMcp(input: McpApplyInput) {
      leaves the MCP-server registration untouched — better than the partial-
      install state we'd otherwise leave behind. */
   await preflightClaudePermissionFiles(input.projectRoot, input.env);
+  await preflightClaudeMcpConfigFiles(input);
   if (input.scope === "project") {
     const applied = await applyClaudeTopLevel(
       input,
@@ -536,6 +624,7 @@ export async function applyClaudeMcp(input: McpApplyInput) {
     const enabledChanged = await enableClaudeProjectMcpJsonServer(
       input.projectRoot,
       userConfig,
+      [...applied.removedNames, ...cleanupChanged.removedNames],
     );
     const allowChanged = await applyClaudeAllowList(
       "project",
@@ -544,7 +633,11 @@ export async function applyClaudeMcp(input: McpApplyInput) {
     );
     return {
       ...applied,
-      changed: applied.changed || cleanupChanged || enabledChanged || allowChanged,
+      changed:
+        applied.changed ||
+        cleanupChanged.changed ||
+        enabledChanged ||
+        allowChanged,
     };
   }
   if (input.scope === "user") {
@@ -560,7 +653,10 @@ export async function applyClaudeMcp(input: McpApplyInput) {
       input.projectRoot,
       input.env,
     );
-    return { ...applied, changed: applied.changed || cleanupChanged || allowChanged };
+    return {
+      ...applied,
+      changed: applied.changed || cleanupChanged.changed || allowChanged,
+    };
   }
   if (input.scope === "local") {
     const applied = await applyClaudeLocal(input, userConfig);
@@ -570,7 +666,10 @@ export async function applyClaudeMcp(input: McpApplyInput) {
       input.projectRoot,
       input.env,
     );
-    return { ...applied, changed: applied.changed || cleanupChanged || allowChanged };
+    return {
+      ...applied,
+      changed: applied.changed || cleanupChanged.changed || allowChanged,
+    };
   }
   throw new Error(`Claude MCP apply does not support scope: ${input.scope}`);
 }

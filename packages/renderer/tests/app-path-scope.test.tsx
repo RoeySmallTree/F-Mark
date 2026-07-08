@@ -1,275 +1,105 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
-import type { AnyEventRecord } from "@f-mark/shared";
-import { App } from "../src/App.js";
-import { useStore } from "../src/state/store.js";
+import { afterEach, beforeEach, describe, test } from "vitest";
+import { REPO_B, SELECTED_EVENT } from "./app-path-scope/fixtures.js";
+import {
+  expectEnsureFetchCount,
+  expectNoLegacyEventFetch,
+  expectParticipantsFetched,
+  expectSecondEnsureBodyScoped,
+  expectSelectedFetchesUnchanged,
+  waitForCurrentSession,
+  waitForEnsureBodies,
+  waitForEnsureBodyCount,
+  waitForRegistryPreserved,
+  waitForSelectedEventRefetch,
+  waitForSelectedPathId,
+  waitForSessionState,
+  waitForSockets,
+} from "./app-path-scope/assertions.js";
+import {
+  dispatchWindowFocusTwice,
+  emitLegacyEventAdded,
+  emitPathsUpdatedForRepoA,
+  emitSelectedEventAdded,
+} from "./app-path-scope/interactions.js";
+import {
+  installBootRestoreServer,
+  installEventFilterServer,
+  installFocusEnsureServer,
+  installRegistryUpdateServer,
+} from "./app-path-scope/scenarios.js";
+import {
+  renderApp,
+  saveLastFocusedSession,
+  seedSelectedSession,
+  setupAppPathScopeTest,
+  teardownAppPathScopeTest,
+} from "./app-path-scope/setup.js";
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+describe("App selected-root path scoping", () => {
+  beforeEach(setupAppPathScopeTest);
+  afterEach(teardownAppPathScopeTest);
 
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  private listeners = new Map<
-    string,
-    (event: { data: string }) => void | Promise<void>
-  >();
+  test("boot restores the last focused session by path_id from all sessions", async () => {
+    saveLastFocusedSession(REPO_B.pathId, "saved-session");
+    const fetchMock = installBootRestoreServer();
 
-  constructor(public url: string) {
-    MockWebSocket.instances.push(this);
-  }
+    renderApp();
 
-  addEventListener(
-    type: string,
-    listener: (event: { data: string }) => void | Promise<void>,
-  ): void {
-    this.listeners.set(type, listener);
-  }
-
-  async emit(message: unknown): Promise<void> {
-    await this.listeners.get("message")?.({ data: JSON.stringify(message) });
-  }
-
-  close(): void {
-    /* noop */
-  }
-}
-
-const PARTICIPANTS = {
-  "us-a7f3": { kind: "user", name: "Roey", color: "#2a5fa8" },
-};
-
-const NEW_EVENT: AnyEventRecord = {
-  filename: "20260526T100000.000Z_us-a7f3.prose.md",
-  timestamp: "2026-05-26T10:00:00.000Z",
-  participant_id: "us-a7f3",
-  kind: "prose",
-  payload: { content: "new path event" },
-};
-
-const OLD_EVENT: AnyEventRecord = {
-  filename: "20260526T090000.000Z_us-a7f3.prose.md",
-  timestamp: "2026-05-26T09:00:00.000Z",
-  participant_id: "us-a7f3",
-  kind: "prose",
-  payload: { content: "old path event" },
-};
-
-function resetStore(): void {
-  useStore.setState({
-    token: null,
-    sessions: [],
-    currentSessionId: null,
-    participants: {},
-    currentUserId: null,
-    events: [],
-    activePath: null,
-    activePathId: null,
-    activeRevision: 0,
-    knownPaths: [],
-    favorites: [],
-    activeModal: null,
-    activePopover: { key: null, anchorRect: null },
-  });
-}
-
-describe("App path-scoped event fetches", () => {
-  beforeEach(() => {
-    resetStore();
-    MockWebSocket.instances = [];
-    vi.stubGlobal("WebSocket", MockWebSocket);
+    await waitForSessionState("saved-session", REPO_B.pathId, [SELECTED_EVENT]);
+    expectParticipantsFetched(fetchMock);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    cleanup();
+  test("debounces focus ensure with the selected root scope", async () => {
+    const ensureBodies: unknown[] = [];
+    const fetchMock = installFocusEnsureServer(ensureBodies);
+
+    renderApp();
+
+    await waitForCurrentSession("focus-session", [SELECTED_EVENT]);
+    await waitForEnsureBodies(ensureBodies, [
+      { idle_only: true, path_id: REPO_B.pathId },
+    ]);
+
+    await dispatchWindowFocusTwice();
+
+    await waitForEnsureBodyCount(ensureBodies, 2);
+    expectSecondEnsureBodyScoped(ensureBodies);
+    expectEnsureFetchCount(fetchMock, 2);
   });
 
-  test("stale event-list failures after a path switch do not clear the new session", async () => {
-    let activePath = "/old";
-    let activePathId = "old-path";
-    let activeRevision = 1;
-    let releaseOldEvents: ((response: Response) => void) | null = null;
+  test("registry websocket updates do not rewrite the selected session", async () => {
+    const fetchMock = installRegistryUpdateServer();
 
-    const fetchMock = vi.fn((url: string | URL, init?: RequestInit) => {
-      const u = String(url);
-      if (u.endsWith("/paths")) {
-        return Promise.resolve(
-          jsonResponse({
-            activePath,
-            activePathId,
-            activeRevision,
-            knownPaths: ["/old", "/new"],
-            favorites: [],
-          }),
-        );
-      }
-      if (u.endsWith("/sessions") && init?.method !== "POST") {
-        return Promise.resolve(
-          jsonResponse({
-            sessions:
-              activePath === "/old"
-                ? [
-                    {
-                      id: "old-session",
-                      slug: "old-session",
-                      created_at: "2026-05-26T09:00:00.000Z",
-                    },
-                  ]
-                : [
-                    {
-                      id: "new-session",
-                      slug: "new-session",
-                      created_at: "2026-05-26T10:00:00.000Z",
-                    },
-                  ],
-          }),
-        );
-      }
-      if (u.endsWith("/participants")) {
-        return Promise.resolve(jsonResponse({ participants: PARTICIPANTS }));
-      }
-      if (u.endsWith("/health")) {
-        return Promise.resolve(
-          jsonResponse({ status: "ok", version: "0.4.0", processApiEnabled: true }),
-        );
-      }
-      if (u.endsWith("/managed-agents")) {
-        return Promise.resolve(jsonResponse({ agents: [], terminals: [] }));
-      }
-      if (u.endsWith("/env-probe")) {
-        return Promise.resolve(jsonResponse({ runtimes: {}, tmux: false }));
-      }
-      if (u.endsWith("/sessions/old-session/events?path=%2Fold")) {
-        return new Promise<Response>((resolve) => {
-          releaseOldEvents = resolve;
-        });
-      }
-      if (u.endsWith("/sessions/new-session/events?path=%2Fnew")) {
-        return Promise.resolve(jsonResponse({ events: [NEW_EVENT] }));
-      }
-      return Promise.resolve(jsonResponse({}));
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    seedSelectedSession();
+    renderApp();
 
-    render(<App />);
+    await waitForCurrentSession("selected-session", [SELECTED_EVENT]);
+    await waitForSockets();
 
-    await waitFor(() => {
-      expect(useStore.getState().currentSessionId).toBe("old-session");
-      expect(releaseOldEvents).not.toBeNull();
-      expect(MockWebSocket.instances.length).toBeGreaterThan(0);
-    });
+    await emitPathsUpdatedForRepoA();
 
-    activePath = "/new";
-    activePathId = "new-path";
-    activeRevision = 2;
-    await act(async () => {
-      for (const ws of MockWebSocket.instances) {
-        await ws.emit({
-          type: "path-switched",
-          activePath,
-          pathId: activePathId,
-          revision: activeRevision,
-        });
-      }
-    });
-
-    await waitFor(() => {
-      expect(useStore.getState().currentSessionId).toBe("new-session");
-      expect(useStore.getState().events).toEqual([NEW_EVENT]);
-    });
-
-    await act(async () => {
-      releaseOldEvents?.(jsonResponse({ error: "session not found" }, 404));
-    });
-
-    expect(useStore.getState().currentSessionId).toBe("new-session");
-    expect(useStore.getState().events).toEqual([NEW_EVENT]);
+    await waitForRegistryPreserved(fetchMock);
   });
 
-  test("refetches events when switching paths even if the session id is unchanged", async () => {
-    let activePath = "/old";
-    let activePathId = "old-path";
-    let activeRevision = 1;
-
-    const fetchMock = vi.fn((url: string | URL) => {
-      const u = String(url);
-      if (u.endsWith("/paths")) {
-        return Promise.resolve(
-          jsonResponse({
-            activePath,
-            activePathId,
-            activeRevision,
-            knownPaths: ["/old", "/new"],
-            favorites: [],
-          }),
-        );
-      }
-      if (u.endsWith("/sessions")) {
-        return Promise.resolve(
-          jsonResponse({
-            sessions: [
-              {
-                id: "shared-session",
-                slug: "shared-session",
-                created_at: "2026-05-26T09:00:00.000Z",
-              },
-            ],
-          }),
-        );
-      }
-      if (u.endsWith("/participants")) {
-        return Promise.resolve(jsonResponse({ participants: PARTICIPANTS }));
-      }
-      if (u.endsWith("/health")) {
-        return Promise.resolve(
-          jsonResponse({ status: "ok", version: "0.4.0", processApiEnabled: true }),
-        );
-      }
-      if (u.endsWith("/managed-agents")) {
-        return Promise.resolve(jsonResponse({ agents: [], terminals: [] }));
-      }
-      if (u.endsWith("/env-probe")) {
-        return Promise.resolve(jsonResponse({ runtimes: {}, tmux: false }));
-      }
-      if (u.endsWith("/sessions/shared-session/events?path=%2Fold")) {
-        return Promise.resolve(jsonResponse({ events: [OLD_EVENT] }));
-      }
-      if (u.endsWith("/sessions/shared-session/events?path=%2Fnew")) {
-        return Promise.resolve(jsonResponse({ events: [NEW_EVENT] }));
-      }
-      return Promise.resolve(jsonResponse({}));
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(useStore.getState().currentSessionId).toBe("shared-session");
-      expect(useStore.getState().events).toEqual([OLD_EVENT]);
-      expect(MockWebSocket.instances.length).toBeGreaterThan(0);
+  test("websocket event filtering uses selected session path_id", async () => {
+    let selectedFetches = 0;
+    const fetchMock = installEventFilterServer(() => {
+      selectedFetches += 1;
     });
 
-    activePath = "/new";
-    activePathId = "new-path";
-    activeRevision = 2;
-    await act(async () => {
-      for (const ws of MockWebSocket.instances) {
-        await ws.emit({
-          type: "path-switched",
-          activePath,
-          pathId: activePathId,
-          revision: activeRevision,
-        });
-      }
-    });
+    renderApp();
 
-    await waitFor(() => {
-      expect(useStore.getState().currentSessionId).toBe("shared-session");
-      expect(useStore.getState().events).toEqual([NEW_EVENT]);
-    });
+    await waitForSelectedPathId(REPO_B.pathId);
+    await waitForSockets();
+    const initialFetches = selectedFetches;
+
+    await emitLegacyEventAdded();
+
+    expectSelectedFetchesUnchanged(selectedFetches, initialFetches);
+
+    await emitSelectedEventAdded();
+
+    await waitForSelectedEventRefetch(() => selectedFetches, initialFetches);
+    expectNoLegacyEventFetch(fetchMock);
   });
 });

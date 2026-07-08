@@ -40,7 +40,13 @@ export interface PostProseBody {
   diff_base?: DiffBase;
   line_context?: LineContext;
   in_reply_to?: string;
-  supersedes?: string;
+  /** Filename(s) this prose supersedes — scalar for a revision, array for a
+   *  coalesced message hiding its streamed delta files. */
+  supersedes?: string | string[];
+  /** Requested write timestamp. The coalescer stamps a coalesced message at
+   *  its first delta's time so it keeps its place ahead of following tools in
+   *  visible reads. The writer still collision-bumps as needed. */
+  timestamp?: string;
   mentions?: ProseMention[];
   source?: EventSourceKind;
   arbitrary?: boolean;
@@ -79,6 +85,8 @@ export interface ManagedAccessResponseRequest {
   decision: Extract<AccessResponseDecision, "approve" | "deny">;
   option_id?: string;
   message?: string;
+  path_id?: string;
+  root?: string;
 }
 
 export interface ManagedAccessResponseResponse {

@@ -11,6 +11,12 @@ export interface WakeSessionRequest {
   target_participant_ids?: string[];
   reason?: WakeReason;
   source_event?: string;
+  /* Required root scope (expansion-decisions.md X2). Exactly one of
+     path_id/root identifies the project root whose agent state + tmux
+     liveness the wake resolves against. A missing scope is rejected with
+     400 ROOT_SCOPE_REQUIRED; an unknown one with 404 UNKNOWN_ROOT. */
+  path_id?: string;
+  root?: string;
 }
 
 export interface CompassPacketEvent {
@@ -34,6 +40,8 @@ export interface CompassPacketEvent {
 export interface CompassPacket {
   type: "fmark.wake";
   session_id: string;
+  /** Display slug from the session meta; the id above is immutable. */
+  session_slug?: string;
   participant_id: string;
   reason?: WakeReason;
   source_event?: string;
@@ -58,7 +66,14 @@ export interface WakeSkippedAgent {
     | "not-managed"
     | "not-active"
     | "pane-dead"
-    | "paused";
+    | "paused"
+    | "runtime-missing"
+    | "runtime-unknown"
+    | "resume-unsupported"
+    | "missing-native-session-id"
+    | "not-idle-stopped"
+    | "resume-failed"
+    | "no-unread-events";
   detail?: string;
 }
 
@@ -68,6 +83,25 @@ export interface WakeSessionResponse {
   delivered: WakeDeliveredAgent[];
   skipped: WakeSkippedAgent[];
   event_count: number;
+}
+
+export interface EnsureManagedAgentsRequest {
+  target_participant_ids?: string[];
+  idle_only?: boolean;
+  path_id?: string;
+  root?: string;
+}
+
+export interface EnsureManagedAgentResult {
+  participant_id: string;
+  tmux_session: string;
+}
+
+export interface EnsureManagedAgentsResponse {
+  session_id: string;
+  resumed: EnsureManagedAgentResult[];
+  already_live: EnsureManagedAgentResult[];
+  skipped: WakeSkippedAgent[];
 }
 
 export interface GetInboxResponse {
@@ -81,6 +115,8 @@ export interface GetInboxResponse {
 export interface MarkSeenRequest {
   participant_id?: string;
   timestamp?: string;
+  path_id?: string;
+  root?: string;
 }
 
 export interface MarkSeenResponse {

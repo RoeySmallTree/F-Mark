@@ -1,0 +1,373 @@
+/* Agent Popover — floating panel opened when clicking an agent row.
+   All colors use system tokens so every theme works without overrides.
+   Width/overflow sizing lives in .popover.agent-pop in popovers.css.   */
+
+/* ── Root container ─────────────────────────────────────────────────────── */
+.agp-root {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ambient glow that softly echoes the agent's accent color */
+.agp-glow {
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--agent-color, var(--agent)) 20%, transparent);
+  filter: blur(32px);
+  pointer-events: none;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.agp-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.agp-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--agent-color, var(--agent-tint-2));
+  color: var(--canvas);
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+  font-family: var(--sans);
+}
+
+.agp-head-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.agp-name-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 3px;
+}
+
+.agp-name-row strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.agp-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-4);
+  border-radius: var(--radius);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-instant) var(--ease-out-quart),
+    border-color var(--dur-instant) var(--ease-out-quart),
+    color var(--dur-instant) var(--ease-out-quart);
+}
+
+.agp-icon-btn:hover {
+  background: var(--panel-2);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+
+.agp-status-text {
+  font-size: 11px;
+  text-transform: capitalize;
+  line-height: 1;
+}
+.agp-status-text.tone-green  { color: var(--green); }
+.agp-status-text.tone-agent  { color: var(--agent); }
+.agp-status-text.tone-danger { color: var(--rose); }
+.agp-status-text.tone-muted  { color: var(--ink-4); }
+
+.agp-status-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--ink-4);
+}
+.agp-status-dot.tone-green {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent);
+}
+.agp-status-dot.tone-agent {
+  background: var(--agent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent) 18%, transparent);
+  animation: agp-dot-pulse 1.6s var(--ease-inout) infinite;
+}
+.agp-status-dot.tone-danger {
+  background: var(--rose);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose) 20%, transparent);
+}
+.agp-status-dot.tone-muted {
+  background: var(--ink-4);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-4) 14%, transparent);
+}
+
+@keyframes agp-dot-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 1; }
+}
+
+/* ── Sections ───────────────────────────────────────────────────────────── */
+.agp-section {
+  position: relative;
+  z-index: 1;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.agp-section-last {
+  border-bottom: none;
+}
+
+.agp-section-label {
+  font-size: 11px;
+  font-weight: 680;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-4);
+  font-family: var(--sans);
+}
+
+.agp-section-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-4);
+  line-height: 1.45;
+}
+
+.agp-readonly-value {
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+}
+
+/* ── Field grid (model + effort side by side) ───────────────────────────── */
+.agp-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.agp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agp-field > span {
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-4);
+}
+
+.agp-field select {
+  width: 100%;
+  padding: 6px 7px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: border-color var(--dur-instant) var(--ease-out-quart);
+}
+
+.agp-field select:hover:not(:disabled) {
+  border-color: var(--line);
+}
+
+.agp-field select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.agp-skeleton-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 3px;
+  border-radius: calc(var(--radius) + 3px);
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, var(--line-2));
+  background: color-mix(in srgb, var(--panel) 56%, transparent);
+}
+
+.agp-skeleton {
+  display: block;
+  min-height: 33px;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 58%, transparent), transparent),
+    color-mix(in srgb, var(--ink) 8%, var(--panel));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
+  opacity: 0.46;
+  animation: agp-skeleton-pulse 1.1s cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
+}
+
+.agp-skeleton-wide {
+  grid-column: 1 / -1;
+}
+
+@keyframes agp-skeleton-pulse {
+  from { opacity: 0.34; }
+  to { opacity: 0.72; }
+}
+
+/* ── Action tile grid ───────────────────────────────────────────────────── */
+.agp-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.agp-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 52px;
+  padding: 7px 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition:
+    transform var(--dur-instant) var(--ease-out-quart),
+    border-color var(--dur-instant) var(--ease-out-quart),
+    background var(--dur-instant) var(--ease-out-quart),
+    color var(--dur-instant) var(--ease-out-quart);
+}
+
+.agp-tile:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--panel-2);
+}
+
+.agp-tile:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.agp-tile:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.agp-tile-danger              { color: var(--rose); }
+.agp-tile-danger:hover:not(:disabled) {
+  color: var(--rose);
+  border-color: color-mix(in srgb, var(--rose) 35%, var(--line-2));
+  background: color-mix(in srgb, var(--rose) 8%, var(--panel));
+}
+
+.agp-tile-accent              { color: var(--user); }
+.agp-tile-accent:hover:not(:disabled) {
+  color: var(--user);
+  border-color: color-mix(in srgb, var(--user) 35%, var(--line-2));
+  background: color-mix(in srgb, var(--user) 8%, var(--panel));
+}
+
+/* ── Collapse / Advanced ────────────────────────────────────────────────── */
+.agp-collapse-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-4);
+  font-size: 11px;
+  font-weight: 680;
+  letter-spacing: 0;
+  text-transform: none;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: color var(--dur-instant) var(--ease-out-quart);
+}
+
+.agp-collapse-trigger:hover { color: var(--ink-3); }
+
+.agp-collapse-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agp-row-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: var(--panel);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-family: var(--sans);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--dur-instant) var(--ease-out-quart),
+    border-color var(--dur-instant) var(--ease-out-quart),
+    color var(--dur-instant) var(--ease-out-quart);
+}
+
+.agp-row-action:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+
+.agp-row-action:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.agp-row-action-danger { color: var(--rose); }
+.agp-row-action-danger:hover:not(:disabled) {
+  color: var(--rose);
+  border-color: color-mix(in srgb, var(--rose) 30%, var(--line-2));
+  background: color-mix(in srgb, var(--rose) 6%, var(--panel));
+}

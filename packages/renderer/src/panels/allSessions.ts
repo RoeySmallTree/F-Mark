@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import type { AnyEventRecord, EventKind, Participant } from "@f-mark/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  normalizeTimestampForSort,
+  type AnyEventRecord,
+  type EventKind,
+  type Participant,
+} from "@f-mark/shared";
 import {
   createClient,
   type SessionEventGroup,
@@ -7,6 +12,11 @@ import {
 } from "../api/client.js";
 import { connectWs } from "../api/ws.js";
 import { useStore } from "../state/store.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  eventAdded: "event_added",
+  pathSwitched: "path-switched",
+} as const;
 
 export function basename(absPath: string | null | undefined): string {
   if (absPath === null || absPath === undefined || absPath.length === 0) {
@@ -58,7 +68,59 @@ function sortGroups(groups: SessionEventGroup[]): SessionEventGroup[] {
   });
 }
 
-export function groupByPath(
+function compareEvents(a: AnyEventRecord, b: AnyEventRecord): number {
+  const timestamp = normalizeTimestampForSort(a.timestamp).localeCompare(
+    normalizeTimestampForSort(b.timestamp),
+  );
+  return timestamp !== 0 ? timestamp : a.filename.localeCompare(b.filename);
+}
+
+function groupKey(group: SessionEventGroup): string {
+  return `${group.path_id}/${group.session.id}`;
+}
+
+export function mergeSessionEventGroups(
+  current: SessionEventGroup[],
+  delta: SessionEventGroup[],
+): SessionEventGroup[] {
+  const byGroup = new Map<string, SessionEventGroup>();
+  for (const group of current) {
+    byGroup.set(groupKey(group), {
+      ...group,
+      events: [...group.events],
+      participants: { ...group.participants },
+    });
+  }
+  for (const incoming of delta) {
+    const key = groupKey(incoming);
+    const existing = byGroup.get(key);
+    if (existing === undefined) {
+      byGroup.set(key, {
+        ...incoming,
+        events: [...incoming.events].sort(compareEvents),
+        participants: { ...incoming.participants },
+      });
+      continue;
+    }
+    const eventsByFilename = new Map<string, AnyEventRecord>();
+    for (const event of existing.events) {
+      eventsByFilename.set(event.filename, event);
+    }
+    for (const event of incoming.events) {
+      eventsByFilename.set(event.filename, event);
+    }
+    byGroup.set(key, {
+      path: incoming.path,
+      path_id: incoming.path_id,
+      session: incoming.session,
+      participants: { ...incoming.participants },
+      events: [...eventsByFilename.values()].sort(compareEvents),
+    });
+  }
+  return sortGroups([...byGroup.values()]);
+}
+
+function groupByPath(
   groups: SessionEventGroup[],
   filter: (event: AnyEventRecord) => boolean,
 ): PathSessionGroup[] {
@@ -85,7 +147,7 @@ export function groupByPath(
   return [...byPath.values()];
 }
 
-export function flattenSessionItems(
+function flattenSessionItems(
   groups: SessionEventGroup[],
   filter: (event: AnyEventRecord) => boolean,
 ): AllSessionItem[] {
@@ -134,19 +196,22 @@ export function useAllSessionEvents(kinds?: EventKind[]): {
   const [groups, setGroups] = useState<SessionEventGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasFullBaseRef = useRef(false);
   const kindsKey = useMemo(() => kinds?.join(",") ?? "", [kinds]);
 
   useEffect(() => {
     const client = createClient({ baseUrl: "", token });
     let cancelled = false;
+    hasFullBaseRef.current = false;
 
-    const refresh = (): void => {
+    const refreshFull = (): void => {
       setLoading(true);
       void client
-        .listAllSessionEvents(kinds)
+        .listAllSessionEvents(kinds, { withResponse: true })
         .then((next) => {
           if (cancelled) return;
-          setGroups(sortGroups(next));
+          setGroups(sortGroups(next.groups));
+          hasFullBaseRef.current = true;
           setError(null);
         })
         .catch((err) => {
@@ -158,14 +223,33 @@ export function useAllSessionEvents(kinds?: EventKind[]): {
         });
     };
 
-    refresh();
+    const refreshIncremental = (): void => {
+      if (!hasFullBaseRef.current) {
+        refreshFull();
+        return;
+      }
+      void client
+        .listAllSessionEvents(kinds, {
+          incremental: true,
+          withResponse: true,
+        })
+        .then((next) => {
+          if (cancelled) return;
+          setGroups((current) => mergeSessionEventGroups(current, next.groups));
+          setError(null);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setError(err instanceof Error ? err.message : String(err));
+        });
+    };
+
+    refreshFull();
     const ws = connectWs({ baseUrl: "", token }, (msg) => {
-      if (
-        msg.type === "event_added" ||
-        msg.type === "path-switched" ||
-        msg.type === "session.forked"
-      ) {
-        refresh();
+      if (msg.type === NO_LOOSE_STRING_VALUES.eventAdded) {
+        refreshIncremental();
+      } else if (msg.type === NO_LOOSE_STRING_VALUES.pathSwitched || msg.type === "session.forked" || msg.type === "session.renamed") {
+        refreshFull();
       }
     });
 
@@ -181,10 +265,20 @@ export function useAllSessionEvents(kinds?: EventKind[]): {
     error,
     refresh: () => {
       const client = createClient({ baseUrl: "", token });
-      void client.listAllSessionEvents(kinds).then((next) => {
-        setGroups(sortGroups(next));
-        setError(null);
-      });
+      setLoading(true);
+      void client
+        .listAllSessionEvents(kinds, { withResponse: true })
+        .then((next) => {
+          setGroups(sortGroups(next.groups));
+          hasFullBaseRef.current = true;
+          setError(null);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          setLoading(false);
+        });
     },
   };
 }

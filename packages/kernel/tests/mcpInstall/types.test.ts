@@ -44,6 +44,28 @@ describe("fmarkMcpCommandSpec", () => {
     expect(spec.args).toEqual([entrypoint, "mcp", "--path", "/tmp/fmark-project"]);
   });
 
+  it("does not install a test worker entrypoint as the MCP command", () => {
+    setEntrypoint(
+      join(
+        process.cwd(),
+        "node_modules",
+        ".pnpm",
+        "tinypool@1.1.1",
+        "node_modules",
+        "tinypool",
+        "dist",
+        "entry",
+        "process.js",
+      ),
+    );
+
+    const spec = fmarkMcpCommandSpec("/tmp/fmark-project", {});
+
+    expect(spec.args[0]).not.toContain("tinypool");
+    expect(spec.args[0]).toMatch(/[\\/]src[\\/]index\.ts$|[\\/]dist[\\/]index\.js$/);
+    expect(spec.args.slice(1)).toEqual(["mcp", "--path", "/tmp/fmark-project"]);
+  });
+
   it("lets explicit MCP command overrides continue to win", () => {
     setEntrypoint(join(process.cwd(), "src", "index.ts"));
 

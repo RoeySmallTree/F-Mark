@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const booleanEnvFlags = [
   ["--remote", "npm_config_remote"],
@@ -14,6 +15,8 @@ const valueEnvFlags = [
   ["--path", "npm_config_path"],
   ["--password", "npm_config_password"],
 ];
+const DEV_KERNEL_RESTART_EXIT_CODE = 78;
+const DEFAULT_SELECTED_PORT = "7777";
 
 const booleanFlags = new Set(booleanEnvFlags.map(([flag]) => flag));
 const valueFlags = new Set(valueEnvFlags.map(([flag]) => flag));
@@ -122,6 +125,48 @@ export function normalizeArgs(argv, env) {
   return args;
 }
 
+export function selectedPortFromArgs(kernelArgs) {
+  for (let i = 0; i < kernelArgs.length; i++) {
+    const arg = kernelArgs[i];
+    if (arg === "--port") {
+      const value = kernelArgs[i + 1];
+      return typeof value === "string" && value.length > 0
+        ? value
+        : DEFAULT_SELECTED_PORT;
+    }
+    if (typeof arg === "string" && arg.startsWith("--port=")) {
+      const value = arg.slice("--port=".length);
+      return value.length > 0 ? value : DEFAULT_SELECTED_PORT;
+    }
+  }
+  return DEFAULT_SELECTED_PORT;
+}
+
+export function buildKernelChildEnv(
+  env = process.env,
+  supervisorPid = process.pid,
+) {
+  return {
+    ...env,
+    FMARK_DEV_RESTART_EXIT_CODE: String(DEV_KERNEL_RESTART_EXIT_CODE),
+    FMARK_DEV_SUPERVISOR_PID: String(supervisorPid),
+  };
+}
+
+/* The kernel must be spawned WITHOUT a pnpm wrapper: `pnpm exec` replaces the
+   child's exit code with its own `1` (ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL), so
+   the supervisor never sees DEV_KERNEL_RESTART_EXIT_CODE (78) and treats every
+   /dev/restart-kernel as a fatal exit — tearing down the whole dev stack.
+   Spawning the workspace-local tsx binary directly preserves the exit code. */
+export function kernelSpawnSpec(kernelArgs, repoRoot) {
+  const kernelDir = join(repoRoot, "packages", "kernel");
+  return {
+    command: join(kernelDir, "node_modules", ".bin", "tsx"),
+    args: ["src/index.ts", ...kernelArgs],
+    cwd: kernelDir,
+  };
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -136,11 +181,12 @@ function run(command, args, options = {}) {
   });
 }
 
-function spawnManaged(command, args) {
+function spawnManaged(command, args, options = {}) {
   return spawn(command, args, {
     stdio: "inherit",
     detached: process.platform !== "win32",
     shell: process.platform === "win32",
+    ...options,
   });
 }
 
@@ -166,14 +212,37 @@ async function main() {
     process.exit(result.code);
   }
 
+  const selectedPort = selectedPortFromArgs(kernelArgs);
+  const preflight = await run("pnpm", [
+    "-F",
+    "f-mark",
+    "exec",
+    "tsx",
+    "src/launch/portPreflightCli.ts",
+    "--host",
+    "localhost",
+    "--port",
+    selectedPort,
+  ]);
+  if (preflight.code !== 0) process.exit(preflight.code);
+
   const build = await run("pnpm", ["-F", "@f-mark/renderer", "build"]);
   if (build.code !== 0) process.exit(build.code);
 
   const renderer = spawnManaged("pnpm", ["-F", "@f-mark/renderer", "dev:bundled"]);
-  const kernel = spawnManaged("pnpm", kernelCommand);
+  const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+  const kernelSpec = kernelSpawnSpec(kernelArgs, repoRoot);
+  const spawnKernel = () =>
+    spawnManaged(kernelSpec.command, kernelSpec.args, {
+      cwd: kernelSpec.cwd,
+      env: buildKernelChildEnv(process.env, process.pid),
+    });
+  let kernel = spawnKernel();
   const children = [renderer, kernel];
+  let stopping = false;
 
   const cleanup = () => {
+    stopping = true;
     for (const child of children) stop(child);
   };
   process.once("SIGINT", () => {
@@ -186,11 +255,19 @@ async function main() {
   });
   process.once("exit", cleanup);
 
-  const result = await new Promise((resolve) => {
-    kernel.once("close", (code, signal) => resolve({ code, signal }));
-  });
-  cleanup();
-  process.exit(result.code ?? (result.signal === null ? 0 : 1));
+  for (;;) {
+    const result = await new Promise((resolve) => {
+      kernel.once("close", (code, signal) => resolve({ code, signal }));
+    });
+    if (!stopping && result.code === DEV_KERNEL_RESTART_EXIT_CODE) {
+      console.log("[f-mark dev] kernel restart requested; starting kernel again...");
+      kernel = spawnKernel();
+      children[1] = kernel;
+      continue;
+    }
+    cleanup();
+    process.exit(result.code ?? (result.signal === null ? 0 : 1));
+  }
 }
 
 if (

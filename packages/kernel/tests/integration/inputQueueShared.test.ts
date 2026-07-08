@@ -81,7 +81,7 @@ function permissiveRunner(opts: { sendKeysDelayMs?: number } = {}): CommandRunne
       if (sub === "display-message") {
         return { stdout: "0", stderr: "", exitCode: 0 };
       }
-      if (sub === "send-keys") {
+      if (sub === "send-keys" || sub === "load-buffer" || sub === "paste-buffer") {
         if (opts.sendKeysDelayMs) await sleep(opts.sendKeysDelayMs);
         return { stdout: "", stderr: "", exitCode: 0 };
       }
@@ -124,6 +124,35 @@ function extractLiteralEnterPairs(argvs: string[][], sessionName: string): Pair[
   return pairs;
 }
 
+/* The /command message path now delivers via bracketed paste: load-buffer,
+   paste-buffer, then Enter (+ a confirm Enter). The atomic unit to protect is
+   paste-buffer → C-m: no overlay literal may land between the paste and its
+   submit for the same session. */
+function extractPasteEnterPairs(argvs: string[][], sessionName: string): Pair[] {
+  const pairs: Pair[] = [];
+  for (let k = 0; k < argvs.length; k++) {
+    const argv = argvs[k]!;
+    if (argv[0] !== "tmux" || argv[1] !== "paste-buffer") continue;
+    const tIdx = argv.indexOf("-t");
+    if (tIdx === -1 || argv[tIdx + 1] !== sessionName) continue;
+    const bIdx = argv.indexOf("-b");
+    const text = argv[bIdx + 1] ?? "";
+    let hasEnter = false;
+    for (let j = k + 1; j < argvs.length; j++) {
+      const nxt = argvs[j]!;
+      if (nxt[0] !== "tmux" || nxt[1] !== "send-keys") continue;
+      const nxtT = nxt.indexOf("-t");
+      if (nxtT === -1 || nxt[nxtT + 1] !== sessionName) continue;
+      if (nxt.includes("-l")) break; // an overlay literal beat our Enter
+      const nxtDashDash = nxt.lastIndexOf("--");
+      if (nxt[nxtDashDash + 1] === "C-m") hasEnter = true;
+      break;
+    }
+    pairs.push({ text, hasEnter });
+  }
+  return pairs;
+}
+
 describe("shared input queue across managed-agents and /ws/pane", () => {
   // --- Wiring test ----------------------------------------------------------
   // The strongest possible proof of the spec invariant: a SINGLE InputQueue
@@ -155,6 +184,7 @@ describe("shared input queue across managed-agents and /ws/pane", () => {
         stopPipePane: async () => {},
         sendLiteralText: async () => {},
         sendKey: async () => {},
+        deliverPrompt: async () => {},
         resize: async () => {},
         paneAlive: async () => true,
         getVersion: async () => null,
@@ -231,6 +261,7 @@ describe("shared input queue across managed-agents and /ws/pane", () => {
         token: "tok-int",
         paths: p,
         commandRunner: runner,
+        promptDelays: { settleMs: 0, confirmMs: 0 },
       });
       await app.listen({ port: 0, host: "127.0.0.1" });
       const addr = app.server.address();
@@ -288,7 +319,10 @@ describe("shared input queue across managed-agents and /ws/pane", () => {
       // Give time for in-flight tasks to drain.
       await new Promise((r) => setTimeout(r, 1500));
 
-      const pairs = extractLiteralEnterPairs(runner.calls, sessionName);
+      const pairs = [
+        ...extractLiteralEnterPairs(runner.calls, sessionName),
+        ...extractPasteEnterPairs(runner.calls, sessionName),
+      ];
       const interleaved = pairs.filter((pair) => !pair.hasEnter);
       const sendKeysSeq = runner.calls
         .filter((c) => c[0] === "tmux" && c[1] === "send-keys")

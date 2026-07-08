@@ -1,76 +1,29 @@
-const alienNames = [
-  "zod", "zarn", "zaru", "zarek", "zhex",
-  "zhul", "zorin", "zovak", "zeln", "zelra",
-  "zath", "zyrn", "zynox", "zhor", "zhaen",
-  "zhova", "zorek", "zulix", "zulra", "zanik",
-  "zavor", "zorith", "zexal", "zovrin", "zelkath",
+const agentNamePresets = [
+  "Alex", "Jordan", "Taylor", "Morgan", "Casey",
+  "Riley", "Jamie", "Avery", "Cameron", "Quinn",
+  "Sam", "Charlie", "Drew", "Reese", "Parker",
+  "Bailey", "Hayden", "Rowan", "Emerson", "Finley",
 
-  "xarn", "xarok", "xarin", "xel", "xelar",
-  "xevu", "xevra", "xith", "xorin", "xolun",
-  "xulka", "xendra", "xyrn", "xyro", "xavor",
-  "xazek", "xenra", "xirok", "xirath", "xorven",
-  "xuln", "xuldar", "xalith", "xekor", "xavar",
+  "Emma", "Olivia", "Ava", "Sophia", "Mia",
+  "Amelia", "Harper", "Evelyn", "Abigail", "Ella",
+  "Grace", "Chloe", "Nora", "Lily", "Hannah",
+  "Leah", "Zoe", "Maya", "Natalie", "Claire",
 
-  "vexu", "vexor", "vekra", "veln", "velra",
-  "vorin", "vornak", "voryx", "vaxel", "vaxor",
-  "vilar", "vithra", "vulon", "vulra", "vyrn",
-  "vyros", "vael", "vaerix", "volek", "volth",
-  "veshar", "vrenok", "vrath", "vezik", "vornia",
+  "Liam", "Noah", "Oliver", "Elijah", "James",
+  "William", "Benjamin", "Lucas", "Henry", "Theodore",
+  "Jack", "Daniel", "Matthew", "David", "Joseph",
+  "Michael", "Ethan", "Logan", "Mason", "Caleb",
 
-  "qorin", "qel", "qelar", "qevik", "qirax",
-  "qiro", "qolan", "qovek", "qarn", "qarnu",
-  "qazir", "qorth", "qelra", "qenix", "qirn",
-  "qutra", "qavon", "qozar", "qenth", "qyrex",
-  "qadra", "qivor", "qomir", "qezul", "qalth",
+  "Sofia", "Isabella", "Victoria", "Camila", "Valentina",
+  "Elena", "Lucia", "Mateo", "Diego", "Leo",
+  "Gabriel", "Adrian", "Julian", "Nicolas", "Marco",
+  "Ana", "Maria", "Iris", "Naomi", "Eva",
 
-  "krel", "karn", "karok", "kavon", "kazri",
-  "kelth", "kethra", "kirax", "kivra", "korlu",
-  "korath", "koryn", "kulvek", "karnex", "krax",
-  "kriva", "kromar", "kalth", "kezor", "kelnor",
-  "kozun", "kivar", "krathen", "kurel", "kalthor",
-
-  "tharn", "tharnu", "threx", "thoral", "thazek",
-  "thulek", "thren", "threnix", "tholun", "thavok",
-  "tharix", "thulra", "thovar", "thirn", "thox",
-  "tharak", "thilox", "thurven", "thazra", "thelrik",
-  "tharnox", "thovaen", "thyrak", "thozu", "thalk",
-
-  "naxu", "naxar", "navor", "nexor", "nexal",
-  "nerix", "nithra", "nyrvek", "nyxal", "nokra",
-  "norvex", "nulkar", "nizok", "nevrin", "navok",
-  "nethul", "nyrak", "nolar", "nulith", "nathor",
-  "nexu", "nithok", "nazril", "navoru", "narnok",
-
-  "raxor", "raxel", "ruvak", "rynix", "rynor",
-  "ralth", "ravor", "rexul", "rekth", "ralak",
-  "rithar", "rixu", "rorvek", "ruvex", "rathun",
-  "rathok", "relkor", "rynvek", "ruxal", "roven",
-  "razhul", "ralthor", "raqen", "ruzik", "rathix",
-
-  "morvok", "marnu", "mekra", "melnar", "mavok",
-  "morth", "mulox", "murven", "mivra", "mazul",
-  "mexor", "monrax", "malkor", "morlan", "mezu",
-  "mirak", "mixra", "murlen", "mazik", "mokra",
-  "marvex", "morthul", "mevrix", "moxan", "malvek",
-
-  "draxen", "dravax", "druxel", "drunok", "drath",
-  "drexor", "drelka", "dravor", "drith", "drovan",
-  "duxar", "dezik", "dalzor", "darvek", "dexun",
-  "dorith", "divok", "dulkarn", "drazhul", "dromek",
-  "drelth", "dornix", "davrek", "draxul", "dazrin",
-
-  "ernia", "ezhul", "ekthar", "elzun", "eknor",
-  "ezrox", "evrak", "evrix", "evarn", "elexu",
-  "orvex", "orvun", "orzak", "oskra", "ozren",
-  "ozrak", "ozirn", "yexal", "yroth", "yulven",
-  "yrix", "yrvek", "ynzor", "elkor", "ethrax",
-
-  "azrok", "akril", "arnok", "avrix", "avrox",
-  "aizul", "azenk", "athor", "arvek", "azhul",
-  "ulzar", "ulvek", "ulnax", "urnex", "uthra",
-  "ulron", "urvex", "ixor", "ithrox", "ithrek",
-  "ikarn", "ilvek", "iskar", "irzul", "oxarn",
-];
+  "Priya", "Anika", "Aisha", "Mina", "Layla",
+  "Nadia", "Sara", "Fatima", "Yara", "Noor",
+  "Omar", "Amir", "Ali", "Hassan", "Karim",
+  "Arjun", "Dev", "Rohan", "Kiran", "Nikhil",
+] as const;
 
 /** A curated palette of agent colors — picked so the chip dot, ring, and
     pulse animation stay legible on every theme background. Avoids the
@@ -97,7 +50,7 @@ function pickFrom<T>(arr: ReadonlyArray<T>): T {
 }
 
 export function randomAgentName(): string {
-  return pickFrom(alienNames);
+  return pickFrom(agentNamePresets);
 }
 
 export function randomAgentColor(): string {

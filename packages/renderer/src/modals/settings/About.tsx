@@ -1,7 +1,10 @@
-/* About section — Settings → About.
-   Renders the first frame of the ASCII logo from planning/ascii-art.md
-   verbatim (so the visual matches the source). Below: live version from
-   GET /health, short architecture blurb, and a small row of links. */
+const NO_LOOSE_STRING_VALUES = {
+  loading: "loading…",
+} as const;
+
+/* About section — Settings -> About.
+   Renders the embedded ASCII logo frame plus live version data from
+   GET /health, a short architecture blurb, and project links. */
 
 import { useEffect, useState, type JSX } from "react";
 import { createClient } from "../../api/client.js";
@@ -47,7 +50,7 @@ export function About(): JSX.Element {
         <div className="about-version">
           F-Mark{" "}
           <b>
-            {version !== null ? `v${version}` : error !== null ? "version unknown" : "loading…"}
+            {version !== null ? `v${version}` : error !== null ? "version unknown" : NO_LOOSE_STRING_VALUES.loading}
           </b>{" "}
           {status !== null ? `· status: ${status}` : null}
           <br />
@@ -61,20 +64,6 @@ export function About(): JSX.Element {
             rel="noopener noreferrer"
           >
             GitHub
-          </a>
-          <a
-            href="/planning/architecture.md"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Architecture
-          </a>
-          <a
-            href="/planning/redesign/INSTRUCTIONS.md"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Redesign notes
           </a>
         </div>
       </div>

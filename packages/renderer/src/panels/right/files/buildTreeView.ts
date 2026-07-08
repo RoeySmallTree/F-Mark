@@ -4,7 +4,14 @@ import type {
 } from "../../../api/client.js";
 import type { FilesSearchState } from "../../../state/store.js";
 
+const NO_LOOSE_STRING_VALUES = {
+  session: "session",
+  project: "project",
+} as const;
+
 export type FavoriteScope = "session" | "project" | null;
+
+export type TreeViewEntry = FilesTreeEntry & { absPath: string };
 
 /* A node in the visible tree. Folders carry their visible children
    inline so the renderer can wrap each folder + its descendants in a
@@ -13,7 +20,7 @@ export type FavoriteScope = "session" | "project" | null;
    stacking under the next folder's header. Files always have an empty
    `children` array. */
 export interface VisibleRow {
-  entry: FilesTreeEntry;
+  entry: TreeViewEntry;
   isOpen: boolean;
   hasChildren: boolean;
   fav: FavoriteScope;
@@ -41,9 +48,9 @@ const EMPTY: TreeView = {
 };
 
 function buildChildrenMap(
-  entries: FilesTreeEntry[],
-): Map<number | null, FilesTreeEntry[]> {
-  const map = new Map<number | null, FilesTreeEntry[]>();
+  entries: TreeViewEntry[],
+): Map<number | null, TreeViewEntry[]> {
+  const map = new Map<number | null, TreeViewEntry[]>();
   for (const entry of entries) {
     const arr = map.get(entry.parent) ?? [];
     arr.push(entry);
@@ -84,6 +91,20 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function absPathForTreeEntry(root: string, relPath: string): string {
+  const trimmedRoot = root.replace(/\/+$/, "");
+  if (relPath.length === 0) return trimmedRoot.length > 0 ? trimmedRoot : "/";
+  if (trimmedRoot.length === 0) return `/${relPath}`;
+  return `${trimmedRoot}/${relPath}`;
+}
+
+function entriesWithAbsPaths(tree: FilesTreeResponse): TreeViewEntry[] {
+  return tree.entries.map((entry) => ({
+    ...entry,
+    absPath: absPathForTreeEntry(tree.root, entry.relPath),
+  }));
+}
+
 export function buildTreeView(
   tree: FilesTreeResponse | null,
   expanded: Record<string, true>,
@@ -93,7 +114,8 @@ export function buildTreeView(
 ): TreeView {
   if (tree === null) return EMPTY;
 
-  const childrenByParent = buildChildrenMap(tree.entries);
+  const entries = entriesWithAbsPaths(tree);
+  const childrenByParent = buildChildrenMap(entries);
   const matcher = makeMatcher(search);
   const chipFilter = new Set(search.exts);
   const hasChips = chipFilter.size > 0;
@@ -102,7 +124,7 @@ export function buildTreeView(
   /* Pre-compute which entries match (file/dir name only, not full relPath
      — easier to type-match and matches typical IDE search semantics). */
   const directMatch = new Set<number>();
-  for (const entry of tree.entries) {
+  for (const entry of entries) {
     if (!matcher.fn(entry.name)) continue;
     if (entry.isDir) {
       directMatch.add(entry.index);
@@ -119,14 +141,14 @@ export function buildTreeView(
      within them files that contain the name"). */
   const keep = new Set<number>(directMatch);
   for (const idx of directMatch) {
-    let cur: number | null = tree.entries[idx]!.parent;
+    let cur: number | null = entries[idx]!.parent;
     while (cur !== null && !keep.has(cur)) {
       keep.add(cur);
-      cur = tree.entries[cur]!.parent;
+      cur = entries[cur]!.parent;
     }
   }
 
-  function sortChildren(items: FilesTreeEntry[]): FilesTreeEntry[] {
+  function sortChildren(items: TreeViewEntry[]): TreeViewEntry[] {
     return [...items].sort((a, b) => {
       const aSess = sessionFavs.has(a.absPath);
       const bSess = sessionFavs.has(b.absPath);
@@ -161,9 +183,9 @@ export function buildTreeView(
         isOpen,
         hasChildren,
         fav: sessionFavs.has(entry.absPath)
-          ? "session"
+          ? NO_LOOSE_STRING_VALUES.session
           : projectFavs.has(entry.absPath)
-            ? "project"
+            ? NO_LOOSE_STRING_VALUES.project
             : null,
         children: childRows,
       });
@@ -176,14 +198,14 @@ export function buildTreeView(
      chip filter so the chip strip reflects what *could* be filtered). */
   const extsSet = new Set<string>();
   for (const idx of directMatch) {
-    const entry = tree.entries[idx]!;
+    const entry = entries[idx]!;
     if (!entry.isDir && entry.ext !== null) extsSet.add(entry.ext);
   }
   /* When chips ARE active we widened the directMatch to skip non-chip files,
      so re-derive ext set ignoring the chip filter to keep all options stable. */
   if (hasChips) {
     extsSet.clear();
-    for (const entry of tree.entries) {
+    for (const entry of entries) {
       if (entry.isDir) continue;
       if (!matcher.fn(entry.name)) continue;
       if (entry.ext !== null) extsSet.add(entry.ext);

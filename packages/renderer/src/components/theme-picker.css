@@ -3,13 +3,17 @@
    Used by the onboarding wizard and Settings → Appearance. */
 
 .theme-picker {
-  display: flex;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  gap: 14px;
   height: 360px;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 .theme-picker-list {
-  flex: 0 0 236px;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -17,40 +21,75 @@
   padding-right: 4px;
 }
 .theme-picker-item {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 5px;
   text-align: left;
-  background: var(--panel);
-  border: var(--border-w) solid var(--line);
+  background: var(--theme-row-panel, var(--panel));
+  border: var(--border-w) solid var(--theme-row-line, var(--line));
   border-radius: var(--radius);
   padding: 10px 12px;
   cursor: pointer;
+  color: var(--theme-row-ink, var(--ink));
+  min-width: 0;
   transition:
     border-color var(--dur-fast) var(--ease-out-quart),
     background var(--dur-fast) var(--ease-out-quart);
 }
 .theme-picker-item:hover {
-  border-color: var(--agent);
+  border-color: var(--theme-row-agent, var(--agent));
 }
 .theme-picker-item.active {
-  border-color: var(--agent);
-  background: var(--agent-tint);
+  border-color: var(--theme-row-agent, var(--agent));
+  background: var(--theme-row-panel-2, var(--panel-2));
+  box-shadow: inset 0 0 0 1px var(--theme-row-agent, var(--agent));
+}
+.theme-picker-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 .theme-picker-name {
   font-family: var(--sans);
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--theme-row-ink, var(--ink));
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-picker-selected {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--theme-row-bg, var(--canvas));
+  background: var(--theme-row-agent, var(--agent));
+  border-radius: var(--radius-pill);
+  padding: 2px 6px;
 }
 .theme-picker-desc {
   font-size: 11px;
   line-height: 1.35;
-  color: var(--ink-4);
+  color: var(--theme-row-muted, var(--ink-4));
+}
+.theme-picker-swatches {
+  display: flex;
+  gap: 4px;
+}
+.theme-picker-swatches span {
+  display: block;
+  width: 24px;
+  height: 5px;
+  border-radius: var(--radius-pill);
 }
 .theme-picker-preview {
-  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   display: flex;
 }
 
@@ -66,6 +105,30 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+.tp-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: var(--border-w) solid var(--line-2);
+}
+.tp-preview-head span {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+.tp-preview-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink);
 }
 .tp-row {
   display: flex;
@@ -264,4 +327,15 @@
 }
 .tp-chip-dot-user {
   background: var(--user);
+}
+
+@media (max-width: 760px) {
+  .theme-picker {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .theme-picker-list,
+  .tp-preview {
+    max-height: 320px;
+  }
 }

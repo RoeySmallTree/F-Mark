@@ -7,7 +7,16 @@ import type {
 } from "@f-mark/shared";
 
 export type ProjectedEvent =
-  | { kind: "prose"; content: string; arbitrary: boolean }
+  | {
+      kind: "prose";
+      content: string;
+      arbitrary: boolean;
+      /** Set by the Stop coalescer: delta files this block replaces. */
+      supersedes?: string | string[];
+      /** Stamp the coalesced event at the run's first delta time so it keeps
+       *  its place ahead of any following tool-use in visible reads. */
+      timestamp?: string;
+    }
   | {
       kind: "tool-use";
       tool_name: string;

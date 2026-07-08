@@ -1,3 +1,9 @@
+const NO_LOOSE_STRING_VALUES = {
+  preview: "preview",
+  source: "source",
+  allowScripts: "allow-scripts",
+} as const;
+
 /* HtmlPreviewModal — fullscreen view of an html-event bundle, opened from
    EmbedCard and visual choice-option previews via store.openHtmlPreview.
    `preview` mode shows the live sandboxed iframe at large size; `source` mode
@@ -9,19 +15,21 @@ import { useEffect, useState, type JSX } from "react";
 import { Code, Maximize2, X } from "lucide-react";
 import { useStore } from "../state/store.js";
 import { htmlBundleUrl } from "../render/htmlBundle.js";
+import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
 
 export function HtmlPreviewModal(): JSX.Element | null {
   const htmlPreview = useStore((s) => s.htmlPreview);
   const token = useStore((s) => s.token);
+  const scope = useCurrentSessionRootScope(htmlPreview?.sessionId ?? null);
   const closeModal = useStore((s) => s.closeModal);
   const [mode, setMode] = useState<"preview" | "source">(
-    htmlPreview?.mode ?? "preview",
+    htmlPreview?.mode ?? NO_LOOSE_STRING_VALUES.preview,
   );
   const [source, setSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const filename = htmlPreview?.filename ?? "";
-  const initialMode = htmlPreview?.mode ?? "preview";
+  const initialMode = htmlPreview?.mode ?? NO_LOOSE_STRING_VALUES.preview;
   // Re-seed the mode whenever a new bundle opens.
   useEffect(() => {
     setMode(initialMode);
@@ -29,11 +37,11 @@ export function HtmlPreviewModal(): JSX.Element | null {
 
   const url =
     htmlPreview !== null
-      ? htmlBundleUrl(htmlPreview.sessionId, htmlPreview.filename, token)
+      ? htmlBundleUrl(htmlPreview.sessionId, htmlPreview.filename, token, scope)
       : "";
 
   useEffect(() => {
-    if (htmlPreview === null || mode !== "source" || url.length === 0) return;
+    if (htmlPreview === null || mode !== NO_LOOSE_STRING_VALUES.source || url.length === 0) return;
     let cancelled = false;
     setSource(null);
     setError(null);
@@ -73,7 +81,7 @@ export function HtmlPreviewModal(): JSX.Element | null {
             role="tab"
             aria-selected={mode === "preview"}
             className={mode === "preview" ? "active" : ""}
-            onClick={() => setMode("preview")}
+            onClick={() => setMode(NO_LOOSE_STRING_VALUES.preview)}
           >
             <Maximize2 size={12} aria-hidden /> Preview
           </button>
@@ -82,7 +90,7 @@ export function HtmlPreviewModal(): JSX.Element | null {
             role="tab"
             aria-selected={mode === "source"}
             className={mode === "source" ? "active" : ""}
-            onClick={() => setMode("source")}
+            onClick={() => setMode(NO_LOOSE_STRING_VALUES.source)}
           >
             <Code size={12} aria-hidden /> Source
           </button>
@@ -97,11 +105,11 @@ export function HtmlPreviewModal(): JSX.Element | null {
         </button>
       </div>
       <div className="modal-body html-preview-body">
-        {mode === "preview" ? (
+        {mode === NO_LOOSE_STRING_VALUES.preview ? (
           <iframe
             title={htmlPreview.title}
             src={url}
-            sandbox="allow-scripts"
+            sandbox={NO_LOOSE_STRING_VALUES.allowScripts}
           />
         ) : error !== null ? (
           <div className="html-source-msg">Failed to load source: {error}</div>

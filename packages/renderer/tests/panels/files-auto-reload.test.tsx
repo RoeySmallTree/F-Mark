@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { App } from "../../src/App.js";
 import { RightFiles } from "../../src/panels/right/RightFiles.js";
 import { useStore } from "../../src/state/store.js";
@@ -56,6 +57,8 @@ function resetStore(): void {
     filesExpandedByPath: {},
     filesFavoritesProjectByPath: {},
     filesFavoritesSession: {},
+    fileViewerTabsBySession: {},
+    fileViewerActiveBySession: {},
     activeModal: null,
     activePopover: { key: null, anchorRect: null },
   });
@@ -104,7 +107,7 @@ describe("Files tab automatic reload", () => {
       if (u.endsWith("/env-probe")) {
         return Promise.resolve(jsonResponse({ runtimes: {}, tmux: false }));
       }
-      if (u.endsWith("/files/tree?root=%2Fproject")) {
+      if (u.endsWith("/files/tree?path_id=project-id")) {
         return Promise.resolve(
           jsonResponse({
             root: "/project",
@@ -119,16 +122,21 @@ describe("Files tab automatic reload", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
+    const filesTab = document.querySelector<HTMLButtonElement>(
+      ".right-tabs button[data-tab='files']",
+    );
+    expect(filesTab).not.toBeNull();
+    await userEvent.click(filesTab!);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/files/tree?root=%2Fproject",
+        "/files/tree?path_id=project-id",
         expect.anything(),
       );
       expect(MockWebSocket.instances.length).toBeGreaterThan(0);
     });
     const initialTreeFetches = fetchMock.mock.calls.filter(
-      ([url]) => String(url) === "/files/tree?root=%2Fproject",
+      ([url]) => String(url) === "/files/tree?path_id=project-id",
     ).length;
 
     await act(async () => {
@@ -144,7 +152,7 @@ describe("Files tab automatic reload", () => {
 
     await waitFor(() => {
       const treeFetches = fetchMock.mock.calls.filter(
-        ([url]) => String(url) === "/files/tree?root=%2Fproject",
+        ([url]) => String(url) === "/files/tree?path_id=project-id",
       ).length;
       expect(treeFetches).toBe(initialTreeFetches + 1);
     });
@@ -173,4 +181,5 @@ describe("Files tab automatic reload", () => {
     expect(screen.queryByTitle("Refresh tree")).toBeNull();
     expect(screen.getByTitle("Search files")).toBeInTheDocument();
   });
+
 });

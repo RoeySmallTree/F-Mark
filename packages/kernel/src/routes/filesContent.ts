@@ -1,14 +1,12 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { normalize as normPath, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
-import { resolveBrowsePath } from "./fs.js";
-import { mimeForExtension } from "../lib/mimeTable.js";
 import {
-  normaliseDeps,
-  resolvePaths,
-  type PathDeps,
-} from "./pathDeps.js";
+  isActiveContentMime,
+  mimeForExtension,
+} from "../lib/mimeTable.js";
+import { normaliseDeps, type PathDeps } from "./pathDeps.js";
+import { resolveScopedFile } from "./filesText.js";
 import type { Paths } from "../paths.js";
 
 /* Cap for full-file reads (no Range header). Larger files must request a
@@ -54,24 +52,12 @@ function parseRange(raw: string | undefined, size: number): RangeSpec | null | "
   return { start, end };
 }
 
-function projectRootGuard(
-  paths: Paths,
-  canonical: string,
-): { ok: true } | { ok: false; status: number; body: { code: string; message: string } } {
-  const root = normPath(paths.root());
-  const rootWithSep = root.endsWith(sep) ? root : root + sep;
-  if (canonical !== root && !canonical.startsWith(rootWithSep)) {
-    return {
-      ok: false,
-      status: 403,
-      body: {
-        code: "PATH_OUTSIDE_PROJECT",
-        message: "path must live inside the active project",
-      },
-    };
-  }
-  return { ok: true };
-}
+/* Active content can execute script in the app origin if rendered as a normal
+   document. `/files/content` is directly navigable, so active MIME types stay
+   inline but receive a sandbox CSP. That lets the browser display the content
+   without silently downloading it while preventing same-origin script access.
+   Everything gets `nosniff` so a wrong guess cannot promote bytes into a more
+   privileged executable type. */
 
 export function registerFilesContentRoute(
   app: FastifyInstance,
@@ -79,15 +65,12 @@ export function registerFilesContentRoute(
 ): void {
   const deps = normaliseDeps(depsArg);
 
-  app.get<{ Querystring: { path?: string } }>(
+  app.get<{ Querystring: { path_id?: string; root?: string; rel_path?: string } }>(
     "/files/content",
     async (req, reply) => {
-      const resolved = await resolveBrowsePath(req.query.path);
-      if (!resolved.ok) return reply.code(resolved.status).send(resolved.body);
-
-      const paths = resolvePaths(deps);
-      const guard = projectRootGuard(paths, resolved.canonical);
-      if (!guard.ok) return reply.code(guard.status).send(guard.body);
+      const scoped = await resolveScopedFile(deps, req.query, reply);
+      if (scoped === null) return reply;
+      const resolved = { canonical: scoped.canonical };
 
       let info;
       try {
@@ -111,6 +94,12 @@ export function registerFilesContentRoute(
       reply.header("Content-Type", mime);
       reply.header("Accept-Ranges", "bytes");
       reply.header("Cache-Control", "no-store");
+      /* Security: project content is served behind a token but the URL is
+         directly navigable, so prevent same-origin script execution. */
+      reply.header("X-Content-Type-Options", "nosniff");
+      if (isActiveContentMime(mime)) {
+        reply.header("Content-Security-Policy", "sandbox");
+      }
 
       if (range === "invalid") {
         reply.header("Content-Range", `bytes */${info.size}`);

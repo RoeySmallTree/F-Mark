@@ -29,7 +29,15 @@ Auth: `Authorization: Bearer <token>` where token is in `.f-mark/.token`.
 { "slug": "launch-plan" }
 ```
 
-→ `{ id, slug, created_at }`. Omitting `slug` defaults to "untitled".
+→ `{ id, slug, created_at }`. Omitting `slug` defaults to the placeholder "new-session".
+
+`PATCH /sessions/:id`
+
+```json
+{ "slug": "fix-login-flow" }
+```
+
+→ `{ id, slug, created_at, path, path_id }`. Renames the session. Sessions open with the placeholder name `new-session`; once you know what the session is about (usually after the first user message), rename it with a short kebab-case slug — via MCP use `fmark_rename_session`. If no request has arrived yet, leave the placeholder; never invent a name. The session id is immutable: renaming only changes the display slug, so keep using the same id. Don't rename a session that already has a real name unless the user asks.
 
 ## Events
 
@@ -65,7 +73,9 @@ All frontmatter fields are optional.
 }
 ```
 
-`POST /sessions/<id>/events/alternatives` — generate several HTML mockups as one visual multi-option widget (each option renders as a selectable preview with a fullscreen view).
+`multi: false` means pick exactly one; `multi: true` means pick any number. If the question says "or more", "mix", "combine", or "select all", use `multi: true` or reword it as single-select.
+
+`POST /sessions/<id>/events/alternatives` — generate several HTML mockups as one visual multi-option widget (each option renders as a selectable preview with a fullscreen view). Use for "explore N designs, pick one"; for plain-text options use `/events/choices` instead. `multi: false` means pick exactly one visual option; `multi: true` means pick any number. If the question says "or more", "mix", "combine", or "select all", use `multi: true` or reword it as single-select. **The posting surface is not the design target — theme each option to its destination, one of three visual targets:** (1) target-repo-ui — UI for a specific repo or product (the current project or another) → match *that* target's own design system (read its source first), not F-Mark's applied theme; (2) fmark-ui — UI that ships in F-Mark itself → read the real renderer source under `packages/renderer/src` and reuse its class names/structure, resolving colors via `GET /theme`; (3) session-artifact — an unbound chart, analysis, or preview → default to the Amber house theme (`GET /theme?theme=amber`) and build every option with its tokens. The user records the pick via `/events/choice`.
 
 ```json
 {
@@ -138,7 +148,24 @@ Removing a parent todo also removes its visible subtasks.
 }
 ```
 
-Use for diagrams, flowcharts, dependency graphs, decision trees, pipelines. The renderer auto-lays-out the graph when `position` is omitted on any node. `popover.html` is rendered inside a sandboxed iframe; `css` and `js` are optional companions.
+Use for diagrams, flowcharts, dependency graphs, decision trees, pipelines, and state machines — it renders as an interactive graph. **Never draw these as ASCII art, box-drawing, or a "diagram in a code block"; POST a flow event instead.** The renderer auto-lays-out the graph when `position` is omitted on any node (all-or-nothing — don't mix positioned and unpositioned nodes). `popover.html` is rendered inside a sandboxed iframe; `css` and `js` are optional companions.
+
+## HTML
+
+`POST /sessions/<id>/events/html` — render a sandboxed HTML bundle. Use for **rendered UI, mockups, charts, or any rich visual**; never hand-draw a UI as ASCII/box-art.
+
+```json
+{
+  "participant_id": "ag-codex",
+  "title": "Settings panel mockup",
+  "html": "<div class=\"panel\">…</div>",
+  "css": ".panel{border-radius:12px}",
+  "js": "",
+  "dependencies": []
+}
+```
+
+`css`, `js`, `title`, `dependencies`, `supersedes`, and `append_to` are optional. **The posting surface is not the design target — before generating any HTML (here or via `/events/alternatives`), state which of three visual targets applies:** (1) *target-repo-ui* — UI meant to ship in a specific repo or product (the current project or another) → read that target's own styles/components/tokens first and match them (palette, components, typography, conventions), not F-Mark's applied theme; (2) *fmark-ui* — a mockup of F-Mark's own product UI → read the real renderer source under `packages/renderer/src` first, reuse its class names and structural CSS, and resolve colors via `GET /theme` (treat the design doc as a token reference, not a layout guide); (3) *session-artifact* — an unbound chart, analysis, or standalone preview → default to the Amber house theme: fetch `GET /theme?theme=amber` and build with its tokens instead of inventing colors. To revise, re-POST with `supersedes` set to the prior html event's filename.
 
 ## Attachments
 
@@ -261,4 +288,4 @@ Logs a tool invocation. The auto-stream hook emits these automatically; you shou
 
 ## POST /sessions/:id/events/prose with `arbitrary`
 
-When set to `true`, the renderer groups the message into the collapsible mid-turn box. The auto-stream hook sets this on every text block except the final one of a turn. Do not set it manually.
+When set to `true`, the renderer groups the message into the collapsible mid-turn box. The auto-stream hook uses this for live assistant text chunks when the runtime exposes them; final turn text uses `arbitrary: false`. Do not set it manually.

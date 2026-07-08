@@ -1,6 +1,7 @@
 import {
   applyClaudeHooks,
   detectClaudeHookLocations,
+  removeClaudeFmarkHooks,
   renderClaudeInstallPrompt,
   renderClaudeInstallSnippet,
   type ClaudeHookScope,
@@ -14,9 +15,11 @@ import {
 import {
   applyOpencodeHooks,
   detectOpencodeHooks,
+  removeOpencodeHooks,
   renderOpencodeInstallSnippet,
   type OpencodeHookScope,
 } from "./opencode.js";
+import type { HookInstallScope } from "@f-mark/shared";
 import type { DetectResult } from "./types.js";
 
 export async function checkHookInstallStatus(opts: {
@@ -24,6 +27,7 @@ export async function checkHookInstallStatus(opts: {
   participantId?: string;
   userParticipantId?: string;
   projectRoot?: string;
+  env?: NodeJS.ProcessEnv;
 }): Promise<DetectResult> {
   const userId = opts.userParticipantId ?? "us-unknown";
   if (opts.runtimeId === "claude") {
@@ -32,8 +36,7 @@ export async function checkHookInstallStatus(opts: {
     });
   }
   if (opts.runtimeId === "codex") {
-    if (!opts.participantId) throw new Error("participantId required for codex hooks");
-    const toml = await loadCodexConfig(opts.projectRoot);
+    const toml = await loadCodexConfig(opts.projectRoot, opts.env);
     return detectCodexHooks(toml, opts.participantId, userId);
   }
   if (opts.runtimeId === "opencode") {
@@ -67,9 +70,6 @@ export function renderInstallInstructions(opts: {
     };
   }
   if (opts.runtimeId === "codex") {
-    if (!opts.participantId || !opts.userParticipantId) {
-      throw new Error("participantId and userParticipantId required for codex hooks");
-    }
     const snippet = renderCodexInstallSnippet(opts.participantId, opts.userParticipantId);
     return { markdown: snippet, manualSteps: [{ configPath: "~/.codex/config.toml", snippet }] };
   }
@@ -88,44 +88,13 @@ export function renderInstallInstructions(opts: {
   throw new Error(`unknown runtime_id: ${opts.runtimeId}`);
 }
 
-export async function applyHookInstall(opts: {
-  runtimeId: string;
-  participantId?: string;
-  userParticipantId?: string;
-  scope: ClaudeHookScope;
-  projectRoot?: string;
-}): Promise<{
-  applied: boolean;
-  scope: ClaudeHookScope;
-  configPath: string;
-  status: DetectResult;
-}> {
-  if (opts.runtimeId !== "claude") {
-    throw new Error(`auto-apply is not supported for runtime_id: ${opts.runtimeId}`);
-  }
-  const applied = await applyClaudeHooks({
-    scope: opts.scope,
-    projectRoot: opts.projectRoot,
-  });
-  return {
-    applied: applied.changed,
-    scope: opts.scope,
-    configPath: applied.configPath,
-    status: await checkHookInstallStatus({
-      runtimeId: opts.runtimeId,
-      participantId: opts.participantId,
-      userParticipantId: opts.userParticipantId,
-      projectRoot: opts.projectRoot,
-    }),
-  };
-}
-
 export async function applyAutomaticHookInstall(opts: {
   runtimeId: string;
   participantId?: string;
   userParticipantId?: string;
   projectRoot?: string;
   scope?: ClaudeHookScope;
+  env?: NodeJS.ProcessEnv;
 }): Promise<{
   changed: boolean;
   status: DetectResult;
@@ -143,12 +112,10 @@ export async function applyAutomaticHookInstall(opts: {
     };
   }
   if (opts.runtimeId === "codex") {
-    if (!opts.participantId || !opts.userParticipantId) {
-      throw new Error("participantId and userParticipantId required for codex hooks");
-    }
     const applied = await applyCodexHooks(
       opts.participantId,
       opts.userParticipantId,
+      opts.env,
     );
     return {
       changed: applied.changed,
@@ -169,4 +136,47 @@ export async function applyAutomaticHookInstall(opts: {
     };
   }
   throw new Error(`auto-apply is not supported for runtime_id: ${opts.runtimeId}`);
+}
+
+export async function reconcileHookScopes(opts: {
+  runtimeId: string;
+  chosenHookScope: HookInstallScope;
+  projectRoot?: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<{ removed: { scope: HookInstallScope; configPath: string }[] }> {
+  const otherScope: HookInstallScope =
+    opts.chosenHookScope === "global" ? "local" : "global";
+  const removed: { scope: HookInstallScope; configPath: string }[] = [];
+
+  if (opts.runtimeId === "claude") {
+    if (otherScope === "local" && opts.projectRoot === undefined) {
+      return { removed };
+    }
+    const result = await removeClaudeFmarkHooks({
+      scope: otherScope,
+      projectRoot: opts.projectRoot,
+    });
+    if (result.changed) {
+      removed.push({ scope: otherScope, configPath: result.configPath });
+    }
+    return { removed };
+  }
+
+  if (opts.runtimeId === "opencode") {
+    const opencodeScope: OpencodeHookScope =
+      otherScope === "global" ? "user" : "project";
+    if (opencodeScope === "project" && opts.projectRoot === undefined) {
+      return { removed };
+    }
+    const result = await removeOpencodeHooks({
+      scope: opencodeScope,
+      projectRoot: opencodeScope === "project" ? opts.projectRoot : undefined,
+    });
+    if (result.changed) {
+      removed.push({ scope: otherScope, configPath: result.configPath });
+    }
+    return { removed };
+  }
+
+  return { removed };
 }

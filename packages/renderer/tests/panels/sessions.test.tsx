@@ -41,6 +41,30 @@ const CREATED_IN_REPO_B: SessionMeta = {
   path_id: "repo-b-id",
 };
 
+function deferredResponse(body: unknown): {
+  promise: Promise<Response>;
+  resolve(): void;
+  settled(): boolean;
+} {
+  let settled = false;
+  let resolveResponse: (() => void) | null = null;
+  const promise = new Promise<Response>((resolve) => {
+    resolveResponse = () => {
+      settled = true;
+      resolve(jsonResponse(body));
+    };
+  });
+  return {
+    promise,
+    resolve() {
+      resolveResponse?.();
+    },
+    settled() {
+      return settled;
+    },
+  };
+}
+
 class MockWebSocket {
   addEventListener(): void {}
   close(): void {}
@@ -50,6 +74,8 @@ function seedStore(): void {
   resetStore({
     activePath: REPO_A,
     activePathId: "repo-a-id",
+    selectedPath: REPO_A,
+    selectedPathId: "repo-a-id",
     activeRevision: 1,
     knownPaths: [REPO_A, REPO_B],
     favorites: [],
@@ -68,6 +94,9 @@ function stubFetch(): ReturnType<typeof vi.fn> {
       if (u === "/sessions" && init?.method === "POST") {
         return Promise.resolve(jsonResponse(CREATED_IN_REPO_B));
       }
+      if (u === "/sessions?path_id=repo-b-id") {
+        return Promise.resolve(jsonResponse({ sessions: [ALL_SESSIONS[1]] }));
+      }
       if (u === "/sessions") {
         return Promise.resolve(
           jsonResponse({
@@ -81,16 +110,8 @@ function stubFetch(): ReturnType<typeof vi.fn> {
       if (u === "/participants") {
         return Promise.resolve(jsonResponse({ participants: {} }));
       }
-      if (u === "/paths/active" && init?.method === "POST") {
-        return Promise.resolve(
-          jsonResponse({
-            activePath: REPO_B,
-            activePathId: "repo-b-id",
-            activeRevision: 2,
-            knownPaths: [REPO_B, REPO_A],
-            favorites: [],
-          }),
-        );
+      if (u === "/participants?path_id=repo-b-id") {
+        return Promise.resolve(jsonResponse({ participants: {} }));
       }
       return Promise.resolve(jsonResponse({}));
     },
@@ -110,6 +131,35 @@ describe("Sessions panel", () => {
     cleanup();
   });
 
+  test("shows the loading animation while the sessions list is still loading", async () => {
+    const sessionsRefresh = deferredResponse({ sessions: [] });
+    const fetchMock = vi.fn().mockImplementation((url: string | URL) => {
+      if (String(url) === "/sessions?scope=all") {
+        return sessionsRefresh.promise;
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useStore.setState({ sessions: [], currentSessionId: null });
+
+    render(<Sessions />);
+
+    const loading = screen.getByRole("status", { name: /loading/i });
+    expect(loading).toHaveClass("loading-animation");
+    expect(loading).toHaveClass("panel-loading");
+    expect(
+      screen.queryByText(/No sessions yet\. Press \+ New\./i),
+    ).not.toBeInTheDocument();
+
+    sessionsRefresh.resolve();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No sessions yet\. Press \+ New\./i),
+      ).toBeInTheDocument();
+    });
+  });
+
   test("renders all sessions grouped under repo accordions", async () => {
     stubFetch();
     render(<Sessions />);
@@ -120,7 +170,7 @@ describe("Sessions panel", () => {
     expect(screen.getByText("beta-session")).toBeInTheDocument();
   });
 
-  test("selecting a session from another repo switches paths first", async () => {
+  test("selecting a session from another repo does not switch kernel active path", async () => {
     const fetchMock = stubFetch();
     const user = userEvent.setup();
     render(<Sessions />);
@@ -130,7 +180,8 @@ describe("Sessions panel", () => {
     await user.click(row as HTMLElement);
 
     await waitFor(() => {
-      expect(useStore.getState().activePath).toBe(REPO_B);
+      expect(useStore.getState().activePath).toBe(REPO_A);
+      expect(useStore.getState().selectedPath).toBe(REPO_B);
       expect(useStore.getState().currentSessionId).toBe(
         ALL_SESSIONS[1]!.id,
       );
@@ -142,13 +193,51 @@ describe("Sessions panel", () => {
         (init as RequestInit | undefined)?.method === "POST"
       );
     });
-    expect(switchCall).toBeDefined();
-    expect(JSON.parse((switchCall![1] as RequestInit).body as string)).toEqual({
-      path: REPO_B,
+    expect(switchCall).toBeUndefined();
+  });
+
+  test("clicking a session focuses it before the root refresh finishes", async () => {
+    const sessionsRefresh = deferredResponse({ sessions: [ALL_SESSIONS[1]] });
+    const participantsRefresh = deferredResponse({ participants: {} });
+    const fetchMock = vi.fn().mockImplementation(
+      (url: string | URL, init?: RequestInit) => {
+        const u = String(url);
+        if (u === "/sessions?scope=all") {
+          return Promise.resolve(jsonResponse({ sessions: ALL_SESSIONS }));
+        }
+        if (u === "/sessions?path_id=repo-b-id") {
+          return sessionsRefresh.promise;
+        }
+        if (u === "/participants?path_id=repo-b-id") {
+          return participantsRefresh.promise;
+        }
+        return Promise.resolve(jsonResponse({}));
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<Sessions />);
+
+    const row = (await screen.findByText("beta-session")).closest(".session-item");
+    expect(row).not.toBeNull();
+    await user.click(row as HTMLElement);
+
+    await waitFor(() => {
+      expect(useStore.getState().currentSessionId).toBe(ALL_SESSIONS[1]!.id);
+      expect(useStore.getState().selectedPath).toBe(REPO_B);
+    });
+    expect(sessionsRefresh.settled()).toBe(false);
+    expect(participantsRefresh.settled()).toBe(false);
+
+    sessionsRefresh.resolve();
+    participantsRefresh.resolve();
+    await waitFor(() => {
+      expect(sessionsRefresh.settled()).toBe(true);
+      expect(participantsRefresh.settled()).toBe(true);
     });
   });
 
-  test("inline creator focuses the returned session id", async () => {
+  test("inline creator is one-click and focuses the returned session id", async () => {
     const fetchMock = stubFetch();
     const user = userEvent.setup();
     render(<Sessions />);
@@ -156,11 +245,10 @@ describe("Sessions panel", () => {
     await user.click(
       await screen.findByRole("button", { name: /new session in repo-b/i }),
     );
-    await user.type(screen.getByLabelText(/new session name in repo-b/i), "new-work");
-    await user.click(screen.getByRole("button", { name: /^start$/i }));
 
     await waitFor(() => {
-      expect(useStore.getState().activePath).toBe(REPO_B);
+      expect(useStore.getState().activePath).toBe(REPO_A);
+      expect(useStore.getState().selectedPath).toBe(REPO_B);
       expect(useStore.getState().currentSessionId).toBe(CREATED_IN_REPO_B.id);
     });
     const createCall = fetchMock.mock.calls.find(([url, init]) => {
@@ -171,7 +259,7 @@ describe("Sessions panel", () => {
     });
     expect(createCall).toBeDefined();
     expect(JSON.parse((createCall![1] as RequestInit).body as string)).toEqual({
-      slug: "new-work",
+      slug: "new-session",
       path: REPO_B,
     });
   });

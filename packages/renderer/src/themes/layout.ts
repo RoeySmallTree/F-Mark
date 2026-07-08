@@ -4,9 +4,6 @@
  * columns, rows, a full-height side pane with the other two stacked, or a
  * full-width band pane with the other two side-by-side.
  *
- * The `LeftRail` (48px icon nav) is pinned to the physical left edge in every
- * layout — only the three content panes move.
- *
  * Mirrors the theme/density pattern (`themes/index.ts`, `themes/density.ts`):
  * a single localStorage key, a `getCurrent` / `apply` / `subscribe` trio, and
  * application before first paint in `main.tsx` to avoid FOUC. Unlike
@@ -46,13 +43,53 @@ export interface PaneGeometry {
 
 export const STORAGE_KEY = "fmark.shellPlacement";
 
-export const RAIL_TRACK = "48px";
+const paneIds = {
+  leftPanel: "leftPanel",
+  chat: "chat",
+  rightPanel: "rightPanel",
+} as const satisfies Record<string, PaneId>;
 
-export const PANE_IDS: PaneId[] = ["leftPanel", "chat", "rightPanel"];
+const layoutKinds = {
+  columns: "columns",
+  rows: "rows",
+  sideStack: "side-stack",
+  bandSplit: "band-split",
+} as const satisfies Record<string, ShellPlacement["kind"]>;
+
+const sides = {
+  left: "left",
+  right: "right",
+} as const;
+
+const bands = {
+  top: "top",
+  bottom: "bottom",
+} as const;
+
+const geometryAxes = {
+  col: "col",
+  row: "row",
+} as const satisfies Record<string, PaneGeometry["axis"]>;
+
+const geometryEdges = {
+  left: "left",
+  right: "right",
+  top: "top",
+  bottom: "bottom",
+} as const satisfies Record<string, PaneGeometry["edge"]>;
+
+const gridTracks = {
+  flexible: "minmax(0, 1fr)",
+  unit: "1fr",
+} as const;
+
+const PANE_IDS = [paneIds.leftPanel, paneIds.chat, paneIds.rightPanel] as const;
+const SIDE_VALUES = [sides.left, sides.right] as const;
+const BAND_VALUES = [bands.top, bands.bottom] as const;
 
 export const DEFAULT_PLACEMENT: ShellPlacement = {
-  kind: "columns",
-  slots: ["leftPanel", "chat", "rightPanel"],
+  kind: layoutKinds.columns,
+  slots: [paneIds.leftPanel, paneIds.chat, paneIds.rightPanel],
 };
 
 /** Picker metadata — the four split patterns the user chooses between. */
@@ -62,22 +99,22 @@ export const SHELL_LAYOUT_KINDS: {
   description: string;
 }[] = [
   {
-    kind: "columns",
+    kind: layoutKinds.columns,
     label: "Columns",
     description: "Three panes side by side (the classic layout).",
   },
   {
-    kind: "rows",
+    kind: layoutKinds.rows,
     label: "Rows",
     description: "Three panes stacked top to bottom.",
   },
   {
-    kind: "side-stack",
+    kind: layoutKinds.sideStack,
     label: "Side stack",
     description: "One full-height pane beside the other two, stacked.",
   },
   {
-    kind: "band-split",
+    kind: layoutKinds.bandSplit,
     label: "Top / bottom split",
     description: "One full-width pane above or below the other two.",
   },
@@ -88,12 +125,12 @@ export const SHELL_LAYOUT_KINDS: {
 /* ------------------------------------------------------------------ */
 
 const DEFAULT_WIDTH: Record<Exclude<PaneId, "chat">, number> = {
-  leftPanel: 288,
-  rightPanel: 340,
+  [paneIds.leftPanel]: 288,
+  [paneIds.rightPanel]: 340,
 };
 const DEFAULT_HEIGHT: Record<Exclude<PaneId, "chat">, number> = {
-  leftPanel: 260,
-  rightPanel: 300,
+  [paneIds.leftPanel]: 260,
+  [paneIds.rightPanel]: 300,
 };
 
 export function widthVar(pane: PaneId): string {
@@ -104,11 +141,11 @@ export function heightVar(pane: PaneId): string {
 }
 
 function colTrack(pane: PaneId): string {
-  if (pane === "chat") return "minmax(0, 1fr)";
+  if (pane === paneIds.chat) return gridTracks.flexible;
   return `var(${widthVar(pane)}, ${DEFAULT_WIDTH[pane]}px)`;
 }
 function rowTrack(pane: PaneId): string {
-  if (pane === "chat") return "minmax(0, 1fr)";
+  if (pane === paneIds.chat) return gridTracks.flexible;
   return `var(${heightVar(pane)}, ${DEFAULT_HEIGHT[pane]}px)`;
 }
 
@@ -117,7 +154,7 @@ function rowTrack(pane: PaneId): string {
 /* ------------------------------------------------------------------ */
 
 function isPaneId(v: unknown): v is PaneId {
-  return v === "leftPanel" || v === "chat" || v === "rightPanel";
+  return typeof v === "string" && PANE_IDS.includes(v as PaneId);
 }
 
 function isExactPaneSet(panes: unknown[]): boolean {
@@ -130,19 +167,19 @@ export function isShellPlacement(v: unknown): v is ShellPlacement {
   if (v === null || typeof v !== "object") return false;
   const p = v as Record<string, unknown>;
   switch (p.kind) {
-    case "columns":
-    case "rows":
+    case layoutKinds.columns:
+    case layoutKinds.rows:
       return Array.isArray(p.slots) && isExactPaneSet(p.slots);
-    case "side-stack":
+    case layoutKinds.sideStack:
       return (
-        (p.side === "left" || p.side === "right") &&
+        (p.side === sides.left || p.side === sides.right) &&
         isPaneId(p.full) &&
         Array.isArray(p.stack) &&
         isExactPaneSet([p.full, ...p.stack])
       );
-    case "band-split":
+    case layoutKinds.bandSplit:
       return (
-        (p.band === "top" || p.band === "bottom") &&
+        (p.band === bands.top || p.band === bands.bottom) &&
         isPaneId(p.full) &&
         Array.isArray(p.split) &&
         isExactPaneSet([p.full, ...p.split])
@@ -158,13 +195,13 @@ export function isShellPlacement(v: unknown): v is ShellPlacement {
 
 export function placementKey(p: ShellPlacement): string {
   switch (p.kind) {
-    case "columns":
+    case layoutKinds.columns:
       return `columns:${p.slots.join("-")}`;
-    case "rows":
+    case layoutKinds.rows:
       return `rows:${p.slots.join("-")}`;
-    case "side-stack":
+    case layoutKinds.sideStack:
       return `side-stack:${p.side}:${p.full}:${p.stack.join("-")}`;
-    case "band-split":
+    case layoutKinds.bandSplit:
       return `band-split:${p.band}:${p.full}:${p.split.join("-")}`;
   }
 }
@@ -172,92 +209,116 @@ export function placementKey(p: ShellPlacement): string {
 /** Index of the stack/split member that absorbs free space (chat if present,
  *  otherwise the second member). */
 function flexIndex(pair: [PaneId, PaneId]): number {
-  const chatIdx = pair.indexOf("chat");
+  const chatIdx = pair.indexOf(paneIds.chat);
   return chatIdx === -1 ? 1 : chatIdx;
 }
 
-interface Grid {
-  columns: string;
-  rows: string;
-  areas: string[];
+/** A grid as an explicit track model: column/row track sizes plus a row-major
+ *  matrix of grid-area names. Serialized to CSS by {@link serializeGrid}; built
+ *  this way so the `extra` satellite can be injected uniformly (split chat's
+ *  column or row) across all 36 placements instead of hand-editing each. */
+interface GridModel {
+  cols: string[];
+  rows: string[];
+  /** `cells[r][c]` = grid-area name. */
+  cells: string[][];
 }
 
-function placementGrid(p: ShellPlacement): Grid {
+function placementGrid(p: ShellPlacement): GridModel {
   switch (p.kind) {
-    case "columns": {
+    case layoutKinds.columns: {
       const [a, b, c] = p.slots;
       return {
-        columns: `${RAIL_TRACK} ${colTrack(a)} ${colTrack(b)} ${colTrack(c)}`,
-        rows: "minmax(0, 1fr)",
-        areas: [`"rail ${a} ${b} ${c}"`],
+        cols: [colTrack(a), colTrack(b), colTrack(c)],
+        rows: [gridTracks.flexible],
+        cells: [[a, b, c]],
       };
     }
-    case "rows": {
+    case layoutKinds.rows: {
       const [a, b, c] = p.slots;
       return {
-        columns: `${RAIL_TRACK} minmax(0, 1fr)`,
-        rows: `${rowTrack(a)} ${rowTrack(b)} ${rowTrack(c)}`,
-        areas: [`"rail ${a}"`, `"rail ${b}"`, `"rail ${c}"`],
+        cols: [gridTracks.flexible],
+        rows: [rowTrack(a), rowTrack(b), rowTrack(c)],
+        cells: [[a], [b], [c]],
       };
     }
-    case "side-stack": {
+    case layoutKinds.sideStack: {
       const [s0, s1] = p.stack;
       const flex = flexIndex(p.stack);
-      const stackRows = p.stack
-        .map((pane, i) => (i === flex ? "minmax(0, 1fr)" : rowTrack(pane)))
-        .join(" ");
+      const stackRows = p.stack.map((pane, i) =>
+        i === flex ? gridTracks.flexible : rowTrack(pane),
+      );
       // Stack column: flexible if it holds chat, else the first member's width.
-      const stackHasChat = p.stack.includes("chat");
+      const stackHasChat = p.stack.includes(paneIds.chat);
       const stackCol = stackHasChat
-        ? "minmax(0, 1fr)"
-        : colTrack(s0 === "chat" ? s1 : s0);
-      if (p.side === "left") {
+        ? gridTracks.flexible
+        : colTrack(s0 === paneIds.chat ? s1 : s0);
+      if (p.side === sides.left) {
         return {
-          columns: `${RAIL_TRACK} ${colTrack(p.full)} ${stackCol}`,
+          cols: [colTrack(p.full), stackCol],
           rows: stackRows,
-          areas: [`"rail ${p.full} ${s0}"`, `"rail ${p.full} ${s1}"`],
+          cells: [
+            [p.full, s0],
+            [p.full, s1],
+          ],
         };
       }
       return {
-        columns: `${RAIL_TRACK} ${stackCol} ${colTrack(p.full)}`,
+        cols: [stackCol, colTrack(p.full)],
         rows: stackRows,
-        areas: [`"rail ${s0} ${p.full}"`, `"rail ${s1} ${p.full}"`],
+        cells: [
+          [s0, p.full],
+          [s1, p.full],
+        ],
       };
     }
-    case "band-split": {
+    case layoutKinds.bandSplit: {
       const [s0, s1] = p.split;
       const flex = flexIndex(p.split);
-      const splitCols = p.split
-        .map((pane, i) => (i === flex ? "minmax(0, 1fr)" : colTrack(pane)))
-        .join(" ");
+      const splitCols = p.split.map((pane, i) =>
+        i === flex ? gridTracks.flexible : colTrack(pane),
+      );
       const bandRow = rowTrack(p.full);
-      const splitHasChat = p.split.includes("chat");
+      const splitHasChat = p.split.includes(paneIds.chat);
       const splitRow = splitHasChat
-        ? "minmax(0, 1fr)"
-        : rowTrack(s0 === "chat" ? s1 : s0);
-      const bandArea = `"rail ${p.full} ${p.full}"`;
-      const splitArea = `"rail ${s0} ${s1}"`;
-      if (p.band === "top") {
+        ? gridTracks.flexible
+        : rowTrack(s0 === paneIds.chat ? s1 : s0);
+      const bandRowCells = [p.full, p.full];
+      const splitRowCells = [s0, s1];
+      if (p.band === bands.top) {
         return {
-          columns: `${RAIL_TRACK} ${splitCols}`,
-          rows: `${bandRow} ${splitRow}`,
-          areas: [bandArea, splitArea],
+          cols: splitCols,
+          rows: [bandRow, splitRow],
+          cells: [bandRowCells, splitRowCells],
         };
       }
       return {
-        columns: `${RAIL_TRACK} ${splitCols}`,
-        rows: `${splitRow} ${bandRow}`,
-        areas: [splitArea, bandArea],
+        cols: splitCols,
+        rows: [splitRow, bandRow],
+        cells: [splitRowCells, bandRowCells],
       };
     }
   }
 }
 
+function serializeGrid(g: GridModel): {
+  columns: string;
+  rows: string;
+  areas: string[];
+} {
+  return {
+    columns: g.cols.join(" "),
+    rows: g.rows.join(" "),
+    areas: g.cells.map((row) => `"${row.join(" ")}"`),
+  };
+}
+
 export function placementCss(p: ShellPlacement): string {
-  const grid = placementGrid(p);
+  const grid = serializeGrid(placementGrid(p));
   const key = placementKey(p);
+  const selector = `.main[data-shell-layout="${key}"]`;
   return [
-    `.main[data-shell-layout="${key}"] {`,
+    `${selector} {`,
     `  grid-template-columns: ${grid.columns};`,
     `  grid-template-rows: ${grid.rows};`,
     `  grid-template-areas: ${grid.areas.join(" ")};`,
@@ -265,26 +326,26 @@ export function placementCss(p: ShellPlacement): string {
   ].join("\n");
 }
 
-/** Mini grid template (uniform tracks + thin rail) for rendering a placement
- *  diagram in the picker. Relative arrangement only, not real proportions. */
-export function placementPreviewGrid(p: ShellPlacement): {
+/** Mini grid template for rendering a placement diagram in the picker.
+ *  Relative arrangement only, not real proportions. */
+function placementPreviewGrid(p: ShellPlacement): {
   columns: string;
   rows: string;
   areas: string;
 } {
-  const grid = placementGrid(p);
+  const grid = serializeGrid(placementGrid(p));
   const colCount = (grid.areas[0] ?? "")
     .replace(/"/g, "")
     .trim()
     .split(/\s+/).length;
   return {
-    columns: ["8px", ...new Array(colCount - 1).fill("1fr")].join(" "),
-    rows: grid.areas.map(() => "1fr").join(" "),
+    columns: new Array(colCount).fill(gridTracks.unit).join(" "),
+    rows: grid.areas.map(() => gridTracks.unit).join(" "),
     areas: grid.areas.join(" "),
   };
 }
 
-function permutations3(items: PaneId[]): [PaneId, PaneId, PaneId][] {
+function permutations3(items: readonly PaneId[]): [PaneId, PaneId, PaneId][] {
   const out: [PaneId, PaneId, PaneId][] = [];
   for (let i = 0; i < 3; i++) {
     for (let j = 0; j < 3; j++) {
@@ -307,13 +368,13 @@ export function enumeratePlacements(
   kind: ShellPlacement["kind"],
 ): ShellPlacement[] {
   switch (kind) {
-    case "columns":
+    case layoutKinds.columns:
       return permutations3(PANE_IDS).map((slots) => ({ kind, slots }));
-    case "rows":
+    case layoutKinds.rows:
       return permutations3(PANE_IDS).map((slots) => ({ kind, slots }));
-    case "side-stack": {
+    case layoutKinds.sideStack: {
       const out: ShellPlacement[] = [];
-      for (const side of ["left", "right"] as const) {
+      for (const side of SIDE_VALUES) {
         for (const full of PANE_IDS) {
           const [r0, r1] = PANE_IDS.filter((x) => x !== full);
           if (r0 === undefined || r1 === undefined) continue;
@@ -327,9 +388,9 @@ export function enumeratePlacements(
       }
       return out;
     }
-    case "band-split": {
+    case layoutKinds.bandSplit: {
       const out: ShellPlacement[] = [];
-      for (const band of ["top", "bottom"] as const) {
+      for (const band of BAND_VALUES) {
         for (const full of PANE_IDS) {
           const [r0, r1] = PANE_IDS.filter((x) => x !== full);
           if (r0 === undefined || r1 === undefined) continue;
@@ -354,34 +415,34 @@ export function paneGeometry(
   p: ShellPlacement,
   pane: PaneId,
 ): PaneGeometry | null {
-  if (pane === "chat") return null;
+  if (pane === paneIds.chat) return null;
   switch (p.kind) {
-    case "columns": {
+    case layoutKinds.columns: {
       const idx = p.slots.indexOf(pane);
-      const chatIdx = p.slots.indexOf("chat");
+      const chatIdx = p.slots.indexOf(paneIds.chat);
       const before = idx < chatIdx;
       return {
-        axis: "col",
-        edge: before ? "right" : "left",
+        axis: geometryAxes.col,
+        edge: before ? geometryEdges.right : geometryEdges.left,
         sign: before ? 1 : -1,
       };
     }
-    case "rows": {
+    case layoutKinds.rows: {
       const idx = p.slots.indexOf(pane);
-      const chatIdx = p.slots.indexOf("chat");
+      const chatIdx = p.slots.indexOf(paneIds.chat);
       const before = idx < chatIdx;
       return {
-        axis: "row",
-        edge: before ? "bottom" : "top",
+        axis: geometryAxes.row,
+        edge: before ? geometryEdges.bottom : geometryEdges.top,
         sign: before ? 1 : -1,
       };
     }
-    case "side-stack": {
+    case layoutKinds.sideStack: {
       if (pane === p.full) {
-        const fullLeft = p.side === "left";
+        const fullLeft = p.side === sides.left;
         return {
-          axis: "col",
-          edge: fullLeft ? "right" : "left",
+          axis: geometryAxes.col,
+          edge: fullLeft ? geometryEdges.right : geometryEdges.left,
           sign: fullLeft ? 1 : -1,
         };
       }
@@ -390,17 +451,17 @@ export function paneGeometry(
       if (idx === flex) return null;
       const before = idx < flex;
       return {
-        axis: "row",
-        edge: before ? "bottom" : "top",
+        axis: geometryAxes.row,
+        edge: before ? geometryEdges.bottom : geometryEdges.top,
         sign: before ? 1 : -1,
       };
     }
-    case "band-split": {
+    case layoutKinds.bandSplit: {
       if (pane === p.full) {
-        const fullTop = p.band === "top";
+        const fullTop = p.band === bands.top;
         return {
-          axis: "row",
-          edge: fullTop ? "bottom" : "top",
+          axis: geometryAxes.row,
+          edge: fullTop ? geometryEdges.bottom : geometryEdges.top,
           sign: fullTop ? 1 : -1,
         };
       }
@@ -409,8 +470,8 @@ export function paneGeometry(
       if (idx === flex) return null;
       const before = idx < flex;
       return {
-        axis: "col",
-        edge: before ? "right" : "left",
+        axis: geometryAxes.col,
+        edge: before ? geometryEdges.right : geometryEdges.left,
         sign: before ? 1 : -1,
       };
     }
@@ -450,7 +511,10 @@ export function getCurrentPlacement(): ShellPlacement {
   }
 }
 
-export function applyPlacement(p: ShellPlacement): void {
+export function applyPlacement(
+  p: ShellPlacement,
+  opts: { persist?: boolean } = {},
+): void {
   const doc = globalThis.document;
   if (doc !== undefined) {
     let style = doc.getElementById(STYLE_ELEMENT_ID) as HTMLStyleElement | null;
@@ -461,7 +525,7 @@ export function applyPlacement(p: ShellPlacement): void {
     }
     style.textContent = placementCss(p);
   }
-  safeStorageSet(JSON.stringify(p));
+  if (opts.persist !== false) safeStorageSet(JSON.stringify(p));
   for (const cb of subscribers) {
     try {
       cb(p);
@@ -477,5 +541,24 @@ export function subscribePlacement(
   subscribers.add(cb);
   return () => {
     subscribers.delete(cb);
+  };
+}
+
+/** Live-apply pane-arrangement changes from OTHER tabs (X6). Re-injects the
+ *  generated grid rule + notifies subscribers (useShellPlacement, Appearance)
+ *  without re-persisting (the value is already in localStorage). */
+let placementStorageListening = false;
+export function startPlacementStorageSync(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (placementStorageListening) return () => {};
+  placementStorageListening = true;
+  const onStorage = (e: StorageEvent): void => {
+    if (e.key !== STORAGE_KEY) return;
+    applyPlacement(getCurrentPlacement(), { persist: false });
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    placementStorageListening = false;
   };
 }

@@ -1,54 +1,35 @@
 import { readFile } from "fs/promises";
 import type {
   CurrentRuntimeState,
-  EffortDescriptor,
-  ModelDescriptor,
   RuntimeOverridePatch,
 } from "@f-mark/shared";
 import { sanitizeArgs as sanitize } from "../argSanitizer.js";
+import { defaultRunCli } from "./claude/cli.js";
+import { createClaudeModelCatalog } from "./claude/modelCatalog.js";
+import type { ClaudeCliRunner } from "./claude/types.js";
 import type { AdapterReadContext, RuntimeAdapter } from "./types.js";
 
-const CLAUDE_MODELS: ModelDescriptor[] = [
-  { id: "claude-opus-4-7", displayName: "Opus 4.7", description: "Highest-capability model." },
-  { id: "claude-sonnet-4-6", displayName: "Sonnet 4.6", description: "Balanced model." },
-  { id: "claude-haiku-4-5", displayName: "Haiku 4.5", description: "Fastest model." },
-];
+export interface ClaudeAdapterOptions {
+  runCli?: ClaudeCliRunner;
+  /* Override the binary name. Defaults to "claude". */
+  binary?: string;
+}
 
-const CLAUDE_EFFORTS: EffortDescriptor[] = [
-  { id: "low", displayName: "Low" },
-  { id: "medium", displayName: "Medium" },
-  { id: "high", displayName: "High" },
-  { id: "xhigh", displayName: "X-high" },
-  { id: "max", displayName: "Max" },
-];
-
-/* Phase 0 observed in live transcripts: undated canonical slugs
-   ("claude-opus-4-7"), bare aliases ("opus"), and date-suffixed slugs
-   ("claude-haiku-4-5-20251001"). Canonicalize all three to the
-   stable family slug so badges, validation, and override pinning all
-   speak the same language. */
-const ALIAS_TO_CANONICAL: Record<string, string> = {
-  opus: "claude-opus-4-7",
-  sonnet: "claude-sonnet-4-6",
-  haiku: "claude-haiku-4-5",
-};
-
+/* Live transcripts can contain provider aliases ("fable", "opus") and
+   date-suffixed full slugs ("claude-fable-5-20261001"). Keep aliases as
+   aliases because the current provider CLI accepts and advertises them, while
+   trimming only trailing date suffixes from full slugs for stable display. */
 export function canonicalizeClaudeModelId(raw: string): string {
   const lower = raw.trim().toLowerCase();
-  if (lower in ALIAS_TO_CANONICAL) return ALIAS_TO_CANONICAL[lower]!;
-  // Strip trailing date suffix: "claude-haiku-4-5-20251001" → "claude-haiku-4-5"
-  const stripped = lower.replace(/^(claude-(?:opus|sonnet|haiku)-\d+-\d+)-\d{6,}$/, "$1");
+  const stripped = lower.replace(/^(claude-[a-z0-9]+(?:-\d+)*?)-\d{6,}$/, "$1");
   return stripped;
 }
 
-export function createClaudeAdapter(): RuntimeAdapter {
-  async function listModels(): Promise<ModelDescriptor[]> {
-    return CLAUDE_MODELS;
-  }
-
-  async function listEfforts(): Promise<EffortDescriptor[]> {
-    return CLAUDE_EFFORTS;
-  }
+export function createClaudeAdapter(
+  options: ClaudeAdapterOptions = {},
+): RuntimeAdapter {
+  const runCli = options.runCli ?? defaultRunCli(options.binary ?? "claude");
+  const catalog = createClaudeModelCatalog(runCli);
 
   async function readCurrent(
     ctx: AdapterReadContext,
@@ -82,7 +63,7 @@ export function createClaudeAdapter(): RuntimeAdapter {
     if (!lastModel) return null;
     return {
       model: lastModel,
-      // effort: undefined — Phase 0 confirmed it's not observable
+      // effort: undefined; Claude transcripts do not expose it.
       source: "transcript",
       observedAt: Date.now(),
     };
@@ -108,8 +89,8 @@ export function createClaudeAdapter(): RuntimeAdapter {
 
   return {
     runtimeId: "claude",
-    listModels,
-    listEfforts,
+    listModels: catalog.listModels,
+    listEfforts: catalog.listEfforts,
     readCurrent,
     buildSpawnArgs,
     buildSpawnEnv,

@@ -4,8 +4,10 @@ import {
   projectRootHash,
   fmarkAgentSessionName,
   fmarkTerminalSessionName,
+  fmarkSessionMatchesProjectRoot,
   isFmarkSessionName,
   parseFmarkSessionName,
+  projectHashFromFmarkSessionName,
 } from "../../src/tmux/naming.js";
 
 describe("tmux naming", () => {
@@ -62,6 +64,13 @@ describe("tmux naming", () => {
   it("isFmarkSessionName recognises the convention", () => {
     expect(isFmarkSessionName("fmark-acme-12345678-ag-ag-claude")).toBe(true);
     expect(isFmarkSessionName("random-session")).toBe(false);
+  });
+
+  it("projectHashFromFmarkSessionName extracts the embedded digest", () => {
+    const name = fmarkAgentSessionName(root, "ag-claude");
+    expect(projectHashFromFmarkSessionName(name)).toBe(projectRootHash(root));
+    expect(fmarkSessionMatchesProjectRoot(name, root)).toBe(true);
+    expect(fmarkSessionMatchesProjectRoot(name, "/other/root")).toBe(false);
   });
 
   it("parseFmarkSessionName extracts kind + id", () => {

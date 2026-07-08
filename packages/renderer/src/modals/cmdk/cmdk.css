@@ -1,5 +1,5 @@
-/* Command Palette (⌘K) — ported from planning/redesign/design.html lines
-   577-595. Every color resolves through the theme tokens; only the layout
+/* Command Palette (Cmd+K).
+   Every color resolves through the theme tokens; only the layout
    metrics (sizes, padding, gaps) are inline values. The palette uses the
    shared .modal frame for its border/background/shadow; the .cmdk-* selectors
    here describe the inner column. */
@@ -180,14 +180,31 @@
   color: var(--ink);
 }
 
-/* ============ Skills palette (P9) ============
-   Ported from planning/redesign/design.html `.skills-pal .skill-row …`.
+/* ============ Skills palette ============
+   Shared skill row styling.
    The palette reuses the cmdk frame; these rules override row padding to
    give multi-line skill rows breathing space and define the `.skill-text`
    typography (mono name + serif description). */
-.skills-pal .skill-row {
-  padding: calc(var(--cmdk-row-pad-y) + 2px) 18px;
+.skills-pal .skill-row,
+.skills-pop .skill-row {
+  padding: 0;
   align-items: flex-start;
+  gap: 0;
+}
+.skill-row-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: calc(var(--cmdk-row-pad-y) + 2px) 12px
+    calc(var(--cmdk-row-pad-y) + 2px) 18px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .skill-text {
   flex: 1;
@@ -220,6 +237,36 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border: 0;
+}
+.skill-row-edit {
+  width: 30px;
+  height: 30px;
+  margin: 8px 10px 8px 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  flex-shrink: 0;
+}
+.skill-row:hover .skill-row-edit,
+.skill-row:focus-within .skill-row-edit,
+.skill-row.sel .skill-row-edit {
+  opacity: 1;
+}
+.skill-row-edit:hover {
+  background: var(--canvas);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.skill-row-edit:focus-visible,
+.skill-row-pick:focus-visible {
+  outline: 2px solid var(--ink-4);
+  outline-offset: -2px;
 }
 .skills-agent-select {
   display: inline-flex;

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type {
   IntegrationCheck,
@@ -99,6 +100,25 @@ function isTypeScriptEntrypoint(path: string): boolean {
   return path.endsWith(".ts") || path.endsWith(".tsx");
 }
 
+function isFmarkCliEntrypoint(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/");
+  return (
+    /\/(?:src|dist)\/index\.(?:ts|js)$/.test(normalized) ||
+    /\/bin\/f-mark\.js$/.test(normalized)
+  );
+}
+
+function fmarkModuleEntrypoint(): string | null {
+  const here = fileURLToPath(import.meta.url);
+  if (here.endsWith(join("src", "mcpInstall", "types.ts"))) {
+    return join(dirname(dirname(here)), "index.ts");
+  }
+  if (here.endsWith(join("dist", "mcpInstall", "types.js"))) {
+    return join(dirname(dirname(here)), "index.js");
+  }
+  return null;
+}
+
 function localTsxCommand(entrypoint: string): string {
   const packageRoot = dirname(dirname(entrypoint));
   const binName = process.platform === "win32" ? "tsx.cmd" : "tsx";
@@ -120,8 +140,12 @@ export function fmarkMcpCommandSpec(
     };
   }
 
-  const entrypoint = process.argv[1];
-  if (entrypoint === undefined || entrypoint.length === 0) {
+  const argvEntrypoint = process.argv[1];
+  const entrypoint =
+    argvEntrypoint !== undefined && isFmarkCliEntrypoint(argvEntrypoint)
+      ? argvEntrypoint
+      : fmarkModuleEntrypoint();
+  if (entrypoint === null || entrypoint.length === 0) {
     return {
       command: "f-mark",
       args: ["mcp", "--path", projectRoot],

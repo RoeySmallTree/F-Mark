@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 
 const PARTICIPANT_RE = /^[a-z][a-z0-9-]{0,63}$/;
@@ -38,5 +38,16 @@ export async function readActiveSession(
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw err;
+  }
+}
+
+export async function clearActiveSession(
+  agentsDir: string,
+  participantId: string,
+): Promise<void> {
+  try {
+    await unlink(activeSessionPath(agentsDir, participantId));
+  } catch (err: any) {
+    if (err.code !== "ENOENT") throw err;
   }
 }

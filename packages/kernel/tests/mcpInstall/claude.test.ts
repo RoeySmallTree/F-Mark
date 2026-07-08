@@ -1,65 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { applyClaudeMcp, detectClaudeMcp } from "../../src/mcpInstall/claude.js";
-import { FMARK_MCP_INSTALL_VERSION } from "../../src/mcpInstall/types.js";
-import { FMARK_CLAUDE_ALLOW_ENTRIES } from "../../src/mcp/tools.js";
-
-async function withTempHome(
-  fn: (ctx: { projectRoot: string; home: string }) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), "fmark-claude-mcp-"));
-  const projectRoot = join(root, "project");
-  const home = join(root, "home");
-  try {
-    await mkdir(projectRoot, { recursive: true });
-    await mkdir(home, { recursive: true });
-    await fn({ projectRoot, home });
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-}
+import {
+  applyClaude,
+  cliFmarkServer,
+  detectClaude,
+  expectAllFmarkAllowEntries,
+  expectClaudeLocation,
+  expectProjectFmarkServer,
+  expectProjectMcpMissing,
+  firstFmarkAllowEntry,
+  readClaudeJson,
+  readProjectSettingsAllow,
+  readUserMcpJson,
+  readUserSettingsAllow,
+  versionedNodeServer,
+  withTempHome,
+  writeClaudeJson,
+  writeClaudeProjectEnabled,
+  writeClaudeProjectPending,
+  writeProjectFmarkServer,
+  writeProjectLocalFmarkAllowEntries,
+  writeProjectLocalSettingsJson,
+  writeProjectLocalSettingsRaw,
+  writeProjectMcpJson,
+  writeUserFmarkAllowEntries,
+  writeUserMcpJson,
+} from "./claude/helpers.js";
 
 describe("Claude MCP install", () => {
   it("project apply writes .mcp.json and enables fmark in ~/.claude.json", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const claudeJson = join(home, ".claude.json");
-      await writeFile(
-        claudeJson,
-        JSON.stringify({
-          projects: {
-            [projectRoot]: {
-              enabledMcpjsonServers: ["other"],
-              disabledMcpjsonServers: ["fmark", "legacy"],
-            },
+    await withTempHome(async (ctx) => {
+      const { projectRoot } = ctx;
+      await writeClaudeJson(ctx, {
+        projects: {
+          [projectRoot]: {
+            enabledMcpjsonServers: ["other"],
+            disabledMcpjsonServers: ["fmark", "legacy"],
           },
-        }),
-      );
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-
-      const applied = await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env,
+        },
       });
 
+      const applied = await applyClaude(ctx, "project");
+
       expect(applied.changed).toBe(true);
-      const projectConfig = JSON.parse(
-        await readFile(join(projectRoot, ".mcp.json"), "utf8"),
-      );
-      expect(projectConfig.mcpServers.fmark.command).toBe("fmark-dev");
-      expect(projectConfig.mcpServers.fmark.args).toEqual([
-        "mcp",
-        "--path",
-        projectRoot,
-      ]);
-      const userConfig = JSON.parse(await readFile(claudeJson, "utf8"));
+      await expectProjectFmarkServer(ctx);
+      const userConfig = await readClaudeJson(ctx);
       expect(
         userConfig.projects[projectRoot].enabledMcpjsonServers,
       ).toContain("fmark");
@@ -67,175 +51,109 @@ describe("Claude MCP install", () => {
         userConfig.projects[projectRoot].disabledMcpjsonServers,
       ).not.toContain("fmark");
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env,
-      });
+      const detected = await detectClaude(ctx);
       expect(detected.locations[0]?.status).toBe("installed");
     });
   });
 
   it("project apply removes competing user, local, and legacy fmark definitions", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "node",
-              args: ["/tmp/old.ts", "mcp", "--path", "/tmp/old-project"],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
+    await withTempHome(async (ctx) => {
+      const { projectRoot, home } = ctx;
+      await writeProjectMcpJson(ctx, {
+        mcpServers: {
+          fmark: versionedNodeServer("/tmp/old.ts", "/tmp/old-project"),
+          "fmark-old": versionedNodeServer(
+            "/tmp/alias.ts",
+            "/tmp/old-project",
+          ),
+          unrelated: {
+            command: "echo",
+            args: ["ok"],
           },
-        }),
-      );
-      await writeFile(
-        join(home, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "node",
-              args: ["/tmp/legacy.ts", "mcp", "--path", home],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
+        },
+      });
+      await writeUserMcpJson(ctx, {
+        mcpServers: {
+          fmark: versionedNodeServer("/tmp/legacy.ts", home),
+          "f-mark": cliFmarkServer(projectRoot),
+        },
+      });
+      await writeClaudeJson(ctx, {
+        mcpServers: {
+          fmark: versionedNodeServer("/tmp/user.ts", "/tmp/user"),
+          "fmark-old": versionedNodeServer("/tmp/user-alias.ts", "/tmp/user"),
+        },
+        projects: {
+          [projectRoot]: {
+            mcpServers: {
+              fmark: versionedNodeServer("/tmp/local.ts", "/tmp/local"),
+              "f-mark": cliFmarkServer(projectRoot),
             },
+            enabledMcpjsonServers: ["fmark", "f-mark", "fmark-old", "other"],
+            disabledMcpjsonServers: ["f-mark", "fmark-old", "legacy"],
           },
-        }),
-      );
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "node",
-              args: ["/tmp/user.ts", "mcp", "--path", "/tmp/user"],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-          projects: {
-            [projectRoot]: {
-              mcpServers: {
-                fmark: {
-                  command: "node",
-                  args: ["/tmp/local.ts", "mcp", "--path", "/tmp/local"],
-                  env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-                },
-              },
-              enabledMcpjsonServers: ["fmark"],
-            },
-          },
-        }),
-      );
-
-      await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env,
+        },
       });
 
-      const projectConfig = JSON.parse(
-        await readFile(join(projectRoot, ".mcp.json"), "utf8"),
-      );
-      expect(projectConfig.mcpServers.fmark.command).toBe("fmark-dev");
-      expect(projectConfig.mcpServers.fmark.args).toEqual([
-        "mcp",
-        "--path",
-        projectRoot,
-      ]);
+      await applyClaude(ctx, "project");
 
-      const userConfig = JSON.parse(await readFile(join(home, ".claude.json"), "utf8"));
+      const projectConfig = await expectProjectFmarkServer(ctx);
+      expect(projectConfig.mcpServers["fmark-old"]).toBeUndefined();
+      expect(projectConfig.mcpServers.unrelated).toBeDefined();
+
+      const userConfig = await readClaudeJson(ctx);
       expect(userConfig.mcpServers?.fmark).toBeUndefined();
+      expect(userConfig.mcpServers?.["fmark-old"]).toBeUndefined();
       expect(userConfig.projects[projectRoot].mcpServers?.fmark).toBeUndefined();
-      expect(userConfig.projects[projectRoot].enabledMcpjsonServers).toContain("fmark");
+      expect(
+        userConfig.projects[projectRoot].mcpServers?.["f-mark"],
+      ).toBeUndefined();
+      expect(
+        userConfig.projects[projectRoot].enabledMcpjsonServers,
+      ).toContain("fmark");
+      expect(
+        userConfig.projects[projectRoot].enabledMcpjsonServers,
+      ).toContain("other");
+      expect(
+        userConfig.projects[projectRoot].enabledMcpjsonServers,
+      ).not.toContain("f-mark");
+      expect(
+        userConfig.projects[projectRoot].enabledMcpjsonServers,
+      ).not.toContain("fmark-old");
+      expect(
+        userConfig.projects[projectRoot].disabledMcpjsonServers,
+      ).toContain("legacy");
+      expect(
+        userConfig.projects[projectRoot].disabledMcpjsonServers,
+      ).not.toContain("f-mark");
+      expect(
+        userConfig.projects[projectRoot].disabledMcpjsonServers,
+      ).not.toContain("fmark-old");
 
-      const legacy = JSON.parse(await readFile(join(home, ".mcp.json"), "utf8"));
+      const legacy = await readUserMcpJson(ctx);
       expect(legacy.mcpServers?.fmark).toBeUndefined();
+      expect(legacy.mcpServers?.["f-mark"]).toBeUndefined();
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env,
-      });
+      const detected = await detectClaude(ctx);
       expect(detected.status).toBe("installed");
     });
   });
 
   it("detect marks a same-version project server stale when it points elsewhere", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: {
-            [projectRoot]: { enabledMcpjsonServers: ["fmark"] },
-          },
-        }),
-      );
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "fmark-dev",
-              args: ["mcp", "--path", "/tmp/not-this-project"],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-        }),
-      );
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
-      await writeFile(
-        join(projectRoot, ".claude", "settings.local.json"),
-        JSON.stringify({
-          permissions: { allow: [...FMARK_CLAUDE_ALLOW_ENTRIES] },
-        }),
-      );
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectEnabled(ctx);
+      await writeProjectFmarkServer(ctx, "/tmp/not-this-project");
+      await writeProjectLocalFmarkAllowEntries(ctx);
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
-      });
-
-      const projectLoc = detected.locations.find((loc) => loc.scope === "project");
-      expect(projectLoc?.status).toBe("stale");
-      expect(projectLoc?.reason).toMatch(/project path/);
+      await expectClaudeLocation(ctx, "project", "stale", /project path/);
     });
   });
 
   it("marks project MCP stale when Claude has not enabled the project server", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "fmark-dev",
-              args: ["mcp", "--path", projectRoot],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-        }),
-      );
+    await withTempHome(async (ctx) => {
+      await writeProjectFmarkServer(ctx);
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
-      });
+      const detected = await detectClaude(ctx);
 
       expect(detected.locations[0]?.status).toBe("stale");
       expect(detected.locations[0]?.reason).toMatch(/enabledMcpjsonServers/);
@@ -243,397 +161,147 @@ describe("Claude MCP install", () => {
   });
 
   it("project apply writes every fmark MCP tool to settings.local.json permissions.allow", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: { [projectRoot]: { enabledMcpjsonServers: [] } },
-        }),
-      );
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectPending(ctx);
 
-      await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env,
-      });
+      await applyClaude(ctx, "project");
 
-      const settings = JSON.parse(
-        await readFile(join(projectRoot, ".claude", "settings.local.json"), "utf8"),
-      );
-      const allow = settings.permissions?.allow;
+      const allow = await readProjectSettingsAllow(ctx);
       expect(Array.isArray(allow)).toBe(true);
-      for (const entry of FMARK_CLAUDE_ALLOW_ENTRIES) {
-        expect(allow).toContain(entry);
-      }
+      expectAllFmarkAllowEntries(allow);
     });
   });
 
   it("project apply preserves existing permissions.allow entries", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const settingsPath = join(projectRoot, ".claude", "settings.local.json");
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
-      await writeFile(
-        settingsPath,
-        JSON.stringify({
-          permissions: { allow: ["Bash(ls:*)", "mcp__fmark__fmark_post_prose"] },
-        }),
-      );
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: { [projectRoot]: { enabledMcpjsonServers: [] } },
-        }),
-      );
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-
-      await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env,
+    await withTempHome(async (ctx) => {
+      await writeProjectLocalSettingsJson(ctx, {
+        permissions: { allow: ["Bash(ls:*)", "mcp__fmark__fmark_post_prose"] },
       });
+      await writeClaudeProjectPending(ctx);
 
-      const settings = JSON.parse(await readFile(settingsPath, "utf8"));
-      const allow = settings.permissions.allow as string[];
+      await applyClaude(ctx, "project");
+
+      const allow = await readProjectSettingsAllow(ctx);
       expect(allow).toContain("Bash(ls:*)");
       /* Idempotent: existing fmark entry not duplicated. */
-      const matches = allow.filter((item) => item === "mcp__fmark__fmark_post_prose");
+      const matches = allow.filter(
+        (item) => item === "mcp__fmark__fmark_post_prose",
+      );
       expect(matches.length).toBe(1);
-      for (const entry of FMARK_CLAUDE_ALLOW_ENTRIES) {
-        expect(allow).toContain(entry);
-      }
+      expectAllFmarkAllowEntries(allow);
     });
   });
 
   it("user apply writes permissions.allow to ~/.claude/settings.json", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
+    await withTempHome(async (ctx) => {
+      await applyClaude(ctx, "user");
 
-      await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "user",
-        projectRoot,
-        env,
-      });
-
-      const settings = JSON.parse(
-        await readFile(join(home, ".claude", "settings.json"), "utf8"),
-      );
-      const allow = settings.permissions.allow as string[];
-      for (const entry of FMARK_CLAUDE_ALLOW_ENTRIES) {
-        expect(allow).toContain(entry);
-      }
+      const allow = await readUserSettingsAllow(ctx);
+      expectAllFmarkAllowEntries(allow);
     });
   });
 
   it("detect reports stale when permissions.allow is missing fmark entries", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const claudeJson = join(home, ".claude.json");
-      await writeFile(
-        claudeJson,
-        JSON.stringify({
-          projects: {
-            [projectRoot]: { enabledMcpjsonServers: ["fmark"] },
-          },
-        }),
-      );
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "fmark-dev",
-              args: ["mcp", "--path", projectRoot],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-        }),
-      );
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectEnabled(ctx);
+      await writeProjectFmarkServer(ctx);
       /* No .claude/settings.local.json — permissions.allow is missing. */
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
-      });
-
-      const projectLoc = detected.locations.find((loc) => loc.scope === "project");
-      expect(projectLoc?.status).toBe("stale");
-      expect(projectLoc?.reason).toMatch(/permissions\.allow/);
+      await expectClaudeLocation(ctx, "project", "stale", /permissions\.allow/);
     });
   });
 
   it("detect treats allow entries in ~/.claude/settings.json as effective for project scope", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: {
-            [projectRoot]: { enabledMcpjsonServers: ["fmark"] },
-          },
-        }),
-      );
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "fmark-dev",
-              args: ["mcp", "--path", projectRoot],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-        }),
-      );
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectEnabled(ctx);
+      await writeProjectFmarkServer(ctx);
       /* All allow entries live in user-global settings, not .local. */
-      await mkdir(join(home, ".claude"), { recursive: true });
-      await writeFile(
-        join(home, ".claude", "settings.json"),
-        JSON.stringify({
-          permissions: { allow: [...FMARK_CLAUDE_ALLOW_ENTRIES] },
-        }),
-      );
+      await writeUserFmarkAllowEntries(ctx);
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
-      });
-
-      const projectLoc = detected.locations.find((loc) => loc.scope === "project");
-      expect(projectLoc?.status).toBe("installed");
+      await expectClaudeLocation(ctx, "project", "installed");
     });
   });
 
   it("detect blocks when a permissions file's top-level JSON is not an object", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: {
-            [projectRoot]: { enabledMcpjsonServers: ["fmark"] },
-          },
-        }),
-      );
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "fmark-dev",
-              args: ["mcp", "--path", projectRoot],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-        }),
-      );
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectEnabled(ctx);
+      await writeProjectFmarkServer(ctx);
       /* Valid JSON but not an object — should be rejected as invalid. */
-      await writeFile(
-        join(projectRoot, ".claude", "settings.local.json"),
-        "[]",
+      await writeProjectLocalSettingsRaw(ctx, "[]");
+
+      const projectLoc = await expectClaudeLocation(
+        ctx,
+        "project",
+        "blocked",
+        /must be a JSON object/,
       );
-
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
-      });
-
-      const projectLoc = detected.locations.find((loc) => loc.scope === "project");
-      expect(projectLoc?.status).toBe("blocked");
       expect(projectLoc?.safe_auto_apply).toBe(false);
-      expect(projectLoc?.reason).toMatch(/must be a JSON object/);
     });
   });
 
   it("apply preflight rejects a non-object top-level settings file before mutation", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
-      await writeFile(
-        join(projectRoot, ".claude", "settings.local.json"),
-        "[]",
-      );
+    await withTempHome(async (ctx) => {
+      await writeProjectLocalSettingsRaw(ctx, "[]");
 
       await expect(
-        applyClaudeMcp({
-          runtimeId: "claude",
-          scope: "project",
-          projectRoot,
-          env,
-        }),
+        applyClaude(ctx, "project"),
       ).rejects.toThrow(/must be a JSON object/);
-      await expect(
-        readFile(join(projectRoot, ".mcp.json"), "utf8"),
-      ).rejects.toThrow();
+      await expectProjectMcpMissing(ctx);
     });
   });
 
   it("detect blocks (and refuses safe auto-apply) when a permissions file is malformed", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: {
-            [projectRoot]: { enabledMcpjsonServers: ["fmark"] },
-          },
-        }),
-      );
-      await writeFile(
-        join(projectRoot, ".mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            fmark: {
-              command: "fmark-dev",
-              args: ["mcp", "--path", projectRoot],
-              env: { F_MARK_MCP_VERSION: FMARK_MCP_INSTALL_VERSION },
-            },
-          },
-        }),
-      );
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
-      await writeFile(
-        join(projectRoot, ".claude", "settings.local.json"),
-        "{ not valid json",
-      );
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectEnabled(ctx);
+      await writeProjectFmarkServer(ctx);
+      await writeProjectLocalSettingsRaw(ctx, "{ not valid json");
 
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
-      });
-
-      const projectLoc = detected.locations.find((loc) => loc.scope === "project");
-      expect(projectLoc?.status).toBe("blocked");
+      const projectLoc = await expectClaudeLocation(
+        ctx,
+        "project",
+        "blocked",
+        /invalid JSON/,
+      );
       expect(projectLoc?.safe_auto_apply).toBe(false);
-      expect(projectLoc?.reason).toMatch(/invalid JSON/);
     });
   });
 
   it("apply preflight throws on malformed settings without mutating .mcp.json", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
-      await writeFile(
-        join(projectRoot, ".claude", "settings.local.json"),
-        "{ not valid json",
-      );
+    await withTempHome(async (ctx) => {
+      await writeProjectLocalSettingsRaw(ctx, "{ not valid json");
 
       await expect(
-        applyClaudeMcp({
-          runtimeId: "claude",
-          scope: "project",
-          projectRoot,
-          env,
-        }),
+        applyClaude(ctx, "project"),
       ).rejects.toThrow(/blocked Claude permissions config/);
 
       /* .mcp.json must NOT exist — we preflight before mutating anything. */
-      await expect(
-        readFile(join(projectRoot, ".mcp.json"), "utf8"),
-      ).rejects.toThrow();
+      await expectProjectMcpMissing(ctx);
     });
   });
 
   it("apply twice is idempotent (changed=false the second time)", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: { [projectRoot]: { enabledMcpjsonServers: [] } },
-        }),
-      );
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-      const first = await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env,
-      });
+    await withTempHome(async (ctx) => {
+      await writeClaudeProjectPending(ctx);
+
+      const first = await applyClaude(ctx, "project");
       expect(first.changed).toBe(true);
 
-      const second = await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env,
-      });
+      const second = await applyClaude(ctx, "project");
       expect(second.changed).toBe(false);
     });
   });
 
   it("apply preserves existing non-fmark allow entries verbatim", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const settingsPath = join(projectRoot, ".claude", "settings.local.json");
-      await mkdir(join(projectRoot, ".claude"), { recursive: true });
+    await withTempHome(async (ctx) => {
       const existingNonFmark = ["Bash(ls:*)", "Bash(git status:*)", "Read(*.md)"];
-      await writeFile(
-        settingsPath,
-        JSON.stringify({ permissions: { allow: existingNonFmark } }),
-      );
-      await writeFile(
-        join(home, ".claude.json"),
-        JSON.stringify({
-          projects: { [projectRoot]: { enabledMcpjsonServers: [] } },
-        }),
-      );
-
-      await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "project",
-        projectRoot,
-        env: {
-          HOME: home,
-          F_MARK_MCP_COMMAND: "fmark-dev",
-          F_MARK_MCP_ARGS: '["mcp"]',
-        },
+      await writeProjectLocalSettingsJson(ctx, {
+        permissions: { allow: existingNonFmark },
       });
+      await writeClaudeProjectPending(ctx);
 
-      const settings = JSON.parse(await readFile(settingsPath, "utf8"));
-      const allow = settings.permissions.allow as string[];
+      await applyClaude(ctx, "project");
+
+      const allow = await readProjectSettingsAllow(ctx);
       for (const entry of existingNonFmark) {
         expect(allow).toContain(entry);
       }
@@ -641,41 +309,20 @@ describe("Claude MCP install", () => {
          the freshly added fmark entries because Set iteration is insertion
          order in JS). */
       const firstNonFmarkIndex = allow.indexOf(existingNonFmark[0]!);
-      const firstFmarkIndex = allow.indexOf(FMARK_CLAUDE_ALLOW_ENTRIES[0]!);
+      const firstFmarkIndex = allow.indexOf(firstFmarkAllowEntry());
       expect(firstNonFmarkIndex).toBeLessThan(firstFmarkIndex);
     });
   });
 
   it("local scope apply writes permissions to .claude/settings.local.json", async () => {
-    await withTempHome(async ({ projectRoot, home }) => {
-      const env = {
-        HOME: home,
-        F_MARK_MCP_COMMAND: "fmark-dev",
-        F_MARK_MCP_ARGS: '["mcp"]',
-      };
-      await applyClaudeMcp({
-        runtimeId: "claude",
-        scope: "local",
-        projectRoot,
-        env,
-      });
+    await withTempHome(async (ctx) => {
+      await applyClaude(ctx, "local");
 
-      const settings = JSON.parse(
-        await readFile(join(projectRoot, ".claude", "settings.local.json"), "utf8"),
-      );
-      const allow = settings.permissions.allow as string[];
-      for (const entry of FMARK_CLAUDE_ALLOW_ENTRIES) {
-        expect(allow).toContain(entry);
-      }
+      const allow = await readProjectSettingsAllow(ctx);
+      expectAllFmarkAllowEntries(allow);
 
       /* Detect should now report `local` as installed too. */
-      const detected = await detectClaudeMcp({
-        runtimeId: "claude",
-        projectRoot,
-        env,
-      });
-      const localLoc = detected.locations.find((loc) => loc.scope === "local");
-      expect(localLoc?.status).toBe("installed");
+      await expectClaudeLocation(ctx, "local", "installed");
     });
   });
 });

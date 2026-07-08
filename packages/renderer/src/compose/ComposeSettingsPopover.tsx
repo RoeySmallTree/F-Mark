@@ -7,6 +7,10 @@ interface Props {
   onClose(): void;
   messageEndsTurn: boolean;
   onMessageEndsTurnChange(value: boolean): void;
+  commentEndsTurn: boolean;
+  onCommentEndsTurnChange(value: boolean): void;
+  choiceEndsTurn: boolean;
+  onChoiceEndsTurnChange(value: boolean): void;
   enterToSend: boolean;
   onEnterToSendChange(value: boolean): void;
 }
@@ -16,6 +20,10 @@ export function ComposeSettingsPopover({
   onClose,
   messageEndsTurn,
   onMessageEndsTurnChange,
+  commentEndsTurn,
+  onCommentEndsTurnChange,
+  choiceEndsTurn,
+  onChoiceEndsTurnChange,
   enterToSend,
   onEnterToSendChange,
 }: Props): JSX.Element {
@@ -39,6 +47,24 @@ export function ComposeSettingsPopover({
             onChange={(e) => onMessageEndsTurnChange(e.target.checked)}
           />
           <span className="toggle-label">Send ends turn automatically</span>
+        </label>
+        <label className="settings-toggle mt-3">
+          <input
+            type="checkbox"
+            checked={commentEndsTurn}
+            onChange={(e) => onCommentEndsTurnChange(e.target.checked)}
+          />
+          <span className="toggle-label">Comments end turn automatically</span>
+        </label>
+        <label className="settings-toggle mt-3">
+          <input
+            type="checkbox"
+            checked={choiceEndsTurn}
+            onChange={(e) => onChoiceEndsTurnChange(e.target.checked)}
+          />
+          <span className="toggle-label">
+            Choosing options ends turn automatically
+          </span>
         </label>
         <label className="settings-toggle mt-3">
           <input

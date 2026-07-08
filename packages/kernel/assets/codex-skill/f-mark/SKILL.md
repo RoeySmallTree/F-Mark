@@ -19,7 +19,7 @@ If cwd contains `.f-mark/`, F-Mark is active. Read `.f-mark/AGENT.md` for the up
 F-Mark v0.4 added the ability for the kernel to launch this agent for the user via a `+` button in the UI. When that happens:
 - The kernel creates a detached tmux session running this agent CLI.
 - It writes `.f-mark/agents/<your-id>/tmux-session` and `runtime` pointers automatically.
-- The user pastes the auto-stream hook snippet for this agent's id into their runtime config (the kernel renders the snippet via `GET /managed-agents/hook-install-instructions`).
+- The kernel applies and reconciles the managed runtime integration for the chosen scope during setup.
 - Once hooks fire, presence flips online and your contributions stream automatically.
 
 You don't need to handle the managed-vs-manual distinction in your code — both paths converge on the same auto-stream hook. The only side-effect for you: if you see `.f-mark/agents/<your-id>/tmux-session`, your process is being supervised by the kernel.
@@ -29,11 +29,14 @@ You don't need to handle the managed-vs-manual distinction in your code — both
 2. `POST /agents/<participant_id>/link` with `{ "session_id": "<chosen>" }`.
 3. The user's participant id needs the same active-session pointer for the UserPromptSubmit hook to know where to log their prompts. After your own link succeeds, query `GET /participants?kind=user` to find the user(s). If there's exactly one, also `POST /agents/<user-id>/link` with the same `session_id`. If multiple users exist, ask via a `choices` event or pick the one matching `currentUserId` if exposed.
 
+## Session naming
+Sessions open with a placeholder name (`new-session`). Once you know what the session is about — usually after the first user message — rename it with the `fmark_rename_session` MCP tool (or `PATCH /sessions/:id` with `{ "slug": "..." }`) using a short kebab-case slug like `fix-login-flow`. If no request has arrived yet, leave the placeholder; never invent a name. The session id is immutable: renaming only changes the display slug, so keep using the same id. Don't rename sessions that already have a real name unless the user asks.
+
 ## Install the auto-stream hook (one-time per project)
 
-Codex CLI supports lifecycle hooks identical in spirit to Claude Code's. Output streams automatically — you only call the API for *structured* contributions.
+Codex CLI supports lifecycle hooks identical in spirit to Claude Code's. Output streams automatically where Codex exposes a hook — you only call the API for *structured* contributions.
 
-Two hooks to install: one for the assistant's turn (your id), one for user prompts (the user's id).
+Install hooks for final assistant text, live tool calls, permission requests, and user prompts.
 
 1. Check whether `.codex/config.toml` (project-level) or `~/.codex/config.toml` (user-level) already has F-Mark hook entries. The project-level config takes precedence and is preferred for F-Mark integration (scopes the hook to this project only).
 
@@ -49,6 +52,14 @@ timeout = 30
 [[hooks.UserPromptSubmit]]
 command = ["npx", "-y", "f-mark", "hook", "auto-stream", "us-username", "--kind", "user"]
 timeout = 10
+
+[[hooks.PermissionRequest]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-yourname"]
+timeout = 300
+
+[[hooks.PostToolUse]]
+command = ["npx", "-y", "f-mark", "hook", "auto-stream", "ag-codex-yourname"]
+timeout = 30
 ```
 
 Substitute `ag-codex-yourname` with your registered agent id and `us-username` with the user's.
@@ -59,9 +70,11 @@ Substitute `ag-codex-yourname` with your registered agent id and `us-username` w
 
 ## What streams automatically
 Once the hook is active, every assistant turn flows into the session as:
-- mid-turn text → prose with `arbitrary: true`
-- tool calls → `tool-use` events
-- final text → prose with `arbitrary: false`, followed by `turn-end`
+- live tool calls -> `tool-use` events
+- final text -> prose with `arbitrary: false`, followed by `turn-end`
+- user prompts -> prose as the user participant
+
+Codex does not currently expose a `MessageDisplay`-style assistant text hook, so mid-run assistant narration still needs an explicit MCP/REST post if it must appear before Stop.
 
 You do NOT POST these manually.
 
@@ -70,9 +83,15 @@ You do NOT POST these manually.
 - **Comments anchored to lines**: `POST /events/prose` with `target: { file, lines }`.
 - **Replies**: `POST /events/prose` with `in_reply_to`.
 - **Revisions**: `POST /events/prose` with `supersedes`.
-- **Todos / choices / file / html / flow**: their dedicated endpoints.
+- **Todos / choices / alternatives / file / html / flow**: their dedicated endpoints.
 
-**Flow charts / diagrams.** When the user asks for a diagram, flowchart, pipeline, or decision tree — or whenever you'd otherwise reach for ASCII art — POST `/sessions/<id>/events/flow` with `{ id, nodes, edges }`. See `api.md` for the full schema. Nodes support `itemType` (info/success/danger/disabled), `focused: true` for emphasis, and `popover: { html, css?, js? }` for click-to-reveal detail. Edges support `style: flowing` for animated dashes.
+**Never draw ASCII art.** Any visual or structural output must use a real surface, not characters arranged in prose. No box-drawing, no "diagram in a code block", no hand-aligned trees of pipes and dashes. Markdown prose, tables, and lists are fine for ordinary text.
+
+**Flow charts / diagrams.** When the user asks for a diagram, flowchart, pipeline, decision tree, dependency graph, or state machine — or whenever you'd otherwise reach for ASCII art — POST `/sessions/<id>/events/flow` with `{ id, nodes, edges }`. It renders as an interactive graph. See `api.md` for the full schema. Nodes support `itemType` (info/success/danger/disabled), `focused: true` for emphasis, and `popover: { html, css?, js? }` for click-to-reveal detail. Edges support `style: flowing` for animated dashes. Omit `position` to get auto-layout.
+
+**Rendered UI / rich visuals.** For a rendered UI, mockup, chart, or any rich visual, POST `/sessions/<id>/events/html` with `{ html, css?, js?, title? }` — a sandboxed bundle, never ASCII. **The posting surface is not the design target — theme the output to its destination, one of three visual targets:** target-repo-ui (UI for a specific repo or product — the current project or another) → match *that* target's own design system, reading its source first, not F-Mark's applied theme; fmark-ui (UI that ships in F-Mark itself) → read the real renderer source under `packages/renderer/src` and reuse its class names/structure, resolving colors via `GET /theme`; session-artifact (an unbound chart, analysis, preview) → default to the Amber house theme (`GET /theme?theme=amber`) and build with its tokens instead of inventing colors. To present several designs to compare and pick from, POST `/sessions/<id>/events/alternatives` (the same destination rule applies).
+
+**Documents vs conversation.** Two surfaces. The **document** is named, composed, and durable — put substantial structured work (plans, specs, designs, analyses) there, built from a named anchor plus `append_to` blocks (prose, flow, html, file, todo, choices, tool-use). The **conversation** is messages and turns — use unnamed prose for back-and-forth. Choose deliberately. **One anchor per deliverable:** a new plan, answer, or artifact opens its **own** new named anchor — `append_to` only extends the document you are *currently* building, never a document from an earlier turn just because it is still on screen.
 
 When you POST manually, do NOT set `arbitrary: true` — manual posts are by definition deliberate.
 

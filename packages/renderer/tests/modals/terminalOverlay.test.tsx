@@ -128,6 +128,7 @@ describe("TerminalOverlay", () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     cleanup();
   });
@@ -232,6 +233,7 @@ describe("TerminalOverlay", () => {
   });
 
   it("user-typed input flows out via pane.input on the WS", async () => {
+    vi.useFakeTimers();
     const { TerminalOverlay } = await importOverlay();
     render(
       <TerminalOverlay
@@ -243,6 +245,9 @@ describe("TerminalOverlay", () => {
     );
     const term = instances[0]!;
     act(() => term.fireInput("hello"));
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
     const ws = wsInstances[0]!;
     expect(ws.sent).toContain(
       JSON.stringify({ type: "pane.input", data: "hello" }),

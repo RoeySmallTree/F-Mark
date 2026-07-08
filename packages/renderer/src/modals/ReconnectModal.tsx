@@ -1,4 +1,9 @@
-/* ReconnectModal — Phase 12.
+const NO_LOOSE_STRING_VALUES = {
+  copied: "Copied",
+  copy: "Copy",
+} as const;
+
+/* ReconnectModal.
    Opens when the user wants to walk an offline agent back into a session.
    Fetches `/guide?agent_id=…&session_id=…&runtime_id=…` (text/markdown),
    renders the body, and exposes a Copy button so the user can paste the
@@ -140,7 +145,7 @@ export function ReconnectModal({
                 void onCopy();
               }}
             >
-              {copied ? "Copied" : "Copy"}
+              {copied ? NO_LOOSE_STRING_VALUES.copied : NO_LOOSE_STRING_VALUES.copy}
             </button>
             <button type="button" className="btn-solid" onClick={onClose}>
               Done

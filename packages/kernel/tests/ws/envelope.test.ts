@@ -97,6 +97,30 @@ describe("wrapBusWithEnvelope", () => {
     }
   });
 
+  it("passes paths-updated through unchanged (registry event, not root-owned)", () => {
+    const cfg = mkdtempSync(join(tmpdir(), "fmark-env-cfg-"));
+    try {
+      const ref = new PathContextRef({
+        global: globalPaths(cfg),
+        active: null,
+      }, 11);
+      const raw = fakeBus();
+      const wrapped = wrapBusWithEnvelope(raw, ref);
+
+      wrapped.publish({
+        type: "paths-updated",
+        paths: [{ path: "/foo", path_id: "abc123def456" }],
+      });
+
+      const m = raw.messages[0]!;
+      expect(m.type).toBe("paths-updated");
+      expect("pathId" in m).toBe(false);
+      expect("revision" in m).toBe(false);
+    } finally {
+      rmSync(cfg, { recursive: true, force: true });
+    }
+  });
+
   it("does not overwrite explicit pathId/revision from publisher", () => {
     const cfg = mkdtempSync(join(tmpdir(), "fmark-env-cfg-"));
     try {
@@ -116,6 +140,37 @@ describe("wrapBusWithEnvelope", () => {
 
       expect(raw.messages[0]!.pathId).toBe("explicitpathid");
       expect(raw.messages[0]!.revision).toBe(99);
+    } finally {
+      rmSync(cfg, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT inject the active revision when the publisher scoped a pathId (X2 background root)", () => {
+    const cfg = mkdtempSync(join(tmpdir(), "fmark-env-cfg-"));
+    try {
+      // Active path carries revision 7, but the publish targets a BACKGROUND
+      // root's pathId — the active revision must not be injected, or the
+      // renderer's revision filter would mishandle a (wrong-pathId,
+      // active-revision) envelope.
+      const ref = new PathContextRef(
+        { global: globalPaths(cfg), active: null },
+        7,
+      );
+      const raw = fakeBus();
+      const wrapped = wrapBusWithEnvelope(raw, ref);
+
+      wrapped.publish({
+        type: "event_added",
+        session_id: "s",
+        filename: "f",
+        kind: "prose",
+        participant_id: "us-1",
+        pathId: "backgroundpath",
+      });
+
+      const m = raw.messages[0]!;
+      expect(m.pathId).toBe("backgroundpath");
+      expect(m.revision).toBeUndefined();
     } finally {
       rmSync(cfg, { recursive: true, force: true });
     }

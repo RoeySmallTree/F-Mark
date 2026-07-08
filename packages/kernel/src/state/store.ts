@@ -75,12 +75,22 @@ export async function updateState(
 }
 
 function normalize(input: Partial<KernelState>): KernelState {
+  const activePath =
+    typeof input.activePath === "string" ? input.activePath : null;
+  const knownPaths = Array.isArray(input.knownPaths)
+    ? input.knownPaths.filter((p): p is string => typeof p === "string")
+    : [];
+  /* activePath is now a deprecated/default-root hint, not the kernel's
+     authoritative runtime root. Keep old state.json files useful by making
+     the legacy activePath visible in the registry-backed knownPaths list. */
+  const normalizedKnownPaths =
+    activePath !== null && !knownPaths.includes(activePath)
+      ? [activePath, ...knownPaths]
+      : knownPaths;
   return {
-    activePath: typeof input.activePath === "string" ? input.activePath : null,
+    activePath,
     activeRevision: typeof input.activeRevision === "number" ? input.activeRevision : 0,
-    knownPaths: Array.isArray(input.knownPaths)
-      ? input.knownPaths.filter((p): p is string => typeof p === "string")
-      : [],
+    knownPaths: normalizedKnownPaths,
     favorites: Array.isArray(input.favorites)
       ? input.favorites.filter(
           (f): f is Favorite =>

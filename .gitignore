@@ -3,6 +3,10 @@ dist/
 *.log
 .DS_Store
 .env
+.claude/
+.cursor/
+.gemini/
+.mcp.json
 .f-mark/.token
 .f-mark/agents/
 .f-mark/runtimes.json
@@ -12,6 +16,11 @@ dist/
 .playwright-mcp/
 packages/*/f-mark-*.tgz
 *.tsbuildinfo
+tmp-*
+/*.png
 
 # F-Mark project data
 .f-mark/
+
+# planning/scratch docs never ship
+planning/

@@ -1,3 +1,7 @@
+const NO_LOOSE_STRING_VALUES = {
+  presets: "presets",
+} as const;
+
 /* PopoverRoot — single mount point for every popover that uses
    store.activePopover. Mirrors ModalRoot's pattern. Each popover key in
    PopoverKey routes to its component here. The corresponding owner panel
@@ -20,7 +24,7 @@ export function PopoverRoot(): JSX.Element | null {
   const activePopover = useStore((s) => s.activePopover);
   const closePopover = useStore((s) => s.closePopover);
 
-  if (activePopover.key === "presets") {
+  if (activePopover.key === NO_LOOSE_STRING_VALUES.presets) {
     return (
       <PresetsPopover
         anchorRect={activePopover.anchorRect}

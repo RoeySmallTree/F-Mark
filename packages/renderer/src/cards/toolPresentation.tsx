@@ -17,6 +17,11 @@ import {
   type MetaItem,
   type StructuredError,
 } from "./ToolPresentationParts.js";
+import {
+  CommandPresentation,
+  describeShellCommand,
+  splitCommandAndReason,
+} from "./CommandPresentation.js";
 
 export interface PresentationSection {
   title: string;
@@ -28,10 +33,53 @@ export interface ToolPresentation {
   titleDetail?: string;
   status?: string;
   compactInternal?: boolean;
+  intro?: string;
   summary?: string;
   sections: PresentationSection[];
   raw?: unknown;
 }
+
+const fmarkToolPrefixes = {
+  mcp: "mcp__fmark__",
+  selection: "select:mcp__fmark__",
+} as const;
+
+const normalizedToolKinds = {
+  toolSearch: "toolsearch",
+  bash: "bash",
+  shell: "shell",
+  terminal: "terminal",
+  read: "read",
+  view: "view",
+  openFile: "openfile",
+  edit: "edit",
+  multiEdit: "multiedit",
+  write: "write",
+  createFile: "createfile",
+  grep: "grep",
+  glob: "glob",
+  search: "search",
+  ls: "ls",
+  webFetch: "webfetch",
+  webSearch: "websearch",
+  fetch: "fetch",
+} as const;
+
+const resultStateLabels = {
+  yes: "yes",
+  noneExpected: "none expected",
+  waitingForResult: "waiting for result",
+  runtimeFallback: "runtime",
+} as const;
+
+const toolIntroCopy = {
+  editFile: "Edit file",
+  fallbackTarget: "request",
+  fetch: "Fetch",
+  readFile: "Read file",
+  search: "Search for",
+  writeFile: "Write file",
+} as const;
 
 function lowerToolName(name: string | undefined): string {
   return (name ?? "").toLowerCase();
@@ -42,14 +90,14 @@ function normalizedToolKind(name: string | undefined): string {
 }
 
 function isFmarkMcpTool(name: string | undefined): boolean {
-  return lowerToolName(name).startsWith("mcp__fmark__");
+  return lowerToolName(name).startsWith(fmarkToolPrefixes.mcp);
 }
 
 function isFmarkToolSelection(toolName: string | undefined, input: unknown): boolean {
-  if (normalizedToolKind(toolName) !== "toolsearch") return false;
+  if (normalizedToolKind(toolName) !== normalizedToolKinds.toolSearch) return false;
   if (!isRecord(input)) return false;
   const query = firstString(input, ["query", "q"]);
-  return query?.startsWith("select:mcp__fmark__") === true;
+  return query?.startsWith(fmarkToolPrefixes.selection) === true;
 }
 
 function filePathFrom(value: unknown): string | undefined {
@@ -106,6 +154,46 @@ function metaFrom(record: Record<string, unknown>, keys: string[]): MetaItem[] {
 function jsonPreview(value: unknown, max = 320): string {
   const text = stringifyForDisplay(value);
   return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function compactPathLabel(path: string | undefined): string | undefined {
+  return fileNameFromPath(path) ?? path;
+}
+
+function toolIntroWithPath(action: string, path: string | undefined, fallback: string): string {
+  return `${action} ${compactPathLabel(path) ?? fallback}`;
+}
+
+function readIntro(input: unknown, result: unknown, fallback: string): string {
+  const path = filePathFrom(isRecord(input) ? input : {}) ?? filePathFrom(result);
+  return toolIntroWithPath(toolIntroCopy.readFile, path, fallback);
+}
+
+function editIntro(input: unknown, result: unknown, fallback: string): string {
+  const path = filePathFrom(isRecord(input) ? input : {}) ?? filePathFrom(result);
+  return toolIntroWithPath(toolIntroCopy.editFile, path, fallback);
+}
+
+function writeIntro(input: unknown, result: unknown, fallback: string): string {
+  const path = filePathFrom(isRecord(input) ? input : {}) ?? filePathFrom(result);
+  return toolIntroWithPath(toolIntroCopy.writeFile, path, fallback);
+}
+
+function searchIntro(input: unknown, fallback: string): string {
+  if (!isRecord(input)) return `${toolIntroCopy.search} ${fallback}`;
+  const pattern = firstString(input, ["pattern", "query", "glob", "include"]);
+  const path = firstString(input, ["path", "file_path", "filePath"]);
+  if (pattern !== undefined && path !== undefined) {
+    return `${toolIntroCopy.search} ${pattern} in ${compactPathLabel(path) ?? path}`;
+  }
+  if (pattern !== undefined) return `${toolIntroCopy.search} ${pattern}`;
+  return `${toolIntroCopy.search} ${fallback}`;
+}
+
+function webIntro(input: unknown, fallback: string): string {
+  if (!isRecord(input)) return `${toolIntroCopy.fetch} ${fallback}`;
+  const target = firstString(input, ["url", "query", "prompt"]);
+  return `${toolIntroCopy.fetch} ${target ?? fallback}`;
 }
 
 function commandTitle(input: unknown, fallback: string): {
@@ -170,7 +258,10 @@ function bashSections(
     sections.push({ title: "Description", content: <p>{description}</p> });
   }
   if (command !== undefined) {
-    sections.push({ title: "Command", content: <CodeBlock>{command}</CodeBlock> });
+    sections.push({
+      title: "Command",
+      content: <CommandPresentation command={command} input={input} />,
+    });
   }
   sections.push({
     title: "Parameters",
@@ -198,9 +289,21 @@ function bashSections(
       content: (
         <ToolMeta
           items={[
-            { label: "interrupted", value: interrupted ? "yes" : undefined },
-            { label: "output", value: noOutput ? "none expected" : undefined },
-            { label: "state", value: result === undefined ? "waiting for result" : undefined },
+            {
+              label: "interrupted",
+              value: interrupted ? resultStateLabels.yes : undefined,
+            },
+            {
+              label: "output",
+              value: noOutput ? resultStateLabels.noneExpected : undefined,
+            },
+            {
+              label: "state",
+              value:
+                result === undefined
+                  ? resultStateLabels.waitingForResult
+                  : undefined,
+            },
           ]}
         />
       ),
@@ -448,52 +551,77 @@ export function presentToolUse(payload: ToolUsePayload): ToolPresentation | null
     };
   }
 
-  if (kind === "bash" || kind === "shell" || kind === "terminal") {
+  if (
+    kind === normalizedToolKinds.bash ||
+    kind === normalizedToolKinds.shell ||
+    kind === normalizedToolKinds.terminal
+  ) {
     const title = commandTitle(input, toolName);
+    const command = firstString(isRecord(input) ? input : {}, ["command", "cmd", "script"]);
     return {
       ...title,
+      intro: command !== undefined ? describeShellCommand(command) : undefined,
       sections: bashSections(input, result, payload.success),
       raw: { input: payload.input, result: payload.result },
     };
   }
-  if (kind === "read" || kind === "view" || kind === "openfile") {
+  if (
+    kind === normalizedToolKinds.read ||
+    kind === normalizedToolKinds.view ||
+    kind === normalizedToolKinds.openFile
+  ) {
     const path = filePathFrom(isRecord(input) ? input : {}) ?? filePathFrom(result);
     return {
       title: fileNameFromPath(path) ?? toolName,
+      intro: readIntro(input, result, toolName),
       sections: readSections(input, result),
       raw: { input: payload.input, result: payload.result },
     };
   }
-  if (kind === "edit" || kind === "multiedit") {
+  if (
+    kind === normalizedToolKinds.edit ||
+    kind === normalizedToolKinds.multiEdit
+  ) {
     return {
       title: toolName,
+      intro: editIntro(input, result, toolName),
       sections: editSections(input, result),
       raw: { input: payload.input, result: payload.result },
     };
   }
-  if (kind === "write" || kind === "createfile") {
+  if (
+    kind === normalizedToolKinds.write ||
+    kind === normalizedToolKinds.createFile
+  ) {
     return {
       title: toolName,
+      intro: writeIntro(input, result, toolName),
       sections: writeSections(input, result),
       raw: { input: payload.input, result: payload.result },
     };
   }
   if (
-    kind === "grep" ||
-    kind === "glob" ||
-    kind === "search" ||
-    kind === "toolsearch" ||
-    kind === "ls"
+    kind === normalizedToolKinds.grep ||
+    kind === normalizedToolKinds.glob ||
+    kind === normalizedToolKinds.search ||
+    kind === normalizedToolKinds.toolSearch ||
+    kind === normalizedToolKinds.ls
   ) {
     return {
       title: toolName,
+      intro: searchIntro(input, toolName),
       sections: searchSections(input, result),
       raw: { input: payload.input, result: payload.result },
     };
   }
-  if (kind === "webfetch" || kind === "websearch" || kind === "fetch") {
+  if (
+    kind === normalizedToolKinds.webFetch ||
+    kind === normalizedToolKinds.webSearch ||
+    kind === normalizedToolKinds.fetch
+  ) {
     return {
       title: toolName,
+      intro: webIntro(input, toolName),
       sections: webSections(input, result),
       raw: { input: payload.input, result: payload.result },
     };
@@ -531,17 +659,37 @@ export function presentAccessRequest(
   const kind = normalizedToolKind(toolName);
   const sections: PresentationSection[] = [];
 
-  if (request.command !== undefined || kind === "bash" || kind === "shell") {
+  if (
+    request.command !== undefined ||
+    kind === normalizedToolKinds.bash ||
+    kind === normalizedToolKinds.shell
+  ) {
     const inRec = isRecord(input) ? input : {};
-    const command = request.command ?? firstString(inRec, ["command", "cmd"]);
-    const description = firstString(inRec, ["description"]);
-    if (description !== undefined) {
-      sections.push({ title: "Description", content: <p>{description}</p> });
+    const rawCommand = request.command ?? firstString(inRec, ["command", "cmd"]);
+    const explicitReason = firstString(inRec, [
+      "description",
+      "reason",
+      "rationale",
+      "purpose",
+      "summary",
+    ]);
+    const commandInfo =
+      rawCommand !== undefined
+        ? splitCommandAndReason(rawCommand, explicitReason)
+        : undefined;
+    if (commandInfo?.reason !== undefined) {
+      sections.push({ title: "Reason", content: <p>{commandInfo.reason}</p> });
     }
-    if (command !== undefined) {
-      sections.push({ title: "Command", content: <CodeBlock>{command}</CodeBlock> });
+    if (commandInfo !== undefined) {
+      sections.push({
+        title: "Command",
+        content: <CommandPresentation command={commandInfo.command} input={input} />,
+      });
     }
-  } else if (kind === "edit" || kind === "multiedit") {
+  } else if (
+    kind === normalizedToolKinds.edit ||
+    kind === normalizedToolKinds.multiEdit
+  ) {
     sections.push(...editSections(input, undefined));
   } else if (isFmarkMcpTool(request.tool_name)) {
     sections.push(...fmarkPreviewSections(input));
@@ -559,7 +707,10 @@ export function presentAccessRequest(
     content: (
       <ToolMeta
         items={[
-          { label: "runtime", value: request.runtime_id ?? "runtime" },
+          {
+            label: "runtime",
+            value: request.runtime_id ?? resultStateLabels.runtimeFallback,
+          },
           { label: "channel", value: request.response_channel },
           { label: "mode", value: request.permission_mode },
           { label: "cwd", value: request.cwd },

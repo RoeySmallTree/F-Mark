@@ -1,3 +1,8 @@
+const NO_LOOSE_STRING_VALUES = {
+  agent: "agent",
+  claude: "claude",
+} as const;
+
 /* active-agent — small derivation + persistence helpers for the Skills
    palette (P9). The "active agent" controls which `.{agent}/skills/` folder
    is scanned (alongside the generic `.skills/`) by the kernel's
@@ -77,7 +82,7 @@ export function deriveActiveAgent(
      to "most recently registered".) */
   let last: AgentKey = null;
   for (const [id, p] of Object.entries(participants)) {
-    if (p.kind !== "agent") continue;
+    if (p.kind !== NO_LOOSE_STRING_VALUES.agent) continue;
     for (const [prefix, key] of PREFIX_TO_KEY) {
       if (id.startsWith(prefix)) {
         last = key;
@@ -91,7 +96,7 @@ export function deriveActiveAgent(
 /* Map a runtime_id (the canonical per-agent runtime, e.g. "claude",
    "opencode") to an AgentKey. Returns null for unknown/custom runtimes so
    resolution can fall through to other signals. */
-export function runtimeToAgentKey(
+function runtimeToAgentKey(
   runtimeId: string | null | undefined,
 ): AgentKey {
   if (runtimeId === null || runtimeId === undefined) return null;
@@ -109,7 +114,7 @@ export function sessionAgentKey(
 ): AgentKey {
   if (sessionId === null || sessionId === undefined) return null;
   for (const [id, p] of Object.entries(participants)) {
-    if (p.kind !== "agent") continue;
+    if (p.kind !== NO_LOOSE_STRING_VALUES.agent) continue;
     if (p.active_session !== sessionId) continue;
     const byRuntime = runtimeToAgentKey(p.runtime_id);
     if (byRuntime !== null) return byRuntime;
@@ -122,7 +127,7 @@ export function sessionAgentKey(
 
 /* Read the persisted active agent. Returns null if there's no stored choice
    or if the stored value is not one of our known keys. */
-export function readStoredActiveAgent(): AgentKey {
+function readStoredActiveAgent(): AgentKey {
   try {
     const raw = globalThis.localStorage?.getItem(ACTIVE_AGENT_STORAGE_KEY);
     if (raw === null || raw === undefined) return null;
@@ -171,5 +176,5 @@ export function resolveActiveAgent(
   const derived = deriveActiveAgent(participants);
   if (derived !== null) return derived;
   /* Sensible default: claude — most users we're targeting use Claude Code. */
-  return "claude";
+  return NO_LOOSE_STRING_VALUES.claude;
 }

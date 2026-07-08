@@ -1,13 +1,11 @@
-/* ProseInlineBlock — registry dispatcher for embedded blocks inside a
-   ProseCard. Each kind has its own inline renderer; in Phase 6 every
-   renderer is a stub placeholder. Phases 7+ replace each stub with the
-   real embedded variant of the corresponding top-level card.
+/* ProseInlineBlock - registry dispatcher for embedded blocks inside a
+   ProseCard. Each kind has its own inline renderer, matching the
+   corresponding top-level card where possible.
 
    The outer `.prose-embed-frame` wrapper carries
    `data-event-filename` + `data-block-kind` so right-panel comment focus
    (RightComments scrolls to `[data-event-filename]`) still resolves to
-   embedded blocks (see plan.md ProseInlineBlock section, review_2
-   finding C). */
+   embedded blocks. */
 
 import { type FC, type JSX, lazy, Suspense } from "react";
 import type {
@@ -39,12 +37,6 @@ export interface InlineProps {
   participants: Record<string, Participant>;
   comments: AnyEventRecord[];
   mode: MarkdownMode;
-}
-
-function StubBlock({ kind }: { kind: string }): JSX.Element {
-  return (
-    <div className="prose-embed-stub">{kind} block — TODO</div>
-  );
 }
 
 /* Real prose-block renderer. Renders the block's markdown content via
@@ -145,7 +137,7 @@ const INLINE_RENDERERS: Partial<Record<EventKind, FC<InlineProps>>> = {
 
 function UnsupportedBlock({ event }: { event: AnyEventRecord }): JSX.Element {
   return (
-    <div className="prose-embed-stub" data-unsupported>
+    <div className="prose-embed-unsupported" data-unsupported>
       unsupported block kind: {event.kind}
     </div>
   );

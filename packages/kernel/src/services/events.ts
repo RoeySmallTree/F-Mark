@@ -1,5 +1,5 @@
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type {
   AccessRequestPayload,
   AccessResponsePayload,
@@ -33,17 +33,15 @@ import type {
   TodoTreeNode,
   VisibleTodoStatus,
 } from "@f-mark/shared";
-import {
-  composeFilename,
-  isoTimestamp,
-  toIsoTimestamp,
-} from "@f-mark/shared";
+import { composeFilename, isoTimestamp } from "@f-mark/shared";
 import { listParticipants } from "../participants.js";
 import type { Paths } from "../paths.js";
 import { sessionExists } from "../sessions.js";
 import { readEvents } from "../events/reader.js";
 import { serializeProse } from "../events/prose.js";
 import { serializeToolUse } from "../events/toolUse.js";
+import { assembleHtmlBundleIndex } from "../events/htmlBundle.js";
+import { assertWithinSession, bumpMillisecond } from "../events/sessionPath.js";
 import {
   EVENT_FILENAME_RE,
   validateNonProseAppendTo,
@@ -86,6 +84,16 @@ interface TodoSnapshotEntry {
   createdAt: string;
 }
 
+interface TodoSnapshotState {
+  latestById: Map<string, TodoEventRecord>;
+  createdAtById: Map<string, string>;
+}
+
+interface HtmlBundleAllocation {
+  folderName: string;
+  folderPath: string;
+}
+
 const TODO_STATUS_RANK: Record<VisibleTodoStatus, number> = {
   wip: 0,
   open: 1,
@@ -107,7 +115,7 @@ function writeResponse<K extends EventKind>(
 
 function outcome<K extends EventKind, R extends EventWriteResult<K>>(
   response: R,
-  supersedes?: string,
+  supersedes?: string | string[],
 ): EventWriteOutcome<K, R> {
   return {
     response,
@@ -128,24 +136,60 @@ function assertValidation(
   if (!validation.ok) throw new Error(validation.error);
 }
 
+/* Root-scope fields (`root`, `path_id`, legacy hook `path`) are transport-only
+   routing keys (expansion-decisions.md X2). They must never be persisted into
+   durable event JSON. Serializers that spread the remainder of a request body
+   (choices/choice/subagent/access/flow) strip them through this helper so the
+   event schema stays clean. Explicit field-pick serializers (prose, tool-use,
+   todo, html, file, turn-end, alternatives) are already safe. */
+function stripScopeFields<T extends object>(
+  body: T,
+): Omit<T, "root" | "path_id" | "path"> {
+  const {
+    root: _root,
+    path_id: _pathId,
+    path: _path,
+    ...rest
+  } = body as T & { root?: unknown; path_id?: unknown; path?: unknown };
+  return rest as Omit<T, "root" | "path_id" | "path">;
+}
+
+const PROSE_PAYLOAD_FIELDS = [
+  "name",
+  "append_to",
+  "mode",
+  "lines",
+  "file_path",
+  "diff_hunk",
+  "diff_base",
+  "line_context",
+  "removed",
+  "in_reply_to",
+  "supersedes",
+  "source",
+  "arbitrary",
+] as const;
+
+type ProsePayloadField = (typeof PROSE_PAYLOAD_FIELDS)[number];
+
+function assignProsePayloadField(
+  payload: ProsePayload,
+  body: ProseWriteBody,
+  field: ProsePayloadField,
+): void {
+  const value = body[field];
+  if (value === undefined) return;
+  (payload as unknown as Record<string, unknown>)[field] = value;
+}
+
 function prosePayload(body: ProseWriteBody): ProsePayload {
   const payload: ProsePayload = { content: body.content };
-  if (body.name !== undefined) payload.name = body.name;
-  if (body.append_to !== undefined) payload.append_to = body.append_to;
-  if (body.mode !== undefined) payload.mode = body.mode;
-  if (body.lines !== undefined) payload.lines = body.lines;
-  if (body.file_path !== undefined) payload.file_path = body.file_path;
-  if (body.diff_hunk !== undefined) payload.diff_hunk = body.diff_hunk;
-  if (body.diff_base !== undefined) payload.diff_base = body.diff_base;
-  if (body.line_context !== undefined) payload.line_context = body.line_context;
-  if (body.removed !== undefined) payload.removed = body.removed;
-  if (body.in_reply_to !== undefined) payload.in_reply_to = body.in_reply_to;
-  if (body.supersedes !== undefined) payload.supersedes = body.supersedes;
+  for (const field of PROSE_PAYLOAD_FIELDS) {
+    assignProsePayloadField(payload, body, field);
+  }
   if (body.mentions !== undefined && body.mentions.length > 0) {
     payload.mentions = body.mentions;
   }
-  if (body.source !== undefined) payload.source = body.source;
-  if (body.arbitrary !== undefined) payload.arbitrary = body.arbitrary;
   return payload;
 }
 
@@ -171,6 +215,7 @@ export async function writeProseEvent(
     kind: "prose",
     ext: "md",
     contents: serializeProse(prosePayload(body)),
+    ...(body.timestamp !== undefined ? { timestamp: body.timestamp } : {}),
   });
   return outcome(writeResponse(filename, body.participant_id, "prose"), body.supersedes);
 }
@@ -201,14 +246,14 @@ export async function writeToolUseEvent(
 function subagentRunPayload(
   body: SubagentRunWriteBody,
 ): Omit<SubagentRunWriteBody, "participant_id" | "path"> {
-  const { participant_id: _participantId, path: _path, ...payload } = body;
+  const { participant_id: _participantId, ...payload } = stripScopeFields(body);
   return payload;
 }
 
 function subagentOutputPayload(
   body: SubagentOutputWriteBody,
 ): Omit<SubagentOutputWriteBody, "participant_id" | "path"> {
-  const { participant_id: _participantId, path: _path, ...payload } = body;
+  const { participant_id: _participantId, ...payload } = stripScopeFields(body);
   return payload;
 }
 
@@ -245,22 +290,14 @@ export async function writeSubagentOutputEvent(
 function accessRequestPayload(
   body: AccessRequestWriteBody,
 ): AccessRequestPayload {
-  const {
-    participant_id: _participantId,
-    path: _path,
-    ...payload
-  } = body;
+  const { participant_id: _participantId, ...payload } = stripScopeFields(body);
   return payload;
 }
 
 function accessResponsePayload(
   body: AccessResponseWriteBody,
 ): AccessResponsePayload {
-  const {
-    participant_id: _participantId,
-    path: _path,
-    ...payload
-  } = body;
+  const { participant_id: _participantId, ...payload } = stripScopeFields(body);
   return payload;
 }
 
@@ -319,14 +356,40 @@ async function assertOptionHtmlRefs(
   }
 }
 
+const MULTI_SELECT_QUESTION_HINTS = [
+  /\bor\s+more\b/i,
+  /\bone\s+or\s+more\b/i,
+  /\bany\s+number\b/i,
+  /\bselect\s+all\b/i,
+  /\bpick\s+(?:any|multiple|several)\b/i,
+  /\bchoose\s+(?:any|multiple|several)\b/i,
+  /\bselect\s+(?:any|multiple|several)\b/i,
+  /\bmix(?:\s+and\s+match)?\b/i,
+  /\bcombine\b/i,
+] as const;
+
+function questionImpliesMultipleSelections(question: string): boolean {
+  return MULTI_SELECT_QUESTION_HINTS.some((pattern) => pattern.test(question));
+}
+
+function assertChoiceModeMatchesQuestion(
+  body: Pick<PostChoicesBody, "question" | "multi">,
+): void {
+  if (body.multi || !questionImpliesMultipleSelections(body.question)) return;
+  throw new Error(
+    "choices question implies multiple selections, but multi is false; set multi: true or reword the question as single-select",
+  );
+}
+
 export async function writeChoicesEvent(
   p: Paths,
   sessionId: string,
   body: PostChoicesBody,
 ): Promise<EventWriteOutcome<"choices">> {
   assertValidation(validateNonProseAppendTo(body.append_to));
+  assertChoiceModeMatchesQuestion(body);
   await assertOptionHtmlRefs(p, sessionId, body.options);
-  const { participant_id, supersedes, ...rest } = body;
+  const { participant_id, supersedes, ...rest } = stripScopeFields(body);
   const filename = await writeEventFile(p, sessionId, {
     participant_id,
     kind: "choices",
@@ -345,7 +408,7 @@ export async function writeChoiceEvent(
   sessionId: string,
   body: PostChoiceBody,
 ): Promise<EventWriteOutcome<"choice">> {
-  const { participant_id, ...rest } = body;
+  const { participant_id, ...rest } = stripScopeFields(body);
   const filename = await writeEventFile(p, sessionId, {
     participant_id,
     kind: "choice",
@@ -401,34 +464,66 @@ function matchesAssignedTo(payload: TodoPayload, assignedTo?: string): boolean {
 export function buildTodoSnapshot(
   todoEvents: TodoEventRecord[],
 ): TodoSnapshotEntry[] {
-  const latestById = new Map<string, TodoEventRecord>();
-  const createdAtById = new Map<string, string>();
+  const state = collectTodoSnapshotState(todoEvents);
+  const superseded = collectSupersededTodoFilenames(todoEvents);
+  return materializeTodoSnapshotEntries(state, superseded);
+}
 
+function collectTodoSnapshotState(todoEvents: TodoEventRecord[]): TodoSnapshotState {
+  const state: TodoSnapshotState = {
+    latestById: new Map<string, TodoEventRecord>(),
+    createdAtById: new Map<string, string>(),
+  };
   for (const event of todoEvents) {
     const id = event.payload.id;
     if (typeof id !== "string" || id.length === 0) continue;
-
-    const existingCreatedAt = createdAtById.get(id);
-    if (existingCreatedAt === undefined || event.timestamp < existingCreatedAt) {
-      createdAtById.set(id, event.timestamp);
-    }
-
-    const existing = latestById.get(id);
-    if (existing === undefined || event.timestamp > existing.timestamp) {
-      latestById.set(id, event);
-    }
+    rememberTodoCreation(state, id, event.timestamp);
+    rememberLatestTodoEvent(state, id, event);
   }
+  return state;
+}
 
+function rememberTodoCreation(
+  state: TodoSnapshotState,
+  id: string,
+  timestamp: string,
+): void {
+  const existingCreatedAt = state.createdAtById.get(id);
+  if (existingCreatedAt === undefined || timestamp < existingCreatedAt) {
+    state.createdAtById.set(id, timestamp);
+  }
+}
+
+function rememberLatestTodoEvent(
+  state: TodoSnapshotState,
+  id: string,
+  event: TodoEventRecord,
+): void {
+  const existing = state.latestById.get(id);
+  if (existing === undefined || event.timestamp > existing.timestamp) {
+    state.latestById.set(id, event);
+  }
+}
+
+function collectSupersededTodoFilenames(
+  todoEvents: TodoEventRecord[],
+): Set<string> {
   const superseded = new Set<string>();
   for (const event of todoEvents) {
     const sup = event.payload.supersedes;
     if (typeof sup === "string" && sup.length > 0) superseded.add(sup);
   }
+  return superseded;
+}
 
+function materializeTodoSnapshotEntries(
+  state: TodoSnapshotState,
+  superseded: Set<string>,
+): TodoSnapshotEntry[] {
   const entries: TodoSnapshotEntry[] = [];
-  for (const event of latestById.values()) {
+  for (const event of state.latestById.values()) {
     if (superseded.has(event.filename)) continue;
-    const createdAt = createdAtById.get(event.payload.id);
+    const createdAt = state.createdAtById.get(event.payload.id);
     if (createdAt === undefined) continue;
     entries.push({ event, payload: event.payload, createdAt });
   }
@@ -457,10 +552,12 @@ function makeTreeNode(
     title: payload.title,
     status: payload.status as VisibleTodoStatus,
     children: [],
+    ...(payload.body !== undefined ? { body: payload.body } : {}),
+    ...(payload.assigned_to !== undefined
+      ? { assigned_to: payload.assigned_to }
+      : {}),
+    ...(payload.parent_id !== undefined ? { parent_id: payload.parent_id } : {}),
   };
-  if (payload.body !== undefined) node.body = payload.body;
-  if (payload.assigned_to !== undefined) node.assigned_to = payload.assigned_to;
-  if (payload.parent_id !== undefined) node.parent_id = payload.parent_id;
   return annotateOwnership(node, viewer);
 }
 
@@ -519,26 +616,47 @@ function buildTodoTree(
     }
   }
 
-  const compareByGroup = (
-    a: AnnotatedTodoTreeNode,
-    b: AnnotatedTodoTreeNode,
-  ): number => {
-    const status = TODO_STATUS_RANK[a.status] - TODO_STATUS_RANK[b.status];
-    if (status !== 0) return status;
-    const assignee = (a.assigned_to ?? "\uffff").localeCompare(
-      b.assigned_to ?? "\uffff",
-    );
-    if (assignee !== 0) return assignee;
-    const aCreatedAt = createdAtById.get(a.id) ?? "";
-    const bCreatedAt = createdAtById.get(b.id) ?? "";
-    return aCreatedAt.localeCompare(bCreatedAt) || a.id.localeCompare(b.id);
-  };
+  const compareByGroup = compareTodoNodesByGroup(createdAtById);
   const sortNodes = (nodes: AnnotatedTodoTreeNode[]): void => {
     nodes.sort(compareByGroup);
     for (const node of nodes) sortNodes(node.children);
   };
   sortNodes(roots);
   return roots;
+}
+
+function compareTodoNodesByGroup(
+  createdAtById: Map<string, string>,
+): (a: AnnotatedTodoTreeNode, b: AnnotatedTodoTreeNode) => number {
+  return (a, b) =>
+    compareTodoStatus(a, b) ||
+    compareTodoAssignee(a, b) ||
+    compareTodoCreatedAt(createdAtById, a, b) ||
+    a.id.localeCompare(b.id);
+}
+
+function compareTodoStatus(
+  a: AnnotatedTodoTreeNode,
+  b: AnnotatedTodoTreeNode,
+): number {
+  return TODO_STATUS_RANK[a.status] - TODO_STATUS_RANK[b.status];
+}
+
+function compareTodoAssignee(
+  a: AnnotatedTodoTreeNode,
+  b: AnnotatedTodoTreeNode,
+): number {
+  return (a.assigned_to ?? "\uffff").localeCompare(b.assigned_to ?? "\uffff");
+}
+
+function compareTodoCreatedAt(
+  createdAtById: Map<string, string>,
+  a: AnnotatedTodoTreeNode,
+  b: AnnotatedTodoTreeNode,
+): number {
+  return (createdAtById.get(a.id) ?? "").localeCompare(
+    createdAtById.get(b.id) ?? "",
+  );
 }
 
 export function buildTodoListResponse(
@@ -699,34 +817,6 @@ export async function writeTodoEvent(
   return { response, publish };
 }
 
-function assertWithinSession(
-  p: Paths,
-  sessionId: string,
-  target: string,
-): void {
-  const sessionRoot = resolve(p.sessionDir(sessionId));
-  const targetResolved = resolve(target);
-  if (
-    !targetResolved.startsWith(`${sessionRoot}/`) &&
-    targetResolved !== sessionRoot
-  ) {
-    throw new Error("path escapes session root");
-  }
-}
-
-function parseCompactTs(ts: string): Date {
-  const ms = ts.length === 20 ? ts.slice(16, 19) : "000";
-  return new Date(
-    `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}T${ts.slice(9, 11)}:${ts.slice(11, 13)}:${ts.slice(13, 15)}.${ms}Z`,
-  );
-}
-
-function bumpMillisecond(ts: string): string {
-  const d = parseCompactTs(ts);
-  d.setUTCMilliseconds(d.getUTCMilliseconds() + 1);
-  return toIsoTimestamp(d);
-}
-
 async function tryMkdir(target: string): Promise<boolean> {
   try {
     await mkdir(target, { recursive: false });
@@ -737,82 +827,143 @@ async function tryMkdir(target: string): Promise<boolean> {
   }
 }
 
+class HtmlBundleWriter {
+  constructor(
+    private readonly p: Paths,
+    private readonly sessionId: string,
+  ) {}
+
+  async assertWritableParticipant(participantId: string): Promise<void> {
+    if (!(await sessionExists(this.p, this.sessionId))) {
+      throw new Error(`session not found: ${this.sessionId}`);
+    }
+    const participants = await listParticipants(this.p);
+    if (!(participantId in participants)) {
+      throw new Error(`unknown participant: ${participantId}`);
+    }
+  }
+
+  async write(body: PostHtmlBody): Promise<EventWriteOutcome<"html">> {
+    assertValidation(validateNonProseAppendTo(body.append_to));
+    await this.assertWritableParticipant(body.participant_id);
+    await mkdir(this.p.sessionDir(this.sessionId), { recursive: true });
+
+    const allocation = await this.allocateFolder(body.participant_id);
+    try {
+      await this.writeBundleFiles(allocation, body);
+    } catch (err) {
+      await rm(allocation.folderPath, { recursive: true, force: true }).catch(
+        () => {},
+      );
+      throw err;
+    }
+
+    return outcome(
+      writeResponse(allocation.folderName, body.participant_id, "html"),
+      body.supersedes,
+    );
+  }
+
+  private async allocateFolder(participantId: string): Promise<HtmlBundleAllocation> {
+    let stamped = isoTimestamp();
+    for (let attempt = 0; attempt < 256; attempt++) {
+      const folderName = composeFilename({
+        timestamp: stamped,
+        participant_id: participantId,
+        kind: "html",
+      });
+      const folderPath = join(this.p.sessionDir(this.sessionId), folderName);
+      assertWithinSession(this.p, this.sessionId, folderPath);
+      if (await tryMkdir(folderPath)) return { folderName, folderPath };
+      stamped = bumpMillisecond(stamped);
+    }
+    throw new Error("could not allocate unique html bundle folder");
+  }
+
+  private async writeBundleFiles(
+    allocation: HtmlBundleAllocation,
+    body: PostHtmlBody,
+  ): Promise<void> {
+    await this.writeJsonFile(
+      allocation.folderPath,
+      "manifest.json",
+      this.buildManifest(allocation.folderName, body),
+    );
+    await this.writeIndexFile(allocation.folderPath, body);
+    await this.writeOptionalAsset(allocation.folderPath, "style.css", body.css);
+    await this.writeOptionalAsset(allocation.folderPath, "script.js", body.js);
+  }
+
+  private buildManifest(folderName: string, body: PostHtmlBody): HtmlManifest {
+    const manifest: HtmlManifest = { id: folderName.replace(/\.html$/, "") };
+    if (typeof body.title === "string" && body.title.length > 0) {
+      manifest.title = body.title;
+    }
+    if (Array.isArray(body.dependencies)) {
+      manifest.dependencies = body.dependencies;
+    }
+    if (typeof body.append_to === "string" && body.append_to.length > 0) {
+      manifest.append_to = body.append_to;
+    }
+    return manifest;
+  }
+
+  private async writeJsonFile(
+    folderPath: string,
+    fileName: string,
+    value: unknown,
+  ): Promise<void> {
+    await this.writeBundleFile(
+      folderPath,
+      fileName,
+      JSON.stringify(value, null, 2),
+    );
+  }
+
+  private async writeIndexFile(
+    folderPath: string,
+    body: PostHtmlBody,
+  ): Promise<void> {
+    await this.writeBundleFile(
+      folderPath,
+      "index.html",
+      assembleHtmlBundleIndex(body.html, {
+        ...(typeof body.css === "string" && body.css.length > 0
+          ? { css: body.css }
+          : {}),
+        ...(typeof body.js === "string" && body.js.length > 0
+          ? { js: body.js }
+          : {}),
+      }),
+    );
+  }
+
+  private async writeOptionalAsset(
+    folderPath: string,
+    fileName: string,
+    contents: string | undefined,
+  ): Promise<void> {
+    if (typeof contents !== "string" || contents.length === 0) return;
+    await this.writeBundleFile(folderPath, fileName, contents);
+  }
+
+  private async writeBundleFile(
+    folderPath: string,
+    fileName: string,
+    contents: string,
+  ): Promise<void> {
+    const target = join(folderPath, fileName);
+    assertWithinSession(this.p, this.sessionId, target);
+    await writeFile(target, contents, { flag: "wx" });
+  }
+}
+
 export async function writeHtmlEvent(
   p: Paths,
   sessionId: string,
   body: PostHtmlBody,
 ): Promise<EventWriteOutcome<"html">> {
-  assertValidation(validateNonProseAppendTo(body.append_to));
-  const {
-    participant_id,
-    html,
-    css,
-    js,
-    title,
-    dependencies,
-    supersedes,
-    append_to,
-  } = body;
-
-  if (!(await sessionExists(p, sessionId))) {
-    throw new Error(`session not found: ${sessionId}`);
-  }
-  const participants = await listParticipants(p);
-  if (!(participant_id in participants)) {
-    throw new Error(`unknown participant: ${participant_id}`);
-  }
-
-  await mkdir(p.sessionDir(sessionId), { recursive: true });
-
-  let stamped = isoTimestamp();
-  let folderName = "";
-  let folderPath = "";
-  let allocated = false;
-  for (let attempt = 0; attempt < 256; attempt++) {
-    folderName = composeFilename({
-      timestamp: stamped,
-      participant_id,
-      kind: "html",
-    });
-    folderPath = join(p.sessionDir(sessionId), folderName);
-    assertWithinSession(p, sessionId, folderPath);
-    if (await tryMkdir(folderPath)) {
-      allocated = true;
-      break;
-    }
-    stamped = bumpMillisecond(stamped);
-  }
-  if (!allocated) throw new Error("could not allocate unique html bundle folder");
-
-  const manifestId = folderName.replace(/\.html$/, "");
-  const manifest: HtmlManifest = { id: manifestId };
-  if (typeof title === "string" && title.length > 0) manifest.title = title;
-  if (Array.isArray(dependencies)) manifest.dependencies = dependencies;
-  if (typeof append_to === "string" && append_to.length > 0) {
-    manifest.append_to = append_to;
-  }
-
-  const manifestPath = join(folderPath, "manifest.json");
-  const indexPath = join(folderPath, "index.html");
-  assertWithinSession(p, sessionId, manifestPath);
-  assertWithinSession(p, sessionId, indexPath);
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), {
-    flag: "wx",
-  });
-  await writeFile(indexPath, html, { flag: "wx" });
-
-  if (typeof css === "string" && css.length > 0) {
-    const cssPath = join(folderPath, "style.css");
-    assertWithinSession(p, sessionId, cssPath);
-    await writeFile(cssPath, css, { flag: "wx" });
-  }
-  if (typeof js === "string" && js.length > 0) {
-    const jsPath = join(folderPath, "script.js");
-    assertWithinSession(p, sessionId, jsPath);
-    await writeFile(jsPath, js, { flag: "wx" });
-  }
-
-  return outcome(writeResponse(folderName, participant_id, "html"), supersedes);
+  return new HtmlBundleWriter(p, sessionId).write(body);
 }
 
 export interface AlternativesWriteOutcome {
@@ -821,6 +972,87 @@ export interface AlternativesWriteOutcome {
     html: Array<{ option_id: string; filename: string }>;
   };
   publish: EventPublishRecord[];
+}
+
+type AlternativeOption = PostAlternativesBody["options"][number];
+
+function assertAlternativeOptions(options: PostAlternativesBody["options"]): void {
+  if (!Array.isArray(options) || options.length === 0) {
+    throw new Error("alternatives requires at least one option");
+  }
+  const seenIds = new Set<string>();
+  for (const option of options) assertAlternativeOption(option, seenIds);
+}
+
+function assertAlternativeOption(
+  option: AlternativeOption,
+  seenIds: Set<string>,
+): void {
+  if (typeof option.id !== "string" || option.id.length === 0) {
+    throw new Error("alternatives option id required");
+  }
+  if (seenIds.has(option.id)) throw new Error(`duplicate option id: ${option.id}`);
+  seenIds.add(option.id);
+  if (typeof option.label !== "string" || option.label.length === 0) {
+    throw new Error(`option ${option.id}: label required`);
+  }
+  if (typeof option.html !== "string" || option.html.length === 0) {
+    throw new Error(`option ${option.id}: html required`);
+  }
+}
+
+function htmlBodyForAlternativeOption(
+  participantId: string,
+  option: AlternativeOption,
+): PostHtmlBody {
+  return {
+    participant_id: participantId,
+    html: option.html,
+    ...(option.css !== undefined ? { css: option.css } : {}),
+    ...(option.js !== undefined ? { js: option.js } : {}),
+    ...(option.title !== undefined ? { title: option.title } : {}),
+    ...(option.dependencies !== undefined
+      ? { dependencies: option.dependencies }
+      : {}),
+  };
+}
+
+function optionsWithHtmlRefs(
+  options: AlternativeOption[],
+  htmlMap: Array<{ option_id: string; filename: string }>,
+): ChoicesOption[] {
+  return options.map((option, index) => ({
+    id: option.id,
+    label: option.label,
+    html: htmlMap[index]!.filename,
+  }));
+}
+
+function alternativesChoicesPayload(
+  body: PostAlternativesBody,
+  options: ChoicesOption[],
+): Omit<PostChoicesBody, "participant_id"> {
+  return {
+    id: body.id,
+    question: body.question,
+    options,
+    multi: body.multi,
+    ...(body.append_to !== undefined ? { append_to: body.append_to } : {}),
+    ...(body.supersedes !== undefined ? { supersedes: body.supersedes } : {}),
+  };
+}
+
+function choicesPublishRecord(
+  filename: string,
+  participantId: string,
+  supersedes: string | undefined,
+): EventPublishRecord<"choices"> {
+  return {
+    filename,
+    kind: "choices",
+    participantId,
+    ...(supersedes !== undefined ? { supersedes } : {}),
+  };
 }
 
 /* Atomic visual-alternatives write: one html bundle per option, then a single
@@ -835,71 +1067,38 @@ export async function writeAlternativesEvent(
   body: PostAlternativesBody,
 ): Promise<AlternativesWriteOutcome> {
   assertValidation(validateNonProseAppendTo(body.append_to));
-  if (!(await sessionExists(p, sessionId))) {
-    throw new Error(`session not found: ${sessionId}`);
-  }
-  const participants = await listParticipants(p);
-  if (!(body.participant_id in participants)) {
-    throw new Error(`unknown participant: ${body.participant_id}`);
-  }
-  if (!Array.isArray(body.options) || body.options.length === 0) {
-    throw new Error("alternatives requires at least one option");
-  }
-  const seenIds = new Set<string>();
-  for (const o of body.options) {
-    if (typeof o.id !== "string" || o.id.length === 0) {
-      throw new Error("alternatives option id required");
-    }
-    if (seenIds.has(o.id)) throw new Error(`duplicate option id: ${o.id}`);
-    seenIds.add(o.id);
-    if (typeof o.label !== "string" || o.label.length === 0) {
-      throw new Error(`option ${o.id}: label required`);
-    }
-    if (typeof o.html !== "string" || o.html.length === 0) {
-      throw new Error(`option ${o.id}: html required`);
-    }
-  }
+  assertChoiceModeMatchesQuestion(body);
+  const writer = new HtmlBundleWriter(p, sessionId);
+  await writer.assertWritableParticipant(body.participant_id);
+  assertAlternativeOptions(body.options);
 
   const createdDirs: string[] = [];
   const htmlMap: Array<{ option_id: string; filename: string }> = [];
   const childPublish: EventPublishRecord[] = [];
   try {
-    for (const o of body.options) {
-      const written = await writeHtmlEvent(p, sessionId, {
-        participant_id: body.participant_id,
-        html: o.html,
-        ...(o.css !== undefined ? { css: o.css } : {}),
-        ...(o.js !== undefined ? { js: o.js } : {}),
-        ...(o.title !== undefined ? { title: o.title } : {}),
-        ...(o.dependencies !== undefined
-          ? { dependencies: o.dependencies }
-          : {}),
-      });
+    for (const option of body.options) {
+      const written = await writer.write(
+        htmlBodyForAlternativeOption(body.participant_id, option),
+      );
       const filename = written.response.filename;
       createdDirs.push(join(p.sessionDir(sessionId), filename));
-      htmlMap.push({ option_id: o.id, filename });
+      htmlMap.push({ option_id: option.id, filename });
       childPublish.push(...written.publish);
     }
 
-    const options: ChoicesOption[] = body.options.map((o, i) => ({
-      id: o.id,
-      label: o.label,
-      html: htmlMap[i]!.filename,
-    }));
     const { participant_id, supersedes, append_to } = body;
-    const payload = {
-      id: body.id,
-      question: body.question,
-      options,
-      multi: body.multi,
-      ...(append_to !== undefined ? { append_to } : {}),
-      ...(supersedes !== undefined ? { supersedes } : {}),
-    };
     const filename = await writeEventFile(p, sessionId, {
       participant_id,
       kind: "choices",
       ext: "json",
-      contents: JSON.stringify(payload, null, 2),
+      contents: JSON.stringify(
+        alternativesChoicesPayload(
+          body,
+          optionsWithHtmlRefs(body.options, htmlMap),
+        ),
+        null,
+        2,
+      ),
     });
     return {
       response: {
@@ -909,12 +1108,7 @@ export async function writeAlternativesEvent(
       // Choices first so a live renderer consumes the option bundles before
       // they could flash as standalone embeds.
       publish: [
-        {
-          filename,
-          kind: "choices",
-          participantId: participant_id,
-          ...(supersedes !== undefined ? { supersedes } : {}),
-        },
+        choicesPublishRecord(filename, participant_id, supersedes),
         ...childPublish,
       ],
     };
@@ -926,7 +1120,7 @@ export async function writeAlternativesEvent(
   }
 }
 
-export function validateGraph(nodes: FlowNode[], edges: FlowEdge[]): void {
+function validateGraph(nodes: FlowNode[], edges: FlowEdge[]): void {
   const ids = new Set<string>();
   for (const n of nodes) {
     if (ids.has(n.id)) throw new Error(`duplicate node id: ${n.id}`);
@@ -947,7 +1141,7 @@ export async function writeFlowEvent(
   sessionId: string,
   body: PostFlowBody,
 ): Promise<EventWriteOutcome<"flow">> {
-  const { participant_id, supersedes, ...rest } = body;
+  const { participant_id, supersedes, ...rest } = stripScopeFields(body);
   const payload: Omit<PostFlowBody, "participant_id"> =
     supersedes !== undefined ? { ...rest, supersedes } : rest;
   assertValidation(validateNonProseAppendTo(payload.append_to));
@@ -996,4 +1190,3 @@ export async function writeFileRefEvent(
   });
   return outcome(writeResponse(filename, participant_id, "file"));
 }
-

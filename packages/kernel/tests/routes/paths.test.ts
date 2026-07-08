@@ -8,6 +8,7 @@ import { PathContextRef } from "../../src/paths/contextRef.js";
 import { registerPathRoutes } from "../../src/routes/paths.js";
 import { readState } from "../../src/state/store.js";
 import type { Bus, BusMessage } from "../../src/ws/bus.js";
+import { computePathId } from "../../src/paths/identity.js";
 
 interface Harness {
   app: FastifyInstance;
@@ -55,6 +56,9 @@ describe("/paths routes", () => {
       const res = await h.app.inject({ method: "GET", url: "/paths" });
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({
+        paths: [],
+        fallbackPath: null,
+        fallbackPathId: null,
         activePath: null,
         activePathId: null,
         activeRevision: 0,
@@ -96,6 +100,16 @@ describe("/paths routes", () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.activePath).toBe(project);
+      expect(body.activePathId).toBe(computePathId(project));
+      expect(body.fallbackPath).toBe(project);
+      expect(body.fallbackPathId).toBe(computePathId(project));
+      expect(body.paths).toEqual([
+        {
+          path: project,
+          path_id: computePathId(project),
+          registered: true,
+        },
+      ]);
       expect(body.activeRevision).toBe(1);
       expect(body.knownPaths).toEqual([project]);
       // Ref updated synchronously.
@@ -167,6 +181,32 @@ describe("/paths routes", () => {
       const state = await readState(globalPaths(h.configRoot));
       expect(state.knownPaths).toEqual([a, b]);
       expect(state.activeRevision).toBe(3);
+    });
+  });
+
+  describe("POST /paths/known", () => {
+    it("registers and MRU-promotes a path without activating it", async () => {
+      const project = join(h.scratch, "known-project");
+      mkdirSync(project);
+      const res = await h.app.inject({
+        method: "POST",
+        url: "/paths/known",
+        payload: { path: project },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.activePath).toBe(null);
+      expect(body.activePathId).toBe(null);
+      expect(body.activeRevision).toBe(0);
+      expect(body.knownPaths).toEqual([project]);
+      expect(body.paths).toEqual([
+        {
+          path: project,
+          path_id: computePathId(project),
+          registered: true,
+        },
+      ]);
+      expect(h.ref.get().active).toBe(null);
     });
   });
 

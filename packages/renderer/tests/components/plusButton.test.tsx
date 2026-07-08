@@ -1,12 +1,13 @@
-/* PlusButton — top-bar "+" with a dropdown listing one item per runtime,
-   plus a Terminal entry and a "Manage runtimes…" entry separated by rules.
+/* PlusButton — top-bar "+" with a dropdown listing one item per runtime
+   plus a "Manage runtimes…" entry. Standalone terminals live in the Terminal
+   dock tab, not in this participant launcher.
 
    Behavior tested:
      - Closed by default; click opens the menu.
      - Each runtime shows displayName, disabled iff available=false.
      - Disabled rows expose a "Not on PATH" tooltip via aria-disabled or
        a title attribute.
-     - Terminal entry is enabled by default; can be disabled via prop.
+     - Terminal entry is absent from this surface.
      - Manage runtimes… fires onManageRuntimes.
      - Clicking a runtime fires onSpawnRuntime(id) and closes the menu.
      - Esc + outside-click close the menu. */
@@ -51,7 +52,7 @@ describe("PlusButton — closed state", () => {
         onManageRuntimes={h.onManageRuntimes}
       />,
     );
-    const btn = screen.getByRole("button", { name: /Add agent or terminal/i });
+    const btn = screen.getByRole("button", { name: /Add agent/i });
     expect(btn).toBeInTheDocument();
   });
 
@@ -82,7 +83,7 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
@@ -101,12 +102,13 @@ describe("PlusButton — open menu", () => {
       </div>,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     const menu = screen.getByRole("menu");
     expect(menu).toHaveStyle({ position: "fixed" });
+    // Uses viewport-clamped fixed coordinates so it can flip above/below the anchor.
     expect(menu.style.top).not.toBe("");
-    expect(menu.style.right).not.toBe("");
+    expect(menu.style.left).not.toBe("");
   });
 
   test("menu renders one item per runtime", async () => {
@@ -121,7 +123,7 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     expect(screen.getByRole("menuitem", { name: /Claude Code/i })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Codex/i })).toBeInTheDocument();
@@ -144,33 +146,33 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
 
     expect(
       screen
         .getByRole("menuitem", { name: /Claude Code/i })
-        .querySelector('[data-provider-icon="claude"]'),
+        .querySelector('[data-provider-mark="claude"] [data-agent-kind-art="claude"]'),
     ).not.toBeNull();
     expect(
       screen
         .getByRole("menuitem", { name: /^Codex/i })
-        .querySelector('[data-provider-icon="openai"]'),
+        .querySelector('[data-provider-mark="openai"] [data-agent-kind-art="gpt"]'),
     ).not.toBeNull();
     expect(
       screen
         .getByRole("menuitem", { name: /OpenAI CLI/i })
-        .querySelector('[data-provider-icon="openai"]'),
+        .querySelector('[data-provider-mark="openai"] [data-agent-kind-art="gpt"]'),
     ).not.toBeNull();
     expect(
       screen
         .getByRole("menuitem", { name: /Opencode/i })
-        .querySelector('[data-provider-icon="opencode"]'),
+        .querySelector('[data-provider-mark="opencode"] [data-agent-kind-art="opencode"]'),
     ).not.toBeNull();
 
     const custom = screen.getByRole("menuitem", { name: /Custom Agent/i });
     expect(custom.querySelector('[data-provider-initials="CA"]')).not.toBeNull();
-    expect(custom.querySelector("[data-provider-icon]")).toBeNull();
+    expect(custom.querySelector("[data-agent-kind-art]")).toBeNull();
   });
 
   test("unavailable runtime is disabled with 'Not on PATH' tooltip", async () => {
@@ -185,7 +187,7 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     const opencode = screen.getByRole("menuitem", { name: /Opencode/i });
     expect(opencode).toBeDisabled();
@@ -204,13 +206,13 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     const claude = screen.getByRole("menuitem", { name: /Claude Code/i });
     expect(claude).not.toBeDisabled();
   });
 
-  test("Terminal entry shows when no extra props passed", async () => {
+  test("Terminal entry is not shown in the participant launcher", async () => {
     const user = userEvent.setup();
     const h = makeHandlers();
     render(
@@ -222,12 +224,12 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
-    expect(screen.getByRole("menuitem", { name: /Terminal/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Terminal/i })).toBeNull();
   });
 
-  test("Terminal entry is disabled when tmuxMissing prop is true", async () => {
+  test("tmuxMissing does not reintroduce the terminal launcher entry", async () => {
     const user = userEvent.setup();
     const h = makeHandlers();
     render(
@@ -240,10 +242,9 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
-    const term = screen.getByRole("menuitem", { name: /Terminal/i });
-    expect(term).toBeDisabled();
+    expect(screen.queryByRole("menuitem", { name: /Terminal/i })).toBeNull();
   });
 
   test("Manage runtimes… entry is present", async () => {
@@ -258,7 +259,7 @@ describe("PlusButton — open menu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     expect(
       screen.getByRole("menuitem", { name: /Manage runtimes/i }),
@@ -279,7 +280,7 @@ describe("PlusButton — actions", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     await user.click(screen.getByRole("menuitem", { name: /Claude Code/i }));
     expect(h.onSpawnRuntime).toHaveBeenCalledWith("claude");
@@ -298,13 +299,13 @@ describe("PlusButton — actions", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     await user.click(screen.getByRole("menuitem", { name: /Opencode/i }));
     expect(h.onSpawnRuntime).not.toHaveBeenCalled();
   });
 
-  test("clicking Terminal fires onSpawnTerminal", async () => {
+  test("Terminal absence leaves onSpawnTerminal untouched", async () => {
     const user = userEvent.setup();
     const h = makeHandlers();
     render(
@@ -316,10 +317,10 @@ describe("PlusButton — actions", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
-    await user.click(screen.getByRole("menuitem", { name: /Terminal/i }));
-    expect(h.onSpawnTerminal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menuitem", { name: /Terminal/i })).toBeNull();
+    expect(h.onSpawnTerminal).not.toHaveBeenCalled();
   });
 
   test("clicking Manage runtimes… fires onManageRuntimes", async () => {
@@ -334,7 +335,7 @@ describe("PlusButton — actions", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     await user.click(screen.getByRole("menuitem", { name: /Manage runtimes/i }));
     expect(h.onManageRuntimes).toHaveBeenCalledTimes(1);
@@ -352,7 +353,7 @@ describe("PlusButton — actions", () => {
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: /Add agent or terminal/i }),
+      screen.getByRole("button", { name: /Add agent/i }),
     );
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await user.keyboard("{Escape}");

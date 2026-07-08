@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { parseArgs } from "../../src/cli.js";
 
 describe("kernel CLI flags", () => {
+  it("leaves the default port owned by startup", () => {
+    expect(parseArgs([]).port).toBeUndefined();
+  });
+
   it("parses the full dev flag set", () => {
     const options = parseArgs([
       "--remote",

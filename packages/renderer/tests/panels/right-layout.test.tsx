@@ -1,4 +1,10 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -24,13 +30,21 @@ vi.mock("../../src/panels/right/RightLog.js", () => ({
 vi.mock("../../src/panels/right/RightFiles.js", () => ({
   RightFiles: (): JSX.Element => <div data-stub="files" />,
 }));
+vi.mock("../../src/shell/MessagesPane.js", () => ({
+  MessagesPane: (): JSX.Element => <div data-stub="messages" />,
+}));
 
 import { RightPanel } from "../../src/shell/RightPanel.js";
 import { RightLayout } from "../../src/panels/right/RightLayout.js";
 import {
+  applyDockLayout,
+  DEFAULT_DOCK_LAYOUT,
+  getCurrentDockLayout,
+  moveDockPane,
+  resetDockLayout,
+} from "../../src/shell/dockLayout.js";
+import {
   DEFAULT_RIGHT_TABS_CONFIG,
-  RIGHT_TABS_CONFIG_BY_SESSION_STORAGE_KEY,
-  RIGHT_TABS_CONFIG_STORAGE_KEY,
   isOnlyEnabledRightTab,
   reorderRightTabsConfig,
   resolveRightTabsConfig,
@@ -40,14 +54,34 @@ import {
 } from "../../src/state/store.js";
 import { resetStore, SESSION_META } from "../cards/_helpers.js";
 
-function seedConfig(overrides: {
-  global?: RightTabConfig;
-  bySession?: Record<string, RightTabConfig>;
-}): void {
-  useStore.setState({
-    rightTabsConfig: overrides.global ?? DEFAULT_RIGHT_TABS_CONFIG,
-    rightTabsConfigBySession: overrides.bySession ?? {},
-  });
+function createDragDataTransfer(): DataTransfer {
+  const values = new Map<string, string>();
+  const transfer = {
+    dropEffect: "none" as DataTransfer["dropEffect"],
+    effectAllowed: "uninitialized" as DataTransfer["effectAllowed"],
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [] as string[],
+    clearData(format?: string): void {
+      if (format === undefined) {
+        values.clear();
+      } else {
+        values.delete(format);
+      }
+      transfer.types = Array.from(values.keys());
+    },
+    getData(format: string): string {
+      return values.get(format) ?? "";
+    },
+    setData(format: string, data: string): void {
+      values.set(format, data);
+      transfer.types = Array.from(values.keys());
+    },
+    setDragImage(): void {
+      /* jsdom has no native drag image support. */
+    },
+  };
+  return transfer as unknown as DataTransfer;
 }
 
 describe("right-tabs config helpers (pure)", () => {
@@ -60,6 +94,8 @@ describe("right-tabs config helpers (pure)", () => {
       "named",
       "agents",
       "files",
+      "diffTree",
+      "terminal",
     ]);
   });
 
@@ -93,6 +129,7 @@ describe("right-tabs config helpers (pure)", () => {
       { key: "named", enabled: true },
       { key: "agents", enabled: true },
       { key: "files", enabled: true },
+      { key: "terminal", enabled: true },
     ];
     expect(
       resolveRightTabsConfig(
@@ -111,130 +148,126 @@ describe("right-tabs config helpers (pure)", () => {
   });
 });
 
-describe("RightPanel — resolved config drives the strip", () => {
+describe("RightPanel — dock layout drives the strip", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
+    resetDockLayout();
     resetStore();
   });
 
   afterEach(() => {
     cleanup();
     globalThis.localStorage?.clear();
+    resetDockLayout();
   });
 
-  test("disabled tabs are hidden; Layout button is always present", () => {
-    seedConfig({
-      global: DEFAULT_RIGHT_TABS_CONFIG.map((e) => ({
-        key: e.key,
-        enabled: e.key !== "comments",
-      })),
-    });
+  test("right strip renders the panes currently assigned to the right dock", () => {
     render(<RightPanel />);
     const tablist = screen.getByRole("tablist", { name: /Right panel tabs/i });
-    /* Comments is hidden. */
-    expect(within(tablist).queryByRole("tab", { name: /Comments/i })).toBeNull();
-    /* Other tabs render. */
+
     expect(within(tablist).getByRole("tab", { name: /Todos/i })).toBeTruthy();
+    expect(within(tablist).getByRole("tab", { name: /Comments/i })).toBeTruthy();
+    expect(within(tablist).getByRole("tab", { name: /Log/i })).toBeTruthy();
+    expect(within(tablist).getByRole("tab", { name: /Terminal/i })).toBeTruthy();
     expect(within(tablist).getByRole("tab", { name: /Layout settings/i })).toBeTruthy();
   });
 
-  test("per-session override beats global", () => {
-    /* Global hides Comments; per-session override re-enables it. */
-    const sessionOverride = DEFAULT_RIGHT_TABS_CONFIG.map((e) => ({
-      key: e.key,
-      enabled: true,
-    }));
-    seedConfig({
-      global: DEFAULT_RIGHT_TABS_CONFIG.map((e) => ({
-        key: e.key,
-        enabled: e.key !== "comments",
-      })),
-      bySession: { [SESSION_META.id]: sessionOverride },
-    });
+  test("moving a right pane elsewhere removes only that tab from the right strip", () => {
+    applyDockLayout(
+      moveDockPane(getCurrentDockLayout(), "comments", "center"),
+    );
+
     render(<RightPanel />);
     const tablist = screen.getByRole("tablist", { name: /Right panel tabs/i });
+
+    expect(within(tablist).queryByRole("tab", { name: /Comments/i })).toBeNull();
+    expect(within(tablist).getByRole("tab", { name: /Todos/i })).toBeTruthy();
+    expect(within(tablist).getByRole("tab", { name: /Log/i })).toBeTruthy();
+    expect(within(tablist).getByRole("tab", { name: /Terminal/i })).toBeTruthy();
+  });
+
+  test("moving chat into the right dock makes it a right-side tab", () => {
+    applyDockLayout(
+      moveDockPane(getCurrentDockLayout(), "messages", "right", "comments"),
+    );
+
+    render(<RightPanel />);
+    const tablist = screen.getByRole("tablist", { name: /Right panel tabs/i });
+
+    expect(within(tablist).getByRole("tab", { name: /Messages/i })).toBeTruthy();
     expect(within(tablist).getByRole("tab", { name: /Comments/i })).toBeTruthy();
   });
 
-  test("disabling the active tab falls back to first enabled", async () => {
-    seedConfig({});
+  test("legacy right-tab state cannot hide an active non-legacy right pane", async () => {
+    applyDockLayout(
+      moveDockPane(getCurrentDockLayout(), "messages", "right", "comments"),
+    );
     useStore.setState({ rightTab: "comments" });
-    render(<RightPanel />);
-    /* Now disable comments globally. The fallback effect should switch
-       rightTab to "todos" (the first remaining enabled tab). */
-    seedConfig({
-      global: DEFAULT_RIGHT_TABS_CONFIG.map((e) => ({
-        key: e.key,
-        enabled: e.key !== "comments",
-      })),
-    });
-    /* Effect runs on next React commit. */
+
+    const { container } = render(<RightPanel />);
     await Promise.resolve();
-    expect(useStore.getState().rightTab).toBe("todos");
+
+    expect(screen.getByRole("tab", { name: /Messages/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(container.querySelector('[data-stub="messages"]')).not.toBeNull();
+    expect(
+      screen.queryByRole("tablist", { name: /Layout scope/i }),
+    ).toBeNull();
   });
 });
 
-describe("RightLayout — UI writes through to store + localStorage", () => {
+describe("RightLayout — unified pane arrangement editor", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
+    resetDockLayout();
     resetStore();
-    seedConfig({});
   });
 
   afterEach(() => {
     cleanup();
     globalThis.localStorage?.clear();
+    resetDockLayout();
   });
 
-  test("toggling a tab in Global mode persists to global config", async () => {
-    const user = userEvent.setup();
+  test("renders the unified pane arrangement controls", () => {
     render(<RightLayout />);
-    const commentsRow = document.querySelector(
-      '[data-tab-key="comments"]',
-    ) as HTMLElement;
-    expect(commentsRow).toBeTruthy();
-    const toggle = within(commentsRow).getByRole("switch", {
-      name: /Show Comments tab/i,
-    }) as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
-    await user.click(toggle);
-    const stored = JSON.parse(
-      globalThis.localStorage!.getItem(RIGHT_TABS_CONFIG_STORAGE_KEY)!,
-    ) as Array<{ key: string; enabled: boolean }>;
-    expect(stored.find((e) => e.key === "comments")?.enabled).toBe(false);
-    expect(useStore.getState().rightTabsConfigBySession).toEqual({});
+
+    expect(screen.getByLabelText(/Undocked pane list/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Current app layout/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Right dock area/i)).toBeTruthy();
   });
 
-  test("editing in This session mode creates a per-session override", async () => {
-    const user = userEvent.setup();
+  test("dragging a toolbar pane places that one pane on screen", () => {
     render(<RightLayout />);
-    await user.click(screen.getByRole("tab", { name: /This session/i }));
-    const todosRow = document.querySelector(
-      '[data-tab-key="todos"]',
-    ) as HTMLElement;
-    const toggle = within(todosRow).getByRole("switch", {
-      name: /Show Todos tab/i,
-    });
-    await user.click(toggle);
-    const bySession = useStore.getState().rightTabsConfigBySession;
-    expect(bySession[SESSION_META.id]).toBeTruthy();
-    expect(
-      bySession[SESSION_META.id]!.find((e) => e.key === "todos")?.enabled,
-    ).toBe(false);
-    /* Global config untouched. */
-    expect(
-      useStore.getState().rightTabsConfig.find((e) => e.key === "todos")
-        ?.enabled,
-    ).toBe(true);
-    /* Reset link appears and clears the override. */
-    const reset = screen.getByRole("button", { name: /Reset to global/i });
-    await user.click(reset);
-    expect(
-      JSON.parse(
-        globalThis.localStorage!.getItem(
-          RIGHT_TABS_CONFIG_BY_SESSION_STORAGE_KEY,
-        ) ?? "{}",
-      ),
-    ).toEqual({});
+
+    const palette = screen.getByLabelText(/Undocked pane list/i);
+    const searchTile = within(palette).getByRole("button", { name: /Search/i });
+    const leftArea = screen.getByLabelText(/Left dock area/i);
+    const dataTransfer = createDragDataTransfer();
+
+    fireEvent.dragStart(searchTile, { dataTransfer });
+    fireEvent.dragOver(leftArea, { dataTransfer });
+    fireEvent.drop(leftArea, { dataTransfer });
+    fireEvent.dragEnd(searchTile, { dataTransfer });
+
+    const layout = getCurrentDockLayout();
+    expect(layout.areas.left).toContain("search");
+    expect(layout.areas.toolbar).not.toContain("search");
+    expect(layout.areas.right).toEqual(DEFAULT_DOCK_LAYOUT.areas.right);
+  });
+
+  test("reset restores the default dock layout", async () => {
+    const user = userEvent.setup();
+    applyDockLayout(
+      moveDockPane(getCurrentDockLayout(), "comments", "center"),
+    );
+
+    render(<RightLayout />);
+
+    await user.click(screen.getByRole("button", { name: /^Reset$/i }));
+
+    expect(getCurrentDockLayout()).toEqual(DEFAULT_DOCK_LAYOUT);
   });
 });

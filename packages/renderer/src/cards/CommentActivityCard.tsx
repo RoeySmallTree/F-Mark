@@ -1,15 +1,34 @@
 import { MessageSquareReply } from "lucide-react";
-import type {
-  AnyEventRecord,
-  Participant,
-  ProsePayload,
+import {
+  EVENT_KINDS,
+  PARTICIPANT_KINDS,
+  type AnyEventRecord,
+  type Participant,
+  type ProsePayload,
 } from "@f-mark/shared";
 import { getCommentTarget } from "@f-mark/shared";
 import { ParticipantAvatar } from "../components/ParticipantAvatar.js";
+import { CommentQuoteBlock } from "../components/CommentQuoteParts.js";
+import { quoteFromEventTarget } from "../comments/commentQuote.js";
+import { RIGHT_TAB_IDS } from "../state/rightTabsConfig.js";
 import { useStore } from "../state/store.js";
 import { formatWhen, whoOf } from "./format.js";
 
 type LineRange = [number, number];
+
+const commentActivityCopy = {
+  currentUser: "You",
+  responded: "responded",
+  commented: "commented",
+} as const;
+
+const commentTargetKinds = {
+  event: "event",
+} as const;
+
+const avatarSizes = {
+  small: "sm",
+} as const;
 
 interface Props {
   event: AnyEventRecord;
@@ -31,7 +50,7 @@ function lineLabel(lines: LineRange | undefined): string {
 }
 
 function titleForTarget(target: AnyEventRecord | undefined, fallback: string): string {
-  if (target?.kind !== "prose") return fallback;
+  if (target?.kind !== EVENT_KINDS.prose) return fallback;
   const payload = target.payload as ProsePayload;
   if (typeof payload.name === "string" && payload.name.trim().length > 0) {
     return payload.name.trim();
@@ -44,15 +63,7 @@ function targetSnippet(
   target: AnyEventRecord | undefined,
   lines: LineRange | undefined,
 ): string | null {
-  if (target?.kind !== "prose") return null;
-  const content = (target.payload as ProsePayload).content ?? "";
-  if (content.trim().length === 0) return null;
-  if (lines === undefined) return shortPreview(content, 120);
-  const all = content.split(/\r?\n/);
-  const start = Math.max(1, lines[0]);
-  const end = Math.min(all.length, Math.max(start, lines[1]));
-  if (start > all.length) return null;
-  return shortPreview(all.slice(start - 1, end).join(" "), 120);
+  return quoteFromEventTarget(target, lines);
 }
 
 export function CommentActivityCard({
@@ -74,21 +85,27 @@ export function CommentActivityCard({
   const who = whoOf(event.participant_id, participants);
   const isReply =
     typeof payload.in_reply_to === "string" && payload.in_reply_to.length > 0;
-  const actor = event.participant_id === currentUserId ? "You" : who.name;
-  const verb = isReply ? "responded" : "commented";
+  const actor =
+    event.participant_id === currentUserId
+      ? commentActivityCopy.currentUser
+      : who.name;
+  const verb = isReply
+    ? commentActivityCopy.responded
+    : commentActivityCopy.commented;
   const title = titleForTarget(targetEvent, targetAnchor);
   const label = lineLabel(targetLines);
   const commentPreview = shortPreview(payload.content, 110);
   const quote = targetSnippet(targetEvent, targetLines);
+  const quoteMultiline = quote !== null && quote.includes("\n");
 
   function focusComment(): void {
     setCommentTarget(
       targetLines === undefined
-        ? { kind: "event", file: targetAnchor }
-        : { kind: "event", file: targetAnchor, lines: targetLines },
+        ? { kind: commentTargetKinds.event, file: targetAnchor }
+        : { kind: commentTargetKinds.event, file: targetAnchor, lines: targetLines },
     );
     setFocusedCommentId(event.filename);
-    setRightTab("comments");
+    setRightTab(RIGHT_TAB_IDS.comments);
   }
 
   return (
@@ -104,11 +121,11 @@ export function CommentActivityCard({
       </span>
       <ParticipantAvatar
         participantId={who.id}
-        kind={who.isUser ? "user" : "agent"}
+        kind={who.isUser ? PARTICIPANT_KINDS.user : PARTICIPANT_KINDS.agent}
         name={who.name}
         color={who.color}
         runtimeId={who.runtimeId}
-        size="sm"
+        size={avatarSizes.small}
       />
       <span className="comment-activity-main">
         <span className="comment-activity-title">
@@ -117,7 +134,7 @@ export function CommentActivityCard({
         </span>
         <span className="comment-activity-preview">{commentPreview}</span>
         {quote !== null ? (
-          <span className="comment-activity-target">{quote}</span>
+          <CommentQuoteBlock quote={quote} multiline={quoteMultiline} />
         ) : null}
       </span>
       <span className="comment-activity-time">{formatWhen(event.timestamp)}</span>

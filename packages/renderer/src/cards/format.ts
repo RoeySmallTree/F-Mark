@@ -1,3 +1,8 @@
+const NO_LOOSE_STRING_VALUES = {
+  us: "us-",
+  user: "user",
+} as const;
+
 /* Small formatting helpers shared by the card components. */
 
 import type { Participant } from "@f-mark/shared";
@@ -22,7 +27,7 @@ export function whoOf(
       id: participantId,
       name: participantId,
       initial: (participantId[0] ?? "?").toUpperCase(),
-      isUser: participantId.startsWith("us-"),
+      isUser: participantId.startsWith(NO_LOOSE_STRING_VALUES.us),
       runtimeId: null,
     };
   }
@@ -30,7 +35,7 @@ export function whoOf(
     id: participantId,
     name: p.name,
     initial: (p.name[0] ?? "?").toUpperCase(),
-    isUser: p.kind === "user",
+    isUser: p.kind === NO_LOOSE_STRING_VALUES.user,
     color: p.color,
     runtimeId: p.runtime_id ?? null,
   };

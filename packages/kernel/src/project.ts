@@ -8,21 +8,29 @@ import { ensureFmarkGitignored } from "./gitignore.js";
 
 export interface ProjectConfig {
   version: string;
+  host?: string;
   port: number;
   participants: Record<string, Participant>;
+  /** Read-only git diff settings (expansion-decisions.md X5). The override
+      pins the base ref used to compute merge-base for branch-mode diffs;
+      absent/null means "detect" (origin/HEAD → main → master). */
+  git?: {
+    diff_base_ref_override?: string | null;
+  };
 }
 
 export interface Participant {
   kind: "user" | "agent" | "sys";
   name: string;
   color: string;
-  avatar_data_url?: string;
+  avatar_preset?: string;
   runtime_id?: string;
   model_override?: string;
   effort_override?: string;
 }
 
 const DEFAULT_VERSION = "0.1.0";
+const DEFAULT_HOST = "localhost";
 const DEFAULT_PORT = 7777;
 const USER_COLOR = "#3b82f6";
 
@@ -34,6 +42,7 @@ function defaultConfig(port: number): ProjectConfig {
   const id = shortId("us");
   return {
     version: DEFAULT_VERSION,
+    host: DEFAULT_HOST,
     port,
     participants: {
       [id]: { kind: "user", name: "You", color: USER_COLOR },

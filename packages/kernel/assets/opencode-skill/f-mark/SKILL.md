@@ -39,8 +39,14 @@ You generally do not POST events yourself when running managed — the plugin ow
 
 After linking, the kernel knows where your stream goes.
 
+## Session naming
+Sessions open with a placeholder name (`new-session`). Once you know what the session is about — usually after the first user message — rename it with the `fmark_rename_session` MCP tool (or `PATCH /sessions/:id` with `{ "slug": "..." }`) using a short kebab-case slug like `fix-login-flow`. If no request has arrived yet, leave the placeholder; never invent a name. The session id is immutable: renaming only changes the display slug, so keep using the same id. Don't rename sessions that already have a real name unless the user asks.
+
 ## First action
-Immediately call `fmark_post_prose` so the user sees you are online (e.g. "Connected. What would you like to work on?"), then `fmark_end_turn`.
+Don't open with a filler greeting like "Connected." — the managed spawn already shows you online. If the session still has its placeholder name (`new-session`), rename it first (`fmark_rename_session`). Then answer the user's active request directly; if there are unread comments (`mode: "comment"`), address those first. End the turn with `fmark_end_turn`.
+
+## Rendered UI / rich visuals
+For a rendered UI, mockup, chart, or any rich visual, use `fmark_post_html` (or `fmark_post_alternatives` for several to compare) — never ASCII. The posting surface is not the design target: first classify the visual target as one of three — **target-repo-ui** (UI for a specific repo or product — the current project or another → match *that* target's own design system, reading its source first, not F-Mark's applied theme), **fmark-ui** (UI that ships in F-Mark itself → read the real renderer source under `packages/renderer/src` and reuse its class names/structure, resolving colors via `fmark_get_theme`), or **session-artifact** (an unbound chart/analysis/standalone visual → default to the Amber house theme, `fmark_get_theme` with `theme: "amber"`).
 
 ## Reference
 See `api.md` in this folder for the full REST/MCP protocol reference.

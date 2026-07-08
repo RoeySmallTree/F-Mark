@@ -17,13 +17,13 @@ export const PARTICIPANTS: Record<string, Participant> = {
     kind: "agent",
     name: "Claude",
     color: "#b86a1f",
-    active_session: "2026-05-22-launch-planning",
+    active_session: "2026-05-22-launch-review",
   },
 };
 
 export const SESSION_META: SessionMeta = {
-  id: "2026-05-22-launch-planning",
-  slug: "launch-planning",
+  id: "2026-05-22-launch-review",
+  slug: "launch-review",
   created_at: "2026-05-22T10:00:00Z",
 };
 
@@ -35,6 +35,12 @@ export function resetStore(overrides: Partial<ReturnType<typeof useStore.getStat
     participants: PARTICIPANTS,
     currentUserId: "us-a7f3",
     events: [],
+    /* Required root scope (X2): scoped writes (postProse/postTodo/postChoice
+       + wake) need a known active path to resolve their scope. */
+    activePath: "/project",
+    activePathId: "project-id",
+    selectedPath: null,
+    selectedPathId: null,
     composeMode: "message",
     commentTarget: null,
     focusedCommentId: null,

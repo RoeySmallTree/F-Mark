@@ -1,0 +1,402 @@
+/* Avatar Preset Picker — premium redesign.
+   Trigger: double-bezel pill with live ASCII art preview.
+   Panel: nested-bezel glass container with staggered tile reveal.
+   All motion uses cubic-bezier(0.32, 0.72, 0, 1) spring physics. */
+
+@keyframes avatar-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes avatar-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+    filter: blur(1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* ─── Wrapper ──────────────────────────────────────────────────────────── */
+.avatar-preset-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ─── Trigger — outer pill (first bezel) ───────────────────────────────── */
+.avatar-preset-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 5px 12px 5px 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--canvas) 70%, var(--panel));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 80%, transparent),
+    0 1px 3px color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+  font-family: var(--sans);
+  cursor: pointer;
+  transition:
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    background 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.avatar-preset-trigger:hover {
+  border-color: var(--ink-4);
+  background: color-mix(in srgb, var(--ink) 4%, var(--canvas));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 85%, transparent),
+    0 3px 10px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.avatar-preset-picker.is-open .avatar-preset-trigger {
+  border-color: color-mix(in srgb, var(--user) 55%, var(--line-2));
+  background: var(--canvas);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 75%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--user) 10%, transparent);
+}
+
+/* ─── Trigger preview ring (second bezel) ──────────────────────────────── */
+.avatar-preset-trigger-preview {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent);
+  overflow: hidden;
+}
+.avatar-preset-trigger-preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px solid var(--user);
+  opacity: 0.3;
+  pointer-events: none;
+}
+.avatar-preset-trigger-preview .avatar-art-glyph {
+  --avatar-art-size: 6px;
+  --avatar-art-line: 5.8px;
+  --avatar-art-scale: 0.66;
+}
+
+/* ─── Trigger text ──────────────────────────────────────────────────────── */
+.avatar-preset-trigger-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.avatar-preset-trigger-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  line-height: 1;
+}
+.avatar-preset-trigger-value {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Trigger chevron ───────────────────────────────────────────────────── */
+.avatar-preset-trigger-chevron {
+  flex-shrink: 0;
+  color: var(--ink-4);
+  transition:
+    transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.avatar-preset-picker.is-open .avatar-preset-trigger-chevron {
+  transform: rotate(180deg);
+  color: var(--ink-3);
+}
+
+/* ─── Panel — outer shell (first bezel) ────────────────────────────────── */
+.avatar-preset-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg) 50%, var(--panel));
+  box-shadow:
+    0 16px 48px color-mix(in srgb, var(--ink) 14%, transparent),
+    0 4px 12px color-mix(in srgb, var(--ink) 7%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 88%, transparent);
+  overflow: hidden;
+  isolation: isolate;
+  animation: avatar-panel-in 240ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+}
+
+/* ─── Panel — inner core (second bezel) ────────────────────────────────── */
+.avatar-preset-panel-inner {
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--canvas);
+  border: 1px solid var(--line-3);
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent);
+}
+
+/* ─── Panel header ──────────────────────────────────────────────────────── */
+.avatar-preset-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-3);
+  background: var(--panel);
+}
+.avatar-preset-panel-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.avatar-preset-panel-title strong {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.avatar-preset-panel-title span {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.avatar-preset-panel-count {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+/* ─── Scroll area ───────────────────────────────────────────────────────── */
+.avatar-preset-scroll {
+  max-height: min(268px, 44vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--canvas);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+.avatar-preset-scroll::-webkit-scrollbar { width: 6px; }
+.avatar-preset-scroll::-webkit-scrollbar-track { background: transparent; }
+.avatar-preset-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--line-2);
+}
+
+/* ─── Grid ──────────────────────────────────────────────────────────────── */
+.avatar-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  padding: 12px;
+}
+
+/* ─── Tile ──────────────────────────────────────────────────────────────── */
+.avatar-preset-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  animation: avatar-tile-in 300ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  animation-delay: min(calc(var(--tile-i, 0) * 10ms), 100ms);
+  transition:
+    background 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.avatar-preset-tile:hover {
+  background: var(--bg);
+  border-color: var(--line-2);
+  transform: translateY(-2px);
+}
+.avatar-preset-tile:active {
+  transform: scale(0.95);
+  transition-duration: 80ms;
+}
+.avatar-preset-tile.selected {
+  background: color-mix(in srgb, var(--user) 9%, var(--canvas));
+  border-color: color-mix(in srgb, var(--user) 48%, var(--line-2));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--user) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 65%, transparent);
+}
+
+/* ─── Tile ring ─────────────────────────────────────────────────────────── */
+.avatar-preset-tile-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 65%, transparent);
+  overflow: hidden;
+}
+.avatar-preset-tile.selected .avatar-preset-tile-ring {
+  border-color: color-mix(in srgb, var(--user) 55%, var(--line));
+  background: color-mix(in srgb, var(--user) 7%, var(--bg));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--user) 16%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 65%, transparent);
+}
+.avatar-preset-tile-ring .avatar-art-glyph {
+  --avatar-art-size: 6px;
+  --avatar-art-line: 5.8px;
+  --avatar-art-scale: 0.66;
+}
+
+/* ─── Tile label ────────────────────────────────────────────────────────── */
+.avatar-preset-tile-label {
+  max-width: 100%;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+}
+.avatar-preset-tile.selected .avatar-preset-tile-label {
+  color: color-mix(in srgb, var(--user) 65%, var(--ink-2));
+  font-weight: 700;
+}
+
+/* ─── Color tray — same menu as ASCII presets ──────────────────────────── */
+.avatar-preset-colors.profile-color-control {
+  display: grid;
+  gap: 9px;
+  padding: 11px 14px 12px;
+  border-top: 1px solid var(--line-3);
+  background:
+    radial-gradient(80% 130% at 8% 0%, color-mix(in srgb, var(--user) 9%, transparent), transparent 52%),
+    var(--panel);
+}
+.avatar-preset-colors-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.avatar-preset-colors-head strong {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.avatar-preset-colors-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.avatar-preset-color-row {
+  width: 100%;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--canvas) 58%, var(--panel));
+}
+.avatar-preset-colors .avatar-preset-color-swatch {
+  background: var(--swatch-color);
+}
+.avatar-preset-hex-field {
+  width: 100%;
+}
+.avatar-preset-hex-field .swatch-hex {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* ─── Panel footer ──────────────────────────────────────────────────────── */
+.avatar-preset-panel-foot {
+  padding: 9px 14px;
+  border-top: 1px solid var(--line-3);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0.03em;
+}
+
+/* ─── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 520px) {
+  .avatar-preset-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+    padding: 10px;
+  }
+  .avatar-preset-tile-ring {
+    width: 32px;
+    height: 32px;
+  }
+}

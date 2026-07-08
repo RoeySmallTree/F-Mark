@@ -18,6 +18,21 @@ describe("MarkdownRenderer", () => {
     expect(html).toMatch(/<p[^>]*>\s*world\s*<\/p>/);
   });
 
+  it("annotates rendered markdown blocks with source line ranges", () => {
+    const md = "# Hello\n\n- Alpha\n- Beta\n\nFinal paragraph";
+    const { container } = render(<MarkdownRenderer content={md} />);
+
+    const heading = container.querySelector("h1");
+    const list = container.querySelector("ul");
+    const paragraph = container.querySelector("p");
+    expect(heading?.getAttribute("data-source-line")).toBe("1");
+    expect(heading?.getAttribute("data-source-line-end")).toBe("1");
+    expect(list?.getAttribute("data-source-line")).toBe("3");
+    expect(list?.getAttribute("data-source-line-end")).toBe("4");
+    expect(paragraph?.getAttribute("data-source-line")).toBe("6");
+    expect(paragraph?.getAttribute("data-source-line-end")).toBe("6");
+  });
+
   it("preserves the raw source in 'source' mode", () => {
     const md = "# Hello\n\nworld";
     const { container } = render(
@@ -29,6 +44,16 @@ describe("MarkdownRenderer", () => {
     // No parsed HTML should appear here — no <h1>, just literal hash.
     expect(pre!.querySelector("h1")).toBeNull();
     expect(pre!.textContent).toContain("# Hello");
+  });
+
+  it("can wrap rendered words for the live message reveal without changing text", () => {
+    const { container } = render(
+      <MarkdownRenderer content={"hello **bright** world"} revealWords />,
+    );
+    const words = container.querySelectorAll(".fm-word-reveal");
+
+    expect(words.length).toBe(3);
+    expect(container.textContent).toContain("hello bright world");
   });
 
   it("renders a closed accordion in 'accordion' mode", () => {
@@ -75,5 +100,22 @@ describe("MarkdownRenderer", () => {
     fireEvent.click(screen.getByRole("button", { name: /Top/ }));
     const h2Buttons = container.querySelectorAll("button.fm-accordion-h2");
     expect(h2Buttons.length).toBe(2);
+  });
+
+  it("renders configured JSON sections as an interactive tree in accordion mode", () => {
+    const md = '# Payload\n\n{"alpha":{"beta":1},"items":[true,false]}';
+    const { container } = render(
+      <MarkdownRenderer
+        content={md}
+        mode="accordion"
+        interactiveJsonSections={[{ title: "Payload" }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Payload/ }));
+
+    expect(container.querySelector(".fm-json-tree")).not.toBeNull();
+    expect(container.querySelector(".fm-prose p")).toBeNull();
+    expect(screen.getByText("{ 2 keys }")).toBeInTheDocument();
   });
 });

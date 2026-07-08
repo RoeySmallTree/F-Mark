@@ -70,6 +70,20 @@ export function isFmarkSessionName(name: string): boolean {
   return FMARK_RE.test(name);
 }
 
+/** 8-char project digest embedded in every F-Mark tmux session name. */
+export function projectHashFromFmarkSessionName(name: string): string | null {
+  const match = /^fmark-[a-z0-9-]+-([0-9a-f]{8})-(?:ag|term)-/.exec(name);
+  return match?.[1] ?? null;
+}
+
+export function fmarkSessionMatchesProjectRoot(
+  name: string,
+  projectRoot: string,
+): boolean {
+  const hash = projectHashFromFmarkSessionName(name);
+  return hash !== null && hash === projectRootHash(projectRoot);
+}
+
 export type ParsedSession =
   | { kind: "agent"; participantId: string }
   | { kind: "terminal"; index: number };

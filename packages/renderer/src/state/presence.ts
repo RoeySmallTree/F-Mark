@@ -4,6 +4,7 @@ import type {
   ManagedTerminal,
   PresenceState,
 } from "@f-mark/shared";
+import { managedAgentsEqual } from "./managedAgentEquality.js";
 
 export interface AgentPresence {
   state: PresenceState;
@@ -15,6 +16,10 @@ export interface PresenceSlice {
   managedAgents: ManagedAgent[];
   managedTerminals: ManagedTerminal[];
   envProbe: EnvProbeResult | null;
+  /** Monotonic counter bumped by WebSocket agent lifecycle events only.
+      HTTP hydration must not touch this — hooks subscribe to refresh live
+      panels without looping on store writes from /managed-agents/status. */
+  managedAgentLiveRevision: number;
   setPresence(participantId: string, p: AgentPresence): void;
   removePresence(participantId: string): void;
   setManagedAgents(agents: ManagedAgent[]): void;
@@ -22,7 +27,9 @@ export interface PresenceSlice {
   addManagedAgent(agent: ManagedAgent): void;
   removeManagedAgent(participantId: string): void;
   addManagedTerminal(t: ManagedTerminal): void;
+  removeManagedTerminal(tmuxSession: string): void;
   setEnvProbe(r: EnvProbeResult): void;
+  bumpManagedAgentLiveRevision(): void;
 }
 
 /* Generic shape: a Zustand `set` that accepts a producer returning a partial
@@ -49,6 +56,7 @@ export function createPresenceSlice<S extends PresenceSlice = PresenceSlice>(
     managedAgents: [],
     managedTerminals: [],
     envProbe: null,
+    managedAgentLiveRevision: 0,
     setPresence: (id, p) =>
       sliceSet((s) => ({ presence: { ...s.presence, [id]: p } })),
     removePresence: (id) =>
@@ -64,14 +72,22 @@ export function createPresenceSlice<S extends PresenceSlice = PresenceSlice>(
     setManagedTerminals: (terminals) =>
       sliceSet(() => ({ managedTerminals: terminals })),
     addManagedAgent: (agent) =>
-      sliceSet((s) => ({
-        managedAgents: [
-          ...s.managedAgents.filter(
-            (a) => a.participant_id !== agent.participant_id,
-          ),
-          agent,
-        ],
-      })),
+      sliceSet((s) => {
+        const existing = s.managedAgents.find(
+          (row) => row.participant_id === agent.participant_id,
+        );
+        if (existing !== undefined && managedAgentsEqual(existing, agent)) {
+          return {};
+        }
+        return {
+          managedAgents: [
+            ...s.managedAgents.filter(
+              (a) => a.participant_id !== agent.participant_id,
+            ),
+            agent,
+          ],
+        };
+      }),
     removeManagedAgent: (id) =>
       sliceSet((s) => ({
         managedAgents: s.managedAgents.filter((a) => a.participant_id !== id),
@@ -83,6 +99,16 @@ export function createPresenceSlice<S extends PresenceSlice = PresenceSlice>(
           t,
         ],
       })),
+    removeManagedTerminal: (tmuxSession) =>
+      sliceSet((s) => ({
+        managedTerminals: s.managedTerminals.filter(
+          (x) => x.tmux_session !== tmuxSession,
+        ),
+      })),
     setEnvProbe: (r) => sliceSet(() => ({ envProbe: r })),
+    bumpManagedAgentLiveRevision: () =>
+      sliceSet((s) => ({
+        managedAgentLiveRevision: s.managedAgentLiveRevision + 1,
+      })),
   };
 }

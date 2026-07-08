@@ -1,5 +1,14 @@
 import type { CSSProperties } from "react";
 
+const NO_LOOSE_STRING_VALUES = {
+  claude: "claude",
+  opencode: "opencode",
+  openai: "openai",
+  agent: "Agent",
+  icon: "icon",
+  initials: "initials",
+} as const;
+
 /* Built-in runtime catalog. The full editable registry is available through
    /runtimes; this table gives built-ins stable labels for surfaces that only
    have an env-probe snapshot. */
@@ -19,17 +28,14 @@ export function runtimeDisplayName(runtimeId: string): string {
 export const RUNTIME_PROVIDER_ICONS = {
   claude: {
     kind: "claude",
-    src: "/agent-icons/claude-icon.png",
     label: "Claude icon",
   },
   openai: {
     kind: "openai",
-    src: "/agent-icons/gpt-icon.png",
     label: "OpenAI icon",
   },
   opencode: {
     kind: "opencode",
-    src: "/agent-icons/opencode-icon.svg",
     label: "Opencode icon",
   },
 } as const;
@@ -53,19 +59,19 @@ export function runtimeProviderIconKind(
   const haystack = `${normalizeProviderToken(runtimeId)} ${normalizeProviderToken(
     displayName,
   )}`;
-  if (/\b(opencode|open code)\b/.test(haystack)) return "opencode";
-  if (/\b(claude|anthropic)\b/.test(haystack)) return "claude";
+  if (/\b(opencode|open code)\b/.test(haystack)) return NO_LOOSE_STRING_VALUES.opencode;
+  if (/\b(claude|anthropic)\b/.test(haystack)) return NO_LOOSE_STRING_VALUES.claude;
   if (/\b(codex|openai|open ai|chatgpt|chat gpt|gpt)\b/.test(haystack)) {
-    return "openai";
+    return NO_LOOSE_STRING_VALUES.openai;
   }
   return null;
 }
 
-export function runtimeProviderInitials(
+function runtimeProviderInitials(
   runtimeId: string,
   displayName = runtimeId,
 ): string {
-  const source = displayName.trim() || runtimeId.trim() || "Agent";
+  const source = displayName.trim() || runtimeId.trim() || NO_LOOSE_STRING_VALUES.agent;
   const words = source.replace(/[_-]+/g, " ").match(/[A-Za-z0-9]+/g) ?? [];
   const raw =
     words.length >= 2
@@ -82,16 +88,10 @@ export function runtimeProviderVisual(
   const icon =
     iconKind !== null ? RUNTIME_PROVIDER_ICONS[iconKind] : undefined;
   if (icon !== undefined) {
-    return { type: "icon", icon };
+    return { type: NO_LOOSE_STRING_VALUES.icon, icon };
   }
   return {
-    type: "initials",
+    type: NO_LOOSE_STRING_VALUES.initials,
     initials: runtimeProviderInitials(runtimeId, displayName),
   };
-}
-
-export function runtimeProviderIconStyle(
-  icon: RuntimeProviderIcon,
-): CSSProperties {
-  return { "--icon-url": `url(${icon.src})` } as CSSProperties;
 }

@@ -73,7 +73,7 @@ describe.skipIf(!rendererBuilt || sampleAsset === undefined)(
         const { app } = createServer({ token: null, paths: p });
         const res = await app.inject({
           method: "GET",
-          url: "/sessions/no-such/events",
+          url: `/sessions/no-such/events?root=${encodeURIComponent(root)}`,
         });
         expect(res.statusCode).toBe(404);
         const body = res.json();

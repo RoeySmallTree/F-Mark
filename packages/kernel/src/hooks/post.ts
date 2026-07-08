@@ -36,7 +36,9 @@ export async function postProjectedEvents(
         content: ev.content,
         arbitrary: ev.arbitrary,
         source: "hook",
-        path: ctx.path,
+        root: ctx.path,
+        ...(ev.supersedes !== undefined ? { supersedes: ev.supersedes } : {}),
+        ...(ev.timestamp !== undefined ? { timestamp: ev.timestamp } : {}),
       });
       lastWasConcluding = !ev.arbitrary;
     } else if (ev.kind === "tool-use") {
@@ -47,7 +49,7 @@ export async function postProjectedEvents(
         input: ev.input,
         result: ev.result,
         success: ev.success,
-        path: ctx.path,
+        root: ctx.path,
       });
       lastWasConcluding = false;
     } else if (ev.kind === "subagent-run") {
@@ -58,7 +60,7 @@ export async function postProjectedEvents(
         {
           participant_id: participantId,
           ...body,
-          path: ctx.path,
+          root: ctx.path,
         },
       );
       lastWasConcluding = false;
@@ -70,7 +72,7 @@ export async function postProjectedEvents(
         {
           participant_id: participantId,
           ...body,
-          path: ctx.path,
+          root: ctx.path,
         },
       );
       lastWasConcluding = false;
@@ -80,7 +82,7 @@ export async function postProjectedEvents(
     await httpPost(`${ctx.kernelUrl}/sessions/${sessionId}/events/turn-end`, ctx.token, {
       participant_id: participantId,
       source: "hook",
-      path: ctx.path,
+      root: ctx.path,
     });
   }
 }
@@ -93,7 +95,7 @@ export async function postAccessRequest(
   await httpPost(
     `${ctx.kernelUrl}/sessions/${sessionId}/events/access-request`,
     ctx.token,
-    { ...body, path: ctx.path },
+    { ...body, root: ctx.path },
   );
 }
 
@@ -105,7 +107,7 @@ export async function postAccessResponse(
   await httpPost(
     `${ctx.kernelUrl}/sessions/${sessionId}/events/access-response`,
     ctx.token,
-    { ...body, path: ctx.path },
+    { ...body, root: ctx.path },
   );
 }
 
@@ -141,7 +143,7 @@ export async function postRuntimeState(
           "Content-Type": "application/json",
           Authorization: `Bearer ${ctx.token}`,
         },
-        body: JSON.stringify(state),
+        body: JSON.stringify({ ...state, root: ctx.path }),
         signal: AbortSignal.timeout(2000),
       },
     );

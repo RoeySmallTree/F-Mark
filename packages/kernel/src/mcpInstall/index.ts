@@ -8,8 +8,11 @@ import type {
   RuntimeCapability,
   RuntimeId,
 } from "@f-mark/shared";
-import { checkHookInstallStatus } from "../hooksInstall/index.js";
-import { applyAutomaticHookInstall } from "../hooksInstall/index.js";
+import {
+  applyAutomaticHookInstall,
+  checkHookInstallStatus,
+  reconcileHookScopes,
+} from "../hooksInstall/index.js";
 import { FMARK_HOOK_INSTALL_VERSION } from "../hooksInstall/command.js";
 import {
   envWithExecutableSearchPath,
@@ -25,6 +28,13 @@ import {
   type McpApplyInput,
   type McpDetectInput,
 } from "./types.js";
+import {
+  defaultScope,
+  hookInstallScopeFor,
+  integrationScopeForHookScope,
+} from "./scopePreference.js";
+
+export { defaultScope } from "./scopePreference.js";
 
 function executableFor(runtimeId: RuntimeId, configuredExecutable?: string): string {
   if (configuredExecutable !== undefined && configuredExecutable.length > 0) {
@@ -86,24 +96,25 @@ async function probeRuntime(
   }
 }
 
-async function detectMcp(input: McpDetectInput): Promise<IntegrationCheck> {
-  if (input.runtimeId === "claude") return detectClaudeMcp(input);
-  if (input.runtimeId === "codex") return detectCodexMcp(input);
-  if (input.runtimeId === "opencode") return detectOpencodeMcp(input);
-  return makeCheck([
-    {
-      scope: "project",
-      path: input.projectRoot,
-      status: "unsupported",
-      reason: `unsupported runtime_id: ${input.runtimeId}`,
-      safe_auto_apply: false,
-    },
-  ]);
-}
-
-function defaultScope(runtimeId: RuntimeId): IntegrationScope {
-  if (runtimeId === "codex") return "user";
-  return "project";
+async function detectMcp(
+  input: McpDetectInput & { chosenScope?: IntegrationScope },
+): Promise<IntegrationCheck> {
+  let check: IntegrationCheck;
+  if (input.runtimeId === "claude") check = await detectClaudeMcp(input);
+  else if (input.runtimeId === "codex") check = await detectCodexMcp(input);
+  else if (input.runtimeId === "opencode") check = await detectOpencodeMcp(input);
+  else {
+    check = makeCheck([
+      {
+        scope: "project",
+        path: input.projectRoot,
+        status: "unsupported",
+        reason: `unsupported runtime_id: ${input.runtimeId}`,
+        safe_auto_apply: false,
+      },
+    ]);
+  }
+  return summarizeMcpCheckForScope(check, input.chosenScope, input.runtimeId);
 }
 
 function hookIntegrationLocation(input: {
@@ -115,11 +126,12 @@ function hookIntegrationLocation(input: {
   error?: string;
   safeAutoApply: boolean;
 }): IntegrationLocation {
+  const expectedVersion = input.expectedVersion ?? FMARK_HOOK_INSTALL_VERSION;
   const staleReason =
     input.status === "stale"
-      ? `installed hook ${input.detectedVersion ?? "legacy"}; expected ${
-          input.expectedVersion ?? FMARK_HOOK_INSTALL_VERSION
-        }`
+      ? input.detectedVersion === expectedVersion
+        ? "installed hook version matches, but the command or trust state does not match the managed F-Mark hook"
+        : `installed hook ${input.detectedVersion ?? "legacy"}; expected ${expectedVersion}`
       : undefined;
   return {
     scope: input.scope,
@@ -151,8 +163,49 @@ function hookTargetScope(
   runtimeId: RuntimeId,
   requestedScope: IntegrationScope,
 ): IntegrationScope {
+  return integrationScopeForHookScope(
+    runtimeId,
+    hookInstallScopeFor(runtimeId, requestedScope),
+  );
+}
+
+function locationScopeForChosenScope(
+  runtimeId: RuntimeId,
+  chosenScope: IntegrationScope,
+): IntegrationScope {
   if (runtimeId === "codex") return "user";
-  return requestedScope === "user" ? "user" : "project";
+  return chosenScope;
+}
+
+export function summarizeHookStatusForScope(
+  locations: IntegrationLocation[],
+  chosenScope: IntegrationScope | undefined,
+  runtimeId: RuntimeId,
+): IntegrationCheck["status"] {
+  if (chosenScope === undefined) return summarizeHookStatus(locations);
+  const locationScope = locationScopeForChosenScope(runtimeId, chosenScope);
+  const chosenLocations = locations.filter(
+    (location) => location.scope === locationScope,
+  );
+  if (chosenLocations.length === 0) return "missing";
+  return summarizeHookStatus(chosenLocations);
+}
+
+function summarizeMcpCheckForScope(
+  check: IntegrationCheck,
+  chosenScope: IntegrationScope | undefined,
+  runtimeId: RuntimeId,
+): IntegrationCheck {
+  if (chosenScope === undefined) return check;
+  const locationScope = locationScopeForChosenScope(runtimeId, chosenScope);
+  const chosenLocations = check.locations.filter(
+    (location) => location.scope === locationScope,
+  );
+  return {
+    ...check,
+    status:
+      chosenLocations.length === 0 ? "missing" : summarizeStatus(chosenLocations),
+  };
 }
 
 function hookLocationForScope(
@@ -178,6 +231,8 @@ async function detectHooks(input: {
   projectRoot: string;
   participantId: string;
   userParticipantId?: string;
+  env?: NodeJS.ProcessEnv;
+  chosenScope?: IntegrationScope;
 }): Promise<IntegrationCheck> {
   if (
     input.runtimeId !== "claude" &&
@@ -194,7 +249,11 @@ async function detectHooks(input: {
       },
     ];
     return {
-      status: summarizeHookStatus(locations),
+      status: summarizeHookStatusForScope(
+        locations,
+        input.chosenScope,
+        input.runtimeId,
+      ),
       expected_version: FMARK_HOOK_INSTALL_VERSION,
       locations,
     };
@@ -205,6 +264,7 @@ async function detectHooks(input: {
       participantId: input.participantId,
       userParticipantId: input.userParticipantId,
       projectRoot: input.projectRoot,
+      env: input.env,
     });
     const locations =
       detected.locations?.map((location) =>
@@ -247,7 +307,11 @@ async function detectHooks(input: {
         }),
       ];
     return {
-      status: summarizeHookStatus(locations),
+      status: summarizeHookStatusForScope(
+        locations,
+        input.chosenScope,
+        input.runtimeId,
+      ),
       expected_version: detected.expectedVersion ?? FMARK_HOOK_INSTALL_VERSION,
       locations,
     };
@@ -262,7 +326,11 @@ async function detectHooks(input: {
       },
     ];
     return {
-      status: summarizeHookStatus(locations),
+      status: summarizeHookStatusForScope(
+        locations,
+        input.chosenScope,
+        input.runtimeId,
+      ),
       expected_version: FMARK_HOOK_INSTALL_VERSION,
       locations,
     };
@@ -276,25 +344,35 @@ export async function preflightIntegration(input: {
   participantId?: string;
   userParticipantId?: string;
   env?: NodeJS.ProcessEnv;
+  chosenScope?: IntegrationScope;
 }): Promise<IntegrationPreflightResponse> {
   const env = input.env ?? process.env;
   const participantId = input.participantId ?? "ag-preflight";
+  const resolvedChosenScope = input.chosenScope ?? defaultScope(input.runtimeId);
+  const chosenHookScope =
+    input.chosenScope === undefined
+      ? undefined
+      : hookTargetScope(input.runtimeId, input.chosenScope);
   const runtime = await probeRuntime(input.runtimeId, env, input.executable);
   const mcp = await detectMcp({
     runtimeId: input.runtimeId,
     projectRoot: input.projectRoot,
     env,
+    chosenScope: input.chosenScope,
   });
   const hooks = await detectHooks({
     runtimeId: input.runtimeId,
     projectRoot: input.projectRoot,
     participantId,
     userParticipantId: input.userParticipantId,
+    env,
+    chosenScope: chosenHookScope,
   });
   return {
     runtime,
     mcp,
     hooks,
+    chosen_scope: resolvedChosenScope,
     can_apply:
       runtime.available &&
       mcp.status !== "blocked" &&
@@ -318,19 +396,22 @@ export async function applyIntegration(input: {
   if (!runtime.available) {
     throw new Error(runtime.reason ?? `${runtime.executable} is not available`);
   }
+  const requestedScope = input.scope ?? defaultScope(input.runtimeId);
+  const chosenHookScope = hookInstallScopeFor(input.runtimeId, requestedScope);
+  const targetHookScope = hookTargetScope(input.runtimeId, requestedScope);
   const appliedMcp = await applyMcp({
     runtimeId: input.runtimeId,
-    scope: input.scope ?? defaultScope(input.runtimeId),
+    scope: requestedScope,
     projectRoot: input.projectRoot,
     env,
   });
-  const requestedScope = input.scope ?? defaultScope(input.runtimeId);
-  const targetHookScope = hookTargetScope(input.runtimeId, requestedScope);
   const beforeHooks = await detectHooks({
     runtimeId: input.runtimeId,
     projectRoot: input.projectRoot,
     participantId: input.participantId ?? "ag-preflight",
     userParticipantId: input.userParticipantId,
+    env,
+    chosenScope: targetHookScope,
   });
   const beforeHookLocation = hookLocationForScope(beforeHooks, targetHookScope);
   let hooksChanged = false;
@@ -341,11 +422,19 @@ export async function applyIntegration(input: {
       participantId: input.participantId,
       userParticipantId: input.userParticipantId,
       projectRoot: input.projectRoot,
-      scope: requestedScope === "user" ? "global" : "local",
+      scope: chosenHookScope,
+      env,
     });
     hooksChanged = applied.changed;
     appliedHooksScope = targetHookScope;
   }
+  const reconciled = await reconcileHookScopes({
+    runtimeId: input.runtimeId,
+    chosenHookScope,
+    projectRoot: input.projectRoot,
+    env,
+  });
+  hooksChanged = hooksChanged || reconciled.removed.length > 0;
   const after = await preflightIntegration({
     runtimeId: input.runtimeId,
     executable: input.executable,
@@ -353,6 +442,7 @@ export async function applyIntegration(input: {
     userParticipantId: input.userParticipantId,
     projectRoot: input.projectRoot,
     env,
+    chosenScope: requestedScope,
   });
   const appliedHooksLocation =
     appliedHooksScope === undefined
@@ -365,5 +455,7 @@ export async function applyIntegration(input: {
       ...(appliedHooksLocation !== undefined ? { hooks: appliedHooksLocation } : {}),
     },
     changed: appliedMcp.changed || hooksChanged,
+    mcp_changed: appliedMcp.changed,
+    hooks_changed: hooksChanged,
   };
 }

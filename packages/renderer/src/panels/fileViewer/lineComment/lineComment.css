@@ -1,0 +1,135 @@
+/* In-viewer line-comment affordance styles.
+   Kept in its own file (imported by the affordance components) so the parallel
+   diff/git work on fileViewer.css doesn't collide. */
+
+/* ---------- Monaco glyph-margin affordance ---------- */
+
+/* The "add comment" plus that appears in the glyph margin on hover / for the
+   active selection. Monaco renders the glyph as an empty element with this
+   class; we paint a centered "+" via ::before. */
+.fv-line-comment-glyph {
+  cursor: pointer;
+}
+.fv-line-comment-glyph::before {
+  content: "+";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--user);
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+.fv-line-comment-glyph:hover::before,
+.fv-line-comment-glyph.active::before {
+  opacity: 1;
+}
+.fv-line-comment-glyph.active::before {
+  color: var(--agent);
+}
+
+/* Existing-comment message icon in glyph margin (draft "+" uses fv-line-comment-glyph). */
+.fv-line-comment-glyph-existing {
+  cursor: pointer;
+}
+.fv-line-comment-glyph-existing::before {
+  content: "💬";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.85;
+  transition: opacity 0.12s;
+}
+.fv-line-comment-glyph-existing:hover::before,
+.fv-line-comment-glyph-existing.active::before {
+  opacity: 1;
+}
+.fv-line-comment-glyph-existing.resolved::before {
+  filter: grayscale(1) sepia(1) saturate(4) hue-rotate(85deg);
+}
+
+/* Whole-line flash band when a comment is revealed in Monaco. */
+.fv-line-comment-flash {
+  background: color-mix(in srgb, var(--agent) 22%, transparent);
+  animation: fv-line-comment-flash-fade 1.4s ease-out;
+}
+@keyframes fv-line-comment-flash-fade {
+  0% {
+    background: color-mix(in srgb, var(--agent) 38%, transparent);
+  }
+  100% {
+    background: color-mix(in srgb, var(--agent) 0%, transparent);
+  }
+}
+
+/* The Monaco wrap is the positioned ancestor for the draft popover. */
+.fv-monaco-wrap {
+  position: relative;
+}
+.fv-line-comment-popover.fv-monaco-comment-popover {
+  position: absolute;
+  right: 16px;
+  left: auto;
+}
+
+/* ---------- Rendered (markdown / csv) overlay ---------- */
+
+.fv-line-comment-overlay {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+.fv-line-comment-content {
+  position: relative;
+  min-height: 100%;
+}
+.fv-line-comment-highlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--agent) 12%, transparent);
+  border-left: 2px solid var(--agent);
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.fv-line-comment-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  z-index: 3;
+}
+.fv-line-comment-rail-existing {
+  right: 4px;
+}
+.fv-line-comment-rail-draft {
+  right: 40px;
+}
+
+/* The shared draft popover, positioned within the rendered overlay. */
+.fv-line-comment-popover.fv-rendered-comment-popover {
+  position: absolute;
+  right: 78px;
+  left: auto;
+  z-index: 25;
+}
+.fv-line-comment-popover.is-fixed {
+  position: fixed;
+  right: auto;
+  left: auto;
+  transform: none;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}

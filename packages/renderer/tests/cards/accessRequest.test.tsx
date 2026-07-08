@@ -144,8 +144,8 @@ describe("AccessRequestCard — body rendering branches", () => {
         allEvents={[event]}
       />,
     );
-    const approve = screen.getByRole("button", { name: "Approve access request" });
-    expect(approve).toHaveTextContent("Approve");
+    const approve = screen.getByRole("button", { name: /^Allow/i });
+    expect(approve).toHaveTextContent("Allow");
     expect(approve).toHaveAttribute("data-decision", "approve");
     fireEvent.click(approve);
 
@@ -184,8 +184,8 @@ describe("AccessRequestCard — body rendering branches", () => {
         allEvents={[event]}
       />,
     );
-    const deny = screen.getByRole("button", { name: "Deny access request" });
-    expect(deny).toHaveTextContent("Deny");
+    const deny = screen.getByRole("button", { name: /Cancel/i });
+    expect(deny).toHaveTextContent("Cancel");
     expect(deny).toHaveAttribute("data-decision", "deny");
     fireEvent.click(deny);
 
@@ -234,7 +234,7 @@ describe("AccessRequestCard — body rendering branches", () => {
         allEvents={[requestEvent, responseEvent]}
       />,
     );
-    expect(screen.queryByLabelText("Approve access request")).toBeNull();
-    expect(screen.queryByLabelText("Deny access request")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Allow/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Cancel/i })).toBeNull();
   });
 });

@@ -92,6 +92,69 @@ describe("mcpInstall/opencode", () => {
     expect(j.mcp.fmark).toBeDefined();
   });
 
+  test("project apply removes owned aliases and competing user entries", async () => {
+    await mkdir(join(tmp, ".config/opencode"), { recursive: true });
+    await writeFile(
+      join(tmp, "opencode.json"),
+      JSON.stringify(
+        {
+          mcp: {
+            "f-mark": {
+              type: "local",
+              command: ["f-mark", "mcp", "--path", tmp],
+              enabled: true,
+            },
+            other: { type: "local", command: ["echo"], enabled: true },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    await writeFile(
+      join(tmp, ".config/opencode/opencode.json"),
+      JSON.stringify(
+        {
+          mcp: {
+            "fmark-old": {
+              type: "local",
+              command: ["node", "/tmp/old.js", "mcp", "--path", "/tmp/old"],
+              environment: { F_MARK_MCP_VERSION: "phase5-stdio-v1" },
+              enabled: true,
+            },
+            userOther: { type: "local", command: ["echo"], enabled: true },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const before = await detectOpencodeMcp({ runtimeId: "opencode", projectRoot: tmp, env });
+    expect(before.status).toBe("stale");
+
+    await applyOpencodeMcp({
+      runtimeId: "opencode",
+      projectRoot: tmp,
+      scope: "project",
+      env,
+    });
+
+    const project = JSON.parse(await readFile(join(tmp, "opencode.json"), "utf8"));
+    expect(project.mcp.fmark).toBeDefined();
+    expect(project.mcp["f-mark"]).toBeUndefined();
+    expect(project.mcp.other).toBeDefined();
+
+    const user = JSON.parse(
+      await readFile(join(tmp, ".config/opencode/opencode.json"), "utf8"),
+    );
+    expect(user.mcp["fmark-old"]).toBeUndefined();
+    expect(user.mcp.userOther).toBeDefined();
+
+    const after = await detectOpencodeMcp({ runtimeId: "opencode", projectRoot: tmp, env });
+    expect(after.status).toBe("installed");
+  });
+
   test("prefers existing opencode.jsonc when both forms would be valid", async () => {
     await writeFile(
       join(tmp, "opencode.jsonc"),

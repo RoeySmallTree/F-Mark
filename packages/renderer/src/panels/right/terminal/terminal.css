@@ -1,0 +1,298 @@
+/* Terminal dock pane — Terminals | Agents toggle over a tab strip and a
+   keep-alive stack of live xterm panes. Only the active terminal is visible
+   (visibility, not display:none, so a hidden pane keeps measurable dimensions
+   and never feeds a 0×0 size to its tmux pane). */
+
+.right-terminal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ── Terminals | Agents segmented control ────────────────────────────────
+   Double-bezel pill: outer agent-tinted shell, pill buttons inside. */
+.terminal-mode-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  margin: 8px 10px 0;
+  border: 1px solid color-mix(in srgb, var(--agent) 16%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--agent) 5%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent);
+}
+
+.terminal-mode-btn {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color     200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.terminal-mode-btn:hover {
+  color: var(--ink-2);
+}
+
+.terminal-mode-btn.active {
+  background: color-mix(in srgb, var(--agent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 24%, transparent);
+  color: var(--ink);
+}
+
+/* ── empty / disabled pane ───────────────────────────────────────────── */
+.terminal-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 6px;
+}
+
+.terminal-empty .tab-empty {
+  flex: 1 1 auto;
+}
+
+/* "New terminal" action button inside the empty state */
+.terminal-empty-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--agent) 18%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--agent) 7%, transparent);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.terminal-empty-new:hover {
+  background: color-mix(in srgb, var(--agent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 40%, transparent);
+  color: var(--ink);
+}
+
+.terminal-empty-new:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.terminal-error {
+  margin: 0;
+  padding: 0 10px;
+  font-size: 11.5px;
+  color: var(--rose);
+}
+
+/* ── Inner tab strip ─────────────────────────────────────────────────── */
+.terminal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding: 6px 10px 0;
+}
+
+.terminal-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  max-width: 160px;
+  padding: 0 4px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink-3);
+  transition:
+    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.terminal-tab:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-2);
+}
+
+.terminal-tab.active {
+  background: color-mix(in srgb, var(--agent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--agent) 24%, transparent);
+  color: var(--ink);
+}
+
+.terminal-tab-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.terminal-tab-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity  180ms cubic-bezier(0.32, 0.72, 0, 1),
+    background 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    color    180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab.active .terminal-tab-close {
+  opacity: 0.55;
+}
+
+.terminal-tab-close:hover {
+  opacity: 1 !important;
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 14%, transparent);
+}
+
+.terminal-tab-close:disabled {
+  opacity: 0.3 !important;
+  cursor: wait;
+}
+
+/* "+" spawn button */
+.terminal-tab-add {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
+    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.terminal-tab-add:hover {
+  color: var(--ink-2);
+  border-color: color-mix(in srgb, var(--agent) 28%, transparent);
+  background: color-mix(in srgb, var(--agent) 8%, transparent);
+}
+
+.terminal-tab-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Keep-alive body stack ───────────────────────────────────────────── */
+.terminal-bodies {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 240px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.terminal-agent-unavailable {
+  flex: 1 1 auto;
+  min-height: 240px;
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--ink-3);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px;
+  text-align: center;
+}
+
+.terminal-agent-unavailable p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.terminal-agent-unavailable button {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms;
+}
+
+.terminal-agent-unavailable button:hover {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+
+.terminal-body-slot {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.terminal-body-slot.active {
+  visibility: visible;
+}
+
+.terminal-view-host {
+  width: 100%;
+  height: 100%;
+}

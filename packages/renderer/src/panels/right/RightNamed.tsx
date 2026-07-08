@@ -1,10 +1,21 @@
 import { useMemo } from "react";
 import { FileText } from "lucide-react";
-import type { ProsePayload } from "@f-mark/shared";
 import { useStore } from "../../state/store.js";
+import { TabEmptyState } from "./TabEmptyState.js";
 import { aggregate } from "../../state/aggregate.js";
-import { LoadingAnimation } from "../../components/LoadingAnimation.js";
-import { LogLevel, useSeqLog } from "../../hooks/useSeqLog.js";
+import {
+  activateEventOnKey,
+  jumpToEvent,
+  participantName,
+  prosePayloadOf,
+} from "../prosePanelUtils.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  i: "--i",
+  untitled: "(untitled)",
+  named: "named",
+  rightNamedEmpty: "right-named-empty",
+} as const;
 
 function shortPreview(text: string, max = 130): string {
   const trimmed = text.replace(/\s+/g, " ").trim();
@@ -16,35 +27,22 @@ export function RightNamed(): JSX.Element {
   const events = useStore((s) => s.events);
   const participants = useStore((s) => s.participants);
   const namedEvents = useMemo(() => aggregate(events).named, [events]);
-  const log = useSeqLog("RightNamed");
-
-  function jumpTo(filename: string): void {
-    const el = document.querySelector(`[data-event-filename="${filename}"]`);
-    log(
-      "RightNamed row clicked",
-      {
-        filename,
-        elementFound: el !== null,
-        $note:
-          "Click on a named contribution should scroll the feed to the matching card",
-      },
-      el === null ? LogLevel.Warning : LogLevel.Info,
-    );
-    if (el !== null) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
 
   if (namedEvents.length === 0) {
-    return <LoadingAnimation className="panel-loading" />;
+    return (
+      <TabEmptyState
+        variant={NO_LOOSE_STRING_VALUES.named}
+        fill
+        testId={NO_LOOSE_STRING_VALUES.rightNamedEmpty}
+      />
+    );
   }
 
   return (
     <div>
       {namedEvents.map((ev, idx) => {
-        const payload = ev.payload as ProsePayload;
-        const author =
-          participants[ev.participant_id]?.name ?? ev.participant_id;
+        const payload = prosePayloadOf(ev);
+        const author = participantName(participants, ev.participant_id);
         return (
           <div
             key={ev.filename}
@@ -58,15 +56,10 @@ export function RightNamed(): JSX.Element {
               borderBottom: "1px solid var(--line-2)",
               alignItems: "flex-start",
               cursor: "pointer",
-              ["--i" as string]: Math.min(idx, 5),
+              [NO_LOOSE_STRING_VALUES.i as string]: Math.min(idx, 5),
             }}
-            onClick={() => jumpTo(ev.filename)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                jumpTo(ev.filename);
-              }
-            }}
+            onClick={() => jumpToEvent(ev.filename)}
+            onKeyDown={(event) => activateEventOnKey(event, ev.filename)}
           >
             <FileText
               size={14}
@@ -82,7 +75,7 @@ export function RightNamed(): JSX.Element {
                   color: "var(--ink)",
                 }}
               >
-                {payload.name ?? "(untitled)"}
+                {payload.name ?? NO_LOOSE_STRING_VALUES.untitled}
               </div>
               {typeof payload.content === "string" && payload.content.length > 0 ? (
                 <div

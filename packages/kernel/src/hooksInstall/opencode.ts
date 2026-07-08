@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DetectResult, HookEntry, HookLocationStatus } from "./types.js";
@@ -27,6 +27,16 @@ export function opencodePluginPath(scope: OpencodeHookScope, projectRoot?: strin
 
 function metaPathFor(pluginPath: string): string {
   return join(dirname(pluginPath), "fmark.meta.json");
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
 }
 
 function pluginTemplatePath(): string {
@@ -205,6 +215,23 @@ export async function applyOpencodeHooks(opts: {
   };
   await writeFile(metaPathFor(configPath), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
   return { changed: true, configPath };
+}
+
+export async function removeOpencodeHooks(opts: {
+  scope: OpencodeHookScope;
+  projectRoot?: string;
+}): Promise<{ changed: boolean; configPath: string }> {
+  const configPath = opencodePluginPath(opts.scope, opts.projectRoot);
+  const sidecarPath = metaPathFor(configPath);
+  const [pluginExisted, sidecarExisted] = await Promise.all([
+    pathExists(configPath),
+    pathExists(sidecarPath),
+  ]);
+  await Promise.all([
+    rm(configPath, { force: true }),
+    rm(sidecarPath, { force: true }),
+  ]);
+  return { changed: pluginExisted || sidecarExisted, configPath };
 }
 
 export function renderOpencodeInstallSnippet(): string {

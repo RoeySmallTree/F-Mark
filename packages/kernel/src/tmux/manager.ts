@@ -1,11 +1,13 @@
 // packages/kernel/src/tmux/manager.ts
 import type { CommandRunner } from "./commandRunner.js";
-import {
-  fmarkAgentSessionName,
-  fmarkTerminalSessionName,
-  isFmarkSessionName,
-  parseFmarkSessionName,
-} from "./naming.js";
+import { TmuxCommandClient } from "./manager/commands.js";
+import { TmuxUserOptions } from "./manager/options.js";
+import type { ListedFmarkSession } from "./manager/sessionFilter.js";
+import { TmuxSessionLauncher } from "./manager/sessionLauncher.js";
+import { TmuxSessionLister } from "./manager/sessionLister.js";
+import { TmuxProjectState } from "./manager/state.js";
+
+export { parseTmuxSessionListLine } from "./manager/sessionFilter.js";
 
 export interface TmuxManager {
   spawnAgent(input: {
@@ -13,15 +15,29 @@ export interface TmuxManager {
     executable: string;
     args: string[];
     env?: Record<string, string>;
+    projectRoot?: string;
   }): Promise<{ sessionName: string }>;
   spawnTerminal(input: { index: number }): Promise<{ sessionName: string }>;
-  listFmarkSessions(): Promise<ListedSession[]>;
+  /* List F-Mark tmux sessions for one project root. Uses the project hash
+     embedded in session names plus an optional tmux `-f` filter — never walks
+     unrelated sessions or calls show-options per candidate. */
+  listFmarkSessions(root?: string): Promise<ListedSession[]>;
+  /** True when `sessionName` belongs to `root` and its pane is alive. */
+  isLiveFmarkSession(sessionName: string, root?: string): Promise<boolean>;
   killSession(sessionName: string): Promise<void>;
   captureSnapshot(sessionName: string): Promise<string>;
   startPipePane(sessionName: string, fifo: string): Promise<void>;
   stopPipePane(sessionName: string): Promise<void>;
   sendLiteralText(sessionName: string, text: string): Promise<void>;
   sendKey(sessionName: string, key: string): Promise<void>;
+  /* Deliver a (possibly multi-line) prompt into a TUI composer and submit it.
+     Uses a bracketed paste (load-buffer + paste-buffer -p) so the TUI sees one
+     atomic paste instead of a keystroke burst, waits for the paste to settle,
+     then sends Enter — and a second confirm-Enter after another beat. TUIs
+     with paste-burst heuristics (codex) otherwise swallow an Enter that lands
+     inside the burst window, leaving the prompt unsubmitted in the composer;
+     the confirm-Enter is a no-op on an already-submitted (empty) composer. */
+  deliverPrompt(sessionName: string, text: string): Promise<void>;
   resize(sessionName: string, cols: number, rows: number): Promise<void>;
   paneAlive(sessionName: string): Promise<boolean>;
   getVersion(): Promise<{ major: number; minor: number; raw: string } | null>;
@@ -35,166 +51,98 @@ export interface TmuxManager {
   currentProjectRoot(): string;
 }
 
-export interface ListedSession {
-  sessionName: string;
-  kind: "agent" | "terminal";
-  participantId?: string;
-  index?: number;
+export interface ListedSession extends ListedFmarkSession {}
+
+export interface PromptDeliveryDelays {
+  /** Pause between the paste landing and the submit Enter. */
+  settleMs: number;
+  /** Pause before the second, confirm Enter (no-op if already submitted). */
+  confirmMs: number;
 }
 
-// FIFO paths embedded in a shell command must be restricted to characters that
-// have no shell-special meaning. The mkdtemp + path.join callers in F-Mark
-// already produce such paths, but we keep the check as a defensive boundary.
-const SAFE_FIFO_PATH = /^[a-zA-Z0-9_./-]+$/;
+export const DEFAULT_PROMPT_DELIVERY_DELAYS: PromptDeliveryDelays = {
+  settleMs: 250,
+  confirmMs: 400,
+};
+
+let promptBufferCounter = 0;
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms).unref?.();
+  });
+}
 
 export function createTmuxManager(deps: {
   runner: CommandRunner;
   projectRoot: string;
+  promptDelays?: PromptDeliveryDelays;
 }): TmuxManager {
-  const { runner } = deps;
-  // projectRoot is mutable so the manager survives a path switch without
-  // being torn down/recreated. New spawns and listFmark scope to the latest
-  // value; pre-rebind sessions retain their original @fmark-project tag.
-  let projectRoot = deps.projectRoot;
-
-  async function setUserOption(session: string, opt: `@${string}`, value: string): Promise<void> {
-    const r = await runner.run(["tmux", "set-option", "-t", session, opt, value]);
-    if (r.exitCode !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
-  }
-
-  async function getUserOption(session: string, opt: `@${string}`): Promise<string | null> {
-    const r = await runner.run(["tmux", "show-options", "-t", session, "-v", opt]);
-    if (r.exitCode !== 0) return null;
-    return r.stdout.trim() || null;
-  }
+  const promptDelays = deps.promptDelays ?? DEFAULT_PROMPT_DELIVERY_DELAYS;
+  const state = new TmuxProjectState(deps.projectRoot);
+  const commands = new TmuxCommandClient(deps.runner);
+  const options = new TmuxUserOptions(commands);
+  const launcher = new TmuxSessionLauncher(commands, options, state);
+  const lister = new TmuxSessionLister(commands, options, state);
 
   return {
-    async spawnAgent({ participantId, executable, args, env }) {
-      const sessionName = fmarkAgentSessionName(projectRoot, participantId);
-      // Inject F-Mark context so generic hooks can resolve the agent/session
-      // without hard-coded participant ids in the user's runtime settings.
-      const effectiveEnv: Record<string, string> = {
-        ...(env ?? {}),
-        F_MARK_PATH: env?.F_MARK_PATH ?? projectRoot,
-        F_MARK_AGENT_ID: participantId,
-      };
-      const envArgs: string[] = [];
-      for (const [k, v] of Object.entries(effectiveEnv)) envArgs.push("-e", `${k}=${v}`);
-      // `--` separates tmux's own flags from the runtime command argv so that
-      // executable/args with leading dashes are never reinterpreted as tmux
-      // options.
-      const argv = [
-        "tmux",
-        "new-session",
-        "-d",
-        "-s",
-        sessionName,
-        ...envArgs,
-        "-c",
-        projectRoot,
-        "--",
-        executable,
-        ...args,
-      ];
-      const r = await runner.run(argv);
-      if (r.exitCode !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
-      await setUserOption(sessionName, "@fmark-project", projectRoot);
-      await setUserOption(sessionName, "@fmark-participant", participantId);
-      return { sessionName };
-    },
-
-    async spawnTerminal({ index }) {
-      const sessionName = fmarkTerminalSessionName(projectRoot, index);
-      const shell = process.env.SHELL ?? "/bin/sh";
-      const r = await runner.run([
-        "tmux",
-        "new-session",
-        "-d",
-        "-s",
-        sessionName,
-        "-c",
-        projectRoot,
-        "--",
-        shell,
-      ]);
-      if (r.exitCode !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
-      await setUserOption(sessionName, "@fmark-project", projectRoot);
-      return { sessionName };
-    },
-
-    async listFmarkSessions() {
-      const r = await runner.run(["tmux", "ls", "-F", "#{session_name}"]);
-      if (r.exitCode !== 0) return [];
-      const candidates = r.stdout.split("\n").map((s) => s.trim()).filter(Boolean).filter(isFmarkSessionName);
-      const verified: ListedSession[] = [];
-      for (const name of candidates) {
-        const val = await getUserOption(name, "@fmark-project");
-        if (val !== projectRoot) continue;
-        const parsed = parseFmarkSessionName(name);
-        if (!parsed) continue;
-        verified.push({ sessionName: name, ...parsed });
-      }
-      return verified;
+    async spawnAgent(input) { return launcher.spawnAgent(input); },
+    async spawnTerminal(input) { return launcher.spawnTerminal(input); },
+    async listFmarkSessions(root) { return lister.list(root); },
+    async isLiveFmarkSession(sessionName, root) {
+      return lister.isLiveSession(sessionName, root);
     },
 
     async killSession(sessionName) {
-      const r = await runner.run(["tmux", "kill-session", "-t", sessionName]);
-      if (r.exitCode !== 0) throw new Error(`tmux kill-session failed: ${r.stderr.trim()}`);
+      await commands.killSession(sessionName);
     },
 
     async captureSnapshot(sessionName) {
-      const r = await runner.run(["tmux", "capture-pane", "-t", sessionName, "-p", "-e", "-J", "-S", "-2000"]);
-      if (r.exitCode !== 0) throw new Error(`tmux capture-pane failed: ${r.stderr.trim()}`);
-      return r.stdout;
+      return commands.captureSnapshot(sessionName);
     },
 
     async startPipePane(sessionName, fifo) {
-      if (!SAFE_FIFO_PATH.test(fifo)) {
-        throw new Error(`invalid fifo path (must match ${SAFE_FIFO_PATH}): ${fifo}`);
-      }
-      // -o opens the pipe only if not already piped; tmux runs the command via
-      // its shell, so we keep the command string restricted to a safe fifo.
-      const r = await runner.run(["tmux", "pipe-pane", "-t", sessionName, "-o", `cat >> ${fifo}`]);
-      if (r.exitCode !== 0) throw new Error(`tmux pipe-pane failed: ${r.stderr.trim()}`);
+      await commands.startPipePane(sessionName, fifo);
     },
 
     async stopPipePane(sessionName) {
-      const r = await runner.run(["tmux", "pipe-pane", "-t", sessionName]);
-      if (r.exitCode !== 0) throw new Error(`tmux pipe-pane failed: ${r.stderr.trim()}`);
+      await commands.stopPipePane(sessionName);
     },
 
     async sendLiteralText(sessionName, text) {
-      const r = await runner.run(["tmux", "send-keys", "-t", sessionName, "-l", "--", text]);
-      if (r.exitCode !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
+      await commands.sendLiteralText(sessionName, text);
     },
 
     async sendKey(sessionName, key) {
-      const r = await runner.run(["tmux", "send-keys", "-t", sessionName, "--", key]);
-      if (r.exitCode !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
+      await commands.sendKey(sessionName, key);
+    },
+
+    async deliverPrompt(sessionName, text) {
+      const bufferName = `fmark-prompt-${++promptBufferCounter}`;
+      await commands.loadBuffer(bufferName, text);
+      await commands.pasteBuffer(sessionName, bufferName);
+      await sleep(promptDelays.settleMs);
+      await commands.sendKey(sessionName, "C-m");
+      await sleep(promptDelays.confirmMs);
+      await commands.sendKey(sessionName, "C-m");
     },
 
     async resize(sessionName, cols, rows) {
-      const r = await runner.run(["tmux", "resize-window", "-t", sessionName, "-x", String(cols), "-y", String(rows)]);
-      if (r.exitCode !== 0) throw new Error(`tmux resize-window failed: ${r.stderr.trim()}`);
+      await commands.resize(sessionName, cols, rows);
     },
 
     async paneAlive(sessionName) {
-      const r = await runner.run(["tmux", "display-message", "-t", sessionName, "-p", "#{pane_dead}"]);
-      if (r.exitCode !== 0) return false;
-      return r.stdout.trim() === "0";
+      return commands.paneAlive(sessionName);
     },
 
     async getVersion() {
-      const r = await runner.run(["tmux", "-V"]);
-      if (r.exitCode !== 0) return null;
-      const m = /^tmux\s+(\d+)\.(\d+)/.exec(r.stdout.trim());
-      if (!m) return null;
-      return { major: Number(m[1]), minor: Number(m[2]), raw: `${m[1]}.${m[2]}` };
+      return commands.getVersion();
     },
 
-    async getUserOption(sessionName, name) { return getUserOption(sessionName, name); },
+    async getUserOption(sessionName, name) { return options.get(sessionName, name); },
 
-    rebind({ projectRoot: next }) { projectRoot = next; },
-    currentProjectRoot() { return projectRoot; },
+    rebind(input) { state.rebind(input); },
+    currentProjectRoot() { return state.currentProjectRoot(); },
   };
 }

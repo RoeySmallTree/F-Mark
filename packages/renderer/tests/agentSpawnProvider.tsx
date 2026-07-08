@@ -55,6 +55,30 @@ function AgentSpawnTestProvider({
               mode,
             )
           }
+          model={agentSpawn.modelForRuntime(
+            agentSpawn.integrationSetupFor.runtimeId,
+          )}
+          effort={agentSpawn.effortForRuntime(
+            agentSpawn.integrationSetupFor.runtimeId,
+          )}
+          modelOptions={agentSpawn.modelOptionsForRuntime(
+            agentSpawn.integrationSetupFor.runtimeId,
+          )}
+          effortOptions={agentSpawn.effortOptionsForRuntime(
+            agentSpawn.integrationSetupFor.runtimeId,
+          )}
+          onModelChange={(model) =>
+            agentSpawn.setModelForRuntime(
+              agentSpawn.integrationSetupFor!.runtimeId,
+              model,
+            )
+          }
+          onEffortChange={(effort) =>
+            agentSpawn.setEffortForRuntime(
+              agentSpawn.integrationSetupFor!.runtimeId,
+              effort,
+            )
+          }
           initialPreflight={agentSpawn.integrationSetupFor.preflight}
           apiClient={apiClient}
           onClose={closeIntegrationSetup}

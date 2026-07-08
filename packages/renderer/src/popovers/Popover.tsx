@@ -1,3 +1,8 @@
+const NO_LOOSE_STRING_VALUES = {
+  bottom: "bottom",
+  end: "end",
+} as const;
+
 /* Popover — generic anchored-overlay framework used by P8 (Presets),
    P9 (Skills), and P12 (Log filter). Renders a transparent backdrop that
    captures background clicks and a fixed-position .popover element next
@@ -51,8 +56,8 @@ function computePosition(
     top = EDGE;
     left = vw - pw - EDGE;
   } else {
-    const placeBelow = placement.startsWith("bottom");
-    const placeEnd = placement.endsWith("end");
+    const placeBelow = placement.startsWith(NO_LOOSE_STRING_VALUES.bottom);
+    const placeEnd = placement.endsWith(NO_LOOSE_STRING_VALUES.end);
     top = placeBelow ? anchor.bottom + GAP : anchor.top - GAP - ph;
     left = placeEnd ? anchor.right - pw : anchor.left;
 

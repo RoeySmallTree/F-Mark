@@ -58,6 +58,7 @@ describe("POST /sessions/:id/events/file", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/file`,
         payload: {
+          root,
           participant_id: pid,
           id: "f1",
           path: "assets/diagram.png",
@@ -88,6 +89,7 @@ describe("POST /sessions/:id/events/file", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/file`,
         payload: {
+          root,
           participant_id: pid,
           id: "f1",
           // missing path and mime_type
@@ -105,6 +107,7 @@ describe("POST /sessions/:id/events/file", () => {
         method: "POST",
         url: `/sessions/no-such/events/file`,
         payload: {
+          root,
           participant_id: pid,
           id: "f1",
           path: "assets/x.png",
@@ -161,6 +164,68 @@ describe("session attachments", () => {
     });
   });
 
+  it("classifies media and code-like uploads for inline previews", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+
+      const cases = [
+        {
+          filename: "clip.mp4",
+          contentType: "video/mp4",
+          expected: "video",
+        },
+        {
+          filename: "voice.mp3",
+          contentType: "audio/mpeg",
+          expected: "audio",
+        },
+        {
+          filename: "script.js",
+          contentType: "application/octet-stream",
+          expected: "text",
+        },
+      ] as const;
+
+      for (const item of cases) {
+        const upload = multipartPayload([
+          {
+            name: "file",
+            filename: item.filename,
+            contentType: item.contentType,
+            value: Buffer.from("bytes"),
+          },
+        ]);
+        const res = await app.inject({
+          method: "POST",
+          url: `/sessions/${sessionId}/attachments`,
+          headers: upload.headers,
+          payload: upload.payload,
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.preview_kind).toBe(item.expected);
+
+        const event = await app.inject({
+          method: "POST",
+          url: `/sessions/${sessionId}/events/file`,
+          payload: {
+            root,
+            participant_id: pid,
+            id: body.id,
+            path: body.path,
+            mime_type: body.mime_type,
+            display_name: body.display_name,
+            size_bytes: body.size_bytes,
+            preview_kind: body.preview_kind,
+          },
+        });
+        expect(event.statusCode).toBe(200);
+      }
+
+      await app.close();
+    });
+  });
+
   it("commits a staged attachment to a file event when /events/file is POSTed with the metadata", async () => {
     await withTempProject(async (root) => {
       const { p, app, sessionId, pid } = await setup(root);
@@ -185,6 +250,7 @@ describe("session attachments", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/file`,
         payload: {
+          root,
           participant_id: pid,
           id: staged.id,
           path: staged.path,
@@ -213,6 +279,56 @@ describe("session attachments", () => {
       });
       expect(content.statusCode).toBe(200);
       expect(content.headers["content-type"]).toContain("image/png");
+      expect(content.headers["x-content-type-options"]).toBe("nosniff");
+      expect(content.headers["content-disposition"]).toBeUndefined();
+      await app.close();
+    });
+  });
+
+  it("serves active attachment content inline but sandboxed", async () => {
+    await withTempProject(async (root) => {
+      const { app, sessionId, pid } = await setup(root);
+      const upload = multipartPayload([
+        {
+          name: "file",
+          filename: "page.html",
+          contentType: "text/html",
+          value: Buffer.from("<script>alert(1)</script>"),
+        },
+      ]);
+      const staged = (
+        await app.inject({
+          method: "POST",
+          url: `/sessions/${sessionId}/attachments`,
+          headers: upload.headers,
+          payload: upload.payload,
+        })
+      ).json();
+      const event = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/events/file`,
+        payload: {
+          root,
+          participant_id: pid,
+          id: staged.id,
+          path: staged.path,
+          mime_type: staged.mime_type,
+          display_name: staged.display_name,
+          size_bytes: staged.size_bytes,
+          preview_kind: staged.preview_kind,
+        },
+      });
+      expect(event.statusCode).toBe(200);
+
+      const content = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/attachments/${staged.id}/content`,
+      });
+      expect(content.statusCode).toBe(200);
+      expect(content.headers["content-type"]).toContain("text/html");
+      expect(content.headers["x-content-type-options"]).toBe("nosniff");
+      expect(content.headers["content-security-policy"]).toBe("sandbox");
+      expect(content.headers["content-disposition"]).toBeUndefined();
       await app.close();
     });
   });
@@ -290,6 +406,7 @@ describe("DELETE /sessions/:id/attachments/:file_id", () => {
         method: "POST",
         url: `/sessions/${sessionId}/events/file`,
         payload: {
+          root,
           participant_id: pid,
           id: staged.id,
           path: staged.path,

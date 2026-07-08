@@ -38,14 +38,14 @@ describe("e2e turn", () => {
       const u1 = await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
-        payload: { participant_id: userId, content: "Plan a launch." },
+        payload: { root, participant_id: userId, content: "Plan a launch."  },
       });
       expect(u1.statusCode).toBe(200);
 
       const ute = await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/turn-end`,
-        payload: { participant_id: userId },
+        payload: { root, participant_id: userId  },
       });
       expect(ute.statusCode).toBe(200);
 
@@ -53,6 +53,7 @@ describe("e2e turn", () => {
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
         payload: {
+          root,
           participant_id: agent.id,
           content: "# Launch Plan\n\nPhase 1: ...",
           name: "Launch Plan v1",
@@ -65,6 +66,7 @@ describe("e2e turn", () => {
         method: "POST",
         url: `/sessions/${session.id}/events/choices`,
         payload: {
+          root,
           participant_id: agent.id,
           id: "ch_approach",
           question: "Approach?",
@@ -80,13 +82,14 @@ describe("e2e turn", () => {
       await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/turn-end`,
-        payload: { participant_id: agent.id },
+        payload: { root, participant_id: agent.id  },
       });
 
       const choice = await app.inject({
         method: "POST",
         url: `/sessions/${session.id}/events/choice`,
         payload: {
+          root,
           participant_id: userId,
           choices_id: "ch_approach",
           selected: ["b"],
@@ -98,9 +101,11 @@ describe("e2e turn", () => {
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
         payload: {
+          root,
           participant_id: userId,
           content: "Refine phase 1.",
-          target: { file: named.filename },
+          append_to: named.filename,
+          mode: "comment",
         },
       });
       expect(comment.statusCode).toBe(200);
@@ -109,6 +114,7 @@ describe("e2e turn", () => {
         method: "POST",
         url: `/sessions/${session.id}/events/prose`,
         payload: {
+          root,
           participant_id: agent.id,
           content: "# Launch Plan\n\nPhase 1: refined ...",
           name: "Launch Plan v1",
@@ -120,7 +126,7 @@ describe("e2e turn", () => {
       const events = (
         await app.inject({
           method: "GET",
-          url: `/sessions/${session.id}/events`,
+          url: `/sessions/${session.id}/events?root=${encodeURIComponent(root)}`,
         })
       ).json() as { events: { kind: string; filename: string }[] };
       const kinds = events.events.map((e) => e.kind);

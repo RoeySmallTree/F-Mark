@@ -4,12 +4,252 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>F-Mark</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --boot-canvas: #faf6ed;
+        --boot-ink: #1a1714;
+        --boot-accent-a: #2a5fa8;
+        --boot-accent-b: #b86a1f;
+        --boot-accent-c: #3d7a4f;
+        --boot-accent-d: #a83a3a;
+      }
+
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: var(--boot-canvas);
+      }
+
+      body.theme-ember { --boot-canvas: #16141b; --boot-ink: #f0eef2; --boot-accent-a: #ff5d72; --boot-accent-b: #ffb13e; --boot-accent-c: #34e2b0; --boot-accent-d: #ff4f67; }
+      body.theme-terminal { --boot-canvas: #0a0c0a; --boot-ink: #cfe8c5; --boot-accent-a: #4ec0ff; --boot-accent-b: #ffb13e; --boot-accent-c: #3aff7b; --boot-accent-d: #ff5577; }
+      body.theme-ide { --boot-canvas: #14171c; --boot-ink: #e6e8eb; --boot-accent-a: #5b9dff; --boot-accent-b: #ffa657; --boot-accent-c: #3fb950; --boot-accent-d: #f85149; }
+      body.theme-solarized { --boot-canvas: #073642; --boot-ink: #fdf6e3; --boot-accent-a: #268bd2; --boot-accent-b: #cb4b16; --boot-accent-c: #859900; --boot-accent-d: #dc322f; }
+      body.theme-brutalist { --boot-canvas: #0a0a0a; --boot-ink: #ffffff; --boot-accent-a: #ffffff; --boot-accent-b: #ffffff; --boot-accent-c: #ffffff; --boot-accent-d: #ff0000; }
+      body.theme-cyber { --boot-canvas: #100b22; --boot-ink: #e8e3ff; --boot-accent-a: #00e5ff; --boot-accent-b: #ff2bd6; --boot-accent-c: #7dff5a; --boot-accent-d: #ff3370; }
+      body.theme-amber { --boot-canvas: #0c0800; --boot-ink: #ffb000; --boot-accent-a: #ffd060; --boot-accent-b: #ff7a00; --boot-accent-c: #ffb000; --boot-accent-d: #ff3300; }
+      body.theme-dracula { --boot-canvas: #282a36; --boot-ink: #f8f8f2; --boot-accent-a: #8be9fd; --boot-accent-b: #ff79c6; --boot-accent-c: #50fa7b; --boot-accent-d: #ff5555; }
+      body.theme-catppuccin { --boot-canvas: #1e1e2e; --boot-ink: #cdd6f4; --boot-accent-a: #89b4fa; --boot-accent-b: #f5c2e7; --boot-accent-c: #a6e3a1; --boot-accent-d: #f38ba8; }
+      body.theme-tokyo { --boot-canvas: #1a1b26; --boot-ink: #c0caf5; --boot-accent-a: #7aa2f7; --boot-accent-b: #bb9af7; --boot-accent-c: #9ece6a; --boot-accent-d: #f7768e; }
+      body.theme-gruvbox { --boot-canvas: #282828; --boot-ink: #ebdbb2; --boot-accent-a: #83a598; --boot-accent-b: #fe8019; --boot-accent-c: #b8bb26; --boot-accent-d: #fb4934; }
+      body.theme-nord { --boot-canvas: #2e3440; --boot-ink: #eceff4; --boot-accent-a: #88c0d0; --boot-accent-b: #d08770; --boot-accent-c: #a3be8c; --boot-accent-d: #bf616a; }
+      body.theme-monokai { --boot-canvas: #272822; --boot-ink: #f8f8f2; --boot-accent-a: #66d9ef; --boot-accent-b: #f92672; --boot-accent-c: #a6e22e; --boot-accent-d: #f92672; }
+      body.theme-borland { --boot-canvas: #0000aa; --boot-ink: #ffff55; --boot-accent-a: #55ffff; --boot-accent-b: #ff55ff; --boot-accent-c: #55ff55; --boot-accent-d: #ff5555; }
+      body.theme-sepia { --boot-canvas: #f7eed8; --boot-ink: #3a2e1f; --boot-accent-a: #5e4b32; --boot-accent-b: #8c3a1a; --boot-accent-c: #4a5a2e; --boot-accent-d: #a83a3a; }
+      body.theme-contrast { --boot-canvas: #000000; --boot-ink: #ffffff; --boot-accent-a: #00ffff; --boot-accent-b: #ffff00; --boot-accent-c: #00ff00; --boot-accent-d: #ff00ff; }
+
+      .boot-splash {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        color: var(--boot-ink);
+        background: var(--boot-canvas);
+      }
+
+      .boot-splash-glyph {
+        margin: 0;
+        max-width: calc(100vw - 32px);
+        overflow: hidden;
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 10px;
+        white-space: pre;
+      }
+
+      .boot-splash-glyph-char {
+        color: inherit;
+        transition: color 180ms cubic-bezier(0.25, 1, 0.5, 1);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-splash-glyph-char {
+          transition: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <script>
+      (() => {
+        try {
+          const theme = window.localStorage.getItem("fmark.theme");
+          const themes = [
+            "ember",
+            "terminal",
+            "ide",
+            "solarized",
+            "brutalist",
+            "cyber",
+            "amber",
+            "dracula",
+            "catppuccin",
+            "tokyo",
+            "gruvbox",
+            "nord",
+            "monokai",
+            "borland",
+            "sepia",
+            "contrast",
+          ];
+          if (theme !== null && themes.includes(theme)) {
+            document.body.classList.add(`theme-${theme}`);
+          }
+        } catch {
+          /* Fall back to the light splash when storage is unavailable. */
+        }
+      })();
+    </script>
+    <div id="root">
+      <div class="boot-splash" role="status" aria-label="Loading F-Mark">
+        <pre class="boot-splash-glyph" aria-hidden="true">           ↑↑↑↑↑↑↑↑↑  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+         ↑↑↑↑↑↑↑↑↑↑↑  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+        ↑↑↑↑↑↑↑                                                ↑↑↑↑↑↑
+        ↑↑↑↑↑                                       ↑↑          ↑↑↑↑↑
+        ↑↑↑↑     ↑↑↑↑↑↑          ↑↑↑↑↑↑           ↑↑↑↑↑↑         ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑          ↑↑↑↑↑↑         ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑          ↑↑↑↑↑↑         ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑↑↑       ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑↑↑↑      ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑ ↑↑↑↑↑↑↑↑ ↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑  ↑↑↑↑↑↑  ↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑     ↑    ↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑   ↑↑↑↑
+        ↑↑↑↑    ↑↑↑↑↑↑↑          ↑↑↑↑↑↑↑     ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑
+        ↑↑↑↑     ↑↑↑↑↑            ↑↑↑↑↑       ↑↑↑↑↑↑↑↑↑↑↑↑↑↑     ↑↑↑↑
+        ↑↑↑↑↑                                    ↑↑↑↑↑↑↑↑       ↑↑↑↑↑
+        ↑↑↑↑↑↑↑                                               ↑↑↑↑↑↑↑
+         ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+           ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑    ↑↑↑↑↑↑↑↑↑↑↑↑
+              ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑      ↑↑↑↑↑↑↑↑</pre>
+      </div>
+    </div>
+    <script>
+      (() => {
+        const glyph = document.querySelector(".boot-splash-glyph");
+        if (!(glyph instanceof HTMLElement)) return;
+
+        const reduceMotion =
+          window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
+          false;
+        if (reduceMotion) return;
+
+        const glyphs =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+=<>?/\\[]{}";
+        const chars = Array.from(glyph.textContent ?? "");
+        const arrowIndexes = [];
+        const spanByIndex = new Map();
+        const fragment = document.createDocumentFragment();
+
+        for (let i = 0; i < chars.length; i += 1) {
+          if (chars[i] === "↑") {
+            arrowIndexes.push(i);
+            const span = document.createElement("span");
+            span.className = "boot-splash-glyph-char";
+            span.textContent = chars[i];
+            spanByIndex.set(i, span);
+            fragment.append(span);
+          } else {
+            fragment.append(document.createTextNode(chars[i] ?? ""));
+          }
+        }
+        if (arrowIndexes.length === 0) return;
+
+        glyph.replaceChildren(fragment);
+
+        const untouched = [...arrowIndexes];
+        const activeThemeStyle = getComputedStyle(document.body);
+        const activeAccentColors = [
+          "--boot-accent-a",
+          "--boot-accent-b",
+          "--boot-accent-c",
+          "--boot-accent-d",
+        ]
+          .map((name) => activeThemeStyle.getPropertyValue(name).trim())
+          .filter((color) => color.length > 0);
+        const accented = new Map();
+        const randomInt = (max) => Math.floor(Math.random() * max);
+        const randomGlyph = () => glyphs[randomInt(glyphs.length)] ?? "F";
+        const firstPassBatch = Math.max(2, Math.ceil(arrowIndexes.length / 72));
+        const steadyBatch = Math.max(1, Math.ceil(arrowIndexes.length / 180));
+        const accentBatch = Math.max(1, Math.ceil(arrowIndexes.length / 420));
+        let lastTick = 0;
+
+        const mutate = (indexes, count) => {
+          for (let i = 0; i < count; i += 1) {
+            const pick = randomInt(indexes.length);
+            const charIndex = indexes[pick];
+            chars[charIndex] = randomGlyph();
+            const span = spanByIndex.get(charIndex);
+            if (span !== undefined) span.textContent = chars[charIndex];
+
+            if (indexes === untouched) {
+              const last = untouched.pop();
+              if (pick < untouched.length && last !== undefined) {
+                untouched[pick] = last;
+              }
+              if (untouched.length === 0) break;
+            }
+          }
+        };
+
+        const clearExpiredAccents = (now) => {
+          for (const [span, until] of accented) {
+            if (now < until) continue;
+            span.style.color = "";
+            accented.delete(span);
+          }
+        };
+
+        const accentSome = (now) => {
+          if (activeAccentColors.length === 0) return;
+          if (randomInt(100) >= 48) return;
+
+          for (let i = 0; i < accentBatch; i += 1) {
+            const charIndex = arrowIndexes[randomInt(arrowIndexes.length)];
+            const span = spanByIndex.get(charIndex);
+            if (span === undefined) continue;
+
+            span.style.color =
+              activeAccentColors[randomInt(activeAccentColors.length)] ?? "";
+            accented.set(span, now + 180 + randomInt(360));
+          }
+        };
+
+        const tick = (now) => {
+          if (!glyph.isConnected) return;
+          clearExpiredAccents(now);
+
+          if (now - lastTick >= 38) {
+            lastTick = now;
+            if (untouched.length > 0) {
+              mutate(untouched, firstPassBatch);
+            } else {
+              mutate(arrowIndexes, steadyBatch);
+            }
+            accentSome(now);
+          }
+
+          window.requestAnimationFrame(tick);
+        };
+
+        window.setTimeout(() => {
+          window.requestAnimationFrame(tick);
+        }, 90);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

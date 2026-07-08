@@ -6,22 +6,42 @@ import {
 } from "../../../src/runtimes/adapters/claude.js";
 
 const FIXTURES = join(__dirname, "fixtures", "claude");
+const CLAUDE_HELP = `
+  --effort <level>                      Effort level for the current session
+                                        (low, medium, high, xhigh, max)
+  --model <model>                       Model for the current session. Provide
+                                        an alias for the latest model (e.g.
+                                        'fable', 'opus', or 'sonnet') or a
+                                        model's full name (e.g.
+                                        'claude-fable-5').
+`;
 
 describe("claude adapter", () => {
   describe("listModels", () => {
-    it("returns the hardcoded model set", async () => {
-      const adapter = createClaudeAdapter();
+    it("returns the provider-advertised model set from claude --help", async () => {
+      const calls: string[][] = [];
+      const adapter = createClaudeAdapter({
+        runCli: async (args) => {
+          calls.push(args);
+          return { stdout: CLAUDE_HELP, stderr: "", code: 0 };
+        },
+      });
       const models = await adapter.listModels();
       const ids = models.map((m) => m.id);
-      expect(ids).toContain("claude-opus-4-7");
-      expect(ids).toContain("claude-sonnet-4-6");
-      expect(ids).toContain("claude-haiku-4-5");
+      expect(calls).toEqual([["--help"]]);
+      expect(ids).toEqual(["fable", "opus", "sonnet", "claude-fable-5"]);
+      expect(ids).not.toContain("claude-opus-4-7");
+      expect(models.find((model) => model.id === "fable")?.displayName).toBe(
+        "Fable",
+      );
     });
   });
 
   describe("listEfforts", () => {
     it("returns the five effort levels claude --help advertises", async () => {
-      const adapter = createClaudeAdapter();
+      const adapter = createClaudeAdapter({
+        runCli: async () => ({ stdout: CLAUDE_HELP, stderr: "", code: 0 }),
+      });
       const efforts = await adapter.listEfforts();
       expect(efforts.map((e) => e.id)).toEqual([
         "low",
@@ -80,13 +100,16 @@ describe("claude adapter", () => {
       expect(canonicalizeClaudeModelId("claude-opus-4-7")).toBe("claude-opus-4-7");
     });
 
-    it("maps bare aliases to canonical family slugs", () => {
-      expect(canonicalizeClaudeModelId("opus")).toBe("claude-opus-4-7");
-      expect(canonicalizeClaudeModelId("sonnet")).toBe("claude-sonnet-4-6");
-      expect(canonicalizeClaudeModelId("haiku")).toBe("claude-haiku-4-5");
+    it("keeps bare provider aliases as provider aliases", () => {
+      expect(canonicalizeClaudeModelId("fable")).toBe("fable");
+      expect(canonicalizeClaudeModelId("opus")).toBe("opus");
+      expect(canonicalizeClaudeModelId("sonnet")).toBe("sonnet");
     });
 
     it("strips trailing date suffixes from family slugs", () => {
+      expect(canonicalizeClaudeModelId("claude-fable-5-20261001")).toBe(
+        "claude-fable-5",
+      );
       expect(canonicalizeClaudeModelId("claude-haiku-4-5-20251001")).toBe(
         "claude-haiku-4-5",
       );
@@ -96,7 +119,7 @@ describe("claude adapter", () => {
     });
 
     it("lowercases input", () => {
-      expect(canonicalizeClaudeModelId("OPUS")).toBe("claude-opus-4-7");
+      expect(canonicalizeClaudeModelId("OPUS")).toBe("opus");
     });
   });
 

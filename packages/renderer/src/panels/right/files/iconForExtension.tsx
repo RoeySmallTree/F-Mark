@@ -13,6 +13,17 @@ import {
   FolderOpen,
 } from "lucide-react";
 
+const NO_LOOSE_STRING_VALUES = {
+  iconCode: "icon-code",
+  iconText: "icon-text",
+  iconJson: "icon-json",
+  iconImage: "icon-image",
+  iconVideo: "icon-video",
+  iconAudio: "icon-audio",
+  iconSpreadsheet: "icon-spreadsheet",
+  iconArchive: "icon-archive",
+} as const;
+
 const CODE = new Set([
   "ts", "tsx", "js", "jsx", "mjs", "cjs",
   "py", "go", "rs", "rb", "java", "c", "h", "cpp", "cc", "hpp",
@@ -47,17 +58,17 @@ export function iconForExtension(
     return { Icon: isOpen ? FolderOpen : Folder, colorClass: "" };
   }
   if (ext === null) return { Icon: File, colorClass: "" };
-  if (CODE.has(ext)) return { Icon: FileCode, colorClass: "icon-code" };
-  if (TEXT.has(ext)) return { Icon: FileText, colorClass: "icon-text" };
-  if (STRUCTURED.has(ext)) return { Icon: FileJson, colorClass: "icon-json" };
-  if (IMAGE.has(ext)) return { Icon: FileImage, colorClass: "icon-image" };
-  if (VIDEO.has(ext)) return { Icon: FileVideo, colorClass: "icon-video" };
-  if (AUDIO.has(ext)) return { Icon: FileAudio, colorClass: "icon-audio" };
+  if (CODE.has(ext)) return { Icon: FileCode, colorClass: NO_LOOSE_STRING_VALUES.iconCode };
+  if (TEXT.has(ext)) return { Icon: FileText, colorClass: NO_LOOSE_STRING_VALUES.iconText };
+  if (STRUCTURED.has(ext)) return { Icon: FileJson, colorClass: NO_LOOSE_STRING_VALUES.iconJson };
+  if (IMAGE.has(ext)) return { Icon: FileImage, colorClass: NO_LOOSE_STRING_VALUES.iconImage };
+  if (VIDEO.has(ext)) return { Icon: FileVideo, colorClass: NO_LOOSE_STRING_VALUES.iconVideo };
+  if (AUDIO.has(ext)) return { Icon: FileAudio, colorClass: NO_LOOSE_STRING_VALUES.iconAudio };
   if (SPREADSHEET.has(ext)) {
-    return { Icon: FileSpreadsheet, colorClass: "icon-spreadsheet" };
+    return { Icon: FileSpreadsheet, colorClass: NO_LOOSE_STRING_VALUES.iconSpreadsheet };
   }
   if (ARCHIVE.has(ext)) {
-    return { Icon: FileArchive, colorClass: "icon-archive" };
+    return { Icon: FileArchive, colorClass: NO_LOOSE_STRING_VALUES.iconArchive };
   }
   return { Icon: File, colorClass: "" };
 }

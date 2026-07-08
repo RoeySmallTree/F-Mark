@@ -1,3 +1,7 @@
+const NO_LOOSE_STRING_VALUES = {
+  custom: "custom",
+} as const;
+
 /* customPresets — renderer-local preset store.
 
    Built-in presets ship as markdown files served by the kernel. Project
@@ -18,7 +22,7 @@
 
 import type { Preset } from "@f-mark/shared";
 
-export const CUSTOM_PRESETS_STORAGE_KEY = "fmark:settings:custom-presets";
+const CUSTOM_PRESETS_STORAGE_KEY = "fmark:settings:custom-presets";
 
 export interface CustomPreset {
   id: string;
@@ -110,7 +114,7 @@ export function toPreset(c: CustomPreset): Preset {
     group: c.group,
     icon: c.icon,
     body: c.body,
-    source: "custom",
+    source: NO_LOOSE_STRING_VALUES.custom,
     path: c.id,
     workspaces: c.workspaces,
   };

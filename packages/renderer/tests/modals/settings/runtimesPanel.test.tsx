@@ -7,266 +7,118 @@
    submitting. */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import type { EnvProbeResult, RuntimeEntry } from "@f-mark/shared";
-import { RuntimesPanel } from "../../../src/modals/settings/RuntimesPanel.js";
+import { cleanup, screen } from "@testing-library/react";
+import {
+  HEALTHY_PROBE,
+  customRuntime,
+  runtimesWithCustom,
+  runtimesWithRetired,
+} from "./runtimesPanel/fixtures.js";
+import {
+  assertAddRuntimeFormVisible,
+  assertBuiltinBadgesVisible,
+  assertCustomRuntimeRow,
+  assertProbeSummaryVisible,
+  assertReadOnlyRuntimeControls,
+  assertRetiredRuntimeHidden,
+  assertRuntimePathStatus,
+  assertRuntimeTableColumns,
+  clickEditRuntime,
+  clickRemoveRuntime,
+  clickReprobe,
+  openAddRuntimeForm,
+  renderRuntimesPanel,
+  runtimeDisplayNameInput,
+  runtimeRemoveButton,
+  saveRuntime,
+  setupRuntimesPanel,
+  submitNewRuntime,
+} from "./runtimesPanel/helpers.js";
 
 afterEach(() => {
   cleanup();
 });
 
-const BASE_RUNTIMES: Record<string, RuntimeEntry> = {
-  claude: {
-    displayName: "Claude Code",
-    executable: "claude",
-    args: [],
-    icon: "claude",
-    readyDelayMs: 2000,
-  },
-  codex: {
-    displayName: "Codex",
-    executable: "codex",
-    args: ["--hello"],
-    icon: "codex",
-    readyDelayMs: 1500,
-  },
-  opencode: {
-    displayName: "Opencode",
-    executable: "opencode",
-    args: [],
-    icon: "opencode",
-    readyDelayMs: 1500,
-  },
-};
-
-const HEALTHY_PROBE: EnvProbeResult = {
-  tmux: true,
-  tmuxVersion: "3.4",
-  runtimes: { claude: true, codex: false, opencode: true },
-  installer: "apt",
-  os: "linux",
-};
-
-function noopAsync(): Promise<void> {
-  return Promise.resolve();
-}
-
 describe("RuntimesPanel", () => {
   it("renders one row per runtime with key columns", () => {
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    const table = screen.getByRole("table");
-    const rows = within(table).getAllByRole("row");
-    // 1 header + 3 data rows
-    expect(rows).toHaveLength(4);
-    expect(within(table).getByText("Claude Code")).toBeInTheDocument();
-    expect(within(table).getByText("Codex")).toBeInTheDocument();
-    expect(within(table).getByText("Opencode")).toBeInTheDocument();
-    // The args column for codex should show "--hello"
-    expect(within(table).getByText(/--hello/)).toBeInTheDocument();
+    renderRuntimesPanel();
+    assertRuntimeTableColumns();
   });
 
   it("renders probe details as system headers before the runtime list", () => {
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        envProbe={HEALTHY_PROBE}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-
-    expect(screen.getByTestId("runtime-probe-os")).toHaveTextContent(/linux/i);
-    expect(screen.getByTestId("runtime-probe-installer")).toHaveTextContent(
-      /apt/i,
-    );
-    expect(screen.getByTestId("runtime-probe-tmux")).toHaveTextContent(/3\.4/);
-    expect(
-      screen.getByRole("heading", { name: /runtimes list/i }),
-    ).toBeInTheDocument();
+    renderRuntimesPanel({ envProbe: HEALTHY_PROBE });
+    assertProbeSummaryVisible();
   });
 
   it("shows each runtime PATH status from the env probe", () => {
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        envProbe={HEALTHY_PROBE}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-
-    expect(screen.getByTestId("runtime-row-claude")).toHaveTextContent(
-      /on PATH/i,
-    );
-    expect(screen.getByTestId("runtime-row-codex")).toHaveTextContent(
-      /missing/i,
-    );
+    renderRuntimesPanel({ envProbe: HEALTHY_PROBE });
+    assertRuntimePathStatus("claude", /on PATH/i);
+    assertRuntimePathStatus("codex", /missing/i);
   });
 
   it("clicking Re-probe calls onReprobe", async () => {
-    const user = userEvent.setup();
     const onReprobe = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        envProbe={HEALTHY_PROBE}
-        onReprobe={onReprobe}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
+    const { user } = setupRuntimesPanel({
+      envProbe: HEALTHY_PROBE,
+      onReprobe,
+    });
 
-    await user.click(screen.getByRole("button", { name: /re-?probe/i }));
+    await clickReprobe(user);
     expect(onReprobe).toHaveBeenCalledTimes(1);
   });
 
   it("marks each row as builtin", () => {
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    // The three known runtimes are all builtins.
-    const badges = screen.getAllByText(/builtin/i);
-    expect(badges.length).toBeGreaterThanOrEqual(3);
+    renderRuntimesPanel();
+    assertBuiltinBadgesVisible();
   });
 
   it("marks unknown ids as custom", () => {
-    const extras: Record<string, RuntimeEntry> = {
-      ...BASE_RUNTIMES,
-      mybot: {
-        displayName: "My Bot",
-        executable: "mybot",
-        args: [],
-        icon: "bot",
-      },
-    };
-    render(
-      <RuntimesPanel
-        runtimes={extras}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    const row = screen.getByTestId("runtime-row-mybot");
-    expect(within(row).getByText("My Bot")).toBeInTheDocument();
-    expect(within(row).getByText(/custom/i)).toBeInTheDocument();
+    renderRuntimesPanel({
+      runtimes: runtimesWithCustom(customRuntime({ icon: "bot" })),
+    });
+    assertCustomRuntimeRow();
   });
 
   it("hides retired runtime rows passed by stale registry data", () => {
-    const extras: Record<string, RuntimeEntry> = {
-      ...BASE_RUNTIMES,
-      gemini: {
-        displayName: "Gemini",
-        executable: "gemini",
-        args: [],
-      },
-    };
-    render(
-      <RuntimesPanel
-        runtimes={extras}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-
-    expect(screen.queryByTestId("runtime-row-gemini")).toBeNull();
-    expect(screen.queryByText(/^gemini$/i)).toBeNull();
+    renderRuntimesPanel({ runtimes: runtimesWithRetired() });
+    assertRetiredRuntimeHidden();
   });
 
   it("disables the Remove button for builtins", () => {
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    const claudeRow = screen.getByTestId("runtime-row-claude");
-    const removeBtn = within(claudeRow).getByRole("button", {
-      name: /remove/i,
-    });
-    expect(removeBtn).toBeDisabled();
+    renderRuntimesPanel();
+    expect(runtimeRemoveButton("claude")).toBeDisabled();
   });
 
   it("enables Remove for custom entries and fires onRemove", async () => {
-    const user = userEvent.setup();
     const onRemove = vi.fn().mockResolvedValue(undefined);
-    const extras: Record<string, RuntimeEntry> = {
-      mybot: {
-        displayName: "My Bot",
-        executable: "mybot",
-        args: [],
-      },
-    };
-    render(
-      <RuntimesPanel
-        runtimes={extras}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={onRemove}
-      />,
-    );
-    const row = screen.getByTestId("runtime-row-mybot");
-    const removeBtn = within(row).getByRole("button", { name: /remove/i });
-    expect(removeBtn).not.toBeDisabled();
-    await user.click(removeBtn);
+    const { user } = setupRuntimesPanel({
+      runtimes: { mybot: customRuntime() },
+      onRemove,
+    });
+
+    expect(runtimeRemoveButton("mybot")).not.toBeDisabled();
+    await clickRemoveRuntime(user, "mybot");
     expect(onRemove).toHaveBeenCalledWith("mybot");
   });
 
   it("opens an inline Add form when Add runtime is clicked", async () => {
-    const user = userEvent.setup();
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /add runtime/i }));
-    expect(screen.getByLabelText(/runtime id/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/display name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/executable/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/args/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^env$/i)).toBeInTheDocument();
+    const { user } = setupRuntimesPanel();
+
+    await openAddRuntimeForm(user);
+    assertAddRuntimeFormVisible();
   });
 
   it("calls onAdd with a parsed entry when Save is clicked", async () => {
-    const user = userEvent.setup();
     const onAdd = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={onAdd}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /add runtime/i }));
-    await user.type(screen.getByLabelText(/runtime id/i), "mybot");
-    await user.type(screen.getByLabelText(/display name/i), "My Bot");
-    await user.type(screen.getByLabelText(/executable/i), "mybot");
-    await user.type(screen.getByLabelText(/args/i), "--foo bar");
-    await user.type(screen.getByLabelText(/^env$/i), "FOO=bar\nTOKEN=a=b");
-    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+    const { user } = setupRuntimesPanel({ onAdd });
+
+    await submitNewRuntime(user, {
+      id: "mybot",
+      displayName: "My Bot",
+      executable: "mybot",
+      args: "--foo bar",
+      env: "FOO=bar\nTOKEN=a=b",
+    });
 
     expect(onAdd).toHaveBeenCalledWith("mybot", {
       displayName: "My Bot",
@@ -279,88 +131,57 @@ describe("RuntimesPanel", () => {
   });
 
   it("rejects invalid env lines", async () => {
-    const user = userEvent.setup();
     const onAdd = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={onAdd}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /add runtime/i }));
-    await user.type(screen.getByLabelText(/runtime id/i), "mybot");
-    await user.type(screen.getByLabelText(/display name/i), "My Bot");
-    await user.type(screen.getByLabelText(/executable/i), "mybot");
-    await user.type(screen.getByLabelText(/^env$/i), "BAD LINE");
-    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+    const { user } = setupRuntimesPanel({ onAdd });
+
+    await submitNewRuntime(user, {
+      id: "mybot",
+      displayName: "My Bot",
+      executable: "mybot",
+      env: "BAD LINE",
+    });
 
     expect(onAdd).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toMatch(/env/i);
   });
 
   it("rejects the form with an invalid executable", async () => {
-    const user = userEvent.setup();
     const onAdd = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={onAdd}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /add runtime/i }));
-    await user.type(screen.getByLabelText(/runtime id/i), "mybot");
-    await user.type(screen.getByLabelText(/display name/i), "My Bot");
-    // ';' is not in [a-zA-Z0-9_./-]
-    await user.type(screen.getByLabelText(/executable/i), "bad;exec");
-    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+    const { user } = setupRuntimesPanel({ onAdd });
 
-    // The form should not submit
+    await submitNewRuntime(user, {
+      id: "mybot",
+      displayName: "My Bot",
+      executable: "bad;exec",
+    });
+
     expect(onAdd).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toMatch(/executable/i);
   });
 
   it("rejects an invalid runtime id", async () => {
-    const user = userEvent.setup();
     const onAdd = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={onAdd}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /add runtime/i }));
-    // Uppercase ids are not allowed
-    await user.type(screen.getByLabelText(/runtime id/i), "BadID");
-    await user.type(screen.getByLabelText(/display name/i), "Bad");
-    await user.type(screen.getByLabelText(/executable/i), "bad");
-    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+    const { user } = setupRuntimesPanel({ onAdd });
+
+    await submitNewRuntime(user, {
+      id: "BadID",
+      displayName: "Bad",
+      executable: "bad",
+    });
 
     expect(onAdd).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toMatch(/id/i);
   });
 
   it("rejects adding a retired runtime id", async () => {
-    const user = userEvent.setup();
     const onAdd = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={onAdd}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /add runtime/i }));
-    await user.type(screen.getByLabelText(/runtime id/i), "gemini");
-    await user.type(screen.getByLabelText(/display name/i), "Gemini");
-    await user.type(screen.getByLabelText(/executable/i), "gemini");
-    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+    const { user } = setupRuntimesPanel({ onAdd });
+
+    await submitNewRuntime(user, {
+      id: "gemini",
+      displayName: "Gemini",
+      executable: "gemini",
+    });
 
     expect(onAdd).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toMatch(
@@ -369,23 +190,15 @@ describe("RuntimesPanel", () => {
   });
 
   it("opens an inline edit form and calls onUpdate when Save is clicked", async () => {
-    const user = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={() => noopAsync()}
-        onUpdate={onUpdate}
-        onRemove={() => noopAsync()}
-      />,
-    );
-    const row = screen.getByTestId("runtime-row-claude");
-    await user.click(within(row).getByRole("button", { name: /edit/i }));
-    const display = screen.getByLabelText(/display name/i) as HTMLInputElement;
+    const { user } = setupRuntimesPanel({ onUpdate });
+
+    await clickEditRuntime(user, "claude");
+    const display = runtimeDisplayNameInput();
     expect(display.value).toBe("Claude Code");
     await user.clear(display);
     await user.type(display, "Claude Renamed");
-    await user.click(screen.getByRole("button", { name: /save runtime/i }));
+    await saveRuntime(user);
 
     expect(onUpdate).toHaveBeenCalledWith(
       "claude",
@@ -398,57 +211,17 @@ describe("RuntimesPanel", () => {
 
   it("renders the readOnlyNote when provided", () => {
     const NOTE = "Runtime editing is unavailable in this environment.";
-    render(
-      <RuntimesPanel
-        runtimes={BASE_RUNTIMES}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-        readOnlyNote={NOTE}
-      />,
-    );
+    renderRuntimesPanel({ readOnlyNote: NOTE });
+
     expect(screen.getByText(NOTE)).toBeInTheDocument();
   });
 
   it("disables Edit/Remove and hides the Add button when readOnlyNote is set", () => {
-    const extras: Record<string, RuntimeEntry> = {
-      ...BASE_RUNTIMES,
-      mybot: {
-        displayName: "My Bot",
-        executable: "mybot",
-        args: [],
-        icon: "bot",
-      },
-    };
-    render(
-      <RuntimesPanel
-        runtimes={extras}
-        onAdd={() => noopAsync()}
-        onUpdate={() => noopAsync()}
-        onRemove={() => noopAsync()}
-        readOnlyNote="Runtime editing is unavailable in this environment."
-      />,
-    );
-    /* All Edit buttons are disabled — both builtin and custom rows. */
-    for (const row of [
-      screen.getByTestId("runtime-row-claude"),
-      screen.getByTestId("runtime-row-codex"),
-      screen.getByTestId("runtime-row-opencode"),
-      screen.getByTestId("runtime-row-mybot"),
-    ]) {
-      const editBtn = within(row).getByRole("button", { name: /edit/i });
-      expect(editBtn).toBeDisabled();
-    }
-    /* Custom row's Remove button should also be disabled in read-only mode
-       (in non-read-only mode it would be enabled for the custom entry). */
-    const customRow = screen.getByTestId("runtime-row-mybot");
-    const removeBtn = within(customRow).getByRole("button", {
-      name: /remove/i,
+    renderRuntimesPanel({
+      runtimes: runtimesWithCustom(customRuntime({ icon: "bot" })),
+      readOnlyNote: "Runtime editing is unavailable in this environment.",
     });
-    expect(removeBtn).toBeDisabled();
-    /* No Add runtime button in read-only mode. */
-    expect(
-      screen.queryByRole("button", { name: /add runtime/i }),
-    ).toBeNull();
+
+    assertReadOnlyRuntimeControls(["claude", "codex", "opencode", "mybot"]);
   });
 });
