@@ -6,7 +6,7 @@ import {
   test,
   vi,
 } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Sessions } from "../../src/panels/Sessions.js";
 import { useStore } from "../../src/state/store.js";
@@ -148,14 +148,14 @@ describe("Sessions panel", () => {
     expect(loading).toHaveClass("loading-animation");
     expect(loading).toHaveClass("panel-loading");
     expect(
-      screen.queryByText(/No sessions yet\. Press \+ New\./i),
+      screen.queryByText(/No sessions yet\. Create one with the \+ button\./i),
     ).not.toBeInTheDocument();
 
     sessionsRefresh.resolve();
 
     await waitFor(() => {
       expect(
-        screen.getByText(/No sessions yet\. Press \+ New\./i),
+        screen.getByText(/No sessions yet\. Create one with the \+ button\./i),
       ).toBeInTheDocument();
     });
   });
@@ -168,6 +168,62 @@ describe("Sessions panel", () => {
     expect(await screen.findByText("repo-b")).toBeInTheDocument();
     expect(await screen.findByText("alpha-session")).toBeInTheDocument();
     expect(await screen.findByText("beta-session")).toBeInTheDocument();
+  });
+
+  test("shows at most ten sessions per workspace until requested", async () => {
+    const manySessions: SessionMeta[] = Array.from({ length: 12 }, (_, index) => ({
+      id: `session-${String(index + 1).padStart(2, "0")}`,
+      slug: `session-${String(index + 1).padStart(2, "0")}`,
+      created_at: new Date(Date.UTC(2026, 4, 24, 12 - index)).toISOString(),
+      path: REPO_A,
+      path_id: "repo-a-id",
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string | URL) => {
+        if (String(url) === "/sessions?scope=all") {
+          return Promise.resolve(jsonResponse({ sessions: manySessions }));
+        }
+        return Promise.resolve(jsonResponse({}));
+      }),
+    );
+    const user = userEvent.setup();
+    render(<Sessions />);
+
+    expect(await screen.findByText("session-10")).toBeInTheDocument();
+    expect(screen.queryByText("session-11")).not.toBeInTheDocument();
+    expect(screen.queryByText("session-12")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /show 2 more sessions in repo-a/i,
+      }),
+    );
+
+    expect(await screen.findByText("session-11")).toBeInTheDocument();
+    expect(screen.getByText("session-12")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /show .* more sessions in repo-a/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("opens a stable, labelled session actions menu", async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<Sessions />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /session actions for alpha-session/i,
+      }),
+    );
+
+    const menu = screen.getByRole("menu", {
+      name: /actions for alpha-session/i,
+    });
+    expect(within(menu).getByText("alpha-session")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /focus session/i })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /delete session/i })).toBeInTheDocument();
   });
 
   test("selecting a session from another repo does not switch kernel active path", async () => {

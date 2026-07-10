@@ -15,6 +15,7 @@ import {
 import { LineCommentContent } from "./lineCommentRail/LineCommentContent.js";
 import {
   DraftCommentMarkers,
+  DraftLineNumbers,
   ExistingCommentMarkers,
 } from "./lineCommentRail/LineCommentMarkers.js";
 import { LineCommentPopoverHost } from "./lineCommentRail/LineCommentPopoverHost.js";
@@ -157,7 +158,7 @@ export function LineCommentRail({
   return (
     <div
       ref={rail.wrapRef}
-      className="commentable"
+      className="commentable prose-commentable"
       onMouseMove={rail.onMouseMove}
       onMouseLeave={rail.onMouseLeave}
       onMouseUp={rail.onMouseUp}
@@ -173,6 +174,10 @@ export function LineCommentRail({
           lineHeight={lineHeight}
         />
       </div>
+      <DraftLineNumbers
+        layouts={rail.draftMarkerLayouts}
+        popoverTarget={rail.popoverTarget}
+      />
       <ExistingCommentMarkers
         layouts={existingMarkerLayouts}
         activeTarget={store.activeTarget}

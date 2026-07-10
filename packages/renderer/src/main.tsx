@@ -51,8 +51,8 @@ applyPlacement(getCurrentPlacement());
 
 // X6 cross-tab sync: live-apply theme/font/density/pane-arrangement changes made
 // in OTHER browser tabs (the `storage` event only fires in non-writing tabs).
-// This runs for both the main App and the standalone /file-tree page so every
-// tab's appearance stays coherent.
+// This runs for the main App and standalone pages so every tab's appearance
+// stays coherent.
 startThemeStorageSync();
 startFontStorageSync();
 startDensityStorageSync();
@@ -65,18 +65,32 @@ startThemeReporting();
 const root = document.getElementById("root");
 if (root === null) throw new Error("missing #root element");
 
-/* Standalone /file-tree tab (spec §6.1): render a state-isolated FileTreePage
-   instead of the full app. The static catch-all already serves the SPA for
-   /file-tree/*, so no server route is needed — we branch on pathname here.
+const REVIEW_STATE_PATH = "/dev/review-state";
+const pathname =
+  typeof window !== "undefined" ? window.location.pathname : "";
+const isReviewState =
+  pathname === REVIEW_STATE_PATH || pathname === `${REVIEW_STATE_PATH}/`;
+
+/* Standalone routes render without the full app lifecycle. The static
+   catch-all already serves the SPA for these paths, so no server route is
+   needed — we branch on pathname here.
 
    The namespace is set synchronously here (folding in the launch path_id),
-   and App/FileTreePage are BOTH dynamic imports so that whichever branch we
-   take, the shared store module is only evaluated AFTER the namespace gate. */
+   and every page is a dynamic import so that the shared store module is only
+   evaluated AFTER the namespace gate when the main app or file tree needs it. */
 const isFileTree =
-  typeof window !== "undefined" &&
-  window.location.pathname.startsWith("/file-tree");
+  typeof window !== "undefined" && pathname.startsWith("/file-tree");
 
-if (isFileTree) {
+if (isReviewState) {
+  void (async () => {
+    const { ReviewStatePage } = await import("./pages/ReviewStatePage.js");
+    createRoot(root).render(
+      <StrictMode>
+        <ReviewStatePage />
+      </StrictMode>,
+    );
+  })();
+} else if (isFileTree) {
   const pathId =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("path_id")

@@ -17,6 +17,10 @@ const NO_LOOSE_STRING_VALUES = {
   savedDraft: "saved-draft",
 } as const;
 
+function lineNumberLabel(lines: LineRange): string {
+  return lines[0] === lines[1] ? String(lines[0]) : `${lines[0]}–${lines[1]}`;
+}
+
 export function ExistingCommentMarkers({
   layouts,
   activeTarget,
@@ -44,6 +48,37 @@ export function ExistingCommentMarkers({
           label={`Open ${a.comments.length === 1 ? "comment" : "comments"} on ${lineLabel(a.lines)}`}
           onClick={() => onFocusComments(a.lines)}
         />
+      ))}
+    </div>
+  );
+}
+
+export function DraftLineNumbers({
+  layouts,
+  popoverTarget,
+}: {
+  layouts: MarkerLayout<DraftMarker>[];
+  popoverTarget: LineRange | null;
+}): JSX.Element {
+  return (
+    <div className="line-comment-number-rail" aria-hidden>
+      {layouts.map(({ item, box }) => (
+        <span
+          key={item.key}
+          className={[
+            "line-comment-line-number",
+            item.kind,
+            popoverTarget !== null && rangeEquals(popoverTarget, item.lines)
+              ? "active"
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={{ top: box.center }}
+          data-target-lines={`${item.lines[0]}:${item.lines[1]}`}
+        >
+          {lineNumberLabel(item.lines)}
+        </span>
       ))}
     </div>
   );

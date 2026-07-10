@@ -28,10 +28,8 @@ export function SessionsPanelView(
           onClick={controller.openNewSessionModal}
           aria-label="Start a new session"
         >
-          <span className="new-btn-core">
-            <span className="new-btn-label">New</span>
-            <span className="new-btn-icon" aria-hidden="true" />
-          </span>
+          <span className="new-btn-icon" aria-hidden="true" />
+          <span className="new-btn-label">New session</span>
         </button>
       </div>
       <div className="panel-search">

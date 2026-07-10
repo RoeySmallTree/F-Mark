@@ -103,7 +103,7 @@ export function FileEditBar({
           aria-label={saveLabel}
         >
           <Save size={13} aria-hidden />
-          Save
+          <span className="fv-editbar-save-label">Save</span>
         </button>
       ) : null}
       <div className="fv-editbar-end">
@@ -126,6 +126,8 @@ export function FileEditBar({
           <input
             type="checkbox"
             checked={autosave}
+            aria-label="Autosave"
+            title="Autosave"
             onChange={(event) => onAutosaveChange(event.currentTarget.checked)}
           />
           <span className="toggle-label">Autosave</span>

@@ -134,10 +134,17 @@ describe("MessageCard", () => {
 
       const marker = screen.getByLabelText(/Add comment on line 1/i);
       const anchor = marker.closest(".line-comment-anchor") as HTMLElement | null;
+      const lineNumber = container.querySelector(
+        ".line-comment-line-number",
+      ) as HTMLElement | null;
       expect(anchor).not.toBeNull();
       expect(anchor!.dataset.targetLines).toBe("1:1");
       expect(Number.parseFloat(anchor!.style.top)).toBeGreaterThan(10);
       expect(Number.parseFloat(anchor!.style.height)).toBeLessThanOrEqual(32);
+      expect(lineNumber).not.toBeNull();
+      expect(lineNumber!.textContent).toBe("1");
+      expect(lineNumber!.dataset.targetLines).toBe("1:1");
+      expect(Number.parseFloat(lineNumber!.style.top)).toBeGreaterThan(20);
     } finally {
       rangeSpy.mockRestore();
     }

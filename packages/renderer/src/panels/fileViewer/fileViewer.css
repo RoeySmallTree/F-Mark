@@ -94,21 +94,37 @@
   .fv-empty-icon-outer { animation: none !important; }
 }
 
-/* Tabs row — pinned and unpinned share a single horizontal flex row.
-   Overflow scrolls horizontally with a thin scrollbar. */
+/* Tabs row — a quiet file ribbon. The inline padding protects the first and
+   last item from the edge mask while the hidden scrollbar keeps the chrome
+   visually still. */
 .fv-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
+  margin: -2px 0;
+  padding: 2px 14px;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
+  scroll-padding-inline: 14px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 12px,
+    black calc(100% - 12px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 12px,
+    black calc(100% - 12px),
+    transparent
+  );
 }
-.fv-tabs::-webkit-scrollbar { height: 6px; }
-.fv-tabs::-webkit-scrollbar-thumb {
-  background: var(--line-2);
-  border-radius: var(--radius-pill);
+.fv-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .fv-tab {
@@ -116,35 +132,54 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 24px;
-  max-width: 200px;
-  padding: 0 4px 0 8px;
-  border: 1px solid transparent;
+  gap: 5px;
+  height: 26px;
+  max-width: 220px;
+  padding: 0 5px;
+  border: var(--border-w) solid transparent;
   border-radius: var(--radius);
-  background: transparent;
-  color: var(--ink-2);
+  background-color: transparent;
+  color: var(--ink-3);
   cursor: pointer;
   user-select: none;
-  transition: background var(--dur-base) var(--ease-out-quart),
-    color var(--dur-base) var(--ease-out-quart),
-    border-color var(--dur-base) var(--ease-out-quart),
-    transform 160ms var(--ease-out-quart);
+  transition:
+    transform var(--dur-fast) var(--ease-out-quart),
+    background-color var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    box-shadow var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart);
 }
 .fv-tab:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink);
+  background-color: color-mix(in srgb, var(--canvas) 66%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-2);
+}
+.fv-tab:focus-visible {
+  outline: 0;
+  border-color: color-mix(in srgb, var(--agent) 32%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent) 13%, transparent);
 }
 .fv-tab.is-active {
-  background: color-mix(in srgb, var(--agent) 12%, var(--canvas));
-  border-color: color-mix(in srgb, var(--agent) 46%, var(--line-2));
+  background-color: var(--canvas);
+  border-color: color-mix(in srgb, var(--agent) 18%, var(--line-2));
   color: var(--ink);
   box-shadow:
-    inset 0 -2px 0 var(--agent),
-    0 0 0 1px color-mix(in srgb, var(--agent) 10%, transparent);
+    var(--shadow),
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 86%, white);
 }
-.fv-tab.is-pinned {
-  border-color: color-mix(in srgb, var(--agent) 30%, var(--line));
+.fv-tab.is-active::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  bottom: 2px;
+  left: 24px;
+  height: 1px;
+  border-radius: var(--radius-pill);
+  background-color: color-mix(in srgb, var(--agent) 72%, transparent);
+  opacity: 0.66;
+}
+.fv-tab.is-pinned:not(.is-active) {
+  background-color: color-mix(in srgb, var(--agent) 5%, transparent);
 }
 .fv-tab[data-drop-before="true"] {
   transform: translateX(9px);
@@ -156,12 +191,17 @@
   top: 5px;
   bottom: 5px;
   width: 2px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--agent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent) 14%, transparent);
 }
 .fv-tab-icon {
+  width: 17px;
+  height: 17px;
+  padding: 2px;
   flex: 0 0 auto;
+  border-radius: max(0px, calc(var(--radius) - 2px));
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
 }
 .fv-tab-name {
   flex: 1;
@@ -170,35 +210,49 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
 }
 .fv-tab-btn {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   border: 0;
-  background: transparent;
-  border-radius: 3px;
+  background-color: transparent;
+  border-radius: max(0px, calc(var(--radius) - 2px));
   color: var(--ink-4);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--dur-base) var(--ease-out-quart),
-    background var(--dur-base) var(--ease-out-quart);
+  pointer-events: none;
+  transform: translateX(2px);
+  transition:
+    transform var(--dur-fast) var(--ease-out-quart),
+    opacity var(--dur-fast) var(--ease-out-quart),
+    background-color var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart);
 }
 .fv-tab:hover .fv-tab-btn,
-.fv-tab.is-active .fv-tab-btn,
-.fv-tab.is-pinned .fv-tab-btn {
-  opacity: 0.7;
+.fv-tab.is-active .fv-tab-close,
+.fv-tab.is-pinned .fv-tab-btn[title="Unpin"] {
+  opacity: 0.72;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 .fv-tab-btn:hover {
   opacity: 1 !important;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  background-color: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink);
 }
+.fv-tab-btn:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent) 16%, transparent);
+}
 .fv-tab.is-pinned .fv-tab-btn[title="Unpin"] {
-  opacity: 1;
   color: var(--agent);
 }
 
@@ -746,6 +800,8 @@
   border-bottom: 1px solid var(--line-2);
   background: var(--panel);
   box-sizing: border-box;
+  container: fv-editbar / inline-size;
+  overflow: hidden;
 }
 .fv-editbar-path {
   display: flex;
@@ -753,6 +809,7 @@
   gap: 4px;
   min-width: 0;
   flex: 1 1 auto;
+  overflow: hidden;
 }
 .fv-editbar-path-text {
   min-width: 0;
@@ -828,21 +885,81 @@
   color: var(--rose, #b54848);
 }
 .fv-editbar-autosave {
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 22px;
+  padding: 2px 6px 2px 4px;
+  border-radius: var(--radius);
+  transition:
+    background-color var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart);
+}
+.fv-editbar-autosave:hover {
+  background-color: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 .fv-editbar-autosave .toggle-label {
-  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
 }
 .fv-editbar-autosave input[type="checkbox"] {
-  width: 28px;
-  height: 16px;
+  width: 26px;
+  height: 14px;
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--ink) 10%, var(--canvas));
+  box-shadow: inset 0 0 0 var(--border-w)
+    color-mix(in srgb, var(--ink) 7%, transparent);
 }
 .fv-editbar-autosave input[type="checkbox"]::before {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
+  box-shadow: var(--shadow);
+}
+.fv-editbar-autosave input[type="checkbox"]:checked {
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--agent) 46%, var(--ink));
+  box-shadow: none;
 }
 .fv-editbar-autosave input[type="checkbox"]:checked::before {
   transform: translateX(12px);
+}
+.fv-editbar-autosave input[type="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent) 14%, transparent);
+}
+
+@container fv-editbar (max-width: 360px) {
+  .fv-editbar-end {
+    gap: 4px;
+  }
+  .fv-editbar-autosave {
+    gap: 0;
+    padding: 4px;
+  }
+  .fv-editbar-autosave .toggle-label {
+    display: none;
+  }
+}
+
+@container fv-editbar (max-width: 300px) {
+  .fv-editbar-status {
+    display: none;
+  }
+}
+
+@container fv-editbar (max-width: 230px) {
+  .fv-editbar-path {
+    display: none;
+  }
+  .fv-editbar-save {
+    width: 22px;
+    padding: 0;
+    justify-content: center;
+  }
+  .fv-editbar-save-label {
+    display: none;
+  }
 }
 .fv-monaco-editor-frame {
   position: relative;

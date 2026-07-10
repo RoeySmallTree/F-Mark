@@ -14,13 +14,14 @@ interface InlineNewSessionProps {
   path: string;
   onCreated: (session: SessionMeta) => void;
   token: string | null;
+  iconOnly?: boolean;
 }
 
 /* One-click creation: sessions open immediately with the placeholder slug
    (`new-session`); the connected agent renames it via `fmark_rename_session`
    once it knows what the session is about. */
 export function InlineNewSession(props: InlineNewSessionProps): JSX.Element {
-  const { path, onCreated, token } = props;
+  const { path, onCreated, token, iconOnly = false } = props;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,30 +44,46 @@ export function InlineNewSession(props: InlineNewSessionProps): JSX.Element {
   }
 
   return (
-    <div className="inline-new-session-root">
+    <span
+      className={`inline-new-session-root${iconOnly ? " is-icon-only" : ""}`}
+    >
       <button
         type="button"
-        className="inline-new-session"
+        className={`inline-new-session${iconOnly ? " is-icon-only" : ""}`}
         disabled={submitting}
-        onClick={() => void create()}
+        onClick={(event) => {
+          if (iconOnly) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          void create();
+        }}
+        onKeyDown={(event) => {
+          if (iconOnly) event.stopPropagation();
+        }}
         aria-label={`New session in ${basename(path)}`}
+        aria-busy={submitting}
+        title={`New session in ${basename(path)}`}
       >
         <Plus
-          size={12}
+          size={13}
+          strokeWidth={1.5}
           aria-hidden="true"
           className="inline-new-session-icon"
         />
-        <span>
-          {submitting
-            ? INLINE_NEW_SESSION_LABELS.creating
-            : INLINE_NEW_SESSION_LABELS.newSession}
-        </span>
+        {iconOnly ? null : (
+          <span>
+            {submitting
+              ? INLINE_NEW_SESSION_LABELS.creating
+              : INLINE_NEW_SESSION_LABELS.newSession}
+          </span>
+        )}
       </button>
       {error !== null ? (
-        <div className="inline-new-session-error" role="alert">
+        <span className="inline-new-session-error" role="alert">
           {error}
-        </div>
+        </span>
       ) : null}
-    </div>
+    </span>
   );
 }
