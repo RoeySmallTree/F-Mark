@@ -19,6 +19,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -F @f-mark/shared build
       - run: pnpm -F @f-mark/renderer build
-      - run: pnpm -F kernel build
-      - run: pnpm -F kernel build:bundle
+      - run: pnpm -F f-mark build
+      - run: pnpm -F f-mark build:bundle
       - run: pnpm test
