@@ -23,70 +23,74 @@
      Cool paper, not cream. --paper-band is the one borrowed artifact:
      greenbar continuous-feed stock, which is what an append-only log would
      actually have been printed on. It bands by turn, not by row. */
-  --paper: #f7f8f7;
-  --paper-band: #eff4f0; /* deliberately near-subliminal */
-  --paper-sunk: #edf0ee; /* inputs, wells, outer chrome */
+  --paper: #fdfdfc;
+  --paper-band: #f4f8f4; /* deliberately near-subliminal */
+  --paper-sunk: #e6ebe8; /* inputs, wells, outer chrome */
 
-  --bg: #edf0ee; /* outer chrome */
-  --canvas: #f7f8f7; /* the ledger sheet itself */
-  --panel: #f1f4f2; /* side surfaces */
-  --panel-2: #e7ece9; /* hover */
+  --bg: #e6ebe8; /* outer chrome */
+  --canvas: #fdfdfc; /* the ledger sheet itself */
+  --panel: #f4f7f5; /* side surfaces */
+  --panel-2: #e8eeea; /* hover */
 
   /* ── Ink ─────────────────────────────────────────────────────────────────
      Four weights. Every ratio below is MEASURED against --canvas, not
      estimated — an earlier revision of this file carried eyeballed numbers and
      nine of fourteen were wrong, including one that hid a real AA failure.
      Re-measure if you change a value; do not hand-write a ratio. */
-  --ink: #141a16; /* 16.59:1 — primary */
-  --ink-2: #46514a; /*  7.78:1 — secondary */
-  --ink-3: #647069; /*  4.85:1 — meta, timestamps. The lightest AA text. */
+  --ink: #121814; /* 17.69:1 — primary */
+  --ink-2: #3f4a43; /*  9.08:1 — secondary */
+  --ink-3: #5f6b64; /*  5.47:1 — meta, timestamps. The lightest AA text. */
   /* --ink-4 is 2.37:1 and does NOT meet AA. It is nominally the disabled /
      hairline tier, but 214 call sites currently set it as `color:` on real
      text — so the constraint is documented debt, not an enforced rule. It is
      unchanged here because ~60 further sites use it as a border colour, where
      darkening to AA would visibly thicken the whole chrome; splitting the two
      roles is the actual fix and is not attempted in this pass. */
-  --ink-4: #9aa69e; /*  2.37:1 — see note above. Do not add new text uses. */
+  --ink-4: #97a39b; /*  2.57:1 — see note above. Do not add new text uses. */
 
   /* ── Rules ───────────────────────────────────────────────────────────────
      A ledger is organised by ruled lines, not by boxes and shadows. */
-  --rule: #dde3de;
-  --rule-strong: #c2cbc4;
-  --line: #dde3de;
-  --line-2: #e6eae7;
-  --line-3: #eff2f0;
+  --rule: #d8e0da;
+  --rule-strong: #bcc7c0;
+  --line: #d8e0da;
+  --line-2: #e4eae6;
+  --line-3: #eef2ef;
 
   /* ── The one accent ──────────────────────────────────────────────────────
      Deep ledger green, 6.15:1 on --canvas. Means: an agent wrote this, or an
      agent is working. Never used to decorate, emphasise, or brand. */
-  --ledger: #0e6b45;
-  --ledger-tint: #e0efe7;
-  --ledger-tint-2: #c5e2d3;
+  --ledger: #0f7a4d;
+  --ledger-tint: #dff0e7;
+  --ledger-tint-2: #b3ddc7;
 
   /* ── Authorship ──────────────────────────────────────────────────────────
      Human = ink. Agent = ledger green. That is the whole distinction; it does
      not need a second hue. */
-  --user: #1f2a23;
-  --user-tint: #eaedeb;
-  --user-tint-2: #d8ded9;
-  --agent: #0e6b45;
-  --agent-tint: #e0efe7;
-  --agent-tint-2: #c5e2d3;
+  --user: #1b2620;
+  --user-tint: #eceff0;
+  --user-tint-2: #d6dedb;
+  --agent: #0f7a4d;
+  --agent-tint: #dff0e7;
+  --agent-tint-2: #b3ddc7;
 
   /* ── Signals ─────────────────────────────────────────────────────────────
      Not accents. Semantics with no substitute. */
-  --green: #0e6b45;
-  --green-tint: #e0efe7;
-  --alarm: #a32a20; /* 6.78:1 — destruction and error ONLY */
-  --rose: #a32a20;
+  --green: #0f7a4d;
+  --green-tint: #dff0e7;
+  --alarm: #b02d20; /*  6.36:1 — destruction and error ONLY */
+  --rose: #b02d20;
 
   /* ── Depth ───────────────────────────────────────────────────────────────
      A sheet of paper is flat. Elevation is a rule, not a blur. These two
      survive for genuinely floating surfaces (popovers, dialogs) and stay
      hairline-led even there. */
-  --shadow: 0 0 0 1px #dde3de;
+  --shadow:
+    0 1px 2px rgb(18 24 20 / 5%),
+    0 2px 6px -1px rgb(18 24 20 / 6%);
   --shadow-2:
-    0 0 0 1px #c2cbc4, 0 8px 24px -12px rgb(20 26 22 / 18%);
+    0 1px 2px rgb(18 24 20 / 5%),
+    0 6px 16px -4px rgb(18 24 20 / 10%),
+    0 18px 40px -12px rgb(18 24 20 / 14%);
 
   /* ── Type ────────────────────────────────────────────────────────────────
      IBM Plex: drawn for technical documentation, with a true mono sibling.
@@ -110,8 +114,8 @@
 
   /* ── Geometry ────────────────────────────────────────────────────────────
      Near-square. Printed rules do not have soft corners. */
-  --radius: 3px;
-  --radius-lg: 5px;
+  --radius: 6px;
+  --radius-lg: 10px;
   --radius-pill: 999px;
   --border-w: 1px;
 
@@ -153,45 +157,49 @@
    and hairlines are what keep this reading as a sheet rather than a terminal.
    The accent desaturates so it sits on the surface instead of glowing off it. */
 body.theme-night {
-  --paper: #0e1210;
-  --paper-band: #131916;
-  --paper-sunk: #0a0d0b;
+  --paper: #101613;
+  --paper-band: #151d19;
+  --paper-sunk: #080b09;
 
-  --bg: #0a0d0b;
-  --canvas: #0e1210;
-  --panel: #111614;
-  --panel-2: #1a221d;
+  --bg: #080b09;
+  --canvas: #101613;
+  --panel: #161e1a;
+  --panel-2: #202b25;
 
-  --ink: #e6ede8; /* 15.86:1 */
-  --ink-2: #a3b0a8; /*  8.39:1 */
-  --ink-3: #74827a; /*  4.69:1 — lightest AA text */
-  --ink-4: #4d584f; /* non-text only */
+  --ink: #e9f0ea; /* 15.81:1 */
+  --ink-2: #a7b5ac; /*  8.59:1 */
+  --ink-3: #78877e; /*  4.86:1 — lightest AA text */
+  --ink-4: #4f5b53; /* non-text only */
 
-  --rule: #232c27;
-  --rule-strong: #35413a;
-  --line: #232c27;
-  --line-2: #1b221e;
-  --line-3: #151b17;
+  --rule: #26312b;
+  --rule-strong: #3a473f;
+  --line: #26312b;
+  --line-2: #1c2521;
+  --line-3: #161d19;
 
-  --ledger: #58b98a; /* 7.84:1 on --canvas */
-  --ledger-tint: #12241b;
-  --ledger-tint-2: #1d3a2b;
+  --ledger: #4ec98f; /*  8.79:1 on --canvas */
+  --ledger-tint: #0f2a1d;
+  --ledger-tint-2: #1d4331;
 
-  --user: #dfe7e2;
-  --user-tint: #171d1a;
-  --user-tint-2: #232c27;
-  --agent: #58b98a;
-  --agent-tint: #12241b;
-  --agent-tint-2: #1d3a2b;
+  --user: #e2eae5;
+  --user-tint: #1a221e;
+  --user-tint-2: #26312b;
+  --agent: #4ec98f;
+  --agent-tint: #0f2a1d;
+  --agent-tint-2: #1d4331;
 
-  --green: #58b98a;
-  --green-tint: #12241b;
-  --alarm: #e8695c; /* 5.94:1 */
-  --rose: #e8695c;
+  --green: #4ec98f;
+  --green-tint: #0f2a1d;
+  --alarm: #f0776a; /*  6.59:1 */
+  --rose: #f0776a;
 
-  --shadow: 0 0 0 1px #232c27;
+  --shadow:
+    0 1px 2px rgb(0 0 0 / 40%),
+    0 2px 6px -1px rgb(0 0 0 / 30%);
   --shadow-2:
-    0 0 0 1px #35413a, 0 8px 24px -12px rgb(0 0 0 / 60%);
+    0 1px 2px rgb(0 0 0 / 50%),
+    0 6px 16px -4px rgb(0 0 0 / 45%),
+    0 18px 40px -12px rgb(0 0 0 / 55%);
 }
 
 /* ═══ CONTRAST ═════════════════════════════════════════════════════════════
@@ -207,7 +215,7 @@ body.theme-contrast {
   --panel: #ffffff;
   --panel-2: #e8e8e8;
 
-  --ink: #000000; /* 21:1 */
+  --ink: #000000; /* 21.00:1 */
   --ink-2: #1c1c1c; /* 17.04:1 */
   --ink-3: #3d3d3d; /* 10.86:1 — still AAA */
   --ink-4: #000000;
@@ -218,7 +226,7 @@ body.theme-contrast {
   --line-2: #000000;
   --line-3: #6b6b6b;
 
-  --ledger: #005c33; /* 8.14:1 */
+  --ledger: #005c33; /*  8.14:1 */
   --ledger-tint: #d9ebe1;
   --ledger-tint-2: #b3d7c4;
 
@@ -231,7 +239,7 @@ body.theme-contrast {
 
   --green: #005c33;
   --green-tint: #d9ebe1;
-  --alarm: #a80000; /* 7.88:1 */
+  --alarm: #a80000; /*  7.88:1 */
   --rose: #a80000;
 
   --border-w: 2px;

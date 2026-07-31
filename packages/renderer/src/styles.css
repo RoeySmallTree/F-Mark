@@ -22,6 +22,10 @@
 @import "./panels/fileViewer/lineComment/lineComment.css";
 @import "./pages/fileTreePage.css";
 @import "./agent-components.css";
+/* Loads LAST on purpose: surface.css carries the rules that must win over
+   every component sheet above (depth, participant colour, tool hue, motion).
+   interaction.css is its opposite — the overridable baseline, imported early. */
+@import "./themes/surface.css";
 
 @tailwind base;
 @tailwind components;

@@ -1496,7 +1496,10 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent),
     0 6px 20px color-mix(in srgb, var(--agent) 8%, transparent);
-  animation: feed-empty-float var(--dur-slow) var(--ease-inout) infinite;
+  /* Settles once on entrance. It used to loop forever: a decorative
+     perpetual motion with no cause behind it, on a screen whose whole job
+     is to be calm and tell you nothing has happened yet. */
+  animation: feed-empty-float var(--dur-slow) var(--ease-out-quint);
   will-change: transform;
 }
 

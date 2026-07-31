@@ -1,0 +1,154 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SURFACE — depth, identity colour, and motion that reports state.
+
+   WHY THIS FILE LOADS LAST. interaction.css defines the overridable baseline
+   with :where(), deliberately at zero specificity, imported early so any
+   component can override it. This file is the opposite: these rules are meant
+   to WIN. They were originally appended to interaction.css and silently lost
+   to every component sheet imported after it — the tool chips carried a
+   correct --tool-hue and still computed grey.
+
+   The first Ledger pass enforced "a sheet of paper is flat" so strictly that
+   every surface landed in a 6% lightness band and all participant colour was
+   overridden to ink. Correct on paper; dead on screen. A workspace is not one
+   sheet — it is things resting on a sheet, and colour is how you tell WHO and
+   WHAT at a glance.
+
+   The one-meaning rule still holds; this adds channels, each with one meaning:
+     ink weight        → hierarchy
+     ledger green      → an agent is working NOW
+     alarm red         → destruction and error
+     participant hue   → WHO (from kernel data, not decoration)
+     tool hue          → WHAT KIND of work
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Depth ────────────────────────────────────────────────────────────── */
+.card,
+.prose-card,
+.embed-card,
+.choices-card,
+.todo-card,
+.file-card {
+  box-shadow: var(--shadow);
+  transition:
+    box-shadow var(--dur-fast) var(--ease-snap),
+    transform var(--dur-fast) var(--ease-snap),
+    border-color var(--dur-fast) var(--ease-snap);
+}
+.card:hover,
+.prose-card:hover,
+.todo-card:hover,
+.file-card:hover {
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+.modal,
+.popover,
+.cmdk-panel {
+  box-shadow: var(--shadow-2);
+}
+
+/* ── Identity colour — hue means WHO ──────────────────────────────────────
+   The kernel ships each participant's colour inline as --avatar-color. It was
+   being overridden to ink, so a session running three agents looked like one
+   running none. Participant colours arrive from data and cannot be
+   contrast-checked ahead of time, so they carry FILLS, RINGS and MARKS only —
+   never body text, which stays on the measured ink scale. */
+.avatar {
+  border-color: color-mix(in srgb, var(--avatar-color, var(--ink-4)) 70%, var(--rule));
+}
+.avatar.with-glyph {
+  background: color-mix(in srgb, var(--avatar-color, var(--panel)) 20%, var(--canvas));
+}
+.avatar .avatar-art-char[data-avatar-tone="primary"] {
+  color: color-mix(in srgb, var(--avatar-color, var(--ink)) 82%, var(--ink));
+}
+.avatar .avatar-art-char[data-avatar-tone="secondary"] {
+  color: color-mix(in srgb, var(--avatar-color, var(--ink-3)) 55%, var(--ink-3));
+}
+
+/* An entry's gutter mark takes its author's colour, so you can scan who wrote
+   what down the left margin without reading a single name. */
+.card.agent .stripe::after {
+  background: var(--avatar-color, var(--agent));
+}
+.card.user .stripe::after {
+  background: var(--avatar-color, var(--user));
+}
+
+.agent-chip,
+.topbar-user-chip {
+  border-color: color-mix(
+    in srgb,
+    var(--agent-color, var(--avatar-color, var(--rule))) 55%,
+    var(--rule)
+  );
+}
+
+/* ── Tool kind — hue means WHAT ───────────────────────────────────────────
+   Read / Edit / Bash were three identical grey chips, so a tool block told you
+   nothing until you read it. Now: green touched nothing, amber changed a file,
+   blue ran a command. Chip text stays on the ink scale. */
+.toolbox-preview-chip,
+.tool-path-chip {
+  border-color: color-mix(in srgb, var(--tool-hue, var(--rule)) 55%, var(--rule));
+  background: color-mix(in srgb, var(--tool-hue, var(--panel)) 16%, var(--canvas));
+}
+.toolbox-preview-chip .dot,
+.toolbox-preview-chip::before,
+.tool-path-chip::before {
+  background: var(--tool-hue, var(--ink-4));
+}
+.t-read { --tool-hue: #2f7d5f; }
+.t-edit,
+.t-write { --tool-hue: #b0722a; }
+.t-bash { --tool-hue: #2b6ca8; }
+.t-search,
+.t-grep { --tool-hue: #6a5aa8; }
+.t-task { --tool-hue: #a8548a; }
+
+/* ── Entrance choreography ────────────────────────────────────────────────
+   Entries arrive as a sequence. The stagger caps at twelve so a long backlog
+   does not cascade for ten seconds. */
+@keyframes entry-arrive {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.feed-inner > * {
+  animation: entry-arrive var(--dur-base) var(--ease-snap) backwards;
+  animation-delay: calc(min(var(--i, 0), 12) * var(--dur-stagger));
+}
+
+/* ── Live agent activity ──────────────────────────────────────────────────
+   The one loop that is honest: an agent IS still working, so the mark breathes
+   until it stops. Green, because green means working. */
+@keyframes agent-alive {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+[data-agent-state="working"],
+.agent-live,
+.run-dot {
+  animation: agent-alive 1.6s var(--ease-inout) infinite;
+}
+
+/* ── Surface transitions ──────────────────────────────────────────────────
+   Switching context surfaces crossfades rather than cutting. */
+@keyframes surface-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.right-panel-scroll > *,
+.left-dock-content > *,
+.center-dock-content > * {
+  animation: surface-in var(--dur-fast) var(--ease-snap);
+}
+
+/* ── Row feedback ─────────────────────────────────────────────────────── */
+.session-item:hover,
+.todo-row:hover,
+.file-row:hover,
+.preset-item:hover,
+.cmdk-row:hover {
+  background: var(--panel-2);
+}

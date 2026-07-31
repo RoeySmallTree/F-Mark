@@ -33,7 +33,7 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent),
     0 4px 14px color-mix(in srgb, var(--agent) 8%, transparent);
-  animation: tab-empty-float var(--dur-slow) var(--ease-inout) infinite;
+  animation: tab-empty-float var(--dur-slow) var(--ease-out-quint);
   will-change: transform;
 }
 
@@ -67,7 +67,7 @@
 /* ── Animated variant (no-path states) ────────────────────────────────────
    A more expressive float with a micro-rotation to feel organic. */
 .tab-empty-icon-animated {
-  animation: tab-empty-float-deep var(--dur-slow) var(--ease-inout) infinite;
+  animation: tab-empty-float-deep var(--dur-slow) var(--ease-out-quint);
 }
 
 /* ── Micro-animations ──────────────────────────────────────────────────────
