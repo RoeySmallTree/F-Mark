@@ -33,12 +33,20 @@
   --panel-2: #e7ece9; /* hover */
 
   /* ── Ink ─────────────────────────────────────────────────────────────────
-     Four weights, each with a job. --ink-3 is the lightest text permitted on
-     --canvas (4.6:1, AA). --ink-4 is for non-text marks only. */
-  --ink: #141a16; /* 16.1:1 — primary */
-  --ink-2: #46514a; /*  8.4:1 — secondary */
-  --ink-3: #75817a; /*  4.6:1 — meta, timestamps */
-  --ink-4: #9aa69e; /*  2.9:1 — NON-TEXT ONLY (rules, glyphs, disabled marks) */
+     Four weights. Every ratio below is MEASURED against --canvas, not
+     estimated — an earlier revision of this file carried eyeballed numbers and
+     nine of fourteen were wrong, including one that hid a real AA failure.
+     Re-measure if you change a value; do not hand-write a ratio. */
+  --ink: #141a16; /* 16.59:1 — primary */
+  --ink-2: #46514a; /*  7.78:1 — secondary */
+  --ink-3: #647069; /*  4.85:1 — meta, timestamps. The lightest AA text. */
+  /* --ink-4 is 2.37:1 and does NOT meet AA. It is nominally the disabled /
+     hairline tier, but 214 call sites currently set it as `color:` on real
+     text — so the constraint is documented debt, not an enforced rule. It is
+     unchanged here because ~60 further sites use it as a border colour, where
+     darkening to AA would visibly thicken the whole chrome; splitting the two
+     roles is the actual fix and is not attempted in this pass. */
+  --ink-4: #9aa69e; /*  2.37:1 — see note above. Do not add new text uses. */
 
   /* ── Rules ───────────────────────────────────────────────────────────────
      A ledger is organised by ruled lines, not by boxes and shadows. */
@@ -49,7 +57,7 @@
   --line-3: #eff2f0;
 
   /* ── The one accent ──────────────────────────────────────────────────────
-     Deep ledger green, 6.1:1 on --canvas. Means: an agent wrote this, or an
+     Deep ledger green, 6.15:1 on --canvas. Means: an agent wrote this, or an
      agent is working. Never used to decorate, emphasise, or brand. */
   --ledger: #0e6b45;
   --ledger-tint: #e0efe7;
@@ -69,7 +77,7 @@
      Not accents. Semantics with no substitute. */
   --green: #0e6b45;
   --green-tint: #e0efe7;
-  --alarm: #a32a20; /* 6.4:1 — destruction and error ONLY */
+  --alarm: #a32a20; /* 6.78:1 — destruction and error ONLY */
   --rose: #a32a20;
 
   /* ── Depth ───────────────────────────────────────────────────────────────
@@ -141,9 +149,9 @@ body.theme-night {
   --panel: #111614;
   --panel-2: #1a221d;
 
-  --ink: #e6ede8; /* 14.8:1 */
-  --ink-2: #a3b0a8; /*  7.6:1 */
-  --ink-3: #74827a; /*  4.5:1 */
+  --ink: #e6ede8; /* 15.86:1 */
+  --ink-2: #a3b0a8; /*  8.39:1 */
+  --ink-3: #74827a; /*  4.69:1 — lightest AA text */
   --ink-4: #4d584f; /* non-text only */
 
   --rule: #232c27;
@@ -152,7 +160,7 @@ body.theme-night {
   --line-2: #1b221e;
   --line-3: #151b17;
 
-  --ledger: #58b98a; /* 7.7:1 on --canvas */
+  --ledger: #58b98a; /* 7.84:1 on --canvas */
   --ledger-tint: #12241b;
   --ledger-tint-2: #1d3a2b;
 
@@ -165,7 +173,7 @@ body.theme-night {
 
   --green: #58b98a;
   --green-tint: #12241b;
-  --alarm: #e8695c; /* 6.0:1 */
+  --alarm: #e8695c; /* 5.94:1 */
   --rose: #e8695c;
 
   --shadow: 0 0 0 1px #232c27;
@@ -187,8 +195,8 @@ body.theme-contrast {
   --panel-2: #e8e8e8;
 
   --ink: #000000; /* 21:1 */
-  --ink-2: #1c1c1c; /* 16.9:1 */
-  --ink-3: #3d3d3d; /*  9.7:1 — still AAA */
+  --ink-2: #1c1c1c; /* 17.04:1 */
+  --ink-3: #3d3d3d; /* 10.86:1 — still AAA */
   --ink-4: #000000;
 
   --rule: #000000;
@@ -197,7 +205,7 @@ body.theme-contrast {
   --line-2: #000000;
   --line-3: #6b6b6b;
 
-  --ledger: #005c33; /* 8.6:1 */
+  --ledger: #005c33; /* 8.14:1 */
   --ledger-tint: #d9ebe1;
   --ledger-tint-2: #b3d7c4;
 
@@ -210,7 +218,7 @@ body.theme-contrast {
 
   --green: #005c33;
   --green-tint: #d9ebe1;
-  --alarm: #a80000; /* 8.5:1 */
+  --alarm: #a80000; /* 7.88:1 */
   --rose: #a80000;
 
   --border-w: 2px;

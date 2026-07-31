@@ -5998,10 +5998,13 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   background: var(--panel);
 }
 
-/* A tablist with one tab is not a choice. The left zone hosts exactly one
-   pane, so its strip is suppressed rather than rendered as a lone orphan tab
-   ("Sess") floating above the panel. */
-.left-dock-tabs {
+/* A tablist with one tab is not a choice: the left zone normally hosts exactly
+   one pane, so its strip would render as a lone orphan tab ("Sess") floating
+   above the panel. It is hidden only while that holds — the Settings pane
+   arrangement editor can still move a second pane in here, and hiding the only
+   switcher unconditionally would strand it out of the tab order.
+   DockAreaView stamps data-pane-count on the area. */
+.left-dock-tabs[data-pane-count="1"] {
   display: none;
 }
 
@@ -6054,15 +6057,42 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 .right-tabs button {
   gap: 5px;
 }
-.right-tabs .right-tab-label {
-  display: none;
+/* Labels stay visible and the strip wraps. An icon-only rail was tried and
+   rejected in review: at 13px, Log and Terminal were near-identical glyphs
+   with nothing to disambiguate them, and eight of ten surfaces became a
+   recognition test. Two rows of chrome is a cheaper price than that.
+   (Log's icon also moved from Terminal to ScrollText — it lists events, it is
+   not a shell — so the two no longer collide even when space is tight.) */
+.right-tabs {
+  gap: 3px;
+  padding: 5px 6px;
+}
+.right-tabs button {
+  padding: 3px 6px;
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.right-tabs button svg {
+  flex: 0 0 auto;
 }
 .right-tabs .ct {
   font: 500 var(--t-micro) / 1 var(--mono);
   font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
 }
-/* Only the active surface names itself, so you can always read where you are
-   without the other nine competing for the same space. */
-.right-tabs button.active .right-tab-label {
-  display: inline;
+.right-tabs button.active .ct {
+  color: inherit;
+}
+
+
+/* Focus rings for the controls this redesign introduced. The rest of the shell
+   styles its own; these were relying on the UA default, which is inconsistent
+   with everything around them. Instant, never faded — a focus ring that
+   animates in is a focus ring you cannot follow with the keyboard. */
+.ledger-panes button:focus-visible,
+.right-tabs button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+  transition: none;
 }

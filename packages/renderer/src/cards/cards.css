@@ -1,5 +1,5 @@
 /* Card styles.
-   Every color is a CSS custom property so the six themes resolve correctly.
+   Every color is a CSS custom property so the three themes resolve correctly.
    The structural theme overrides (brutalist border-widths, terminal scanlines, etc.)
    already live in themes/structural.css; this file owns the base card shapes. */
 

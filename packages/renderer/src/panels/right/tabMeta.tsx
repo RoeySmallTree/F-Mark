@@ -6,6 +6,8 @@ import {
   FolderTree,
   GitCompareArrows,
   MessageSquare,
+  ScrollText,
+  Search,
   SquareTerminal,
 } from "lucide-react";
 import type { RightTabKey } from "../../state/store.js";
@@ -28,7 +30,7 @@ export const RIGHT_TAB_META: Record<RightTabKey, TabMeta> = {
   },
   named: { label: "Named", icon: <FileText size={12} aria-hidden="true" /> },
   agents: { label: "Agents", icon: <Bot size={12} aria-hidden="true" /> },
-  log: { label: "Log", icon: null },
+  log: { label: "Log", icon: <ScrollText size={12} aria-hidden="true" /> },
   files: {
     label: "Files",
     icon: <FolderTree size={12} aria-hidden="true" />,
@@ -40,5 +42,9 @@ export const RIGHT_TAB_META: Record<RightTabKey, TabMeta> = {
   terminal: {
     label: "Terminal",
     icon: <SquareTerminal size={12} aria-hidden="true" />,
+  },
+  search: {
+    label: "Search",
+    icon: <Search size={12} aria-hidden="true" />,
   },
 };
