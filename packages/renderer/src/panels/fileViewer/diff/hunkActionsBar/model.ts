@@ -23,11 +23,34 @@ export function fileActionLabel(status: GitFileStatus): string {
   return "Restore file";
 }
 
-/** Per-hunk revert label by status (should-fix 7 / X3). */
+/** Per-hunk revert label by status (should-fix 7 / X3). For untracked/added
+    files the only hunk is synthetic and whole-file, so reverting it deletes
+    the file's content -- say so. */
 export function hunkActionLabel(status: GitFileStatus): string {
-  return status === NO_LOOSE_STRING_VALUES.deleted || status === NO_LOOSE_STRING_VALUES.binaryDeleted
-    ? "Restore hunk"
-    : "Revert hunk";
+  if (
+    status === NO_LOOSE_STRING_VALUES.deleted ||
+    status === NO_LOOSE_STRING_VALUES.binaryDeleted
+  ) {
+    return "Restore hunk";
+  }
+  if (
+    status === NO_LOOSE_STRING_VALUES.untracked ||
+    status === NO_LOOSE_STRING_VALUES.added ||
+    status === NO_LOOSE_STRING_VALUES.binaryUntracked ||
+    status === NO_LOOSE_STRING_VALUES.binaryAdded
+  ) {
+    return "Delete hunk";
+  }
+  return "Revert hunk";
+}
+
+/** What the user loses, for the confirmation dialog. Untracked content is not
+    in git, so nothing can restore it. */
+export function revertConfirmDetail(status: GitFileStatus): string {
+  return status === NO_LOOSE_STRING_VALUES.untracked ||
+    status === NO_LOOSE_STRING_VALUES.binaryUntracked
+    ? "This file is untracked, so git cannot restore it. This is permanent."
+    : "Discards your uncommitted changes to this file.";
 }
 
 /* The comment targets the hunk's NEW line range (added/context lines). For a

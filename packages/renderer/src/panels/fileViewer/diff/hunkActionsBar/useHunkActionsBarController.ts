@@ -2,9 +2,16 @@ import { useCallback, useMemo, useState } from "react";
 import type { GitRevertAction, ProseMention } from "@f-mark/shared";
 import { createClient } from "../../../../api/client.js";
 import { useStore } from "../../../../state/store.js";
+import { useConfirmDestructive } from "../../../../confirm/index.js";
 import { useDefaultFileCommentMentions } from "../../lineComment/FileCommentDraftPopover.js";
 import { useFileCommentPoster } from "../../lineComment/useFileCommentPoster.js";
-import { hunkDiffText, hunkLineRange, hunkSnippet } from "./model.js";
+import {
+  fileActionLabel,
+  hunkDiffText,
+  hunkLineRange,
+  hunkSnippet,
+  revertConfirmDetail,
+} from "./model.js";
 import { revertHunkChange } from "./revert.js";
 import type {
   HunkActionsBarController,
@@ -21,6 +28,7 @@ export function useHunkActionsBarController(
     wireMode,
     baseRef = null,
     diffBase,
+    fileStatus,
     hunk,
     oldPath,
     sessionId,
@@ -30,6 +38,7 @@ export function useHunkActionsBarController(
   const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
   const poster = useFileCommentPoster();
   const defaultMentions = useDefaultFileCommentMentions();
+  const confirmDestructive = useConfirmDestructive();
 
   const [draftOpen, setDraftOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -42,6 +51,12 @@ export function useHunkActionsBarController(
   const runRevert = useCallback(
     async (action: GitRevertAction): Promise<void> => {
       if (busy) return;
+      const intent = await confirmDestructive({
+        action: "git.revert",
+        title: `${fileActionLabel(fileStatus)} — ${relPath}?`,
+        detail: revertConfirmDetail(fileStatus),
+      });
+      if (intent === null) return;
       setBusy(true);
       setConflict(null);
       try {
@@ -66,6 +81,8 @@ export function useHunkActionsBarController(
       busy,
       baseRef,
       client,
+      confirmDestructive,
+      fileStatus,
       hunk,
       oldPath,
       onReverted,
