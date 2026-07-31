@@ -126,26 +126,74 @@ body.theme-sepia .feed-inner h2::before{ content:"§ "; color:#8c3a1a }
 body.theme-sepia .compose-box, body.theme-sepia .form-input{ background:#fdf8e8 }
 body.theme-sepia .prose-card{ background:#fdf8e8 }
 
-/* High Contrast — hard edges, big borders, the a11y target */
-body.theme-contrast .card, body.theme-contrast .prose-card, body.theme-contrast .embed-card, body.theme-contrast .choices-card, body.theme-contrast .todo-card{
-  border:2px solid #fff; box-shadow:none; border-radius:0
+/* High Contrast — hard edges, heavy borders, the a11y target.
+
+   Every value here resolves through a token. The previous revision hardcoded
+   #fff borders and a #ffff00 outline, which were correct when this theme had a
+   black canvas — the Ledger redesign inverted it to white paper, so those rules
+   painted white-on-white borders and a ~1.07:1 yellow outline. Tokens invert
+   with the theme; literals do not. */
+body.theme-contrast .card,
+body.theme-contrast .prose-card,
+body.theme-contrast .embed-card,
+body.theme-contrast .choices-card,
+body.theme-contrast .todo-card {
+  border: var(--border-w) solid var(--rule);
+  box-shadow: none;
+  border-radius: 0;
 }
-body.theme-contrast .modal, body.theme-contrast .popover{ border:3px solid #fff; border-radius:0; box-shadow:none }
-body.theme-contrast .turn-pill, body.theme-contrast .badge, body.theme-contrast .pop-chip, body.theme-contrast .status-pill,
-body.theme-contrast .assign-badge, body.theme-contrast .kbd-chip, body.theme-contrast .prose-pin, body.theme-contrast .cmdk-kind{
-  border-radius:0 !important; border-width:2px
+body.theme-contrast .modal,
+body.theme-contrast .popover {
+  border: 3px solid var(--rule);
+  border-radius: 0;
+  box-shadow: none;
 }
-body.theme-contrast .avatar{ border-radius:0; border-width:2px }
-body.theme-contrast .avatar::before, body.theme-contrast .avatar.with-image img{ border-radius:0 }
-body.theme-contrast .card .stripe{ width:6px; background:var(--user) }
-body.theme-contrast .card.agent .stripe{ background:var(--agent) }
-body.theme-contrast .prose-title, body.theme-contrast .modal-title, body.theme-contrast .settings-h, body.theme-contrast .choices-q, body.theme-contrast .embed-title{
-  text-transform:uppercase; letter-spacing:.04em
+body.theme-contrast .turn-pill,
+body.theme-contrast .badge,
+body.theme-contrast .pop-chip,
+body.theme-contrast .status-pill,
+body.theme-contrast .assign-badge,
+body.theme-contrast .kbd-chip,
+body.theme-contrast .prose-pin,
+body.theme-contrast .cmdk-kind {
+  border-radius: 0 !important;
+  border-width: var(--border-w);
 }
-body.theme-contrast .feed-inner h2{ text-transform:uppercase; letter-spacing:.04em }
-body.theme-contrast a, body.theme-contrast button:focus{ outline:2px solid #ffff00 }
-body.theme-contrast .topbar, body.theme-contrast .compose{ border-width:2px }
-body.theme-contrast .left-panel, body.theme-contrast .right-panel{ border-width:2px }
+body.theme-contrast .avatar {
+  border-radius: 0;
+  border-width: var(--border-w);
+}
+body.theme-contrast .avatar::before,
+body.theme-contrast .avatar.with-image img {
+  border-radius: 0;
+}
+body.theme-contrast .card .stripe::after {
+  width: 9px;
+  height: 9px;
+}
+body.theme-contrast .prose-title,
+body.theme-contrast .modal-title,
+body.theme-contrast .settings-h,
+body.theme-contrast .choices-q,
+body.theme-contrast .embed-title,
+body.theme-contrast .feed-inner h2 {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Links are underlined rather than outlined. A permanent 2px outline on every
+   link was the old theme's way of making them unmissable; underline is the
+   standard affordance and does not fight the focus ring that
+   themes/interaction.css already draws at 21:1 in this theme. */
+body.theme-contrast a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+body.theme-contrast .topbar,
+body.theme-contrast .compose,
+body.theme-contrast .left-panel,
+body.theme-contrast .right-panel {
+  border-width: var(--border-w);
+}
 
 /* Ember — coral glow ground, soft 14px cards, glossy red primary, red-tipped titles.
    Reference paints the glow on <body>; the app's shell grid fully covers the body,
