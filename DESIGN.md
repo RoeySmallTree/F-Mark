@@ -162,17 +162,24 @@ The original complaint was that F-Mark felt crowded. The cause was not decoratio
 **undifferentiated choice**. Two reductions carry most of the fix, and both were shown in
 every lab:
 
-**Right rail: 10 flat tabs → 3 named groups.** Ten peers with equal weight force you to
-read all ten to find one. Grouped and collapsible:
+**Right rail: 9 flat tabs → 3 named groups.** Nine peers with equal weight force you to
+read all nine to find one. The tab list is authoritative in
+`panels/right/tabMeta.tsx` — `RIGHT_TAB_META` — and the grouping is:
 
-| Group | Panes |
-|---|---|
-| **Work** | Sessions · Todos · Search |
-| **Code** | Files · Diff · Flow |
-| **Runtime** | Agents · Terminal · Log |
+| Group | Panes | Why together |
+|---|---|---|
+| **Work** | Todos · Named · Comments | the document and collaboration layer — what is planned, written, discussed |
+| **Code** | Files · Diff tree · Search | the repository — what exists, what changed, where things are |
+| **Runtime** | Agents · Terminal · Log | the machines — who is running, their panes, their raw output |
 
-`Layout` leaves the rail — it is configuration, not a destination, so it belongs behind the
-settings control.
+`Layout` (`RightLayout.tsx`) leaves the rail — it is configuration, not a destination, so
+it belongs behind the settings control.
+
+> Corrected 2026-08-01. An earlier revision of this file listed `Sessions` and `Flow` in
+> the rail. Neither is a rail tab: `Sessions` is a **left** panel (`panels/Sessions.tsx`)
+> and `Flow` is a **feed card type** (`FlowCard`, `systemDispatch`). `Comments` and `Named`
+> were missing. The grouping above is read from `RIGHT_TAB_META`, not from memory — do the
+> same before changing it.
 
 **Composer: 7 buttons → 2 + overflow.** `Send` and `＋` (attach) stay visible; `⋯` holds
 Todo, Alternatives, HTML, Flow and Anchor. The five hidden actions are real and used, but
