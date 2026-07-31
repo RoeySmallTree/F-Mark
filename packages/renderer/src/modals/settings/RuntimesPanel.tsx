@@ -9,6 +9,7 @@
 
 import type { JSX } from "react";
 import type { EnvProbeResult, RuntimeEntry } from "@f-mark/shared";
+import { useConfirmDestructive } from "../../confirm/index.js";
 import {
   RuntimeInlineError,
   RuntimeListHeader,
@@ -47,6 +48,18 @@ export function RuntimesPanel({
   const removeAction = useAsyncAction(onRemove);
   const reprobeAction = useAsyncAction(onReprobe);
   const readOnly = readOnlyNote !== undefined;
+  const confirmDestructive = useConfirmDestructive();
+
+  async function confirmAndRemove(id: string): Promise<void> {
+    const intent = await confirmDestructive({
+      action: "runtime.remove",
+      title: `Remove the "${id}" runtime?`,
+      detail:
+        "Agents already running keep going. New launches with this runtime will fail until you re-register it.",
+    });
+    if (intent === null) return;
+    await removeAction.run(id);
+  }
 
   return (
     <>
@@ -65,7 +78,7 @@ export function RuntimesPanel({
         readOnly={readOnly}
         onEdit={formController.openEdit}
         onRemove={(id) => {
-          void removeAction.run(id);
+          void confirmAndRemove(id);
         }}
       />
       <RuntimeInlineError error={removeAction.error} />
