@@ -5180,35 +5180,30 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   align-items: center;
   gap: 4px;
 }
+/* The augments — everything that puts something INTO the message being
+   written. This zone used to scroll horizontally behind a mask fade, which
+   meant that at any narrow width some of the composer's own tools were hidden
+   with only a soft edge to suggest it (the same failure the right rail had).
+   It wraps instead: a second row of buttons is honest, a hidden one is not. */
 .compose-zone-augments {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  /* Fade out the trailing edge so when the row scrolls horizontally the
-     last visible augment doesn't slam against the right-side end zone. */
-  -webkit-mask-image: linear-gradient(
-    to right,
-    black 0,
-    black calc(100% - 18px),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    black 0,
-    black calc(100% - 18px),
-    transparent 100%
-  );
-}
-.compose-zone-augments::-webkit-scrollbar {
-  display: none;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 .compose-zone-augments > .mode-btn {
   flex-shrink: 0;
 }
+/* The session actions — Fork and compose settings act on the SESSION, not on
+   the message. They were visually identical to the augments beside them, so
+   seven buttons read as one undifferentiated row. A rule separates the two
+   groups so the boundary is visible rather than merely present in the DOM. */
 .compose-zone-end {
   flex-shrink: 0;
   gap: 4px;
+  padding-left: 10px;
+  margin-left: 2px;
+  border-left: var(--border-w) solid var(--rule);
 }
 
 .dock-spacer {
