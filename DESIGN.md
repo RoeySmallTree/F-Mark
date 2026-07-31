@@ -156,6 +156,38 @@ The dashboard is the launch surface. It reads top to bottom in descending urgenc
 Recent ends with **View all activity →**, which makes the full cross-session timeline a
 drill-down rather than a competing screen. The dashboard is the hub.
 
+## The shell: fewer, named choices
+
+The original complaint was that F-Mark felt crowded. The cause was not decoration — it was
+**undifferentiated choice**. Two reductions carry most of the fix, and both were shown in
+every lab:
+
+**Right rail: 10 flat tabs → 3 named groups.** Ten peers with equal weight force you to
+read all ten to find one. Grouped and collapsible:
+
+| Group | Panes |
+|---|---|
+| **Work** | Sessions · Todos · Search |
+| **Code** | Files · Diff · Flow |
+| **Runtime** | Agents · Terminal · Log |
+
+`Layout` leaves the rail — it is configuration, not a destination, so it belongs behind the
+settings control.
+
+**Composer: 7 buttons → 2 + overflow.** `Send` and `＋` (attach) stay visible; `⋯` holds
+Todo, Alternatives, HTML, Flow and Anchor. The five hidden actions are real and used, but
+not on the path of the common case, which is sending a message.
+
+**One home per surface.** The dock engine (`dockLayout.tsx`, 12 panes × 5 drop areas ×
+36 guillotine layouts) still exists behind a pinned default rather than being deleted —
+removing it would touch all 12 panes' render paths at once. A `v5` migration moves stowed
+panes into the right rail so nothing silently disappears for existing users.
+
+**Supported width is declared, not adaptive.** F-Mark drives tmux panes, diffs and file
+viewers; there is no off-canvas mobile mode and none is planned. The commitment is that
+nothing scrolls horizontally between 320 and 1920px, and that below the supported width
+the app states the requirement rather than degrading into an unusable layout.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
