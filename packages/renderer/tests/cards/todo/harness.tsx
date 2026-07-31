@@ -76,11 +76,24 @@ export function stubTodoFetch(filename: string): FetchMock {
   return fetchMock;
 }
 
-export function stubConfirm(result: boolean): void {
-  vi.stubGlobal(
-    "confirm",
-    vi.fn<typeof window.confirm>().mockReturnValue(result),
-  );
+/** The descendants lookup rejects (server 500); removal must not depend on
+    it succeeding — the confirmation still has to appear and removal still
+    has to go through, just with a degraded (zero) descendant count. */
+export function stubTodoFetchWithFailingDescendants(filename: string): FetchMock {
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    if (DESCENDANTS_URL.test(String(input))) {
+      return jsonResponse({ error: "descendants lookup failed" }, 500);
+    }
+    return jsonResponse({ filename });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+export function stubConfirm(result: boolean): MockInstance<typeof window.confirm> {
+  const confirmMock = vi.fn<typeof window.confirm>().mockReturnValue(result);
+  vi.stubGlobal("confirm", confirmMock);
+  return confirmMock;
 }
 
 export function stubRecordingTodoFetch(filename: string): {

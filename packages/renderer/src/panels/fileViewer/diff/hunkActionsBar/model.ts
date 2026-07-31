@@ -1,4 +1,4 @@
-import type { GitFileStatus, GitHunk } from "@f-mark/shared";
+import type { GitFileStatus, GitHunk, GitRevertAction } from "@f-mark/shared";
 import type { LineRange } from "./types.js";
 
 const NO_LOOSE_STRING_VALUES = {
@@ -44,23 +44,60 @@ export function hunkActionLabel(status: GitFileStatus): string {
   return "Revert hunk";
 }
 
-/** What the user loses, for the confirmation dialog. Untracked content is not
-    in git at all; staged-but-uncommitted content survives only as a dangling
-    object recoverable by low-level plumbing. */
-export function revertConfirmDetail(status: GitFileStatus): string {
-  if (
+/** Confirmation title verb for a revert action (hunk / rename / file), so the
+    dialog always names what the button named — the button and the dialog
+    must never disagree (X3 premise). "rename" has no per-status variants:
+    it always moves the file back to its old path, so it always reads "Undo
+    rename", matching the button text in HunkActionsBarView. */
+export function revertActionLabel(
+  action: GitRevertAction,
+  status: GitFileStatus,
+): string {
+  if (action === "hunk") return hunkActionLabel(status);
+  if (action === "rename") return "Undo rename";
+  return fileActionLabel(status);
+}
+
+const UNTRACKED_PERMANENT_DETAIL =
+  "This file is untracked, so git cannot restore it. This is permanent.";
+const ADDED_LOW_LEVEL_DETAIL =
+  "This file is not committed. Deleting it removes it from disk and the index, and recovering it would need low-level git commands.";
+const FILE_DISCARD_DETAIL = "Discards your uncommitted changes to this file.";
+const HUNK_DISCARD_DETAIL = "Discards your uncommitted changes to this hunk.";
+const FILE_RESTORE_DETAIL =
+  "Restores the file from the base. Nothing is discarded.";
+const HUNK_RESTORE_DETAIL =
+  "Restores this hunk's lines. Nothing is discarded.";
+const RENAME_DETAIL = "Moves the file back to its original path.";
+
+/** What the user loses, for the confirmation dialog. Must match `action`,
+    not just `status`: a hunk revert only loses the hunk (except on
+    untracked/added files, where the single hunk IS the whole file, so it
+    keeps the file-level warning); a rename loses nothing. Untracked content
+    is not in git at all; staged-but-uncommitted content survives only as a
+    dangling object recoverable by low-level plumbing; a Restore (on a
+    deleted file) is not destructive at all and must not read like one
+    (should-fix — over-warning trains users to dismiss dialogs). */
+export function revertConfirmDetail(
+  action: GitRevertAction,
+  status: GitFileStatus,
+): string {
+  if (action === "rename") return RENAME_DETAIL;
+
+  const isUntracked =
     status === NO_LOOSE_STRING_VALUES.untracked ||
-    status === NO_LOOSE_STRING_VALUES.binaryUntracked
-  ) {
-    return "This file is untracked, so git cannot restore it. This is permanent.";
-  }
-  if (
+    status === NO_LOOSE_STRING_VALUES.binaryUntracked;
+  const isAdded =
     status === NO_LOOSE_STRING_VALUES.added ||
-    status === NO_LOOSE_STRING_VALUES.binaryAdded
-  ) {
-    return "This file is not committed. Deleting it removes it from disk and the index, and recovering it would need low-level git commands.";
-  }
-  return "Discards your uncommitted changes to this file.";
+    status === NO_LOOSE_STRING_VALUES.binaryAdded;
+  const isDeleted =
+    status === NO_LOOSE_STRING_VALUES.deleted ||
+    status === NO_LOOSE_STRING_VALUES.binaryDeleted;
+
+  if (isUntracked) return UNTRACKED_PERMANENT_DETAIL;
+  if (isAdded) return ADDED_LOW_LEVEL_DETAIL;
+  if (isDeleted) return action === "hunk" ? HUNK_RESTORE_DETAIL : FILE_RESTORE_DETAIL;
+  return action === "hunk" ? HUNK_DISCARD_DETAIL : FILE_DISCARD_DETAIL;
 }
 
 /* The comment targets the hunk's NEW line range (added/context lines). For a

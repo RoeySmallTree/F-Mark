@@ -12,6 +12,7 @@ import {
   stubConfirm,
   stubRecordingTodoFetch,
   stubTodoFetch,
+  stubTodoFetchWithFailingDescendants,
   taskDescriptionField,
   taskTitleField,
   todoEvent,
@@ -79,6 +80,34 @@ function registerTodoStatusTests(): void {
 
     await waitForFetchCalls(fetchMock, 2);
     expectDescendantsCall(fetchMock, 0);
+    expect(postedBody(fetchMock, 1)).toMatchObject({
+      status: "removed",
+      supersedes: event.filename,
+    });
+  });
+
+  test("clicking X still confirms and removes when the descendants lookup fails", async () => {
+    const fetchMock = stubTodoFetchWithFailingDescendants(
+      "20260522T110310Z_us-a7f3.todo.json",
+    );
+    const confirmMock = stubConfirm(true);
+    const { event, user } = setupTodoCard({
+      id: "t1",
+      title: "Cull stale note",
+      status: "open",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Remove task Cull stale note/i }),
+    );
+
+    await waitForFetchCalls(fetchMock, 2);
+    expectDescendantsCall(fetchMock, 0);
+    /* A dialog still appeared despite the failed lookup — this is the
+       regression check: before the fix, the rejected descendants promise
+       propagated out of the void-ed onRemove() and the confirm/remove flow
+       never ran at all. */
+    expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(postedBody(fetchMock, 1)).toMatchObject({
       status: "removed",
       supersedes: event.filename,

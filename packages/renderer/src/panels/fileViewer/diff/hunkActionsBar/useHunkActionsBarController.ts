@@ -6,10 +6,10 @@ import { useConfirmDestructive } from "../../../../confirm/index.js";
 import { useDefaultFileCommentMentions } from "../../lineComment/FileCommentDraftPopover.js";
 import { useFileCommentPoster } from "../../lineComment/useFileCommentPoster.js";
 import {
-  fileActionLabel,
   hunkDiffText,
   hunkLineRange,
   hunkSnippet,
+  revertActionLabel,
   revertConfirmDetail,
 } from "./model.js";
 import { revertHunkChange } from "./revert.js";
@@ -53,8 +53,8 @@ export function useHunkActionsBarController(
       if (busy) return;
       const intent = await confirmDestructive({
         action: "git.revert",
-        title: `${fileActionLabel(fileStatus)} — ${relPath}?`,
-        detail: revertConfirmDetail(fileStatus),
+        title: `${revertActionLabel(action, fileStatus)} — ${relPath}?`,
+        detail: revertConfirmDetail(action, fileStatus),
       });
       if (intent === null) return;
       setBusy(true);
