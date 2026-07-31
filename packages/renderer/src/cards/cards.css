@@ -33,27 +33,20 @@
   --card-accent: var(--agent);
   --card-accent-tint: var(--agent-tint);
 }
+/* The entry gutter — the ledger's ruled left margin, and the one structural
+   device the whole feed aligns to.
+
+   It was a 14px lozenge built from two radial gradients, a linear gradient,
+   two inset shadows and an 18px outer glow. A ruled sheet is flat, so this is
+   now a hairline rule and a single solid mark.
+
+   The mark's SHAPE carries authorship as well as its colour — a square for a
+   person, a circle for an agent — so the distinction survives for anyone who
+   cannot separate ink from ledger green. */
 .card .stripe {
   position: relative;
   width: 14px;
-  border-radius: var(--radius-pill);
   flex-shrink: 0;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      circle at 50% 10px,
-      color-mix(in srgb, white 68%, var(--card-accent)) 0 2px,
-      transparent 4.75px
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--card-accent) 22%, var(--canvas)) 0%,
-      color-mix(in srgb, var(--card-accent) 11%, var(--canvas)) 56%,
-      transparent 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--card-accent) 24%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
 }
 .card .stripe::before,
 .card .stripe::after {
@@ -61,35 +54,30 @@
   position: absolute;
   pointer-events: none;
 }
+/* The rule: runs the height of the entry, hairline, neutral. It is structure,
+   not emphasis, so it does not take the authorship colour. */
 .card .stripe::before {
-  top: 20px;
-  bottom: 9px;
+  top: 18px;
+  bottom: 2px;
   left: 50%;
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card-accent) 88%, white 12%),
-    color-mix(in srgb, var(--card-accent) 42%, transparent) 72%,
-    transparent
-  );
-  opacity: 0.88;
+  width: var(--border-w);
+  background: var(--rule);
   transform: translateX(-50%);
 }
+/* The mark: solid, flat, sized to sit on the first line of the entry. */
 .card .stripe::after {
-  top: 5px;
+  top: 6px;
   left: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 28%, white 0 1px, transparent 2px),
-    var(--card-accent);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--card-accent) 13%, transparent),
-    0 7px 18px color-mix(in srgb, var(--card-accent) 24%, transparent);
+  width: 7px;
+  height: 7px;
+  background: var(--card-accent);
   transform: translateX(-50%);
-  transition: transform var(--dur-slow) var(--ease-out-expo);
+}
+.card.user .stripe::after {
+  border-radius: 1px; /* square — a person wrote this */
+}
+.card.agent .stripe::after {
+  border-radius: 50%; /* circle — an agent wrote this */
 }
 .card .body {
   flex: 1;
