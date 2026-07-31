@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { createClient } from "../../api/client.js";
 import type { SessionMeta } from "../../api/client.js";
 import { rootScopeForSession } from "../../api/rootScope.js";
+import type { ConfirmRequest, ConfirmedIntent } from "../../confirm/index.js";
 import type { SessionActionBaseInput } from "./actionTypes.js";
 import {
   findSessionInSameRoot,
@@ -11,12 +12,9 @@ import {
 interface UseSessionDeleteInput extends SessionActionBaseInput {
   activePathId: string | null;
   allSessions: SessionMeta[];
-}
-
-function confirmDelete(session: SessionMeta): boolean {
-  return window.confirm(
-    `Delete session "${session.slug}" from F-Mark? Project files are not deleted.`,
-  );
+  confirmDestructive: (
+    request: ConfirmRequest,
+  ) => Promise<ConfirmedIntent | null>;
 }
 
 function syncCurrentSessionAfterDelete(
@@ -42,7 +40,13 @@ async function runDeleteSession(
   session: SessionMeta,
 ): Promise<void> {
   input.closeContextMenu();
-  if (!confirmDelete(session)) return;
+  const intent = await input.confirmDestructive({
+    action: "session.delete",
+    title: `Delete session "${session.slug}"?`,
+    detail:
+      "Permanently deletes this session's event log — every message, document, todo and comment in it. Your project files are untouched. This cannot be undone.",
+  });
+  if (intent === null) return;
   const client = createClient({ baseUrl: "", token: input.token });
   try {
     const scope = rootScopeForSession(
