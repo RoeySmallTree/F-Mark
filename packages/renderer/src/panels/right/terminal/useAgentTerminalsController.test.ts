@@ -62,4 +62,26 @@ describe("agent terminal close", () => {
     });
     expect(result.current.mountedSessions).not.toContain(AGENT.tmux_session);
   });
+
+  it("never ends a detached agent", () => {
+    const detachedAgent = { ...AGENT, alive: false };
+    useStore.setState({
+      currentSessionId: "session-1",
+      managedAgents: [
+        {
+          participant_id: detachedAgent.participant_id,
+          display_name: detachedAgent.label,
+          tmux_session: detachedAgent.tmux_session,
+          active_session: "session-1",
+          alive: false,
+        },
+      ],
+    } as never);
+    const { result } = renderHook(() => useAgentTerminalsController());
+    act(() => {
+      result.current.close(detachedAgent);
+    });
+    expect(goodbye).not.toHaveBeenCalled();
+    expect(getConfirmToken).not.toHaveBeenCalled();
+  });
 });

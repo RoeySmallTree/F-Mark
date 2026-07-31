@@ -73,7 +73,7 @@ export function AgentTerminals(): JSX.Element {
         <div className="terminal-agent-unavailable">
           <p>{activeAgent.label} is detached.</p>
           <button type="button" onClick={() => c.close(activeAgent)}>
-            Remove agent
+            Close terminal view
           </button>
         </div>
       ) : (
