@@ -3,9 +3,13 @@
    resolve correctly. */
 
 /* App skeleton */
+/* Two rows, two grid items: the top bar wrapper (banner + bar) and .main.
+   `auto` sizes the wrapper to whatever it holds, so an optional runtime banner
+   pushes nothing out of the grid. Do not give .topbar-wrap `display: contents`
+   — that dissolves it into two items and shifts .main into an implicit row. */
 .app {
   display: grid;
-  grid-template-rows: 52px 1fr;
+  grid-template-rows: auto 1fr;
   height: 100vh;
 }
 .main {
@@ -2100,7 +2104,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
    participants stack. Wraps the AgentChip / TerminalChip components and
    the PlusButton trailing affordance. */
 .topbar-wrap {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .topbar-chips {
   display: flex;
