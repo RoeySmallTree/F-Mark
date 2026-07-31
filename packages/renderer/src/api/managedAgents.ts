@@ -28,6 +28,7 @@ import type {
   WakeSessionRequest,
   WakeSessionResponse,
 } from "@f-mark/shared";
+import type { ConfirmedIntent } from "../confirm/index.js";
 import { createManagedAgentControlMethods } from "./managedAgents/controlMethods.js";
 import { createManagedAgentLifecycleMethods } from "./managedAgents/lifecycleMethods.js";
 import { createManagedAgentsRequest } from "./managedAgents/request.js";
@@ -136,7 +137,8 @@ export interface ManagedAgentsClient {
   goodbye(
     participantId: string,
     confirmToken: string,
-    scope?: RootScope | null,
+    scope: RootScope | null | undefined,
+    intent: ConfirmedIntent,
   ): Promise<ManagedAgentGoodbyeResponse>;
   command(
     participantId: string,
