@@ -1,14 +1,20 @@
-/* EnvProbeBanner — warning strip styling. Uses the existing agent-tint
-   amber palette from tokens.css so the banner blends with the rest of the
-   chrome but still reads as "needs attention". */
+/* EnvProbeBanner — a degradation notice: some runtime is missing, so some
+   options will be disabled. Nothing is broken and nothing is being destroyed.
+
+   It previously borrowed --agent-tint, which under the Ledger token rules now
+   means "an agent did this" — a warning rendered in the agent colour. Colour
+   is reserved (green = agent, red = destruction), so this states itself with
+   ink weight and a rule instead, which is what the direction uses for
+   everything that is neither. */
 
 .env-probe-banner {
-  background: var(--agent-tint);
-  border: 1px solid var(--agent-tint-2);
+  background: var(--panel);
+  border: var(--border-w) solid var(--rule);
+  border-left: 3px solid var(--ink-3);
   border-radius: var(--radius);
-  color: var(--ink);
-  padding: 8px 12px;
-  font: 13px/1.45 var(--sans);
+  color: var(--ink-2);
+  padding: 7px 12px;
+  font: var(--t-ui) / 1.45 var(--sans);
   margin: 8px 12px;
   display: flex;
   flex-direction: column;
@@ -17,23 +23,26 @@
 
 .env-probe-banner code {
   font-family: var(--mono);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 3px;
+  font-size: var(--t-meta);
+  background: var(--canvas);
+  border: var(--border-w) solid var(--rule);
+  border-radius: var(--radius);
   padding: 1px 5px;
+  color: var(--ink);
 }
 
 .env-probe-banner a {
-  color: var(--user);
+  color: var(--ink);
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .env-probe-copy {
   margin-left: 6px;
   font: inherit;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 3px;
+  background: var(--canvas);
+  border: var(--border-w) solid var(--rule);
+  border-radius: var(--radius);
   padding: 1px 8px;
   cursor: pointer;
   color: var(--ink);
@@ -41,4 +50,9 @@
 
 .env-probe-copy:hover {
   background: var(--panel-2);
+}
+
+.env-probe-copy:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
 }

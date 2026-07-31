@@ -8,6 +8,7 @@ import {
   Settings,
   Square,
   Sun,
+  Moon,
   Sunrise,
   Terminal,
   Zap,
@@ -35,6 +36,8 @@ export function IconFor(props: { icon: CmdkIcon; size?: number }): JSX.Element {
       return <Terminal size={size} aria-hidden="true" />;
     case "Code":
       return <Code size={size} aria-hidden="true" />;
+    case "Moon":
+      return <Moon size={size} aria-hidden="true" />;
     case "Sunrise":
       return <Sunrise size={size} aria-hidden="true" />;
     case "Square":

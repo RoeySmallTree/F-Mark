@@ -5944,3 +5944,125 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border-radius: 3px;
   color: var(--ink-2);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEDGER SHELL
+
+   Three zones, one tablist. The dock previously surfaced five competing tab
+   strips (left rail, left dock, centre dock, stowed toolbar, right panel) for
+   twelve panes across five drop areas. Panes still live where the layout puts
+   them — every pane keeps its component and its behaviour — but the user is
+   no longer the window manager.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The ledger's own header. Sits directly above the sheet so the controls that
+   filter the document are attached to the document. */
+.ledger-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 0 14px;
+  height: 38px;
+  background: var(--canvas);
+  border-bottom: var(--border-w) solid var(--rule);
+}
+.ledger-header-spacer {
+  flex: 1 1 auto;
+}
+.ledger-panes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ledger-panes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-3);
+  font: 500 var(--t-ui) / 1 var(--sans);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out-quart);
+}
+.ledger-panes button:hover {
+  color: var(--ink);
+}
+.ledger-panes button.active {
+  color: var(--ink);
+  border-color: var(--rule);
+  background: var(--panel);
+}
+
+/* A tablist with one tab is not a choice. The left zone hosts exactly one
+   pane, so its strip is suppressed rather than rendered as a lone orphan tab
+   ("Sess") floating above the panel. */
+.left-dock-tabs {
+  display: none;
+}
+
+/* The centre dock's own tab strip is replaced by .ledger-panes above. */
+.center-dock-tabs {
+  display: none;
+}
+
+/* Stowing was part of the window manager: a pane could be parked in the top
+   bar and had to be dragged back out. Nothing stows now (dock layout v5), so
+   the strip that revealed it is gone. */
+.toolbar-dock-tabs {
+  display: none;
+}
+
+/* The bottom dock is an empty fourth drop target in the default layout; it
+   only ever showed "Drop a pane here". With dragging removed it can never be
+   filled, so it does not reserve space. */
+.bottom-dock-region[data-empty="true"] {
+  display: none;
+}
+
+/* Panes are no longer draggable between areas, so the drop affordances and
+   the drag orb have nothing to express. */
+.drag-preview-orb,
+.dock-drop-hint {
+  display: none;
+}
+
+/* Right zone: one tablist, and it must never clip. It previously overflowed
+   its column and cut the last tabs off the edge of the window with no
+   indication they existed. */
+.right-panel .dock-tabs,
+.right-dock-tabs {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  overflow: visible;
+}
+
+/* Right-zone switcher. Ten surfaces in a ~340px column: at full labels the
+   strip measured 869px against a 339px viewport, so Diff tree, Terminal,
+   Search and Layout sat off the edge behind a horizontal scroll almost nobody
+   would find. Icons + counts fit all ten on one row; the label returns when
+   the column is wide enough to hold it. Names stay in aria-label either way. */
+.right-tabs {
+  overflow: visible;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.right-tabs button {
+  gap: 5px;
+}
+.right-tabs .right-tab-label {
+  display: none;
+}
+.right-tabs .ct {
+  font: 500 var(--t-micro) / 1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+/* Only the active surface names itself, so you can always read where you are
+   without the other nine competing for the same space. */
+.right-tabs button.active .right-tab-label {
+  display: inline;
+}

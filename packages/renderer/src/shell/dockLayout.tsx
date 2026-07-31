@@ -170,8 +170,11 @@ const STORAGE_KEY = "fmark.dockLayout";
    top-bar Msg|File tab by default (see migrateDockLayoutOnce). v3: the Terminal
    pane was added; existing stored layouts get it appended to the right pane
    (normalizeLayout would otherwise park a brand-new pane in the toolbar). v4:
-   Diff tree was added and should surface beside Files. */
-export const CURRENT_DOCK_LAYOUT_VERSION = 4;
+   Diff tree was added and should surface beside Files. v5 (Ledger redesign):
+   the "toolbar" stow area is no longer surfaced — the strip that revealed it
+   was one of five competing tablists. Search moves to the right rail so it
+   keeps a home; nothing is stowed by default. */
+export const CURRENT_DOCK_LAYOUT_VERSION = 5;
 
 export const DEFAULT_DOCK_LAYOUT: DockLayout = {
   areas: {
@@ -186,9 +189,10 @@ export const DEFAULT_DOCK_LAYOUT: DockLayout = {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ],
     bottom: [],
-    toolbar: ["search"],
+    toolbar: [],
   },
   active: {
     left: "sessions",

@@ -39,17 +39,17 @@ describe("themes", () => {
     expect(THEMES.map((t) => t.name)).toEqual([
       "light",
       "ember",
-      "terminal",
-      "ide",
-      "solarized",
-      "brutalist",
-      "cyber",
+      "night",
+      "night",
+      "night",
+      "contrast",
+      "night",
       "amber",
       "dracula",
       "catppuccin",
       "tokyo",
       "gruvbox",
-      "nord",
+      "night",
       "monokai",
       "borland",
       "sepia",
@@ -73,28 +73,28 @@ describe("themes", () => {
   });
 
   test("getCurrentTheme returns the stored theme", () => {
-    localStorage.setItem(STORAGE_KEY, "terminal");
-    expect(getCurrentTheme()).toBe("terminal");
+    localStorage.setItem(STORAGE_KEY, "night");
+    expect(getCurrentTheme()).toBe("night");
   });
 
-  test("applyTheme('cyber') adds theme-cyber class and writes localStorage", () => {
-    applyTheme("cyber");
-    expect(bodyThemeClasses()).toEqual(["theme-cyber"]);
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("cyber");
+  test("applyTheme('night') adds theme-night class and writes localStorage", () => {
+    applyTheme("night");
+    expect(bodyThemeClasses()).toEqual(["theme-night"]);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("night");
   });
 
   test("applyTheme removes any prior theme-* class before adding the new one", () => {
-    applyTheme("terminal");
-    expect(bodyThemeClasses()).toEqual(["theme-terminal"]);
-    applyTheme("brutalist");
-    expect(bodyThemeClasses()).toEqual(["theme-brutalist"]);
-    applyTheme("ide");
-    expect(bodyThemeClasses()).toEqual(["theme-ide"]);
+    applyTheme("night");
+    expect(bodyThemeClasses()).toEqual(["theme-night"]);
+    applyTheme("contrast");
+    expect(bodyThemeClasses()).toEqual(["theme-contrast"]);
+    applyTheme("night");
+    expect(bodyThemeClasses()).toEqual(["theme-night"]);
   });
 
   test("applyTheme('light') clears all theme-* classes (no class added)", () => {
-    applyTheme("cyber");
-    expect(bodyThemeClasses()).toEqual(["theme-cyber"]);
+    applyTheme("night");
+    expect(bodyThemeClasses()).toEqual(["theme-night"]);
     applyTheme("light");
     expect(bodyThemeClasses()).toEqual([]);
     expect(localStorage.getItem(STORAGE_KEY)).toBe("light");
@@ -104,29 +104,29 @@ describe("themes", () => {
     document.body.classList.add("theme-foo");
     document.body.classList.add("theme-bar");
     document.body.classList.add("not-a-theme-class");
-    applyTheme("solarized");
-    expect(bodyThemeClasses()).toEqual(["theme-solarized"]);
+    applyTheme("night");
+    expect(bodyThemeClasses()).toEqual(["theme-night"]);
     expect(document.body.classList.contains("not-a-theme-class")).toBe(true);
   });
 
   test("subscribeTheme callback fires on apply", () => {
     const cb = vi.fn();
     subscribeTheme(cb);
-    applyTheme("terminal");
+    applyTheme("night");
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb).toHaveBeenCalledWith("terminal");
-    applyTheme("cyber");
+    expect(cb).toHaveBeenCalledWith("night");
+    applyTheme("night");
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(cb).toHaveBeenLastCalledWith("cyber");
+    expect(cb).toHaveBeenLastCalledWith("night");
   });
 
   test("subscribeTheme unsubscribe stops further calls", () => {
     const cb = vi.fn();
     const unsubscribe = subscribeTheme(cb);
-    applyTheme("ide");
+    applyTheme("night");
     expect(cb).toHaveBeenCalledTimes(1);
     unsubscribe();
-    applyTheme("brutalist");
+    applyTheme("contrast");
     applyTheme("light");
     expect(cb).toHaveBeenCalledTimes(1);
   });
@@ -136,14 +136,14 @@ describe("themes", () => {
     const b = vi.fn();
     const unsubA = subscribeTheme(a);
     subscribeTheme(b);
-    applyTheme("solarized");
+    applyTheme("night");
     expect(a).toHaveBeenCalledTimes(1);
     expect(b).toHaveBeenCalledTimes(1);
     unsubA();
-    applyTheme("cyber");
+    applyTheme("night");
     expect(a).toHaveBeenCalledTimes(1);
     expect(b).toHaveBeenCalledTimes(2);
-    expect(b).toHaveBeenLastCalledWith("cyber");
+    expect(b).toHaveBeenLastCalledWith("night");
   });
 
   test("every theme name in THEMES survives a round-trip through applyTheme + getCurrentTheme", () => {

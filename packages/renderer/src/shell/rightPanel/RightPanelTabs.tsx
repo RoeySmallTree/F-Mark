@@ -69,6 +69,13 @@ function RightPanelTabButton({
         dock.dropBefore === pane && dock.draggedPane !== pane ? "true" : undefined
       }
       aria-selected={dock.activePane === pane}
+      /* The visible label collapses to an icon when the column is narrow, so
+         the name has to come from aria-label rather than the text node — the
+         accessible name must not depend on the viewport. */
+      aria-label={
+        count !== undefined ? `${meta.label} (${count})` : meta.label
+      }
+      title={meta.label}
       className={dock.activePane === pane ? "active" : ""}
       draggable
       onDragStart={(event) => dock.onTabDragStart(event, pane)}
@@ -78,14 +85,8 @@ function RightPanelTabButton({
       onClick={() => dock.selectTab(pane)}
     >
       {meta.icon}
-      {meta.icon !== null ? " " : null}
-      {meta.label}
-      {count !== undefined ? (
-        <>
-          {" "}
-          <span className="ct">{count}</span>
-        </>
-      ) : null}
+      <span className="right-tab-label">{meta.label}</span>
+      {count !== undefined ? <span className="ct">{count}</span> : null}
     </button>
   );
 }

@@ -33,6 +33,7 @@ export type CmdkIcon =
   | "Plus"
   | "Settings"
   | "Sun"
+  | "Moon"
   | "Terminal"
   | "Code"
   | "Sunrise"
@@ -173,13 +174,8 @@ const cmdkGroups = {
 /** Per-theme palette icons; themes without a specific one fall back to Palette. */
 const THEME_ICONS: Partial<Record<ThemeName, CmdkIcon>> = {
   light: "Sun",
-  ember: "Zap",
-  terminal: "Terminal",
-  ide: "Code",
-  solarized: "Sunrise",
-  brutalist: "Square",
-  cyber: "Zap",
-  amber: "Sunrise",
+  night: "Moon",
+  contrast: "Square",
 };
 
 /**

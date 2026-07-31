@@ -4,6 +4,7 @@ import { TopBar } from "../shell/TopBar.js";
 import { LeftPanel } from "../shell/LeftPanel.js";
 import { RightPanel } from "../shell/RightPanel.js";
 import { DockAreaView } from "../shell/DockAreaView.js";
+import { LedgerHeader } from "../shell/LedgerHeader.js";
 import { ModalRoot } from "../modals/ModalRoot.js";
 import { ModalShell } from "../panels/fileViewer/shells/ModalShell.js";
 import { useShellPlacement } from "../hooks/useShellPlacement.js";
@@ -65,6 +66,7 @@ export function AppShell(input: {
           className="chat-region"
           data-has-bottom-dock={hasBottomDock ? "true" : undefined}
         >
+          <LedgerHeader />
           <DockAreaView
             area={NO_LOOSE_STRING_VALUES.center}
             label="Center pane tabs"
