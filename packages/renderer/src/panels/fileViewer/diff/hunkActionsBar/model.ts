@@ -45,12 +45,22 @@ export function hunkActionLabel(status: GitFileStatus): string {
 }
 
 /** What the user loses, for the confirmation dialog. Untracked content is not
-    in git, so nothing can restore it. */
+    in git at all; staged-but-uncommitted content survives only as a dangling
+    object recoverable by low-level plumbing. */
 export function revertConfirmDetail(status: GitFileStatus): string {
-  return status === NO_LOOSE_STRING_VALUES.untracked ||
+  if (
+    status === NO_LOOSE_STRING_VALUES.untracked ||
     status === NO_LOOSE_STRING_VALUES.binaryUntracked
-    ? "This file is untracked, so git cannot restore it. This is permanent."
-    : "Discards your uncommitted changes to this file.";
+  ) {
+    return "This file is untracked, so git cannot restore it. This is permanent.";
+  }
+  if (
+    status === NO_LOOSE_STRING_VALUES.added ||
+    status === NO_LOOSE_STRING_VALUES.binaryAdded
+  ) {
+    return "This file is not committed. Deleting it removes it from disk and the index, and recovering it would need low-level git commands.";
+  }
+  return "Discards your uncommitted changes to this file.";
 }
 
 /* The comment targets the hunk's NEW line range (added/context lines). For a
