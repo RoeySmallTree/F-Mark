@@ -8,6 +8,7 @@ export function useTodoTreeActions(
   return {
     createDraft: deps.createDraft,
     updateExisting: deps.updateExisting,
+    fetchDescendants: deps.fetchDescendants,
     ...createDraftTodoActions(deps),
     ...createExistingTodoActions(deps),
   };

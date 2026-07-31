@@ -64,7 +64,7 @@ export interface TodoItemHandlers {
   onCommitAndCreateBelow?: (
     values: TodoItemValues,
   ) => Promise<void> | void;
-  fetchDescendants?: () => Promise<string[]>;
+  fetchDescendants: () => Promise<string[]>;
 }
 
 export interface TodoCardItemModel {

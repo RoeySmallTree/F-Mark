@@ -2,6 +2,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
 import {
   draftTitleField,
+  expectDescendantsCall,
   expectTodoPost,
   expectWakeCall,
   postedBody,
@@ -77,6 +78,7 @@ function registerTodoStatusTests(): void {
     );
 
     await waitForFetchCalls(fetchMock, 2);
+    expectDescendantsCall(fetchMock, 0);
     expect(postedBody(fetchMock, 1)).toMatchObject({
       status: "removed",
       supersedes: event.filename,

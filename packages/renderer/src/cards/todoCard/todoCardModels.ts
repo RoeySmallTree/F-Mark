@@ -232,6 +232,7 @@ function buildTodoDraftItemHandlers({
     onToggleWip: (values) =>
       createDraft(draft, values, TODO_STATUSES.wip).then(() => undefined),
     onRemove: async () => setDraft(null),
+    fetchDescendants: () => Promise.resolve([]),
     onAddSubtask: async (values) => {
       const created = await createDraft(draft, values);
       if (!created) return;

@@ -17,6 +17,7 @@ export interface TodoTreeData {
   setActionError: Dispatch<SetStateAction<string | null>>;
   latestById: Map<string, string>;
   postTodo: (body: PostTodoBody) => Promise<void>;
+  fetchDescendants: (todoId: string) => Promise<string[]>;
 }
 
 export interface TodoTreeStoreSnapshot {

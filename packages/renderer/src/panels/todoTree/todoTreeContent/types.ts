@@ -34,12 +34,16 @@ export interface TodoTreeContentProps {
     currentDraft: DraftTodo,
     patch: Partial<TodoPayload>,
   ) => Promise<boolean>;
+  /** Authoritative descendant ids from the kernel (the same cascade
+   *  `writeTodoEvent` applies), used to phrase the removal confirmation. */
+  fetchDescendants: (todoId: string) => Promise<string[]>;
 }
 
 export type TodoTreeActionDeps = Pick<
   TodoTreeContentProps,
   | "agentIds"
   | "createDraft"
+  | "fetchDescendants"
   | "flat"
   | "flatById"
   | "focusTodo"
@@ -51,6 +55,7 @@ export type TodoTreeActionDeps = Pick<
 export interface TodoTreeActions {
   createDraft: TodoTreeContentProps["createDraft"];
   updateExisting: TodoTreeContentProps["updateExisting"];
+  fetchDescendants: TodoTreeContentProps["fetchDescendants"];
   clearDraft: () => void;
   commitDraftAndCreateBelow: (
     currentDraft: DraftTodo,

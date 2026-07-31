@@ -1,6 +1,6 @@
 import { type CSSProperties, useRef } from "react";
 import { useConfirmDestructive } from "../../confirm/index.js";
-import { countDescendants, fieldValue } from "../../panels/todoPanelUtils.js";
+import { fieldValue } from "../../panels/todoPanelUtils.js";
 import {
   depthOffset,
   removeConfirmTitle,
@@ -72,10 +72,7 @@ export function useTodoItemController({
       await onRemove(undefined, inputs.values());
       return;
     }
-    const descendantCount =
-      fetchDescendants === undefined
-        ? countDescendants(node)
-        : (await fetchDescendants()).length;
+    const descendantCount = (await fetchDescendants()).length;
     const intent = await confirmDestructive({
       action: "todo.remove",
       title: removeConfirmTitle(descendantCount),

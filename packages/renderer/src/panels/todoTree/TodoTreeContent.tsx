@@ -21,10 +21,12 @@ export function TodoTreeContent({
   focusTodo,
   updateExisting,
   createDraft,
+  fetchDescendants,
 }: TodoTreeContentProps): JSX.Element {
   const actions = useTodoTreeActions({
     agentIds,
     createDraft,
+    fetchDescendants,
     flat,
     flatById,
     focusTodo,

@@ -39,8 +39,9 @@ export interface TodoItemMutationHandlers {
   ) => Promise<void>;
   /** Authoritative descendant ids from the kernel (the same cascade
    *  `writeTodoEvent` applies), used to phrase the removal confirmation.
-   *  Omitted by callers that already hold an accurate full-tree count. */
-  fetchDescendants?: () => Promise<string[]>;
+   *  Required so no caller can silently fall back to a client-derived
+   *  count. */
+  fetchDescendants: () => Promise<string[]>;
 }
 
 export interface TodoItemNavigationHandlers {

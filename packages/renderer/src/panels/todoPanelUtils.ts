@@ -12,7 +12,6 @@ export {
 export { latestTodoFilenames } from "./todoPanelUtils/latestFilenames.js";
 export {
   buildTodoTreeFromEvents,
-  countDescendants,
   countTree,
 } from "./todoPanelUtils/treeBuilder.js";
 export {

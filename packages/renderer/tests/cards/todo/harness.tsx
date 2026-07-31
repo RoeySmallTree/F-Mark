@@ -122,6 +122,10 @@ export function expectWakeCall(fetchMock: FetchMock, index = 1): void {
   expect(postedUrl(fetchMock, index)).toMatch(WAKE_URL);
 }
 
+export function expectDescendantsCall(fetchMock: FetchMock, index = 0): void {
+  expect(postedUrl(fetchMock, index)).toMatch(DESCENDANTS_URL);
+}
+
 export async function waitForFetchCalls(
   fetchMock: FetchMock,
   callCount: number,
