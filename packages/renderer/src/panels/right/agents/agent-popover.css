@@ -118,7 +118,7 @@
 .agp-status-dot.tone-agent {
   background: var(--agent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent) 18%, transparent);
-  animation: agp-dot-pulse 1.6s var(--ease-inout) infinite;
+  animation: agp-dot-pulse var(--dur-slow) var(--ease-inout) infinite;
 }
 .agp-status-dot.tone-danger {
   background: var(--rose);
@@ -235,7 +235,7 @@
     color-mix(in srgb, var(--ink) 8%, var(--panel));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
   opacity: 0.46;
-  animation: agp-skeleton-pulse 1.1s cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
+  animation: agp-skeleton-pulse var(--dur-slow) var(--ease-snap) infinite alternate;
 }
 
 .agp-skeleton-wide {

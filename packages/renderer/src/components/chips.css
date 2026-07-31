@@ -637,9 +637,9 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
   cursor: pointer;
   transition:
-    border-color 170ms var(--ease-out-quart),
-    background 170ms var(--ease-out-quart),
-    transform 170ms var(--ease-out-quart);
+    border-color var(--dur-fast) var(--ease-out-quart),
+    background var(--dur-fast) var(--ease-out-quart),
+    transform var(--dur-fast) var(--ease-out-quart);
 }
 
 .agent-runtime-field select:hover:not(:disabled),
@@ -690,7 +690,7 @@
     color-mix(in srgb, var(--ink) 8%, var(--panel));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 58%, transparent);
   opacity: 0.48;
-  animation: agent-runtime-skeleton-pulse 1.1s cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
+  animation: agent-runtime-skeleton-pulse var(--dur-slow) var(--ease-snap) infinite alternate;
 }
 
 .agent-runtime-skeleton-wide {
@@ -698,11 +698,11 @@
 }
 
 .agent-runtime-skeleton-mid {
-  animation-delay: 90ms;
+  animation-delay: var(--dur-instant);
 }
 
 .agent-runtime-skeleton-short {
-  animation-delay: 160ms;
+  animation-delay: var(--dur-fast);
 }
 
 @keyframes agent-runtime-skeleton-pulse {
@@ -729,7 +729,7 @@
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--user), var(--agent));
-  transition: width 420ms var(--ease-out-expo);
+  transition: width var(--dur-slow) var(--ease-out-expo);
 }
 
 .agent-runtime-note,
@@ -773,10 +773,10 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
   transition:
-    transform 170ms var(--ease-out-quart),
-    border-color 170ms var(--ease-out-quart),
-    background 170ms var(--ease-out-quart),
-    color 170ms var(--ease-out-quart);
+    transform var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    background var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart);
 }
 
 .agent-runtime-action-tile i {
@@ -785,7 +785,7 @@
   font-style: normal;
   font-size: 15px;
   line-height: 1;
-  transition: transform 170ms var(--ease-out-quart), color 170ms var(--ease-out-quart);
+  transition: transform var(--dur-fast) var(--ease-out-quart), color var(--dur-fast) var(--ease-out-quart);
 }
 
 .agent-runtime-action-tile:hover:not(:disabled),
@@ -832,10 +832,10 @@
   font-size: 13px;
   cursor: pointer;
   transition:
-    background 170ms var(--ease-out-quart),
-    border-color 170ms var(--ease-out-quart),
-    color 170ms var(--ease-out-quart),
-    transform 170ms var(--ease-out-quart);
+    background var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart),
+    transform var(--dur-fast) var(--ease-out-quart);
 }
 
 .agent-runtime-row-action i {

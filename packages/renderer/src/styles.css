@@ -1,4 +1,9 @@
 @import "./themes/tokens.css";
+/* interaction.css defines the focus/hover/press/disabled baseline against bare
+   elements with :where(), so it carries zero specificity and every component
+   sheet below can still override it normally. It must sit after tokens (it
+   consumes them) and before the components (they refine it). */
+@import "./themes/interaction.css";
 @import "./themes/structural.css";
 @import "./themes/fonts.css";
 @import "./themes/density.css";
@@ -46,15 +51,15 @@ body {
 
 .staggered-row {
   animation: list-row-enter var(--dur-base) var(--ease-out-quart) backwards;
-  animation-delay: calc(var(--i, 0) * 30ms);
+  animation-delay: calc(var(--i, 0) * var(--dur-stagger));
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 1ms !important;
+    animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
-    transition-duration: 1ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

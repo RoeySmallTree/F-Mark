@@ -121,18 +121,31 @@
   --gutter-w: 56px;
 
   /* ── Motion ──────────────────────────────────────────────────────────────
-     Ink does not bounce. Short durations, decelerating easings only. The
-     reduced-motion override lives in styles.css. */
-  --dur-instant: 90ms;
-  --dur-fast: 140ms;
-  --dur-base: 190ms;
-  --dur-slow: 280ms;
-  --dur-stagger: 28ms;
+     Ink does not bounce: decelerating curves only, nothing overshoots.
+
+     These four durations are the rhythm the codebase already had — the
+     dominant literals were 120 / 160 / 180-220 / 320ms — now named so every
+     surface shares them instead of re-picking a number. Anything that is not
+     one of these tiers is a bug, not a nuance.
+
+     --ease-snap is the one curve worth keeping from before the redesign: a
+     hard decelerate that makes small UI moves feel mechanical rather than
+     floaty. It is the default for state changes. The browser's own `ease-out`
+     is deliberately NOT used — it is the value you get when nobody chose.
+
+     The reduced-motion reset lives in styles.css and covers all of these. */
+  --dur-instant: 120ms; /* hover, focus, colour swaps */
+  --dur-fast: 160ms; /* small position/size moves */
+  --dur-base: 200ms; /* panel + card entrances */
+  --dur-slow: 320ms; /* full-surface transitions */
+  --dur-stagger: 28ms; /* per-item delay in a sequence */
+
+  --ease-snap: cubic-bezier(0.32, 0.72, 0, 1); /* default for state change */
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0);
-  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* long, full-surface */
+  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0); /* exits only */
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1); /* loops that must not jerk */
 }
 
 /* ═══ NIGHT ════════════════════════════════════════════════════════════════

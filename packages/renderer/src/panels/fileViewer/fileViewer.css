@@ -60,7 +60,7 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent),
     0 4px 14px color-mix(in srgb, var(--agent) 8%, transparent);
-  animation: fv-icon-float 4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: fv-icon-float var(--dur-slow) var(--ease-inout) infinite;
   will-change: transform;
 }
 
@@ -129,7 +129,7 @@
   transition: background var(--dur-base) var(--ease-out-quart),
     color var(--dur-base) var(--ease-out-quart),
     border-color var(--dur-base) var(--ease-out-quart),
-    transform 160ms var(--ease-out-quart);
+    transform var(--dur-fast) var(--ease-out-quart);
 }
 .fv-tab:hover {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
@@ -776,7 +776,7 @@
   background: none;
   color: var(--ink-3);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--dur-instant), color var(--dur-instant);
 }
 .fv-editbar-copy:hover {
   background: color-mix(in srgb, var(--ink) 6%, var(--canvas));

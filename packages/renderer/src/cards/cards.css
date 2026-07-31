@@ -419,7 +419,7 @@
   border-radius: calc(var(--radius) - 1px);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--dur-instant), color var(--dur-instant);
 }
 .prose-toggle button:hover {
   color: var(--ink);
@@ -441,7 +441,7 @@
   border-radius: var(--radius);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--dur-instant), color var(--dur-instant);
 }
 .prose-copy-btn:hover {
   background: var(--panel);
@@ -655,7 +655,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.14s;
+  transition: transform var(--dur-fast);
 }
 .line-comment-icon {
   position: relative;
@@ -670,8 +670,8 @@
   color: var(--rail-color);
   box-shadow: var(--shadow);
   transition:
-    background 0.14s,
-    color 0.14s;
+    background var(--dur-fast),
+    color var(--dur-fast);
 }
 .line-comment-count {
   position: absolute;
@@ -704,7 +704,7 @@
 }
 .line-comment-anchor.draft {
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-instant);
 }
 .commentable:hover .line-comment-anchor.draft,
 .line-comment-anchor.draft.active {
@@ -1014,9 +1014,9 @@
   cursor: pointer;
   box-shadow: var(--shadow);
   transition:
-    border-color 0.14s,
-    background 0.14s,
-    transform 0.14s;
+    border-color var(--dur-fast),
+    background var(--dur-fast),
+    transform var(--dur-fast);
 }
 .comment-activity-hitbox {
   position: absolute;
@@ -1165,9 +1165,9 @@
   cursor: pointer;
   margin-bottom: var(--choice-opt-mb);
   transition:
-    background 180ms var(--ease-out-quint),
-    border-color 180ms var(--ease-out-quint),
-    transform 220ms var(--ease-out-quint);
+    background var(--dur-base) var(--ease-out-quint),
+    border-color var(--dur-base) var(--ease-out-quint),
+    transform var(--dur-base) var(--ease-out-quint);
   background: none;
   text-align: left;
   width: 100%;
@@ -1198,7 +1198,7 @@
   align-items: center;
   justify-content: center;
   margin-top: 2px;
-  transition: 0.15s;
+  transition: var(--dur-fast);
 }
 .choice-opt.chosen .choice-radio {
   border-color: var(--green);
@@ -1280,8 +1280,8 @@
   padding: 8px 10px;
   outline: none;
   transition:
-    border-color 180ms var(--ease-out-quint),
-    box-shadow 180ms var(--ease-out-quint);
+    border-color var(--dur-base) var(--ease-out-quint),
+    box-shadow var(--dur-base) var(--ease-out-quint);
 }
 .choice-custom-row input:focus {
   border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
@@ -1301,10 +1301,10 @@
   font-weight: 700;
   padding: 7px 11px;
   transition:
-    background 180ms var(--ease-out-quint),
-    border-color 180ms var(--ease-out-quint),
-    color 180ms var(--ease-out-quint),
-    transform 220ms var(--ease-out-quint);
+    background var(--dur-base) var(--ease-out-quint),
+    border-color var(--dur-base) var(--ease-out-quint),
+    color var(--dur-base) var(--ease-out-quint),
+    transform var(--dur-base) var(--ease-out-quint);
 }
 .choice-custom-row button:hover,
 .choice-comment-submit:hover,
@@ -1372,8 +1372,8 @@
   outline: none;
   padding: 8px 10px;
   transition:
-    border-color 180ms var(--ease-out-quint),
-    box-shadow 180ms var(--ease-out-quint);
+    border-color var(--dur-base) var(--ease-out-quint),
+    box-shadow var(--dur-base) var(--ease-out-quint);
 }
 .choice-comment-form textarea:focus {
   border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
@@ -1455,9 +1455,9 @@
   overflow: hidden;
   background: var(--canvas);
   transition:
-    border-color 0.15s,
-    background 0.15s,
-    opacity 0.15s;
+    border-color var(--dur-fast),
+    background var(--dur-fast),
+    opacity var(--dur-fast);
 }
 .choice-preview-card.chosen {
   border-color: var(--green);
@@ -1911,7 +1911,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: 0.15s;
+  transition: var(--dur-fast);
   background: none;
   padding: 0;
   color: var(--canvas);
@@ -3207,7 +3207,7 @@
   }
 }
 .flow-edge.flowing {
-  animation: flow-dashflow 0.7s linear infinite;
+  animation: flow-dashflow var(--dur-slow) linear infinite;
 }
 
 /* === Popover overlay === */

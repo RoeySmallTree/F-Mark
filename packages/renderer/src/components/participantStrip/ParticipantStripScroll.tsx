@@ -133,13 +133,21 @@ export function ParticipantStripScroll({
             title={`${participant.name} · ${participant.id}`}
           />
         );
+        const role = isCurrentUser
+          ? NO_LOOSE_STRING_VALUES.you
+          : NO_LOOSE_STRING_VALUES.user;
+        /* A participant with no name set falls back to "You", which is also
+           the role label — so the chip rendered "You You". The eyebrow only
+           earns its line when it says something the name does not. */
+        const roleAddsMeaning =
+          participant.name.trim().toLowerCase() !== role.toLowerCase();
         const chip = (
           <span className={`topbar-user-chip${isCurrentUser ? " current" : ""}`}>
             {avatar}
             <span className="topbar-user-meta" aria-hidden>
-              <span className="topbar-user-role">
-                {isCurrentUser ? NO_LOOSE_STRING_VALUES.you : NO_LOOSE_STRING_VALUES.user}
-              </span>
+              {roleAddsMeaning ? (
+                <span className="topbar-user-role">{role}</span>
+              ) : null}
               <span className="topbar-user-name">{participant.name}</span>
             </span>
           </span>
