@@ -49,3 +49,36 @@ Why this way:
   fourteen numbers went wrong before, one hiding a live AA failure)
 
 Commits: dc6584f · ac0595f · c9c55ce · b351454 · f2961b4 · 29bdee3
+## 2026-07-31 — Destructive Action Contract
+
+How it works: F-Mark had three unrelated confirmation mechanisms and no authority among them, so each
+destructive surface picked one or picked none. Confirmation is now a single renderer-side contract:
+a hook shows the dialog and returns a branded `ConfirmedIntent` receipt, and `goodbye` requires that
+receipt as a parameter — so a call site that skips confirmation fails to compile rather than shipping.
+
+Flow (from the user):
+1. The user clicks a destructive control (end an agent, delete a session, revert a file, remove a todo
+   or runtime) → the handler calls `useConfirmDestructive` instead of acting
+2. → the dialog names the specific loss; for a cascading delete the blast radius comes from the kernel
+   that performs the cascade, never re-derived on the client
+3. → Cancel returns `null` and the handler bails; Accept returns a receipt that unlocks the mutation
+
+```
+  click ──► useConfirmDestructive ──► dialog
+                    │                   │
+            Accept  │                   │  Cancel
+                    ▼                   ▼
+            ConfirmedIntent          null ──► return (no mutation)
+                    │
+                    ▼
+            api.goodbye(..., intent)      ← won't compile without it
+```
+
+Why this way:
+• Confirmation enforced by a type, not a convention → (not a code-review rule, which regrows the bug)
+• The kernel nonce renamed to `requestNonce` → (not kept as "confirm token", whose name caused the UI
+  to trust a guarantee a server structurally cannot give — that misplaced trust produced Blocker B2)
+• Cascade count fetched from the server that cascades → (not passed down as more props, which fixes
+  today's instance and leaves the class)
+• `fetchDescendants` made required, local fallback deleted → (not left optional, which keeps a second
+  source of truth one omitted prop away)
