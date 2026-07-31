@@ -319,18 +319,23 @@ describe("SettingsModal — Appearance", () => {
     const themeGroup = screen.getByRole("radiogroup", {
       name: /color theme/i,
     });
-    const terminalCard = within(themeGroup).getByRole("radio", {
-      name: /terminal/i,
-    });
-    await user.click(terminalCard);
-    expect(applyTheme).toHaveBeenCalledWith("terminal");
+    /* Seventeen themes meant none could be held to a contrast standard. The
+       three that remain are each audited, so the count is worth pinning. */
+    expect(within(themeGroup).getAllByRole("radio")).toHaveLength(3);
 
-    const cyberCard = within(themeGroup).getByRole("radio", {
-      name: /cyberpunk/i,
+    const nightCard = within(themeGroup).getByRole("radio", {
+      name: /night/i,
     });
-    await user.click(cyberCard);
-    expect(applyTheme).toHaveBeenCalledWith("cyber");
+    await user.click(nightCard);
+    expect(applyTheme).toHaveBeenCalledWith("night");
+
+    const contrastCard = within(themeGroup).getByRole("radio", {
+      name: /high contrast/i,
+    });
+    await user.click(contrastCard);
+    expect(applyTheme).toHaveBeenCalledWith("contrast");
   });
+
 
   test("clicking a font option calls applyFont(name)", async () => {
     const fontsModule = await import("../../src/themes/fonts.js");
