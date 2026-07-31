@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import { AvatarArt } from "./AvatarArt.js";
-import { agentKindArtLines, agentKindArtTones } from "./agentKindArt.js";
+import { agentKindArtLines, agentKindArtTones } from "./agentKindArtPresets.js";
 import type { AvatarKind } from "./types.js";
 
 export function AgentKindArt({

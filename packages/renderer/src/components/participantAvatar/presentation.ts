@@ -4,7 +4,7 @@ import {
   type AvatarPreset,
   type AvatarToneMap,
 } from "@f-mark/shared";
-import { agentKindArtLines, agentKindArtTones } from "./agentKindArt.js";
+import { agentKindArtLines, agentKindArtTones } from "./agentKindArtPresets.js";
 import type { AvatarKind, ParticipantAvatarInput } from "./types.js";
 
 const NO_LOOSE_STRING_VALUES = {
