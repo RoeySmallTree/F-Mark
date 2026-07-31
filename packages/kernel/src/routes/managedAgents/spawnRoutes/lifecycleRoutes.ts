@@ -3,22 +3,22 @@ import type { AgentStateStore } from "../../../services/agentState.js";
 import type { ManagedAgentsRouteContext } from "../routeContext.js";
 import { requireParticipantId, requireScopedBinding } from "../routeRequest.js";
 import {
-  consumeConfirm,
-  mintConfirm,
-  type ConfirmTokenStore,
-} from "./confirmTokens.js";
+  consumeRequestNonce,
+  mintRequestNonce,
+  type RequestNonceStore,
+} from "./requestNonces.js";
 
 export function registerLifecycleRoutes(
   app: FastifyInstance,
   context: ManagedAgentsRouteContext,
-  confirmTokens: ConfirmTokenStore,
+  requestNonces: RequestNonceStore,
 ): void {
   app.get<{ Params: { id: string } }>(
     "/managed-agents/:id/confirm-token",
     async (req, reply) => {
       const participant = requireParticipantId(req.params.id, reply);
       if (!participant.ok) return participant.body;
-      return { token: mintConfirm(confirmTokens, participant.id) };
+      return { token: mintRequestNonce(requestNonces, participant.id) };
     },
   );
 
@@ -32,7 +32,7 @@ export function registerLifecycleRoutes(
       if (!participant.ok) return participant.body;
       const id = participant.id;
 
-      if (!consumeConfirm(confirmTokens, id, req.query.confirm ?? "")) {
+      if (!consumeRequestNonce(requestNonces, id, req.query.confirm ?? "")) {
         reply.code(403);
         return { error: "missing or stale confirm token" };
       }
