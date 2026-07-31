@@ -86,6 +86,22 @@ export async function postTodoForCard(
   }
 }
 
+export async function fetchTodoDescendantsForCard(
+  context: TodoCardPostContext,
+  todoId: string,
+): Promise<string[]> {
+  const { sessionId } = context;
+  if (sessionId === null) return [];
+  const scope = rootScopeForSession(
+    context.sessions.find((s) => s.id === sessionId),
+    context.activePathId,
+    context.activePath,
+  );
+  if (scope === null) return [];
+  const client = createClient({ baseUrl: "", token: context.token });
+  return client.todoDescendants(sessionId, todoId, scope);
+}
+
 export function makeTodoCardUpdateBody({
   actorId,
   node,

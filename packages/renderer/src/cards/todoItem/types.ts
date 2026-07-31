@@ -37,6 +37,10 @@ export interface TodoItemMutationHandlers {
     field?: TodoInputField,
     values?: TodoItemValues,
   ) => Promise<void>;
+  /** Authoritative descendant ids from the kernel (the same cascade
+   *  `writeTodoEvent` applies), used to phrase the removal confirmation.
+   *  Omitted by callers that already hold an accurate full-tree count. */
+  fetchDescendants?: () => Promise<string[]>;
 }
 
 export interface TodoItemNavigationHandlers {
@@ -93,8 +97,6 @@ export interface TodoItemController {
   assigneeLabel: string;
   assigneeOpen: boolean;
   participantsList: TodoAssigneeOption[];
-  confirmingRemove: boolean;
-  descendants: number;
   titleLabel: string;
   className: string;
   style: CSSProperties;
@@ -113,7 +115,6 @@ export interface TodoItemController {
   toggleWip: () => Promise<void>;
   addSubtask: () => void;
   toggleAssigneeMenu: () => void;
-  cancelRemoveConfirmation: () => void;
   onLocalKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onInputKeyDown: TodoInputKeyDown;
 }

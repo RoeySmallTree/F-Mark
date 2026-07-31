@@ -9,6 +9,8 @@ const NO_LOOSE_STRING_VALUES = {
   compact: "compact",
   draft: "draft",
   unassigned: "Unassigned",
+  subtask: "subtask",
+  subtasks: "subtasks",
 } as const;
 
 export function depthOffset(depth: number): string {
@@ -61,4 +63,13 @@ export function titleLabelFor(title: string): string {
 
 export function assigneeLabelFor(name: string | null): string {
   return name === null ? NO_LOOSE_STRING_VALUES.unassigned : `Assigned to ${name}`;
+}
+
+export function removeConfirmTitle(descendantCount: number): string {
+  if (descendantCount === 0) return "Remove this task?";
+  const noun =
+    descendantCount === 1
+      ? NO_LOOSE_STRING_VALUES.subtask
+      : NO_LOOSE_STRING_VALUES.subtasks;
+  return `Remove this task and ${descendantCount} ${noun}?`;
 }

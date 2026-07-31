@@ -23,6 +23,7 @@ type EventMethods = Pick<
   | "uploadAttachment"
   | "deleteAttachment"
   | "listTodos"
+  | "todoDescendants"
 >;
 
 export function createEventMethods(http: ApiHttpClient): EventMethods {
@@ -162,6 +163,13 @@ export function createEventMethods(http: ApiHttpClient): EventMethods {
       const suffix = qs.toString();
       const path = `/sessions/${sessionId}/todos${suffix ? `?${suffix}` : ""}`;
       return http.get<TodoListResponse>(path);
+    },
+    async todoDescendants(sessionId, todoId, scope) {
+      const qs = new URLSearchParams();
+      appendScopeQuery(qs, scope);
+      const path = `/sessions/${sessionId}/todos/${todoId}/descendants?${qs.toString()}`;
+      const body = await http.get<{ descendants: string[] }>(path);
+      return body.descendants;
     },
   };
 }

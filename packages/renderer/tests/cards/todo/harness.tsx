@@ -63,12 +63,24 @@ export function setupTodoCard(
   };
 }
 
+const DESCENDANTS_URL = /\/todos\/[^/]+\/descendants/;
+
 export function stubTodoFetch(filename: string): FetchMock {
-  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () =>
-    jsonResponse({ filename }),
-  );
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    if (DESCENDANTS_URL.test(String(input))) {
+      return jsonResponse({ descendants: [] });
+    }
+    return jsonResponse({ filename });
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+export function stubConfirm(result: boolean): void {
+  vi.stubGlobal(
+    "confirm",
+    vi.fn<typeof window.confirm>().mockReturnValue(result),
+  );
 }
 
 export function stubRecordingTodoFetch(filename: string): {

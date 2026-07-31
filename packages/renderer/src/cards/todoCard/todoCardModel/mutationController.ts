@@ -5,6 +5,7 @@ import type { TodoItemValues } from "../../TodoItem.js";
 import {
   createDraftTodo,
   dirtyTodoCardValuesPatch,
+  fetchTodoDescendantsForCard,
   makeTodoCardUpdateBody,
   postTodoForCard,
   type TodoCardPostContext,
@@ -32,6 +33,7 @@ export interface TodoCardMutationController {
     next: () => void,
   ) => Promise<void>;
   reparent: (values: TodoItemValues, parentId: string | null) => Promise<void>;
+  fetchDescendants: (todoId: string) => Promise<string[]>;
 }
 
 interface TodoCardMutationControllerInput {
@@ -113,10 +115,15 @@ export function createTodoCardMutationController({
     focusInlineTodo(payload.id);
   }
 
+  function fetchDescendants(todoId: string): Promise<string[]> {
+    return fetchTodoDescendantsForCard(postContext, todoId);
+  }
+
   return {
     updateTodo,
     createDraft,
     saveDirtyThen,
     reparent,
+    fetchDescendants,
   };
 }

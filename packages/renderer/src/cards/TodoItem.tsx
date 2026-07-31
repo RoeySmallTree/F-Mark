@@ -1,5 +1,4 @@
 import type { JSX } from "react";
-import { TodoConfirmRemove } from "./todoItem/TodoConfirmRemove.js";
 import { TodoItemActions } from "./todoItem/TodoItemActions.js";
 import { TodoItemDescription } from "./todoItem/TodoItemDescription.js";
 import { TodoItemTitleBar } from "./todoItem/TodoItemTitleBar.js";
@@ -65,13 +64,6 @@ export function TodoItem(props: TodoItemProps): JSX.Element {
           />
         </div>
       </div>
-      {item.confirmingRemove ? (
-        <TodoConfirmRemove
-          descendants={item.descendants}
-          onCancel={item.cancelRemoveConfirmation}
-          onRemove={item.remove}
-        />
-      ) : null}
     </div>
   );
 }
