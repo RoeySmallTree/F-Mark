@@ -10,6 +10,7 @@ import {
   Zap,
 } from "lucide-react";
 import { openAgentTerminalPane } from "../../../state/terminalPaneState.js";
+import { useConfirmDestructive } from "../../../confirm/index.js";
 import {
   commandTitle,
   type RightAgentViewModel,
@@ -41,6 +42,25 @@ export function RightAgentControls({
   controller,
 }: RightAgentControlsProps): JSX.Element {
   const { agent } = view;
+  const confirmDestructive = useConfirmDestructive();
+  const onClear = async (): Promise<void> => {
+    const intent = await confirmDestructive({
+      action: "agent.clear",
+      title: `Clear ${agent.display_name}?`,
+      detail: "Discards the agent's conversation context.",
+    });
+    if (intent === null) return;
+    void controller.clear(agent);
+  };
+  const onGoodbye = async (): Promise<void> => {
+    const intent = await confirmDestructive({
+      action: "agent.goodbye",
+      title: `Remove ${agent.display_name}?`,
+      detail: "Ends the agent and its terminal session. This cannot be undone.",
+    });
+    if (intent === null) return;
+    void controller.goodbye(agent, intent);
+  };
   if (agent.membership_state === NO_LOOSE_STRING_VALUES.removed) {
     return (
       <div className="agent-controls">
@@ -122,10 +142,7 @@ export function RightAgentControls({
         title={commandTitle("Clear", view.commandReason)}
         aria-label={`Clear ${agent.display_name}`}
         disabled={view.isBusy || view.clearDisabled}
-        onClick={() => {
-          if (!window.confirm(`Clear ${agent.display_name}?`)) return;
-          void controller.clear(agent);
-        }}
+        onClick={() => void onClear()}
       >
         <Eraser size={13} aria-hidden="true" />
         <span>Clear</span>
@@ -159,10 +176,7 @@ export function RightAgentControls({
         title="Goodbye"
         aria-label={`Goodbye ${agent.display_name}`}
         disabled={view.isBusy}
-        onClick={() => {
-          if (!window.confirm(`Remove ${agent.display_name}?`)) return;
-          void controller.goodbye(agent);
-        }}
+        onClick={() => void onGoodbye()}
       >
         <Trash2 size={13} aria-hidden="true" />
         <span>Remove</span>

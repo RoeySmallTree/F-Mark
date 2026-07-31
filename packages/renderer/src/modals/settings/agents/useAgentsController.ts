@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SessionMeta } from "@f-mark/shared";
 import { createClient } from "../../../api/client.js";
 import { createManagedAgentsClient } from "../../../api/managedAgents.js";
+import { useConfirmDestructive } from "../../../confirm/index.js";
 import { useStore } from "../../../state/store.js";
 import {
   buildPathAgentGroups,
@@ -32,6 +33,7 @@ export function useAgentsController(): AgentsController {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyAgentId, setBusyAgentId] = useState<string | null>(null);
+  const confirmDestructive = useConfirmDestructive();
 
   const api = useMemo(
     () => createManagedAgentsClient({ baseUrl: "", token }),
@@ -105,16 +107,17 @@ export function useAgentsController(): AgentsController {
   const goodbye = useCallback(
     async (entry: ConnectedAgentEntry): Promise<void> => {
       const { agent, scope } = entry;
-      if (
-        !window.confirm(`Remove ${agent.display_name} from this session?`)
-      ) {
-        return;
-      }
+      const intent = await confirmDestructive({
+        action: "agent.goodbye",
+        title: `Remove ${agent.display_name}?`,
+        detail: "Ends the agent and its terminal session. This cannot be undone.",
+      });
+      if (intent === null) return;
       setBusyAgentId(agent.participant_id);
       setError(null);
       try {
         const confirmToken = await api.getConfirmToken(agent.participant_id);
-        await api.goodbye(agent.participant_id, confirmToken, scope);
+        await api.goodbye(agent.participant_id, confirmToken, scope, intent);
         await refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -122,7 +125,7 @@ export function useAgentsController(): AgentsController {
         setBusyAgentId(null);
       }
     },
-    [api, refresh],
+    [api, confirmDestructive, refresh],
   );
 
   return {
