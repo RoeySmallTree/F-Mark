@@ -57,8 +57,7 @@ export function AgentTerminals(): JSX.Element {
               <button
                 type="button"
                 className="terminal-tab-close"
-                aria-label={`Close agent ${a.label}`}
-                disabled={c.closing.has(a.participant_id)}
+                aria-label={`Close ${a.label} terminal view`}
                 onClick={() => c.close(a)}
               >
                 <X size={11} aria-hidden="true" />
