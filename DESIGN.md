@@ -175,6 +175,20 @@ read all nine to find one. The tab list is authoritative in
 `Layout` (`RightLayout.tsx`) leaves the rail — it is configuration, not a destination, so
 it belongs behind the settings control.
 
+**Rail behaviour: one active panel, plus exactly one pin.** The groups stay fixed so the
+rail is navigable by muscle memory, and one panel can be pinned below the active one —
+covering the real pairing (watch Terminal while reading Diff tree) without reintroducing
+parallel panes.
+
+**The cap of one is the design, not a limitation.** An uncapped accordion is how the
+12-pane dock started; measured in the lab, three open sections in a normal ~900px window
+get roughly 170–200px each — fine for a list, unusable for a terminal. Pinning therefore
+**replaces** rather than appends, enforced in state.
+
+Edge case, already resolved: pinning the panel that is currently active would render it
+twice. The docked copy is **suppressed while pinned === active** and reappears the moment
+you switch away — which is exactly what pinning the thing you are looking at means.
+
 > Corrected 2026-08-01. An earlier revision of this file listed `Sessions` and `Flow` in
 > the rail. Neither is a rail tab: `Sessions` is a **left** panel (`panels/Sessions.tsx`)
 > and `Flow` is a **feed card type** (`FlowCard`, `systemDispatch`). `Comments` and `Named`
