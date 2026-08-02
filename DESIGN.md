@@ -219,14 +219,24 @@ to show one pane, so watching an agent means not using anything else. The 300px 
 narrow for a terminal at all — measured, the agent screen gives the terminal **945px against
 the rail's 292px**. Neither surface was designed for the thing the product exists to do.
 
-Layout: the terminal is the hero, with a context sidebar answering exactly three questions —
-**who is this agent**, **is it stuck**, **what is it doing**.
+**The conversation is the hero, not the terminal.** This corrects an earlier draft of this
+section which made the raw pane the main view — backwards, and it contradicted the product.
+F-Mark's differentiator is auto-stream: the kernel renders an agent's output into cards
+(messages, tool chips, todos, approvals) in the event log. That rendering *is* the interface.
+The tmux pane is the **escape hatch** — for raw access, for typing directly into the pane,
+and for the case where an agent died mid-turn and the feed has no conclusion.
+
+So the main column is tabbed: **Conversation** (default) · **Terminal**. Both are views of
+the same agent — one is the kernel's rendering of its output, the other is the source.
+
+The context sidebar answers exactly three questions — **who is this agent**, **is it stuck**,
+**what is it doing**.
 
 | Region | Carries |
 |---|---|
 | Route bar | breadcrumb + the URL, so the screen is linkable |
 | Identity bar | name (rename in place), presence, model and effort selectors, `⋯` for the rest |
-| Terminal | live `TerminalView`, the same component the overlay and dock tab use |
+| Main column | **Conversation** (default) or **Terminal** — `TerminalView`, the same component the overlay and dock tab use |
 | Drive bar | Pause/Resume · **Interrupt** · Compact · Clear · Reconnect, then the prompt box |
 | Sidebar | Waiting on you · Context meter · Doing now · Recent · Runtime facts |
 
