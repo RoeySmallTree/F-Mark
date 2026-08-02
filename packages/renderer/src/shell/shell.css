@@ -4046,13 +4046,19 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 .agent-context-meter span {
   display: block;
   height: 100%;
-  width: var(--context-used, 0%);
+  width: 100%;
   border-radius: inherit;
   background: var(--agent-color, var(--agent));
-  /* Slower than a hover: this is a state change worth watching. After
+  /* clip-path, not width: animating width forces a layout recalc every
+     frame (the same reason .viewmode-indicator above uses transform
+     instead of left/width). clip-path is layout-free like transform, and
+     `round 999px` on the inset keeps the fill's moving edge pill-capped
+     instead of square now that the box itself is always full-width.
+     Slower than a hover: this is a state change worth watching. After
      Compact, the visible drop IS the feedback that Compact did something -
-     jumping straight to the new width would hide it. */
-  transition: width var(--dur-slow) var(--ease-out-quart);
+     jumping straight to the new inset would hide it. */
+  clip-path: inset(0 calc(100% - var(--context-used, 0%)) 0 0 round 999px);
+  transition: clip-path var(--dur-slow) var(--ease-out-quart);
 }
 
 .agent-context-row {

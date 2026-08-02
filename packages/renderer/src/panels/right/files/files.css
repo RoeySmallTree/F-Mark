@@ -525,6 +525,10 @@
   min-width: 18px;
   height: 18px;
   opacity: 0;
+  /* This transition does not apply to the focus-visible opacity jump: this
+     button matches interaction.css's `:focus-visible { transition: none
+     !important }`, which wins regardless of specificity, so the outline and
+     opacity change land in the same frame. */
   transition: opacity var(--dur-base) var(--ease-out-quart);
 }
 .file-row:hover .file-row-copy {

@@ -161,8 +161,17 @@ export function FileRow({
       const dx = Math.abs(e.clientX - start.x);
       const dy = Math.abs(e.clientY - start.y);
       if (dx >= 5 || dy >= 5) return;
-      /* Star button has its own onClick with stopPropagation, so we
-         don't reach here when the user clicks the star. */
+      /* Bail when the mouseup landed inside a button (copy, star, and any
+         future row control). DOM event order is mousedown -> mouseup ->
+         click, each fully bubbling before the next stage fires - so a
+         button's onClick (and any stopPropagation() in it) runs AFTER this
+         handler has already opened the file, and can't prevent it. Checking
+         the mouseup target here, once, covers every control in the row
+         without each new one having to remember a non-obvious incantation. */
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest("button") !== null) {
+        return;
+      }
       if (onOpenFile !== undefined) onOpenFile(entry.absPath);
       else presentFile(entry.absPath);
     },
@@ -171,16 +180,19 @@ export function FileRow({
 
   const onStarClick = useCallback(
     (e: React.MouseEvent): void => {
+      /* This stopPropagation() does NOT stop the row from opening the file -
+         see the button-target check in onMouseUp above for why, and for the
+         actual guard. Kept as harmless defensive hygiene against any future
+         click listener on an ancestor. */
       e.stopPropagation();
       onCycleFav(entry.absPath, fav);
     },
     [entry.absPath, fav, onCycleFav],
   );
 
-  /* Stops propagation for the same reason the star does: the row's own
-     "open file" gesture is mousedown/mouseup-based (see onMouseUp above),
-     not a real click handler, so without this a copy click would also
-     open the file underneath it. */
+  /* Same stopPropagation() caveat as the star button above: it looks like it
+     guards against opening the file underneath, but by the time this onClick
+     runs, onMouseUp's button-target check has already made that decision. */
   const onCopyClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>): void => {
       e.stopPropagation();

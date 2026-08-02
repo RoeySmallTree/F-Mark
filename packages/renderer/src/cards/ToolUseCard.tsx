@@ -71,7 +71,20 @@ export function ToolUseCard({
           call's full output — mounts only while open or closing, so
           hundreds of collapsed calls in the feed never pay for content
           they aren't showing. */}
-      <div className="tool-disclosure">
+      {/* aria-hidden and inert both track `open` (not `open || closing`) so
+          they flip the instant the close starts, matching aria-expanded on
+          the header above: during the ~120ms closing window the body is
+          still visually animating out but must already be gone from the AT
+          tree and unfocusable (it contains a real "Show full" button).
+          inert is passed as the string workaround, not a boolean prop -
+          this project's React 18.3 doesn't support the boolean `inert` prop
+          (it warns and drops the attribute); the empty-string form is the
+          same pattern already used in FeedComposeDock's compose-shell. */}
+      <div
+        className="tool-disclosure"
+        aria-hidden={!open}
+        {...(!open ? { inert: "" } : {})}
+      >
         <div className="tool-disclosure-clip">
           {open || closing ? (
             <ToolUseBody
