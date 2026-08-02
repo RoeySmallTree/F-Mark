@@ -76,16 +76,16 @@ the conversation/terminal segmented control.
 | `src/shell/topBar/TopBarActions.tsx` | live "last event Xs ago" | modify |
 | `src/cards/AccessRequestCard.tsx` | rich resolved label | modify |
 | `src/hooks/useAgentSpawn.tsx` | spawn busy state | modify |
-| `src/shell/Compose.tsx` | send busy state | modify |
+| ~~`src/shell/Compose.tsx`~~ | **2-line re-export stub — real file is `src/compose/Compose.tsx`** | corrected |
 | `src/shell/pathSwitcher/PathSwitcherMenu.tsx` | animated close | modify |
 | `src/cards/todoItem/TodoAssigneeControl.tsx` | animated close | modify |
-| `src/cards/toolboxAccordion.tsx` | disclosure height transition | modify |
+| ~~`src/cards/toolboxAccordion.tsx`~~ | **a context, not markup — real target is `src/cards/ToolUseCard.tsx:67`** | corrected |
 | `src/panels/right/RightFiles.tsx` | copy-on-click | modify |
 | `src/panels/right/agents/` | rename pencil on focus | modify |
 | `src/shell/topBar/ViewModeToggle.tsx` | sliding indicator | modify |
 | `src/panels/right/agents/RightAgentDetails.tsx` | context meter transition | modify |
 | `src/components/participantStrip/AgentChipEditorPopover.tsx` | chevron rotation | modify |
-| `src/cards/flow/FlowCard.tsx` | diagnosed-node pulse | modify |
+| `src/cards/FlowCard.tsx` | diagnosed-node pulse (NOT `cards/flow/`) | modify |
 
 ---
 
