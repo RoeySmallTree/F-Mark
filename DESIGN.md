@@ -276,6 +276,38 @@ Eleven places link to the agent screen, including the dashboard's blocked strip,
 Agents panel, and an agent avatar anywhere in the feed. `sessionPersistence` becomes the
 fallback for "where was I", not the source of truth.
 
+## Attention: escalate only as far as attention has left
+
+Agents run unattended. If one stops for approval while you are elsewhere, nothing tells you —
+the renderer has **no notification code at all** today: no `Notification`, no `document.title`
+mutation, no favicon change. The signals already exist on the websocket (`access-request`,
+`presence`, `managed-agent.*`, `event_added`); only the surfacing is missing.
+
+Four severities, four distances. A channel fires only when the quieter ones cannot reach you.
+
+| Severity | Source | Looking at it | Elsewhere in app | Another tab | Away |
+|---|---|---|---|---|---|
+| **blocked** | `access-request` | inline only | badge · toast | + title · favicon | + OS |
+| **broken** | presence `pane-dead`, `hook-not-installed` | inline only | badge · toast | + title · favicon | + OS |
+| **done** | `event_added` → turn-end | inline only | badge | + title | + title |
+| **ambient** | `managed-agent.spawned`, stale | inline only | badge | badge | badge |
+
+Rules that follow:
+
+- **Never interrupt about what is already on screen.** If the agent's screen is open, the
+  approval renders inline and nothing else fires. A notification about visible content is the
+  fastest way to teach someone to switch notifications off.
+- **Blocked toasts do not auto-dismiss.** The agent is genuinely stopped until answered.
+  Everything else clears itself after ~5s.
+- **The badge is the floor and it is honest.** Every tier touches it, so one glance answers
+  "is anything waiting?" — but it only turns `--hot` for blocked and broken.
+- **Answer without navigating.** Allow / Deny live on the toast, same rule as the dashboard
+  strip: handling an approval must not cost you your place.
+- **OS notifications are opt-in and rare** — blocked and broken only, only when the browser is
+  unfocused. Ask permission the first time an agent blocks, never on first launch.
+- **No sound.** A tool left running all day cannot beep. If it is ever wanted it belongs in
+  settings, defaulted off.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
