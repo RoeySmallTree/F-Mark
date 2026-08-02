@@ -527,6 +527,21 @@ Rules:
 **Gap found:** `killTerminal` in `RegularTerminals.tsx` has **no confirmation at all** — it
 kills the tmux session directly, taking any running build or test with it.
 
+**Where the dialog appears.** Always a modal over the screen you were on, triggered from a
+control — never navigated to:
+
+| Action | Triggered from |
+|---|---|
+| Clear context · Remove agent | agent row `⋯` in the rail · the agent screen's drive bar |
+| Kill terminal | terminal row `⋯` |
+| Revert hunk | Diff tree footer · a hunk's `⋯` |
+| Delete session | session row `⋯` |
+
+**Task modals get routes; confirmations do not.** Spawn and New session are things you are
+*doing*, so they carry a URL and survive a reload. A confirmation is a *question about an
+action you just took* — reloading mid-delete should cancel it, not restore it. Anything that
+would resume a destructive prompt across a page load is a bug.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
