@@ -21,6 +21,11 @@ import { iconForTool } from "../../feed/toolIcons.js";
 
 export const TOOL_BODY_MAX_HEIGHT = 360;
 
+/* How long the body stays mounted after close so the grid-row collapse
+   (cards.css `.tool-disclosure`, exit leg) has time to finish before the
+   content unmounts. Mirrors that rule's exit duration, --dur-instant. */
+export const TOOL_DISCLOSURE_EXIT_MS = 120;
+
 export interface ToolType {
   cls: string;
   label: string;

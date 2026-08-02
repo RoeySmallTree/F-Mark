@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { ToolPresentation } from "../toolPresentation.js";
-import { TOOL_BODY_MAX_HEIGHT } from "./model.js";
+import { TOOL_BODY_MAX_HEIGHT, TOOL_DISCLOSURE_EXIT_MS } from "./model.js";
 
 interface ToolUseDisclosureOptions {
   autoOpen: boolean | undefined;
@@ -24,6 +24,9 @@ interface ToolUseDisclosure {
   bodyExpanded: boolean;
   bodyOverflowing: boolean;
   bodyRef: MutableRefObject<HTMLDivElement | null>;
+  /** True for the brief window after `open` goes false, while the height
+   *  transition plays. The body should stay mounted while this is true. */
+  closing: boolean;
   open: boolean;
   setBodyExpanded: Dispatch<SetStateAction<boolean>>;
   toggleOpen: () => void;
@@ -38,10 +41,30 @@ export function useToolUseDisclosure({
   result,
 }: ToolUseDisclosureOptions): ToolUseDisclosure {
   const [open, setOpen] = useState(initialOpen);
+  const [closing, setClosing] = useState(false);
   const [bodyExpanded, setBodyExpanded] = useState(false);
   const [bodyOverflowing, setBodyOverflowing] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const userToggledRef = useRef(false);
+  const wasOpenRef = useRef(open);
+
+  /* `open` is the single state every close path writes to — the manual
+     toggle below and the external autoOpen effect both call setOpen, so this
+     is the one place that needs to notice a close and start the exit timer.
+     Closing only when we were actually open avoids animating the initial
+     mount of a card that starts collapsed. */
+  useEffect(() => {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (open) {
+      setClosing(false);
+      return;
+    }
+    if (!wasOpen) return;
+    setClosing(true);
+    const timer = setTimeout(() => setClosing(false), TOOL_DISCLOSURE_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   useEffect(() => {
     userToggledRef.current = false;
@@ -83,6 +106,7 @@ export function useToolUseDisclosure({
     bodyExpanded,
     bodyOverflowing,
     bodyRef,
+    closing,
     open,
     setBodyExpanded,
     toggleOpen,

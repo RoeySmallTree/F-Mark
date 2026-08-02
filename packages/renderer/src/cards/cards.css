@@ -3282,3 +3282,31 @@
   background: color-mix(in srgb, var(--canvas) 86%, transparent);
   transform: rotate(90deg);
 }
+
+/* === Tool disclosure height (ToolUseCard) ===
+   Mirrors .toolbox-collapse (agent-components.css): a one-row grid that
+   animates grid-template-rows 0fr -> 1fr, so the body reflows to its
+   natural height instead of popping in at full size. The clipped child
+   needs min-height: 0 - without it a 0fr track's automatic minimum is the
+   child's min-content, and the row never actually reaches 0.
+
+   The transition duration is declared on each end state rather than once
+   on the base selector, so entry and exit can differ: entry (this rule
+   matching on .open) runs the full --dur-fast, exit (falling back to the
+   base rule below once .open is removed) runs the shorter --dur-instant -
+   collapsing should read snappier than expanding. */
+.tool-disclosure { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-instant) var(--ease-out-quart); }
+.tool-call.open .tool-disclosure { grid-template-rows: 1fr; transition: grid-template-rows var(--dur-fast) var(--ease-out-quart); }
+.tool-disclosure > .tool-disclosure-clip { min-height: 0; overflow: hidden; }
+
+/* Collapsing already reads as instant under the global reduced-motion reset
+   (styles.css) - transition-duration drops to 0.01ms there. This local rule
+   exists for the one thing that reset doesn't cover: ToolUseCard keeps the
+   body mounted for TOOL_DISCLOSURE_EXIT_MS after close so the exit
+   transition can finish before it unmounts. `transition: none` (not a
+   shortened var() duration - quality-floor.test.ts forbids that) makes the
+   collapse to 0 genuinely instant rather than merely fast, so that mount
+   window can never show a sliver of un-clipped content. */
+@media (prefers-reduced-motion: reduce) {
+  .tool-disclosure { transition: none; }
+}

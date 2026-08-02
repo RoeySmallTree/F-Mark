@@ -34,6 +34,7 @@ export function ToolUseCard({
     bodyExpanded,
     bodyOverflowing,
     bodyRef,
+    closing,
     open,
     setBodyExpanded,
     toggleOpen,
@@ -64,15 +65,25 @@ export function ToolUseCard({
         success={success}
         toolName={tool_name}
       />
-      {open ? (
-        <ToolUseBody
-          bodyExpanded={bodyExpanded}
-          bodyOverflowing={bodyOverflowing}
-          bodyRef={bodyRef}
-          onExpand={() => setBodyExpanded(true)}
-          presentation={presentation}
-        />
-      ) : null}
+      {/* Always in the DOM so `.tool-call.open .tool-disclosure` (cards.css)
+          can animate grid-template-rows 0fr -> 1fr; the wrapper itself is
+          cheap. `ToolUseBody` — the part that actually renders a tool
+          call's full output — mounts only while open or closing, so
+          hundreds of collapsed calls in the feed never pay for content
+          they aren't showing. */}
+      <div className="tool-disclosure">
+        <div className="tool-disclosure-clip">
+          {open || closing ? (
+            <ToolUseBody
+              bodyExpanded={bodyExpanded}
+              bodyOverflowing={bodyOverflowing}
+              bodyRef={bodyRef}
+              onExpand={() => setBodyExpanded(true)}
+              presentation={presentation}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
