@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   LEDGER — F-Mark's token system.
+   AURORA — F-Mark's token system.
 
    The thesis: F-Mark is an append-only event log. Nothing is deleted; entries
    are superseded. The interface is a ruled ledger sheet, and every visual
@@ -20,9 +20,12 @@
 
 :root {
   /* ── AURORA LIGHT.
-     The canvas is TINTED, never white, so a white card can sit visibly above
-     it. On a white canvas white cards vanish and every panel needs a border
-     merely to exist. */
+     --bg is the tinted void behind everything (never white), so a white
+     --canvas can sit visibly above it — on a pure-white void, white cards
+     vanish and every panel needs a border merely to exist. Naming collision:
+     DESIGN.md calls the void "canvas" and this file's solid surface
+     "solid" — here it is the reverse, --bg is DESIGN.md's canvas and
+     --canvas is DESIGN.md's solid. */
   --bg: #e9ecf3;
   --canvas: #ffffff;
   --panel: #f5f6fa;
@@ -31,10 +34,10 @@
   --paper-band: #f7f8fb;
   --paper-sunk: #e9ecf3;
 
-  /* MEASURED worst-case across --canvas, --panel, --panel-2 */
+  /* MEASURED against --canvas */
   --ink: #16181f;   /* 17.73:1 */
-  --ink-2: #4a5163; /*  7.93:1 */
-  --ink-3: #5f6675; /*  5.76:1 — lightest AA text */
+  --ink-2: #3d4456; /*  9.72:1 */
+  --ink-3: #5c6372; /*  6.03:1 — lightest AA text */
   --ink-4: #8b91a3; /*  3.15:1 — NON-TEXT tier, same debt as dark */
 
   --rule: rgb(16 20 34 / 11%);
@@ -134,7 +137,9 @@
 /* ═══ NIGHT ════════════════════════════════════════════════════════════════
    Not a void with a neon accent. The ruled structure stays visible — bands
    and hairlines are what keep this reading as a sheet rather than a terminal.
-   The accent desaturates so it sits on the surface instead of glowing off it. */
+   The accent itself stays vivid — Aurora teal holds its saturation and sits
+   near max lightness — but it never spreads: one meaning, one channel, so
+   everywhere else the ruled structure carries the eye instead. */
 body.theme-night {
   /* ── Surfaces — AURORA DARK ───────────────────────────────────────────
      Elevation is surface LUMINANCE, not shadow: a lighter surface reads as
@@ -142,7 +147,7 @@ body.theme-night {
   --bg: #0b0d16;        /* the void behind everything */
   --canvas: #12141f;    /* OPAQUE. every surface that carries text */
   --panel: #171a27;     /* raised content: hover, active row, nested panel */
-  --panel-2: #1d2130;   /* hover on raised content */
+  --panel-2: #232736;   /* hover on raised content */
   --paper: #12141f;     /* legacy alias, kept: 0 call sites but referenced in comments */
   --paper-band: #141724;
   --paper-sunk: #0b0d16;
@@ -151,8 +156,8 @@ body.theme-night {
      MEASURED against --canvas (#12141f). Do not hand-write these numbers;
      run tests/token-contrast.test.ts and paste its output. */
   --ink: #f0f1f7;   /* 16.26:1 — primary */
-  --ink-2: #a8adc4; /*  8.24:1 — secondary */
-  --ink-3: #8b91a8; /*  5.86:1 — meta, timestamps. The lightest AA text. */
+  --ink-2: #bec3da; /* 10.48:1 — secondary */
+  --ink-3: #9298af; /*  6.40:1 — meta, timestamps. The lightest AA text. */
   --ink-4: #5b607a; /*  2.97:1 — NON-TEXT tier. Documented debt: ~214 sites
                        still set it as `color:`. Do not add new text uses. */
 
