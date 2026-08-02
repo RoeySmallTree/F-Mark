@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type JSX,
@@ -50,6 +51,32 @@ export function Feed(): JSX.Element {
     runningTailKey: agentTails.runningTailKey,
     connectingTailKey: agentTails.connectingTailKey,
   });
+
+  /* j/k reuse the step navigation that already powers FeedNavCluster's buttons.
+     Only the key binding is new.
+
+     The guard must cover EVERY editable surface, not just the composer: this app
+     also has comment textareas, todo-item editors, session-rename editors and
+     the cmdk palette. A composer-only guard lets j/k hijack typing in all of
+     them. `closest()` on the active element covers nested editors too. */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== "j" && e.key !== "k") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement &&
+        (active.isContentEditable || active.closest("input, textarea, [contenteditable]"))
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (e.key === "j") scroll.onNext();
+      else scroll.onPrev();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [scroll.onNext, scroll.onPrev]);
 
   const [composerCollapsed, setComposerCollapsed] = useState(false);
   const onToggleComposerCollapsed = useCallback((): void => {

@@ -6094,3 +6094,39 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   outline-offset: 1px;
   transition: none;
 }
+
+/* New-event edge. `.is-fresh` is already applied per row by FeedRows using
+   calculateFreshKeys, which deliberately excludes the initial session load so
+   a whole batch never animates at once. This is presentation only. `.feed-item`
+   is already `position: relative` (see the unread-dot rule above), so no
+   position override is needed here.
+
+   It FADES rather than persisting: a permanent marker on every arrival becomes
+   wallpaper within a minute. Six seconds is long enough to catch the eye on
+   return, short enough not to accumulate. */
+.feed-item.is-fresh::before {
+  content: "";
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-start: -6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--agent);
+  animation: feed-fresh-edge 6s var(--ease-out-quart) forwards;
+}
+@keyframes feed-fresh-edge {
+  0%, 55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* The edge is a signal ("an agent did this"), not decoration, so reduced
+   motion keeps it visible instead of removing it - only the fade stops.
+   `animation: none` plus a static opacity, not a near-zero duration: the
+   keyframes end at opacity 0 with `forwards` fill, so shrinking the duration
+   would still land the bar on its invisible final frame instead of keeping
+   it shown. */
+@media (prefers-reduced-motion: reduce) {
+  .feed-item.is-fresh::before {
+    animation: none;
+    opacity: 1;
+  }
+}
