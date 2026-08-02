@@ -2339,17 +2339,27 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   overscroll-behavior: contain;
 }
 .view-toggle {
+  position: relative;
   display: flex;
   align-items: center;
   background: var(--panel);
   border-radius: 7px;
   padding: 3px;
   gap: 1px;
+  --view-toggle-pad: 3px;
+  /* 12ch fits "Conversation", the longest label; +icon +icon-gap +h-padding.
+     Fixed per-slot width (not measured) so every tab is equal width and the
+     indicator's transform math below is exact, not approximate. */
+  --view-toggle-slot: calc(12ch + 12px + 5px + 18px);
 }
 .view-toggle button {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
+  min-width: var(--view-toggle-slot);
   font-size: 11.5px;
   color: var(--ink-2);
   padding: 5px 9px;
@@ -2362,12 +2372,30 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   cursor: pointer;
 }
 .view-toggle button.active {
-  background: var(--canvas);
   color: var(--ink);
-  box-shadow: var(--shadow);
 }
 .view-toggle button:hover:not(.active) {
   color: var(--ink);
+}
+/* The active pill slides between segments rather than cutting, so the eye
+   can follow which mode it landed on. transform only - animating left or
+   width would put layout on the frame path for every mode switch. */
+.viewmode-indicator {
+  position: absolute;
+  top: var(--view-toggle-pad);
+  bottom: var(--view-toggle-pad);
+  left: var(--view-toggle-pad);
+  z-index: 0;
+  width: var(--view-toggle-slot);
+  border-radius: 5px;
+  background: var(--canvas);
+  box-shadow: var(--shadow);
+  transform: translateX(
+    calc(var(--vm-index, 0) * (var(--view-toggle-slot) + 1px))
+  );
+  transition: transform var(--dur-fast) var(--ease-out-quart);
+  will-change: transform;
+  pointer-events: none;
 }
 .center-dock-top-tabs {
   position: relative;
@@ -2439,6 +2467,7 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
     inset 0 0 0 1px color-mix(in srgb, var(--ink) 11%, transparent);
 }
 .center-dock-tab-bundle.active .view-toggle {
+  --view-toggle-pad: 2px;
   background: color-mix(in srgb, var(--panel) 72%, transparent);
   padding: 2px;
 }
@@ -2448,8 +2477,10 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   color: var(--ink-3);
 }
 .center-dock-tab-bundle.active .view-toggle button.active {
-  background: var(--bg);
   color: var(--ink);
+}
+.center-dock-tab-bundle.active .viewmode-indicator {
+  background: var(--bg);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent);
 }
 .center-dock-tab-bundle.active .view-toggle button:hover:not(.active) {
@@ -4018,6 +4049,10 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   width: var(--context-used, 0%);
   border-radius: inherit;
   background: var(--agent-color, var(--agent));
+  /* Slower than a hover: this is a state change worth watching. After
+     Compact, the visible drop IS the feedback that Compact did something -
+     jumping straight to the new width would hide it. */
+  transition: width var(--dur-slow) var(--ease-out-quart);
 }
 
 .agent-context-row {
