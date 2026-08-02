@@ -31,6 +31,8 @@ const NO_LOOSE_STRING_VALUES = {
   deny: "deny",
   resolved: "resolved",
   card: "card",
+  approved: "approved",
+  allowed: "allowed",
 } as const;
 
 function latestAccessResponse(
@@ -67,12 +69,42 @@ export function pendingAccessCountForParticipant(
   ).length;
 }
 
+/* Picks the raw status word — never shown directly, only used as the
+   data-status styling hook and as input to formatApprovalStatus below. */
 function statusLabel(
   request: AccessRequestPayload,
   response: AccessResponsePayload | null,
 ): string {
   if (response !== null) return response.status;
   return request.status;
+}
+
+/* Local time, matching cards/format.ts's formatWhen (the convention every
+   other feed card uses for its timestamp) — not UTC. A user reading this
+   card also reads the feed around it; a second clock, hours off from the
+   first, would be exactly the kind of thing this feature exists to stop. */
+function formatDecisionTime(at: string): string | null {
+  const parsed = new Date(at);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const hours = String(parsed.getHours()).padStart(2, "0");
+  const minutes = String(parsed.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+/* A resolved approval previously read "approved", which does not say what was
+   allowed or when. Denials deliberately omit the scope: "denied once" reads
+   as though something was permitted — only approvals name their scope. */
+export function formatApprovalStatus(
+  status: string,
+  scope: string | null,
+  at: string | null,
+): string {
+  if (status !== NO_LOOSE_STRING_VALUES.approved) return status;
+  const time = at === null ? null : formatDecisionTime(at);
+  const parts = [NO_LOOSE_STRING_VALUES.allowed, scope, time].filter(
+    (part): part is string => part !== null && part !== "",
+  );
+  return parts.join(" · ");
 }
 
 function normalizeAccessError(err: unknown): {
@@ -189,6 +221,11 @@ export function AccessRequestCard({
   const response = latestAccessResponse(request.request_id, allEvents);
   const open = response === null && request.status === NO_LOOSE_STRING_VALUES.open && !staleClosed;
   const visibleStatus = staleClosed ? NO_LOOSE_STRING_VALUES.resolved : statusLabel(request, response);
+  const approvalLabel = formatApprovalStatus(
+    visibleStatus,
+    response?.scope ?? null,
+    response?.responded_at ?? null,
+  );
   const actor = participants[event.participant_id]?.name ?? event.participant_id;
   const presentation = presentAccessRequest(request);
   const canRespond =
@@ -241,7 +278,7 @@ export function AccessRequestCard({
             {open ? <WaitingElapsed since={request.created_at} /> : null}
           </div>
         </div>
-        <code className="approval-status">{visibleStatus}</code>
+        <code className="approval-status">{approvalLabel}</code>
       </div>
       <div className="approval-body">
         {renderPresentationSections(presentation.sections)}
