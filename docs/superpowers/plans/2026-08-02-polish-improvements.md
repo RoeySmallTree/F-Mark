@@ -77,8 +77,8 @@ the conversation/terminal segmented control.
 | `src/cards/AccessRequestCard.tsx` | rich resolved label | modify |
 | `src/hooks/useAgentSpawn.tsx` | spawn busy state | modify |
 | ~~`src/shell/Compose.tsx`~~ | **2-line re-export stub — real file is `src/compose/Compose.tsx`** | corrected |
-| `src/shell/pathSwitcher/PathSwitcherMenu.tsx` | animated close | modify |
-| `src/cards/todoItem/TodoAssigneeControl.tsx` | animated close | modify |
+| `src/popovers/Popover.tsx` | animated close — shared by 8 popovers | modify |
+| `AgentMentionPickerView.tsx` | animated close — the other `popover-enter` consumer | modify |
 | ~~`src/cards/toolboxAccordion.tsx`~~ | **a context, not markup — real target is `src/cards/ToolUseCard.tsx:67`** | corrected |
 | `src/panels/right/RightFiles.tsx` | copy-on-click | modify |
 | `src/panels/right/agents/` | rename pencil on focus | modify |
@@ -389,8 +389,18 @@ Menus pop in with a keyframe and are removed instantly. Animating in but not out
 "assembled, not made" tell in the app.
 
 **Files:**
-- Modify: `packages/renderer/src/shell/pathSwitcher/PathSwitcherMenu.tsx`
-- Modify: `packages/renderer/src/cards/todoItem/TodoAssigneeControl.tsx`
+- Modify: `packages/renderer/src/popovers/Popover.tsx` — the shared wrapper. EIGHT popovers
+  route through it (AgentPopover, SkillsPopover, ComposeSettingsPopover, CreateTodoPopoverView,
+  LogFilterPopover, PresetsPopoverView, AgentChipEditorPopover, ForkSessionPopoverView), so one
+  fix covers all of them.
+- Modify: the `.agent-mention-popover` owner (`AgentMentionPickerView.tsx`, styled at
+  `shell/shell.css:5328`) — the only other `popover-enter` consumer.
+
+**NOT** `PathSwitcherMenu.tsx` or `TodoAssigneeControl.tsx`. Verified 2026-08-02:
+`.path-switcher-menu` (`shell.css:1719`) and `.todo-assignee-menu` (`cards.css:2072`) have **no
+`animation` property at all** — they have no motion, so there is no asymmetry to fix. Adding
+motion there would be inventing work the finding never described. The finding was "animates in
+but not out", which is true only of the two `popover-enter` consumers above.
 - Modify: the CSS file that owns each menu's open keyframe
 
 ### Premise correction — verified in `src/` on 2026-08-02
