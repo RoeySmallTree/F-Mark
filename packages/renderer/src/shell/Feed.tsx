@@ -16,6 +16,18 @@ import { useFeedProjection } from "./useFeedProjection.js";
 import { useFeedScrollController } from "./useFeedScrollController.js";
 import { useFeedStoreSnapshot } from "./useFeedStoreSnapshot.js";
 
+/* Same shape as FeedRows.tsx:10 — the fmark-rules/no-loose-string lint rule
+   rejects bare string literals passed into DOM APIs, so the selectors and
+   class names the participant-focus listener toggles live here instead. */
+const NO_LOOSE_STRING_VALUES = {
+  avatarAttr: "[data-participant-avatar]",
+  avatarAttrName: "data-participant-avatar",
+  participantAttr: "[data-participant-id]",
+  focusing: "is-focusing",
+  hi: "is-hi",
+  hiSelector: ".is-hi",
+} as const;
+
 export function Feed(): JSX.Element {
   const store = useFeedStoreSnapshot();
 
@@ -88,24 +100,33 @@ export function Feed(): JSX.Element {
     if (!root) return;
     function over(e: MouseEvent): void {
       const av = (e.target as HTMLElement | null)?.closest?.(
-        "[data-participant-avatar]",
+        NO_LOOSE_STRING_VALUES.avatarAttr,
       );
       if (!av) return;
-      const id = av.getAttribute("data-participant-avatar");
-      root!.classList.add("is-focusing");
+      const id = av.getAttribute(NO_LOOSE_STRING_VALUES.avatarAttrName);
+      root!.classList.add(NO_LOOSE_STRING_VALUES.focusing);
       for (const row of root!.querySelectorAll<HTMLElement>(
-        "[data-participant-id]",
+        NO_LOOSE_STRING_VALUES.participantAttr,
       )) {
-        row.classList.toggle("is-hi", row.dataset.participantId === id);
+        row.classList.toggle(
+          NO_LOOSE_STRING_VALUES.hi,
+          row.dataset.participantId === id,
+        );
       }
     }
     function out(e: MouseEvent): void {
-      if (!(e.target as HTMLElement | null)?.closest?.("[data-participant-avatar]")) {
+      if (
+        !(e.target as HTMLElement | null)?.closest?.(
+          NO_LOOSE_STRING_VALUES.avatarAttr,
+        )
+      ) {
         return;
       }
-      root!.classList.remove("is-focusing");
-      for (const row of root!.querySelectorAll<HTMLElement>(".is-hi")) {
-        row.classList.remove("is-hi");
+      root!.classList.remove(NO_LOOSE_STRING_VALUES.focusing);
+      for (const row of root!.querySelectorAll<HTMLElement>(
+        NO_LOOSE_STRING_VALUES.hiSelector,
+      )) {
+        row.classList.remove(NO_LOOSE_STRING_VALUES.hi);
       }
     }
     root.addEventListener("mouseover", over);
