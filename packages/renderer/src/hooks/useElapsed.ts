@@ -77,5 +77,10 @@ export function useElapsed(
     scheduleNext();
     return () => window.clearTimeout(id);
   }, [start, tickMs]);
-  return format(now - start);
+  /* Date.parse returns NaN on an unparseable timestamp, and NaN passes
+     through Math.max and Math.floor untouched — the readouts would render
+     "NaNs" / "NaNm ago" rather than fail loudly. Zero reads as "hasn't
+     started", which is the honest answer when we can't tell. */
+  const elapsed = now - start;
+  return format(Number.isFinite(elapsed) ? elapsed : 0);
 }
