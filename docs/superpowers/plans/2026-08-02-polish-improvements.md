@@ -393,14 +393,32 @@ Menus pop in with a keyframe and are removed instantly. Animating in but not out
 - Modify: `packages/renderer/src/cards/todoItem/TodoAssigneeControl.tsx`
 - Modify: the CSS file that owns each menu's open keyframe
 
-- [ ] **Step 1: Find the open animation and the removal**
+### Premise correction — verified in `src/` on 2026-08-02
+
+The review said menus "pop in with a keyframe and are `.remove()`d instantly". That describes
+the **design lab's vanilla-JS implementation**. There is no `closeMenus()` and no `.remove()`
+anywhere in `src/` — this is React, and menus vanish because they **unmount**.
+
+The asymmetry is still real, just by a different mechanism:
+
+| Fact | Where |
+|---|---|
+| `@keyframes popover-enter` exists | `popovers/popovers.css:8` |
+| applied with `backwards` fill | `popovers/popovers.css:38`, `shell/shell.css:5328` |
+| any exit keyframe | **none anywhere** |
+
+So popovers animate in and disappear instantly on unmount. The fix is therefore **not** a
+class swap before removal — it is keeping the element mounted for the duration of the exit,
+then unmounting. That is a React state change, not a DOM operation.
+
+- [ ] **Step 1: Find every consumer of `popover-enter`**
 
 ```bash
-grep -rn "pop\|@keyframes" packages/renderer/src --include="*.css" | grep -i "menu\|pop" | head
-grep -n "open\|setOpen\|null" packages/renderer/src/shell/pathSwitcher/PathSwitcherMenu.tsx | head
+grep -rn "popover-enter" packages/renderer/src --include="*.css"
 ```
 
-Note the exact keyframe name and duration used on open. The close must mirror it.
+Note the duration token it uses on open. The exit must be shorter (~70%), and must live in the
+same file as the enter keyframe so the pair is readable together.
 
 - [ ] **Step 2: Add a closing state**
 
@@ -472,13 +490,46 @@ measuring it.
 - Modify: `packages/renderer/src/cards/toolboxAccordion.tsx`
 - Modify: `packages/renderer/src/cards/cards.css`
 
-- [ ] **Step 1: Read the current markup**
+### Premise corrections — verified in `src/` on 2026-08-02. Read before starting.
+
+**Two things in the original finding are wrong.**
+
+1. **`cards/toolboxAccordion.tsx` is NOT the target.** It is a React context that lifts
+   open/closed state to the feed — no markup, no `aria-expanded`, no div, no button. Nothing
+   to style there.
+
+2. **The a11y half is ALREADY DONE.** The finding said the disclosure row "carries
+   `aria-expanded` but is a bare div". That was fixed during the tool-argument task: the row is
+   now `<div className="tool-head">` wrapping a real `<button className="tool-head-toggle">`
+   that carries `aria-expanded` (`cards/toolUseCard/ToolUseHeader.tsx:145`). Do **not** add
+   `role="button"` anywhere — that would reintroduce the nested-interactive defect that
+   restructure removed.
+
+**What is actually left is only the height transition, and there is a blocker the plan missed:**
+
+`cards/ToolUseCard.tsx:67` renders the body as `{open ? (...) : null}` — the content is
+**conditionally rendered**, so when closed there is no element in the DOM. `grid-template-rows:
+0fr → 1fr` animates an element that is always present; it cannot animate one that does not
+exist yet.
+
+So this task necessarily includes restructuring the render: the wrapper must always be in the
+DOM with the body inside it, and `open` must drive the grid rows rather than the presence of
+the children.
+
+**Consider the cost before you do it.** Always-rendering every collapsed tool body in an
+append-only feed means mounting content for every tool call in the session. Check what the body
+actually contains (`ToolUseCard.tsx:67` onward) and judge whether that is acceptable. If it
+mounts something expensive, **stop and report** rather than trading a scroll-performance
+regression for an animation — the feed is the densest surface in the app.
+
+`cards/ArbitraryGroupCard.tsx:91` has the same `disclosure.shown ? " open" : ""` pattern for
+toolboxes; note whether your approach generalises, but do not change it in this task.
+
+- [ ] **Step 1: Read the real markup and judge the mount cost**
 
 ```bash
-grep -n "expanded\|open\|children" packages/renderer/src/cards/toolboxAccordion.tsx | head -15
+sed -n '50,80p' packages/renderer/src/cards/ToolUseCard.tsx
 ```
-
-The transition needs a wrapper element around the content. If one does not exist, add exactly one.
 
 - [ ] **Step 2: Add the transition**
 
@@ -639,9 +690,13 @@ and breaks them here. Grouped because each is a few lines and they are reviewed 
 - Modify: `packages/renderer/src/shell/topBar/ViewModeToggle.tsx` (+ its CSS)
 - Modify: `packages/renderer/src/panels/right/agents/RightAgentDetails.tsx` (+ its CSS)
 - Modify: `packages/renderer/src/components/participantStrip/AgentChipEditorPopover.tsx`
-- Modify: `packages/renderer/src/cards/flow/FlowCard.tsx` (+ its CSS)
+- Modify: `packages/renderer/src/cards/FlowCard.tsx` (+ its CSS) — NOTE: directly under `cards/`, NOT `cards/flow/`; verified 2026-08-02
 
 - [ ] **Step 1: Sliding indicator on the view-mode toggle**
+
+`shell/topBar/ViewModeToggle.tsx:40-53` is a `role="tablist"` div of buttons; the active one
+gets `className="active"`. There is NO separate indicator element today — you must add one.
+Drive it with `transform: translateX()` from the active index, never by measuring DOM.
 
 ```css
 /* The active pill slides between segments rather than cutting, so the eye can
@@ -697,6 +752,10 @@ The app already rotates chevrons elsewhere; these break the convention it teache
 ```
 
 - [ ] **Step 4: Single-shot pulse on FlowCard's diagnosed node**
+
+The file is `packages/renderer/src/cards/FlowCard.tsx` (`cards/flow/` is a different directory).
+Confirm a diagnosed-node concept actually exists there before styling one — if it does not,
+report that and skip this sub-item rather than inventing it.
 
 ```css
 /* Single-shot, not a loop: a looping pulse becomes wallpaper and competes
