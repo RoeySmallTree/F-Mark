@@ -1,10 +1,11 @@
 import { type CSSProperties, useCallback, useRef } from "react";
-import { Link2, Star } from "lucide-react";
+import { Copy, Link2, Star } from "lucide-react";
 import { iconForExtension } from "./iconForExtension.js";
 import type { FavoriteScope, VisibleRow } from "./buildTreeView.js";
 import { GIT_FILE_STATUSES, type GitFileStatus } from "@f-mark/shared";
 import { useStore } from "../../../state/store.js";
 import { usePresentFile } from "../../../shell/usePresentFile.js";
+import { copyToClipboard } from "../../../render/copy.js";
 import {
   clearDragSource,
   setCircularDragImage,
@@ -43,6 +44,28 @@ const favoriteScopes = {
   project: "project",
   none: "none",
 } as const;
+
+/* Mirrors ToolUseHeader's copy-flash: a direct classList toggle rather than
+   React state, so the transient affordance doesn't force a row re-render.
+   `.tool-arg-copy` supplies the button reset/cursor/focus-ring/flash CSS
+   (reused, not duplicated); `.file-row-copy` only adds sizing, reveal, and
+   the neutral (non-agent-teal) accent — see files.css. */
+const COPIED_CLASS = "is-copied";
+const COPIED_MS = 900;
+
+function flashCopied(el: HTMLElement): void {
+  el.classList.add(COPIED_CLASS);
+  window.setTimeout(() => el.classList.remove(COPIED_CLASS), COPIED_MS);
+}
+
+/* Silent on failure, matching ToolUseHeader's ToolArgument and the other
+   call sites that check the boolean: a denied clipboard permission is rare
+   and not actionable here, and the flash must never claim success it
+   didn't earn. */
+async function copyPath(text: string, el: HTMLElement): Promise<void> {
+  const ok = await copyToClipboard(text);
+  if (ok) flashCopied(el);
+}
 
 function favTooltip(current: FavoriteScope): string {
   switch (current) {
@@ -154,6 +177,18 @@ export function FileRow({
     [entry.absPath, fav, onCycleFav],
   );
 
+  /* Stops propagation for the same reason the star does: the row's own
+     "open file" gesture is mousedown/mouseup-based (see onMouseUp above),
+     not a real click handler, so without this a copy click would also
+     open the file underneath it. */
+  const onCopyClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>): void => {
+      e.stopPropagation();
+      void copyPath(entry.absPath, e.currentTarget);
+    },
+    [entry.absPath],
+  );
+
   const className = [
     fileRowClassNames.row,
     entry.ignored ? fileRowClassNames.ignored : null,
@@ -193,6 +228,15 @@ export function FileRow({
           {changedBadge(changedStatus).label}
         </span>
       ) : null}
+      <button
+        type="button"
+        className="file-row-copy tool-arg-copy"
+        onClick={onCopyClick}
+        title="Copy file path"
+        aria-label="Copy file path"
+      >
+        <Copy size={11} aria-hidden />
+      </button>
       <button
         type="button"
         className="file-row-star"

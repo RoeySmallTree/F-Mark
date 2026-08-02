@@ -507,6 +507,40 @@
   margin-left: -3px;
 }
 
+/* Copy-on-click for the file path (reach layer). Reuses .tool-arg-copy's
+   button reset, cursor, focus ring, and is-copied flash mechanics
+   (ToolUseHeader.tsx) instead of a second copy style — only sizing/reveal
+   (matching .file-row-star above) and the accent color are added here.
+   --agent/--ledger teal means "an agent is working" everywhere else in
+   this app, and .tool-arg-copy's hover/is-copied tint leans on that; a
+   manual path copy in a static file list isn't agent activity, so the
+   accent is swapped for the same neutral ink-mix every other hover state
+   in this panel already uses (.file-row:hover, .file-folder-row:hover,
+   .file-row-star:hover). */
+.file-row-copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out-quart);
+}
+.file-row:hover .file-row-copy {
+  opacity: 0.7;
+}
+.file-row-copy:hover,
+.file-row-copy:focus-visible {
+  opacity: 1;
+}
+.file-row-copy.tool-arg-copy:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.file-row-copy.tool-arg-copy.is-copied {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
 /* "Changed (not in tree)" — deleted / renamed-away paths that no longer have
    a tree row to carry a badge (review §6). */
 .files-changed-absent {
