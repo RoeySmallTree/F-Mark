@@ -19,9 +19,14 @@ function flashCopied(el: HTMLElement): void {
   window.setTimeout(() => el.classList.remove(COPIED_CLASS), COPIED_MS);
 }
 
+/* Silent on failure, matching the other two call sites that check the
+   boolean (FileEditBar, ReconnectModal): a denied clipboard permission or a
+   failed execCommand fallback is rare and not actionable from here, and the
+   flash is a "here's what got copied" confirmation, not a status readout.
+   The one thing it must not do is claim success it didn't earn. */
 async function copyArgument(text: string, el: HTMLElement): Promise<void> {
-  await copyToClipboard(text);
-  flashCopied(el);
+  const ok = await copyToClipboard(text);
+  if (ok) flashCopied(el);
 }
 
 interface ToolUseHeaderProps {
@@ -74,6 +79,7 @@ function ToolArgument({ text }: { text: string }): JSX.Element {
       type="button"
       className="tool-summary-primary tool-arg-copy"
       aria-label="Copy tool argument"
+      title="Click to copy"
       onClick={onClick}
     >
       {text}

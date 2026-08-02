@@ -6120,7 +6120,18 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 
    It FADES rather than persisting: a permanent marker on every arrival becomes
    wallpaper within a minute. Six seconds is long enough to catch the eye on
-   return, short enough not to accumulate. */
+   return, short enough not to accumulate.
+
+   Colour is `--user`, not `--agent` — calculateFreshKeys marks ANY newly
+   appended row fresh regardless of who acted (user, agent, sys, or grp), so
+   this edge answers exactly one question, "is this new?", not "who did
+   this?". Authorship is already carried by the participant hue on the row's
+   own avatar. Per DESIGN.md's one-meaning-per-channel rule, `--agent` means
+   only "an agent is healthy or working" and never doubles as emphasis or
+   attention — the rule exists because an earlier revision let a runtime
+   warning banner render in the agent tint and it stayed invisible as a bug
+   until every channel had a fixed meaning. Matches the same "something is
+   new here" job already done by `.feed-item-unread-dot` above. */
 .feed-item.is-fresh::before {
   content: "";
   position: absolute;
@@ -6128,15 +6139,15 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   inset-inline-start: -6px;
   width: 2px;
   border-radius: 2px;
-  background: var(--agent);
+  background: var(--user);
   animation: feed-fresh-edge 6s var(--ease-out-quart) forwards;
 }
 @keyframes feed-fresh-edge {
   0%, 55% { opacity: 1; }
   100% { opacity: 0; }
 }
-/* The edge is a signal ("an agent did this"), not decoration, so reduced
-   motion keeps it visible instead of removing it - only the fade stops.
+/* The edge is a signal ("this is new"), not decoration, so reduced motion
+   keeps it visible instead of removing it - only the fade stops.
    `animation: none` plus a static opacity, not a near-zero duration: the
    keyframes end at opacity 0 with `forwards` fill, so shrinking the duration
    would still land the bar on its invisible final frame instead of keeping
