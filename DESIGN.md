@@ -410,6 +410,43 @@ No description, no template, no visibility setting: a session earns its meaning 
 written into it, and asking for a description up front asks you to summarise work you have not
 done yet.
 
+## When things break
+
+**The worst failure in this product is a silent one.** The websocket already reconnects and
+calls `backfillCurrentView()` on reconnect — but its connection state **never reaches a
+component**. So when the kernel dies, the app looks perfectly healthy and quietly stops
+updating. For a tool whose job is watching agents work, silence reads as *"nothing is
+happening"* when it actually means *"I can't see anything."*
+
+Four tiers. The tier decides where it appears and whether it can be dismissed — not how
+alarming the wording is.
+
+| Tier | Means | Appears | Dismissible | Examples |
+|---|---|---|---|---|
+| **Blind** | you are not seeing reality | top bar, above everything | **no** | connection lost · kernel gone |
+| **Degraded** | part works, part doesn't | banner in the affected surface | yes | tmux too old · hook not installed |
+| **Contained** | one panel died, the app is fine | in place of that panel | yes | a panel threw |
+| **Benign** | nothing is wrong yet | toast | yes | newer build available |
+
+Rules:
+
+- **Say what you can't see, not just that something failed.** "Not connected" is half the
+  message; "you are not seeing new events, the feed is frozen at 14:05" is the whole one.
+- **Blind states are not dismissible.** You can dismiss a warning about a broken thing; you
+  cannot dismiss the fact that the app is blind — dismissing would restore the healthy-looking
+  lie that is the original bug.
+- **Presence becomes `unknown`, never `offline`.** With the socket down, every dot goes grey
+  and reads *last known*. Showing agents online is a lie; showing them offline is a different
+  lie.
+- **Say what is still true.** Agents keep running in tmux when the server stops — say so, or a
+  dead window looks like dead work.
+- **Freeze honestly.** The feed keeps its content, striped and stamped *frozen at 14:05*.
+  Blanking it discards readable history for nothing.
+- **Every panel needs an error boundary.** Only `FileViewerErrorBoundary` and `LazyBoundary`
+  exist today, so a throw in the feed takes the whole app white.
+- **Give the command and let it be copied.** `brew install tmux`,
+  `f-mark hook install claude`. `EnvProbeBanner` already does this well — keep it.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
