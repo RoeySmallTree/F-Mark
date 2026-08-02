@@ -209,6 +209,53 @@ viewers; there is no off-canvas mobile mode and none is planned. The commitment 
 nothing scrolls horizontally between 320 and 1920px, and that below the supported width
 the app states the requirement rather than degrading into an unusable layout.
 
+## The agent screen — the main interface
+
+F-Mark's job is driving agents, so an agent's terminal is **not** a panel. It is the primary
+screen, and it gets a route.
+
+This replaced two earlier answers that were both wrong. `TerminalOverlay` blacks out the app
+to show one pane, so watching an agent means not using anything else. The 300px rail is too
+narrow for a terminal at all — measured, the agent screen gives the terminal **945px against
+the rail's 292px**. Neither surface was designed for the thing the product exists to do.
+
+Layout: the terminal is the hero, with a context sidebar answering exactly three questions —
+**who is this agent**, **is it stuck**, **what is it doing**.
+
+| Region | Carries |
+|---|---|
+| Route bar | breadcrumb + the URL, so the screen is linkable |
+| Identity bar | name (rename in place), presence, model and effort selectors, `⋯` for the rest |
+| Terminal | live `TerminalView`, the same component the overlay and dock tab use |
+| Drive bar | Pause/Resume · **Interrupt** · Compact · Clear · Reconnect, then the prompt box |
+| Sidebar | Waiting on you · Context meter · Doing now · Recent · Runtime facts |
+
+`interrupt`, `rename` and `recolor` come from `BusyAction` in
+`panels/right/agents/types.ts` and were missing from every earlier design. `context`
+(`AgentContextStatus`) drives the meter, which uses `clip-path: inset()` rather than
+`transform: scaleX()` — the bar has a gradient and a radius, and scaleX distorts both.
+
+The blocking approval sits at the **top of the sidebar**, not in the terminal, because the
+terminal scrolls and an approval must not scroll away.
+
+## Routing
+
+Decided: the app gets a router. Today the active session lives in store state
+(`currentSessionId`, `state/sessionPersistence.ts`) and only `/file-tree` plus a `path_id`
+query param exist, so nothing is linkable and the browser back button does nothing.
+
+| Route | Screen |
+|---|---|
+| `/` | dashboard |
+| `/session/:id` | session feed |
+| `/session/:id/agent/:tmux` | agent screen |
+| `/session/:id/files/*path` | file viewer (already half-routed via `/file-tree`) |
+| `?path_id=` | project switcher — already exists, keep it |
+
+Eleven places link to the agent screen, including the dashboard's blocked strip, the rail's
+Agents panel, and an agent avatar anywhere in the feed. `sessionPersistence` becomes the
+fallback for "where was I", not the source of truth.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
