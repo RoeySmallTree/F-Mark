@@ -2340,17 +2340,25 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 }
 .view-toggle {
   position: relative;
-  display: flex;
+  /* Equal-width tracks, sized by the grid rather than by a shared length
+     token. The token version (--view-toggle-slot: calc(12ch + ...)) was
+     measurably wrong: an unregistered custom property substitutes as a token
+     stream, so `ch` resolves against the element that USES the value, not the
+     one that declares it. The buttons used it in --mono @ 11.5px (117.8px);
+     .viewmode-indicator is a bare <span> inheriting --sans @ 16px (150.2px).
+     Same token, two widths - the pill rendered 64.8px right of its tab and
+     94.2px past this control's right edge on "Conversation". 1fr tracks can't
+     drift from the buttons because they ARE the buttons' width. */
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   align-items: center;
   background: var(--panel);
   border-radius: 7px;
-  padding: 3px;
+  padding: var(--view-toggle-pad);
   gap: 1px;
   --view-toggle-pad: 3px;
-  /* 12ch fits "Conversation", the longest label; +icon +icon-gap +h-padding.
-     Fixed per-slot width (not measured) so every tab is equal width and the
-     indicator's transform math below is exact, not approximate. */
-  --view-toggle-slot: calc(12ch + 12px + 5px + 18px);
+  --view-toggle-count: 3;
 }
 .view-toggle button {
   position: relative;
@@ -2359,7 +2367,6 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-width: var(--view-toggle-slot);
   font-size: 11.5px;
   color: var(--ink-2);
   padding: 5px 9px;
@@ -2386,13 +2393,21 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   bottom: var(--view-toggle-pad);
   left: var(--view-toggle-pad);
   z-index: 0;
-  width: var(--view-toggle-slot);
+  /* One track's share of the control: total width, less the two pads and the
+     inter-track gaps. `100%` here is the containing block (the control's
+     padding box); `100%` inside the transform below is this element's own
+     width. Both are resolved on THIS element, so neither can disagree with
+     the buttons the way a shared `ch` token did. */
+  width: calc(
+    (
+        100% - 2 * var(--view-toggle-pad) -
+          (var(--view-toggle-count) - 1) * 1px
+      ) / var(--view-toggle-count)
+  );
   border-radius: 5px;
   background: var(--canvas);
   box-shadow: var(--shadow);
-  transform: translateX(
-    calc(var(--vm-index, 0) * (var(--view-toggle-slot) + 1px))
-  );
+  transform: translateX(calc(var(--vm-index, 0) * (100% + 1px)));
   transition: transform var(--dur-fast) var(--ease-out-quart);
   will-change: transform;
   pointer-events: none;
