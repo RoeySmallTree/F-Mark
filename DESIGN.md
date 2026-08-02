@@ -346,6 +346,23 @@ Further rules:
 
 ## Starting work
 
+### Where these surfaces live
+
+Neither spawn nor new-session is a destination. Both are **modals over the screen you were
+already on**, because both are short, have a clear end, and are always performed *into*
+something — and the thing you most want visible while choosing a permission mode is the work
+that agent is about to touch.
+
+| Surface | Placement | Opened from |
+|---|---|---|
+| Spawn an agent | modal over the session, route `/session/:id/spawn` | rail Agents panel · dashboard Agents panel · the new-session flow |
+| New session | modal, route `/session/new` | dashboard `+ New session` · rail · ⌘K |
+| First run | **full screen**, no modal | first launch only — there is no session behind it to preserve |
+
+Both modals carry a route so `Escape` and the browser back button close them and a reload does
+not strand you in a half-open dialog. The route exists for the back button, not because anyone
+will share the link.
+
 ### Spawning an agent — and the coupling nobody sees
 
 A card per runtime (`claude` · `codex` · `opencode`), shaped by `ProviderCardModel`: status
