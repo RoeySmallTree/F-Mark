@@ -484,6 +484,49 @@ work, so the second line is "the session log is untouched, only the agent forget
 - Flips above the trigger and clamps to the viewport rather than overflowing.
 - Destructive controls use the `--hot` tooltip variant, matching their inline treatment.
 
+## Destructive actions
+
+Today this is **`window.confirm()`** at seven call sites (`RightAgentControls`,
+`AgentPopover`, `useSessionDelete`, `settings/agents`, `useProjectPromotion`). A native OS
+dialog that cannot show counts, cannot be styled, blocks the thread, and reads like a browser
+error rather than a decision about your work. The `Clear` and `Remove` strings are
+**duplicated** between `RightAgentControls` and `AgentPopover`, so they can drift — and the
+copy you did not update is the one someone reads.
+
+**The insight that shapes all of it: F-Mark is append-only, so most "destructive" actions
+destroy nothing.** The dialog's job is usually to *reassure accurately*, not to frighten. Of
+the five real actions, exactly one loses data.
+
+| Tier | Means | Friction | Actions |
+|---|---|---|---|
+| **1** | nothing is lost from the log | one-click confirm · scrim click cancels | Clear context · Remove agent |
+| **2** | something outside the log is lost | confirm + explicit list of what goes · undo where possible | Revert hunk · Kill terminal |
+| **3** | real, permanent data loss | **type the name** · scrim click does **not** cancel | Delete session |
+
+Every dialog shows a two-part ledger — **what survives** in `--ok`, **what is lost** in
+`--hot` — with counts, because numbers are what make stakes real:
+
+- *Clear*: "Everything in the log stays. All 41 events remain on disk."
+- *Remove agent*: "Its 23 events stay in the log permanently."
+- *Delete session*: "All 96 events, permanently. 2 agents lose their history."
+
+Rules:
+
+- **Say what survives, not just what dies.** For an append-only system that is both more
+  useful and more honest than a warning triangle.
+- **Friction matches the loss.** Making `Clear` as hard as `Delete` teaches people to click
+  through both.
+- **Only tier 3 traps the scrim.** Clicking outside cancels tiers 1–2; for a permanent delete
+  an accidental outside click must not be a decision in either direction. `Escape` always
+  cancels.
+- **Undo only where the action allows it.** Revert gets a 6-second undo because the edits can
+  be re-applied; delete gets none, because nothing can restore the folder and a fake undo is
+  worse than no undo.
+- **One dialog component, one copy source.**
+
+**Gap found:** `killTerminal` in `RegularTerminals.tsx` has **no confirmation at all** — it
+kills the tmux session directly, taking any running build or test with it.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
