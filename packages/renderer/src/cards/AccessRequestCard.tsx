@@ -15,6 +15,7 @@ import { scopeToBody } from "../api/rootScope.js";
 import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
 import { useElapsed } from "../hooks/useElapsed.js";
 import { useStore } from "../state/store.js";
+import { formatWhen } from "./format.js";
 import { ErrorNotice, type StructuredError } from "./ToolPresentationParts.js";
 import {
   presentAccessRequest,
@@ -79,28 +80,24 @@ function statusLabel(
   return request.status;
 }
 
-/* Local time, matching cards/format.ts's formatWhen (the convention every
-   other feed card uses for its timestamp) — not UTC. A user reading this
-   card also reads the feed around it; a second clock, hours off from the
-   first, would be exactly the kind of thing this feature exists to stop. */
-function formatDecisionTime(at: string): string | null {
-  const parsed = new Date(at);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const hours = String(parsed.getHours()).padStart(2, "0");
-  const minutes = String(parsed.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
-}
-
 /* A resolved approval previously read "approved", which does not say what was
    allowed or when. Denials deliberately omit the scope: "denied once" reads
-   as though something was permitted — only approvals name their scope. */
+   as though something was permitted — only approvals name their scope.
+
+   The time reuses cards/format.ts's formatWhen — the convention every other
+   feed card uses for its timestamp — rather than a second formatter. A
+   bespoke HH:MM here rendered a decision from three weeks ago identically to
+   one from thirty seconds ago; formatWhen is relative-first ("5 minutes
+   ago") and only falls back to an absolute date+time after 7 days, which is
+   the distinction a feed whose job is "what changed while you were gone"
+   actually needs. */
 export function formatApprovalStatus(
   status: string,
   scope: string | null,
   at: string | null,
 ): string {
   if (status !== NO_LOOSE_STRING_VALUES.approved) return status;
-  const time = at === null ? null : formatDecisionTime(at);
+  const time = at === null ? null : formatWhen(at);
   const parts = [NO_LOOSE_STRING_VALUES.allowed, scope, time].filter(
     (part): part is string => part !== null && part !== "",
   );
@@ -192,6 +189,22 @@ function WaitingElapsed({ since }: WaitingElapsedProps): JSX.Element {
   return <span className="approval-elapsed"> · waiting {elapsed}</span>;
 }
 
+interface DecisionDetailProps {
+  label: string;
+}
+
+/* Resolved approvals used to render `approvalLabel` in the same fixed pill
+   as OPEN — `.approval-status` was one bordered, uppercase, mono badge for
+   every state. Once approvals grew a scope and time ("ALLOWED · ONCE ·
+   14:04"), that pill was 3-4x longer than "OPEN" and the eye landed on the
+   item needing no attention. OPEN keeps the badge; a resolved decision is
+   plain text next to the actor instead — no chrome, no color, just less
+   weight, matching how little attention a decision that already happened
+   deserves. */
+function DecisionDetail({ label }: DecisionDetailProps): JSX.Element {
+  return <span className="approval-decision"> · {label}</span>;
+}
+
 interface AccessRequestCardProps {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
@@ -276,9 +289,10 @@ export function AccessRequestCard({
           <div className="approval-sub">
             {actor}
             {open ? <WaitingElapsed since={request.created_at} /> : null}
+            {open ? null : <DecisionDetail label={approvalLabel} />}
           </div>
         </div>
-        <code className="approval-status">{approvalLabel}</code>
+        {open ? <code className="approval-status">{approvalLabel}</code> : null}
       </div>
       <div className="approval-body">
         {renderPresentationSections(presentation.sections)}

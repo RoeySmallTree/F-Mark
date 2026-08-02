@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import type { ProseMention } from "@f-mark/shared";
 import type { RootScope } from "../api/client.js";
 import type { StagedAttachment } from "./AttachmentChip.js";
@@ -38,7 +44,8 @@ export interface ComposeSubmissionState {
   /* void, not the controller's boolean: every action here is re-entrancy
      guarded, and a call rejected by the guard has no honest boolean to
      return. The sole caller (useComposeRootActions' onCreateTodoCreated)
-     awaits and discards it. */
+     awaits and discards it. Guarded on its own ref, separate from the other
+     three actions below - see withReentrancyGuard's call sites. */
   endTurn(): Promise<void>;
   endTurnAndWake(): Promise<void>;
   submitAndMaybeEndTurn(): Promise<void>;
@@ -64,10 +71,21 @@ export function useComposeSubmission({
   /* Synchronous in-flight guard: a double-click or Enter-then-click fires two
      handler calls before React re-renders `busy`, so state-derived disabling
      alone can't catch the second one — mirrors useSpawnRuntimeAction's
-     spawnsInFlight ref. Unlike spawn (many runtimes, one card each), the
-     compose bar has a single primary action, so a plain boolean ref is the
-     right key — there's nothing to key it by. */
+     spawnsInFlight ref.
+
+     Two separate refs, not one shared ref: submit / endTurnAndWake /
+     submitAndMaybeEndTurn are genuinely one mutually-exclusive action - they
+     all drive the same Send/End-Turn button and the same `busy` state, so
+     they share inFlightRef. The standalone `endTurn` fires from a DIFFERENT
+     control (useComposeRootActions' onCreateTodoCreated, once
+     messageEndsTurn is on and a todo popover closes) whose trigger button is
+     gated only on sessionId, never on `busy`. A shared ref meant a submit in
+     flight silently swallowed that endTurn call - the guard rejected it, the
+     popover closed normally, and nothing told the user their turn never
+     ended. Keying it separately fixes that; it needs its own ref because,
+     unlike spawn's many-runtimes case, there's nothing else to key it by. */
   const inFlightRef = useRef(false);
+  const endTurnRef = useRef(false);
   const hasContent = content.trim().length > 0;
   const hasSendableAttachments = useMemo(
     () =>
@@ -134,19 +152,29 @@ export function useComposeSubmission({
   );
 
   /* Every user-triggered action (submit, end-turn, or the combined
-     submit-then-end-turn) runs through this so a second in-flight call is
-     rejected before it can touch `busy` state at all — re-entrancy first,
-     visual state second. */
+     submit-then-end-turn) runs through this so a second in-flight call on
+     the SAME ref is rejected before it can touch `busy` state at all —
+     re-entrancy first, visual state second. The ref is per-caller (see the
+     two refs above), so two DIFFERENT actions can be in flight at once
+     without either blocking the other.
+
+     `drivesBusy` defaults to true because `busy` is the Send/End-Turn
+     button's own state, and every caller but one owns that button. The one
+     exception (the standalone `endTurn` below) opts out. */
   const withReentrancyGuard = useCallback(
-    async (action: () => Promise<void>): Promise<void> => {
-      if (inFlightRef.current) return;
-      inFlightRef.current = true;
-      setBusy(true);
+    async (
+      guardRef: MutableRefObject<boolean>,
+      action: () => Promise<void>,
+      { drivesBusy = true }: { drivesBusy?: boolean } = {},
+    ): Promise<void> => {
+      if (guardRef.current) return;
+      guardRef.current = true;
+      if (drivesBusy) setBusy(true);
       try {
         await action();
       } finally {
-        inFlightRef.current = false;
-        setBusy(false);
+        guardRef.current = false;
+        if (drivesBusy) setBusy(false);
       }
     },
     [],
@@ -154,28 +182,43 @@ export function useComposeSubmission({
 
   const submit = useCallback(
     (): Promise<void> =>
-      withReentrancyGuard(async () => {
+      withReentrancyGuard(inFlightRef, async () => {
         finishSubmit(await controller.submit());
       }),
     [controller, finishSubmit, withReentrancyGuard],
   );
 
-  /* Guarded like the rest: this is user-triggered too — useComposeRootActions
-     calls it from onCreateTodoCreated when messageEndsTurn is on, so creating
-     a todo ends the turn through here. It returns void rather than the
-     controller's boolean because the sole caller awaits and discards it, and
-     a guard-rejected call has no honest boolean to report. */
+  /* Guarded on its own ref (endTurnRef), not the shared inFlightRef: this
+     fires from a different control than submit/endTurnAndWake/
+     submitAndMaybeEndTurn — useComposeRootActions' onCreateTodoCreated calls
+     it when messageEndsTurn is on, after the todo popover has already
+     closed (see submitTodo.ts: onClose() runs before onCreated()). It
+     returns void rather than the controller's boolean because the sole
+     caller awaits and discards it, and a guard-rejected call has no honest
+     boolean to report.
+
+     drivesBusy: false — by the time this runs there is no popover left to
+     show busy in, and the compose bar's `busy` belongs to its own
+     Send/End-Turn button. Flipping that button's busy state for a call the
+     user didn't trigger by pressing it would be its own small version of the
+     bug this fix exists for: a real Send click landing while this is in
+     flight would see the button looking busy/disabled for a reason that has
+     nothing to do with what the user just did. */
   const endTurn = useCallback(
     (): Promise<void> =>
-      withReentrancyGuard(async () => {
-        await controller.endTurn();
-      }),
+      withReentrancyGuard(
+        endTurnRef,
+        async () => {
+          await controller.endTurn();
+        },
+        { drivesBusy: false },
+      ),
     [controller, withReentrancyGuard],
   );
 
   const endTurnAndWake = useCallback(
     (): Promise<void> =>
-      withReentrancyGuard(async () => {
+      withReentrancyGuard(inFlightRef, async () => {
         const posted = await controller.endTurn();
         if (!posted) return;
         await controller.wakeAfterUserMessage();
@@ -185,7 +228,7 @@ export function useComposeSubmission({
 
   const submitAndMaybeEndTurn = useCallback(
     (): Promise<void> =>
-      withReentrancyGuard(async () => {
+      withReentrancyGuard(inFlightRef, async () => {
         const shouldEndTurn = activeMode === NO_LOOSE_STRING_VALUES.message && messageEndsTurn;
         const result = await controller.submit({ wake: !shouldEndTurn });
         finishSubmit(result);

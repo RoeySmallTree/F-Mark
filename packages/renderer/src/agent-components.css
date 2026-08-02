@@ -140,7 +140,10 @@ details[open] > summary .chev { transform: rotate(90deg); }
 .approval-ico svg { width: 15px; height: 15px; }
 .approval-title { font-family: var(--serif); font-size: 15.5px; font-weight: 600; color: var(--ink); }
 .approval-sub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: .04em; }
-/* app extensions: resolved-status chip in the head + a compact variant for panels */
+/* app extension: the OPEN badge. Only OPEN carries this chrome - a resolved
+   decision (.approval-decision, alongside the actor name in .approval-sub
+   above) is plain text at the same size/weight as the rest of the sub-line,
+   so the eye lands on the item that still needs attention. */
 .approval-status { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); background: var(--panel); border: 1px solid var(--line-2); padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
 .approval.compact { box-shadow: none; }
 /* resolved/denied status tint (ported from the app's access-request card) */

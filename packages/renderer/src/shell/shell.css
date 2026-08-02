@@ -4936,6 +4936,12 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 .compose-box textarea::placeholder {
   color: var(--ink-4);
 }
+/* Visible feedback for the in-flight window: the typed text stays on screen
+   until the request resolves (clearAfterSubmit runs only after), so without
+   this a second Enter press looked like it did nothing at all. */
+.compose-box textarea:read-only {
+  opacity: 0.6;
+}
 /* ============ Staged attachment chips ============
    Sits between the NameChip (or top of compose-inner) and the textarea.
    Each chip is a 40px-square preview + name/size + an X. The row wraps

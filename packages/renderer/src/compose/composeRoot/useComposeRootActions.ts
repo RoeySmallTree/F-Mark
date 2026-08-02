@@ -94,6 +94,7 @@ export function useComposeRootActions(
   );
   const onTextareaKey = useComposeKeyboard({
     enterToSend: settings.enterToSend,
+    busy: submission.busy,
     toggleNamed,
     openPresets,
     openSkills: openSkillsHotkey,
