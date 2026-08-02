@@ -327,14 +327,55 @@ Replace the `:root` surface/ink/rule/accent blocks in
 }
 ```
 
-- [ ] **Step 2: Rewrite `body.night` to aurora-light**
+- [ ] **Step 2: Create `body.theme-light` with the aurora-light values**
 
-Aurora-light is **not an inversion**. Dark teal measures 1.48:1 on white and is unusable; every
-accent is re-picked. Elevation switches mechanism — nothing is lighter than white, so light uses
-a shadow.
+**Read this — the plan's original mapping was inverted, and Oran ruled on 2026-08-02.**
+
+The real file is the opposite of what this plan first assumed. Verified:
+
+| Selector | Line | What it holds TODAY |
+|---|---|---|
+| `:root` | 21 | the **light** theme (`--canvas: #fdfdfc`) |
+| `body.theme-night` | 159 | the **dark** theme (`--canvas: #101613`) |
+| `body.theme-contrast` | 208 | high contrast |
+
+`ThemeName = "light" \| "night" \| "contrast"` (`themes/index.ts:17`), and eight legacy names
+(ember, terminal, ide, solarized, cyber, amber, dracula, catppuccin) alias to `night`.
+
+Writing aurora-light into `body.theme-night` would make the theme called *night* render *light*.
+**Do not.** The agreed structure, which keeps every name honest and makes dark the default per
+`DESIGN.md`'s dark-first thesis:
+
+```
+:root                 -> aurora DARK   (the no-class fallback = the default)
+body.theme-light      -> aurora LIGHT  (NEW block — does not exist yet)
+body.theme-night      -> empty, documented (dark already lives in :root)
+body.theme-contrast   -> unchanged
+```
+
+`body.theme-night` stays as an **empty block with a comment**. Only one theme class is on `<body>`
+at a time (`density.ts:76-80` removes before adding), so with no overrides it falls through to
+`:root`, which is dark — correct. Keep the selector present: `themeBlock()` in the contrast test
+throws if a marker is missing, and the test's `if (fg === null) continue` means an empty block
+simply generates no assertions.
+
+Do **not** duplicate the dark values into `theme-night`. Two copies of the same palette is how one
+of them silently goes stale.
 
 ```css
-body.night {
+/* Aurora dark is the default and lives in :root, so this block deliberately
+   re-declares nothing. It exists so the theme name still resolves and so the
+   contrast test's block parser finds its marker. */
+body.theme-night {
+}
+```
+
+Then create the new light block. Aurora-light is **not an inversion**. Dark teal measures 1.48:1 on
+white and is unusable; every accent is re-picked. Elevation switches mechanism — nothing is lighter
+than white, so light uses a shadow.
+
+```css
+body.theme-light {
   /* ── AURORA LIGHT.
      The canvas is TINTED, never white, so a white card can sit visibly above
      it. On a white canvas white cards vanish and every panel needs a border
@@ -376,6 +417,42 @@ body.night {
   --rose: #b02a44;
 }
 ```
+
+- [ ] **Step 2b: Teach the contrast test about the new theme**
+
+`tests/token-contrast.test.ts` currently has `SURFACES_BY_THEME` covering `root`, `night`,
+`contrast`. Add `light` — otherwise the brand-new light theme is the one theme nothing checks:
+
+```ts
+const SURFACES_BY_THEME: Record<string, string[]> = {
+  root: ["--canvas", "--panel", "--panel-2"],
+  light: ["--canvas", "--panel", "--panel-2"],
+  night: ["--canvas", "--panel", "--panel-2"],
+  contrast: ["--canvas", "--panel"],
+};
+```
+
+`night` stays in the map deliberately: it now generates zero assertions, and if someone later
+re-populates that block the guard picks it up automatically.
+
+### Headroom targets — measured on 2026-08-02, use these
+
+Task 1 measured every assertion against the current Ledger values. One hard failure and six
+near-misses. **Aim above 5.5:1 for anything on this list**, not 4.51 — these are the pairs where
+a small value tweak flips the theme red:
+
+| theme | token | surface | ratio | |
+|---|---|---|---|---|
+| night | `--ink-3` | `--panel-2` | **3.882** | **FAIL today** |
+| night | `--ink-3` | `--panel` | 4.507 | one nudge from red |
+| root | `--ledger` / `--agent` | `--panel-2` | 4.563 | |
+| root | `--ink-3` | `--panel-2` | 4.730 | |
+| night | `--ink-3` | `--canvas` | 4.856 | |
+| root | `--ledger` / `--agent` | `--panel` | 4.978 | |
+
+The pattern is unambiguous: **`--ink-3` and the accent on the `--panel-2` hover surface** are where
+this design fails. The Aurora values in Step 1 already target ~5.86:1 for `--ink-3`; verify that
+holds on `--panel-2`, not only on `--canvas`.
 
 - [ ] **Step 3: Run the contrast test — it MUST now pass**
 
