@@ -611,11 +611,52 @@ decision deferred to the user. Aurora keeps three themes and one opinion.
 Do not spend a free axis on the AI-default clusters: warm-cream + serif + terracotta;
 near-black + acid green; broadsheet hairline newspaper columns.
 
+## Aurora-light
+
+**Light is not an inversion, and two things change structurally rather than in value.**
+
+**1. Every accent is re-picked.** The dark accents are unusable on white — measured, dark teal
+`#5eead4` is **1.48:1** against white, dark amber `#fbbf24` is **1.67:1**. Same meanings,
+different values:
+
+| Token | Dark | Light | Worst-case light |
+|---|---|---|---|
+| `--tx` | `#f0f1f7` | `#16181f` | 14.99 |
+| `--tx-2` | `#a8adc4` | `#4a5163` | 6.71 |
+| `--tx-3` | `#8b91a8` | `#5f6675` | 4.87 |
+| `--ac` / `--ok` | `#5eead4` | `#0a6b5d` | 5.42 |
+| `--ac-2` | `#c9a2ff` | `#6d28d9` | 6.01 |
+| `--warn` | `#fbbf24` | `#8a5100` | 5.45 |
+| `--hot` | `#fb8fa0` | `#b02a44` | 5.45 |
+
+Worst case is across all three surfaces (`--canvas`, `--solid`, `--solid-2`). Both themes pass
+AA on every token.
+
+**2. Elevation switches mechanism.** Dark raises a surface by making it **lighter** — nothing
+is lighter than white, so light cannot do that. Light uses a **shadow** (`--elev`). This is the
+one place the no-shadow rule is suspended, and only in the light theme.
+
+Two consequences that follow:
+
+- **The canvas is tinted, never white** (`#e9ecf3`), so a white card can sit visibly above it.
+  On a white canvas, white cards vanish and every panel needs a border merely to exist.
+- **The mesh drops to roughly a third** (`.12` → `.05`). At dark-mode strength over a light
+  background it reads as a printing error rather than atmosphere.
+- **Glass inverts**: white at 4.5% on dark, white at 62% on light. Both read as glass; neither
+  is the same value.
+
+## Density
+
+**Kept, all three levels** (`compact` · `comfortable` · `spacious`, 173 tokens each in
+`themes/density.css`). Density is the one setting about the user's *screen* rather than their
+taste — a 13" laptop and a 32" monitor genuinely differ — which is why it survives when 17
+themes did not.
+
+`compact` changes more than padding: line-height drops `1.66 → 1.5` and body `13.5 → 12.5px`.
+Padding alone produces a cramped screen that is still hard to scan.
+
 ## Still open
 
-- **Aurora-light** — not designed. Dark is the default; light is the alternate and needs
-  its own measured palette, not an inversion.
 - **Routing** — see the navigation contract.
 - **The session feed** — ~40 card types in `cards/`, the densest surface in the app and
   where most time is spent. Only minimally mocked so far.
-- **Density** — the app ships three densities. Whether Aurora keeps all three is undecided.
