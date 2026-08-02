@@ -13,6 +13,7 @@ import {
 } from "../api/managedAgents.js";
 import { scopeToBody } from "../api/rootScope.js";
 import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
+import { useElapsed } from "../hooks/useElapsed.js";
 import { useStore } from "../state/store.js";
 import { ErrorNotice, type StructuredError } from "./ToolPresentationParts.js";
 import {
@@ -146,6 +147,19 @@ function requestSuggestions(
   );
 }
 
+interface WaitingElapsedProps {
+  since: string;
+}
+
+/* Rendered only while the request is open (see accessRequestOpen), so the
+   interval this mounts stops ticking the moment a decision lands — the card
+   itself stays mounted in the append-only feed forever, but the timer must
+   not. */
+function WaitingElapsed({ since }: WaitingElapsedProps): JSX.Element {
+  const elapsed = useElapsed(since);
+  return <span className="approval-elapsed"> · waiting {elapsed}</span>;
+}
+
 interface AccessRequestCardProps {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
@@ -222,7 +236,10 @@ export function AccessRequestCard({
         </span>
         <div>
           <div className="approval-title">{presentation.title}</div>
-          <div className="approval-sub">{actor}</div>
+          <div className="approval-sub">
+            {actor}
+            {open ? <WaitingElapsed since={request.created_at} /> : null}
+          </div>
         </div>
         <code className="approval-status">{visibleStatus}</code>
       </div>
