@@ -98,11 +98,32 @@ export function Feed(): JSX.Element {
   useEffect(() => {
     const root = scroll.scrollRef.current;
     if (!root) return;
+    /* Clearing has to be reachable from more than "the pointer left an
+       avatar". Removing a node does not fire mouseout, and agentWorkingStrip
+       renders a ParticipantAvatar that unmounts at every turn boundary — hover
+       it, let the turn end, and the avatar vanishes under the cursor with no
+       mouseout to answer. Every dimmed row then stays at opacity 0.28 with no
+       visible cause. So: any hover that is NOT on an avatar clears, and
+       leaving the scroll root clears. The contains() check keeps the common
+       case (moving across ordinary feed content) a single class read on the
+       densest surface in the app. */
+    function clear(): void {
+      if (!root!.classList.contains(NO_LOOSE_STRING_VALUES.focusing)) return;
+      root!.classList.remove(NO_LOOSE_STRING_VALUES.focusing);
+      for (const row of root!.querySelectorAll<HTMLElement>(
+        NO_LOOSE_STRING_VALUES.hiSelector,
+      )) {
+        row.classList.remove(NO_LOOSE_STRING_VALUES.hi);
+      }
+    }
     function over(e: MouseEvent): void {
       const av = (e.target as HTMLElement | null)?.closest?.(
         NO_LOOSE_STRING_VALUES.avatarAttr,
       );
-      if (!av) return;
+      if (!av) {
+        clear();
+        return;
+      }
       const id = av.getAttribute(NO_LOOSE_STRING_VALUES.avatarAttrName);
       root!.classList.add(NO_LOOSE_STRING_VALUES.focusing);
       for (const row of root!.querySelectorAll<HTMLElement>(
@@ -114,26 +135,11 @@ export function Feed(): JSX.Element {
         );
       }
     }
-    function out(e: MouseEvent): void {
-      if (
-        !(e.target as HTMLElement | null)?.closest?.(
-          NO_LOOSE_STRING_VALUES.avatarAttr,
-        )
-      ) {
-        return;
-      }
-      root!.classList.remove(NO_LOOSE_STRING_VALUES.focusing);
-      for (const row of root!.querySelectorAll<HTMLElement>(
-        NO_LOOSE_STRING_VALUES.hiSelector,
-      )) {
-        row.classList.remove(NO_LOOSE_STRING_VALUES.hi);
-      }
-    }
     root.addEventListener("mouseover", over);
-    root.addEventListener("mouseout", out);
+    root.addEventListener("mouseleave", clear);
     return () => {
       root.removeEventListener("mouseover", over);
-      root.removeEventListener("mouseout", out);
+      root.removeEventListener("mouseleave", clear);
     };
   }, [scroll.scrollRef]);
 
