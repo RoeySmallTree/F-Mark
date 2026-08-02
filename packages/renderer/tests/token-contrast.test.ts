@@ -101,3 +101,51 @@ describe("tokens.css contrast claims", () => {
     },
   );
 });
+
+/* Aurora surfaces. A token must pass AA against EVERY surface its theme puts
+   text on — not just the darkest one. The light theme in particular has three
+   (canvas, panel, panel-2) and an accent that passes on one can fail on
+   another. */
+const SURFACES_BY_THEME: Record<string, string[]> = {
+  root: ["--canvas", "--panel", "--panel-2"],
+  night: ["--canvas", "--panel", "--panel-2"],
+  contrast: ["--canvas", "--panel"],
+};
+
+/* Tokens that carry TEXT and must therefore meet AA (4.5:1).
+   --ink-4 is deliberately excluded: it is documented debt (2.57:1, ~214 text
+   call sites) and splitting its text/border roles is a separate task. */
+const TEXT_TOKENS = ["--ink", "--ink-2", "--ink-3", "--ledger", "--alarm", "--agent"];
+
+function themeBlock(css: string, theme: string): string {
+  /* Real selectors in tokens.css are `:root {`, `body.theme-night {`, and
+     `body.theme-contrast {` — not the bare `body.night {` / `body.contrast {`
+     the brief assumed. Adapted to match what the file actually contains. */
+  const marker = theme === "root" ? ":root {" : `body.theme-${theme} {`;
+  const start = css.indexOf(marker);
+  if (start === -1) throw new Error(`theme block not found: ${theme}`);
+  const end = css.indexOf("\n}", start);
+  return css.slice(start, end);
+}
+
+function tokenValue(block: string, name: string): string | null {
+  const m = block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`));
+  return m?.[1] ?? null;
+}
+
+describe("every text token meets AA on every surface of its theme", () => {
+  for (const [theme, surfaces] of Object.entries(SURFACES_BY_THEME)) {
+    const block = themeBlock(TOKENS, theme);
+    for (const token of TEXT_TOKENS) {
+      const fg = tokenValue(block, token);
+      if (fg === null) continue; /* theme may not redefine every token */
+      for (const surfaceName of surfaces) {
+        const bg = tokenValue(block, surfaceName);
+        if (bg === null) continue;
+        test(`${theme} ${token} on ${surfaceName}`, () => {
+          expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+    }
+  }
+});
