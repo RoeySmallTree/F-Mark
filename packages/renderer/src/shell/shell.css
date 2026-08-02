@@ -6193,11 +6193,14 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
    wallpaper within a minute. Six seconds is long enough to catch the eye on
    return, short enough not to accumulate.
 
-   Colour is `--user`, not `--agent` — calculateFreshKeys marks ANY newly
-   appended row fresh regardless of who acted (user, agent, sys, or grp), so
-   this edge answers exactly one question, "is this new?", not "who did
-   this?". Authorship is already carried by the participant hue on the row's
-   own avatar. Per DESIGN.md's one-meaning-per-channel rule, `--agent` means
+   Colour is `--ink-4`, a neutral: calculateFreshKeys marks ANY newly appended
+   row fresh regardless of who acted (user, agent, sys, or grp), so this edge
+   answers exactly one question, "is this new?", not "who did this?".
+   Authorship is already carried by the participant hue on the row's own
+   avatar, so ANY participant hue here — `--user` as much as `--agent` — would
+   draw "a human did this" over mostly agent-authored rows. `--ink-4` is the
+   documented NON-TEXT tier, which is exactly what a 2px bar is. Per DESIGN.md's
+   one-meaning-per-channel rule, `--agent` means
    only "an agent is healthy or working" and never doubles as emphasis or
    attention — the rule exists because an earlier revision let a runtime
    warning banner render in the agent tint and it stayed invisible as a bug
@@ -6210,7 +6213,7 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   inset-inline-start: -6px;
   width: 2px;
   border-radius: 2px;
-  background: var(--user);
+  background: var(--ink-4);
   animation: feed-fresh-edge 6s var(--ease-out-quart) forwards;
 }
 @keyframes feed-fresh-edge {
