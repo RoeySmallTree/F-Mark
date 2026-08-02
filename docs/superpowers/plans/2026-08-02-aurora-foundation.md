@@ -111,7 +111,8 @@ pnpm -F @f-mark/shared build
 pnpm -F @f-mark/renderer test --run --reporter=json --outputFile=/tmp/aurora-raw.json 2>&1 | tail -5
 node -e '
 const r=require("/tmp/aurora-raw.json");
-const failed=[...new Set(r.testResults.filter(t=>t.status!=="passed").map(t=>t.name))].sort();
+const root=process.cwd()+"/";
+const failed=[...new Set(r.testResults.filter(t=>t.status!=="passed").map(t=>t.name.startsWith(root)?t.name.slice(root.length):t.name))].sort();
 require("fs").writeFileSync("/tmp/aurora-baseline.json",JSON.stringify(failed,null,2));
 console.log("baseline failing files:",failed.length);
 '
@@ -451,7 +452,8 @@ pnpm -F @f-mark/renderer test --run --reporter=json --outputFile=/tmp/aurora-now
 node -e '
 const base=require("./docs/ui-sweep/2026-08-02-test-baseline.json");
 const now=require("/tmp/aurora-now.json");
-const f=[...new Set(now.testResults.filter(t=>t.status!=="passed").map(t=>t.name))].sort();
+const root=process.cwd()+"/";
+const f=[...new Set(now.testResults.filter(t=>t.status!=="passed").map(t=>t.name.startsWith(root)?t.name.slice(root.length):t.name))].sort();
 const added=f.filter(x=>!base.includes(x));
 console.log("NEW failing files:",added.length); added.forEach(x=>console.log("  ",x));
 '
@@ -723,7 +725,8 @@ pnpm -F @f-mark/renderer test --run --reporter=json --outputFile=/tmp/aurora-now
 node -e '
 const base=require("./docs/ui-sweep/2026-08-02-test-baseline.json");
 const now=require("/tmp/aurora-now.json");
-const f=[...new Set(now.testResults.filter(t=>t.status!=="passed").map(t=>t.name))].sort();
+const root=process.cwd()+"/";
+const f=[...new Set(now.testResults.filter(t=>t.status!=="passed").map(t=>t.name.startsWith(root)?t.name.slice(root.length):t.name))].sort();
 console.log("NEW failing files:",f.filter(x=>!base.includes(x)).length);
 '
 ```
