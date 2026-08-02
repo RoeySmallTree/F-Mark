@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ProseMention } from "@f-mark/shared";
 import type { RootScope } from "../api/client.js";
 import type { StagedAttachment } from "./AttachmentChip.js";
@@ -35,7 +35,11 @@ export interface ComposeSubmissionState {
   hasSendableAttachments: boolean;
   canSubmit: boolean;
   submit(): Promise<void>;
-  endTurn(): Promise<boolean>;
+  /* void, not the controller's boolean: every action here is re-entrancy
+     guarded, and a call rejected by the guard has no honest boolean to
+     return. The sole caller (useComposeRootActions' onCreateTodoCreated)
+     awaits and discards it. */
+  endTurn(): Promise<void>;
   endTurnAndWake(): Promise<void>;
   submitAndMaybeEndTurn(): Promise<void>;
   sendOrEndTurn(): Promise<void>;
@@ -57,6 +61,13 @@ export function useComposeSubmission({
   requestScrollToBottom,
 }: UseComposeSubmissionOptions): ComposeSubmissionState {
   const [busy, setBusy] = useState(false);
+  /* Synchronous in-flight guard: a double-click or Enter-then-click fires two
+     handler calls before React re-renders `busy`, so state-derived disabling
+     alone can't catch the second one — mirrors useSpawnRuntimeAction's
+     spawnsInFlight ref. Unlike spawn (many runtimes, one card each), the
+     compose bar has a single primary action, so a plain boolean ref is the
+     right key — there's nothing to key it by. */
+  const inFlightRef = useRef(false);
   const hasContent = content.trim().length > 0;
   const hasSendableAttachments = useMemo(
     () =>
@@ -122,40 +133,69 @@ export function useComposeSubmission({
     [clearAfterSubmit, discardAttachments, requestScrollToBottom],
   );
 
-  const submit = useCallback(async (): Promise<void> => {
-    setBusy(true);
-    try {
-      finishSubmit(await controller.submit());
-    } finally {
-      setBusy(false);
-    }
-  }, [controller, finishSubmit]);
-
-  const endTurn = useCallback(
-    async (): Promise<boolean> => controller.endTurn(),
-    [controller],
+  /* Every user-triggered action (submit, end-turn, or the combined
+     submit-then-end-turn) runs through this so a second in-flight call is
+     rejected before it can touch `busy` state at all — re-entrancy first,
+     visual state second. */
+  const withReentrancyGuard = useCallback(
+    async (action: () => Promise<void>): Promise<void> => {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      setBusy(true);
+      try {
+        await action();
+      } finally {
+        inFlightRef.current = false;
+        setBusy(false);
+      }
+    },
+    [],
   );
 
-  const endTurnAndWake = useCallback(async (): Promise<void> => {
-    const posted = await controller.endTurn();
-    if (!posted) return;
-    await controller.wakeAfterUserMessage();
-  }, [controller]);
+  const submit = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(async () => {
+        finishSubmit(await controller.submit());
+      }),
+    [controller, finishSubmit, withReentrancyGuard],
+  );
 
-  const submitAndMaybeEndTurn = useCallback(async (): Promise<void> => {
-    const shouldEndTurn = activeMode === NO_LOOSE_STRING_VALUES.message && messageEndsTurn;
-    setBusy(true);
-    try {
-      const result = await controller.submit({ wake: !shouldEndTurn });
-      finishSubmit(result);
-      if (shouldEndTurn && result !== null) {
+  /* Guarded like the rest: this is user-triggered too — useComposeRootActions
+     calls it from onCreateTodoCreated when messageEndsTurn is on, so creating
+     a todo ends the turn through here. It returns void rather than the
+     controller's boolean because the sole caller awaits and discards it, and
+     a guard-rejected call has no honest boolean to report. */
+  const endTurn = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(async () => {
+        await controller.endTurn();
+      }),
+    [controller, withReentrancyGuard],
+  );
+
+  const endTurnAndWake = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(async () => {
         const posted = await controller.endTurn();
-        if (posted) await controller.wakeAfterSubmittedMessage();
-      }
-    } finally {
-      setBusy(false);
-    }
-  }, [activeMode, controller, finishSubmit, messageEndsTurn]);
+        if (!posted) return;
+        await controller.wakeAfterUserMessage();
+      }),
+    [controller, withReentrancyGuard],
+  );
+
+  const submitAndMaybeEndTurn = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(async () => {
+        const shouldEndTurn = activeMode === NO_LOOSE_STRING_VALUES.message && messageEndsTurn;
+        const result = await controller.submit({ wake: !shouldEndTurn });
+        finishSubmit(result);
+        if (shouldEndTurn && result !== null) {
+          const posted = await controller.endTurn();
+          if (posted) await controller.wakeAfterSubmittedMessage();
+        }
+      }),
+    [activeMode, controller, finishSubmit, messageEndsTurn, withReentrancyGuard],
+  );
 
   const sendOrEndTurn = useCallback(async (): Promise<void> => {
     if (activeMode === NO_LOOSE_STRING_VALUES.message && !canSubmit) {
