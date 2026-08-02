@@ -3232,3 +3232,53 @@
   display: block;
   background: var(--canvas);
 }
+
+/* === Tool argument copy (ToolUseHeader) === */
+.tool-arg-copy {
+  /* Reset browser <button> chrome — this is a real <button> now (it can't be
+     nested inside .tool-head-toggle below), where it used to be a plain
+     inline span; without this it would render with a UA background/border. */
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding-block: 0;
+  cursor: copy;
+  border-radius: 4px;
+  padding-inline: 3px;
+  margin-inline: -3px;
+  transition: background var(--dur-instant) var(--ease-out-quart);
+}
+.tool-arg-copy:hover { background: var(--agent-tint); color: var(--ink); }
+.tool-arg-copy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tool-arg-copy.is-copied { background: var(--agent-tint-2); }
+
+/* === Tool head toggle (ToolUseHeader) ===
+   `.tool-head` used to be a <button>; splitting the argument out into its
+   own button (above) means `.tool-head` is now a plain row <div>, and the
+   actual keyboard-operable toggle is this smaller inner <button> around the
+   chevron + type badge. `.tool-head` keeps all of its original flex/hover/
+   active CSS unchanged (agent-components.css) — this block only resets this
+   new button's browser chrome and restores the chevron's rotate + tint on
+   expand, which used to come from `.tool-head[aria-expanded="true"] .chev`
+   when aria-expanded lived on the outer element. */
+.tool-head { cursor: pointer; }
+.tool-head-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.tool-head-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tool-head-toggle[aria-expanded="true"] .chev {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--canvas) 86%, transparent);
+  transform: rotate(90deg);
+}
