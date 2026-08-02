@@ -308,6 +308,42 @@ Rules that follow:
 - **No sound.** A tool left running all day cannot beep. If it is ever wanted it belongs in
   settings, defaulted off.
 
+### Actionable notifications
+
+Oran's ask: answer from the notification itself, the way a macOS chat notification lets you
+reply — so an approval never costs you your focus. Adopted, within a real platform ceiling.
+
+**Achievable:** action buttons via `ServiceWorkerRegistration.showNotification({actions})`,
+handled in `notificationclick`, which POSTs to the kernel **without focusing the app**.
+`Notification.maxActions` is **2** on macOS, so every notification is designed for two.
+
+**Not achievable:** typing a reply. Chrome's inline reply sits behind the Experimental Web
+Platform Features flag, and on macOS the notification centre allows only one inflexible
+"Reply" button. It is a native capability, not a web one. A **Tauri wrapper** would unlock it
+— and, more valuably, a menu-bar presence. Not decided.
+
+**The app has no service worker.** Adding one is a prerequisite, and it interacts with
+`staleChunkReload.ts`, which exists because chunk staleness has bitten before.
+
+The governing rule: **the safe action is always inline; the nuanced one opens the app.**
+
+| Case | Actions | Rationale |
+|---|---|---|
+| Routine approval | `Allow once` · `Deny` | both resolve inline; an `access-response` event records the decision |
+| **Destructive command** | `Review` · `Deny` | **no inline Allow.** One-tap approval on a half-read notification is how `rm -rf` gets approved |
+| More than two answers | `Choose…` · `Not now` | `suggestions[]` can be any length; rather than truncate a choice, say there is one and go there |
+| Agent broke | `Restart` · `Open` | Open lands on the **Terminal** tab — a dead pane's feed has orphaned events and no conclusion |
+| Three at once | `Open F-Mark` · `Later` | collapse after the second; three popups is how a tool gets muted |
+
+Further rules:
+
+- **Always show the actual command**, in mono, in the body. "Wants to run a command" trains
+  people to approve blind.
+- **Deny is always inline**, including in the destructive case — it is the safe outcome, so it
+  never costs a context switch.
+- **Never decide on the user's behalf.** "Not now" dismisses the popup and leaves the agent
+  blocked; a dismissed notification must never read as an answer.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
