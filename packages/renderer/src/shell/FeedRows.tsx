@@ -181,6 +181,7 @@ function GroupFeedRow({
     <div
       data-event-filename={readKey}
       data-feed-read-key={readKey}
+      data-participant-id={group.participant_id}
       className={feedItemClassName({ isFresh, isUnread })}
       style={motionStyle}
     >
@@ -222,6 +223,7 @@ function EventFeedRow({
       data-event-filename={event.filename}
       data-feed-read-key={readKey}
       data-orphan-embed={isOrphan ? "true" : undefined}
+      data-participant-id={event.participant_id}
       className={feedItemClassName({ isFresh, isUnread, isOrphan })}
       style={motionStyle}
     >

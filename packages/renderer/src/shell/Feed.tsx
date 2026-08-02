@@ -78,6 +78,44 @@ export function Feed(): JSX.Element {
     return () => document.removeEventListener("keydown", onKey);
   }, [scroll.onNext, scroll.onPrev]);
 
+  /* Deliberately imperative. FeedRows is not memoized, so a useState-driven
+     version would re-render every card twice per hover movement on the
+     densest surface in the app. This matches how useFeedScrollController
+     already treats scroll and visibility as DOM-level concerns rather than
+     component state. */
+  useEffect(() => {
+    const root = scroll.scrollRef.current;
+    if (!root) return;
+    function over(e: MouseEvent): void {
+      const av = (e.target as HTMLElement | null)?.closest?.(
+        "[data-participant-avatar]",
+      );
+      if (!av) return;
+      const id = av.getAttribute("data-participant-avatar");
+      root!.classList.add("is-focusing");
+      for (const row of root!.querySelectorAll<HTMLElement>(
+        "[data-participant-id]",
+      )) {
+        row.classList.toggle("is-hi", row.dataset.participantId === id);
+      }
+    }
+    function out(e: MouseEvent): void {
+      if (!(e.target as HTMLElement | null)?.closest?.("[data-participant-avatar]")) {
+        return;
+      }
+      root!.classList.remove("is-focusing");
+      for (const row of root!.querySelectorAll<HTMLElement>(".is-hi")) {
+        row.classList.remove("is-hi");
+      }
+    }
+    root.addEventListener("mouseover", over);
+    root.addEventListener("mouseout", out);
+    return () => {
+      root.removeEventListener("mouseover", over);
+      root.removeEventListener("mouseout", out);
+    };
+  }, [scroll.scrollRef]);
+
   const [composerCollapsed, setComposerCollapsed] = useState(false);
   const onToggleComposerCollapsed = useCallback((): void => {
     setComposerCollapsed((collapsed) => !collapsed);

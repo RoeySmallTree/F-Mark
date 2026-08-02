@@ -13,6 +13,7 @@ export function FeedAgentTailItems({
         <div
           key="agent-ascii-running-tail"
           className="feed-item agent-ascii-tail-item"
+          data-feed-chrome
         >
           <AgentWorkingStrip
             agentIds={tails.activeAgentIdList}
@@ -28,6 +29,7 @@ export function FeedAgentTailItems({
         <div
           key="agent-ascii-connecting-tail"
           className="feed-item agent-ascii-tail-item"
+          data-feed-chrome
         >
           <AgentWorkingStrip
             agentIds={tails.connectingAgentsForSession.map(

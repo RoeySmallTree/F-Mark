@@ -1452,6 +1452,23 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 .feed-scroll::-webkit-scrollbar {
   display: none;
 }
+/* Participant focus (Feed.tsx delegated hover listener). Dims, never hides:
+   display:none would make the feed reflow and jump under the cursor, which
+   is worse than the problem it solves. The global reduced-motion rule in
+   styles.css already zeroes this transition's duration.
+
+   Excludes [data-feed-chrome], not just rows lacking [data-participant-id]:
+   StubFeedRow also has no participant_id (a "document was added" row has
+   none to attribute) and it SHOULD still dim — it is a log entry, same as
+   any group/event row. The agent tails (FeedAgentTailItems.tsx) are the
+   opposite: live status chrome, not log entries, that can describe SEVERAL
+   agents at once, so no single id ever applies to them. Attribute presence
+   can't tell those two "no participant" cases apart; a dedicated marker on
+   the live-chrome rows can. */
+.feed-scroll.is-focusing .feed-item:not([data-feed-chrome]):not(.is-hi) {
+  opacity: 0.28;
+  transition: opacity var(--dur-fast) var(--ease-out-quart);
+}
 .feed-inner {
   margin: 0 auto;
   /* Reserve room at the bottom for the floating dock so the last message can
