@@ -2119,6 +2119,15 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   min-width: 0;
   flex-shrink: 1;
 }
+.topbar-last-event {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
 
 /* Top-bar chip strip. Lives between the turn-pill and the
    participants stack. Wraps the AgentChip / TerminalChip components and
