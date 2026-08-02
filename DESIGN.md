@@ -229,6 +229,16 @@ and for the case where an agent died mid-turn and the feed has no conclusion.
 So the main column is tabbed: **Conversation** (default) · **Terminal**. Both are views of
 the same agent — one is the kernel's rendering of its output, the other is the source.
 
+**Scope: one agent, not the whole session.** The session screen (`/session/:id`) shows every
+participant. The agent screen shows **you plus this agent only** — the view you want when two
+agents are working and you need to follow one.
+
+The risk in filtering is real: agents act on each other's work, so a hidden event can leave
+the next one unexplained. The mitigation is an inline **stub** where events were removed —
+`2 events from Codex hidden · show` — which expands in place, dimmed, and collapses again.
+The thread stays recoverable without weakening the filter. This mirrors the aggregator's
+existing "consumed stub" jump rows rather than inventing a new idea.
+
 The context sidebar answers exactly three questions — **who is this agent**, **is it stuck**,
 **what is it doing**.
 
