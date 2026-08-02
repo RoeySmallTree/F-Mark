@@ -447,6 +447,43 @@ Rules:
 - **Give the command and let it be copied.** `brew install tmux`,
   `f-mark hook install claude`. `EnvProbeBanner` already does this well — keep it.
 
+## Tooltips
+
+F-Mark has a lot of private vocabulary — `Named`, `Anchor`, `Supersede`, `Compact`, `Fork`,
+`Effort`, `Arbitrary group` — and none of it is guessable. Every one of those needs a
+definition somewhere, and a tooltip is the cheapest place to put it.
+
+**But not on every control.** A tooltip on `Send` reading "sends the message" teaches people
+to stop reading tooltips, and then the one on `Bypass permissions` goes unread too. Three
+tiers:
+
+| Tier | Rule | Examples |
+|---|---|---|
+| **A — none** | the label is the whole story | Send · Cancel · Create session · Deny |
+| **B — required** | icon-only, private vocabulary, or a non-obvious effect. Most of the app. | ⌘K · ⚙ · Compact · Clear · Named · Anchor · ⟲ revised · effort |
+| **C — inline, not hover** | consequences you must not be able to miss | Bypass permissions · Do not ask · Remove agent · Revert hunk |
+
+Tier C is the important one: **a hover you might not perform is not a warning.** Those get
+visible text at the point of decision — the tooltip is a bonus, never the only telling.
+
+**Content formula:** line 1 = what it does · line 2 = what happens, or when to use it ·
+line 3 (optional) = the caveat or shortcut. Three lines maximum; past that it is
+documentation and belongs in the panel's empty state or settings.
+
+Say the **consequence, not the mechanism** — for `Clear`, what people actually fear is losing
+work, so the second line is "the session log is untouched, only the agent forgets."
+
+**Behaviour:**
+
+- **Focus shows instantly; hover waits 600ms.** Tabbing is deliberate, dragging a mouse across
+  a dense rail is not.
+- **Warm period of 1.5s** — after the first tooltip, neighbours appear instantly, so comparing
+  two controls does not cost a second each.
+- `Escape` dismisses, scrolling dismisses, blur dismisses. A tooltip that outlives its trigger
+  is a bug, and a stuck one over a dense rail is worse than none.
+- Flips above the trigger and clamps to the viewport rather than overflowing.
+- Destructive controls use the `--hot` tooltip variant, matching their inline treatment.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
