@@ -271,14 +271,38 @@ canvas. Currently RED against Ledger values - Aurora makes it green."
 `--ac-2` (violet) has **no** existing equivalent. Do not invent one in this task — Aurora's
 violet is used only for the launching-presence state, which is out of scope here.
 
-- [ ] **Step 1: Rewrite the `:root` block to aurora-dark**
+### STRUCTURE — read before writing a single line
 
-Replace the `:root` surface/ink/rule/accent blocks in
-`packages/renderer/src/themes/tokens.css` with:
+**Two earlier attempts at this mapping were wrong. This is the ruled, verified structure.**
+
+Keep the file's existing shape. Swap Aurora's values into the blocks that already exist:
+
+```
+:root                 -> aurora LIGHT   (the classless default — do not move it)
+body.theme-night      -> aurora DARK
+body.theme-contrast   -> unchanged
+```
+
+**Why `:root` must stay light.** `applyTheme` at `themes/index.ts:127` reads
+`if (name !== "light") body.classList.add(...)` — the `light` theme deliberately adds **no class**,
+so `:root` *is* the light theme. It is documented at `index.ts:6-16`, asserted by two tests in
+`tests/themes.test.ts`, and `resolveThemeName` at `:93-99` returns `"light"` for every user with no
+stored preference. A `body.theme-light` block would be **dead CSS that nothing ever matches**, and
+everyone who picked "Day" would see dark.
+
+**Do NOT create `body.theme-light`. Do NOT edit `themes/index.ts`. Do NOT change any assertion in
+`tests/themes.test.ts`.** Those are out of scope; `DESIGN.md`'s dark-first line is being amended to
+match this instead.
+
+- [ ] **Step 1: Rewrite `body.theme-night` to aurora-dark**
+
+Replace the surface/ink/rule/accent declarations inside the existing `body.theme-night` block
+(starts at `tokens.css:159`) with the values below. **The selector stays `body.theme-night` — only
+the values change.**
 
 ```css
-:root {
-  /* ── Surfaces — AURORA DARK (default) ─────────────────────────────────
+body.theme-night {
+  /* ── Surfaces — AURORA DARK ───────────────────────────────────────────
      Elevation is surface LUMINANCE, not shadow: a lighter surface reads as
      closer. There are no drop shadows in the dark theme. */
   --bg: #0b0d16;        /* the void behind everything */
@@ -327,55 +351,18 @@ Replace the `:root` surface/ink/rule/accent blocks in
 }
 ```
 
-- [ ] **Step 2: Create `body.theme-light` with the aurora-light values**
+- [ ] **Step 2: Rewrite `:root` to aurora-light**
 
-**Read this — the plan's original mapping was inverted, and Oran ruled on 2026-08-02.**
+`:root` is the classless default and therefore the **light** theme — see the STRUCTURE note above.
+Replace its surface/ink/rule/accent declarations with the values below. **The selector stays
+`:root`.**
 
-The real file is the opposite of what this plan first assumed. Verified:
-
-| Selector | Line | What it holds TODAY |
-|---|---|---|
-| `:root` | 21 | the **light** theme (`--canvas: #fdfdfc`) |
-| `body.theme-night` | 159 | the **dark** theme (`--canvas: #101613`) |
-| `body.theme-contrast` | 208 | high contrast |
-
-`ThemeName = "light" \| "night" \| "contrast"` (`themes/index.ts:17`), and eight legacy names
-(ember, terminal, ide, solarized, cyber, amber, dracula, catppuccin) alias to `night`.
-
-Writing aurora-light into `body.theme-night` would make the theme called *night* render *light*.
-**Do not.** The agreed structure, which keeps every name honest and makes dark the default per
-`DESIGN.md`'s dark-first thesis:
-
-```
-:root                 -> aurora DARK   (the no-class fallback = the default)
-body.theme-light      -> aurora LIGHT  (NEW block — does not exist yet)
-body.theme-night      -> empty, documented (dark already lives in :root)
-body.theme-contrast   -> unchanged
-```
-
-`body.theme-night` stays as an **empty block with a comment**. Only one theme class is on `<body>`
-at a time (`density.ts:76-80` removes before adding), so with no overrides it falls through to
-`:root`, which is dark — correct. Keep the selector present: `themeBlock()` in the contrast test
-throws if a marker is missing, and the test's `if (fg === null) continue` means an empty block
-simply generates no assertions.
-
-Do **not** duplicate the dark values into `theme-night`. Two copies of the same palette is how one
-of them silently goes stale.
+Aurora-light is **not an inversion** of the dark palette. Dark teal measures 1.48:1 on white and is
+unusable, so every accent is re-picked. Elevation also switches mechanism — nothing is lighter than
+white, so light uses a shadow where dark uses surface luminance.
 
 ```css
-/* Aurora dark is the default and lives in :root, so this block deliberately
-   re-declares nothing. It exists so the theme name still resolves and so the
-   contrast test's block parser finds its marker. */
-body.theme-night {
-}
-```
-
-Then create the new light block. Aurora-light is **not an inversion**. Dark teal measures 1.48:1 on
-white and is unusable; every accent is re-picked. Elevation switches mechanism — nothing is lighter
-than white, so light uses a shadow.
-
-```css
-body.theme-light {
+:root {
   /* ── AURORA LIGHT.
      The canvas is TINTED, never white, so a white card can sit visibly above
      it. On a white canvas white cards vanish and every panel needs a border
@@ -418,22 +405,14 @@ body.theme-light {
 }
 ```
 
-- [ ] **Step 2b: Teach the contrast test about the new theme**
+- [ ] **Step 2b: Leave the contrast test's theme map alone**
 
-`tests/token-contrast.test.ts` currently has `SURFACES_BY_THEME` covering `root`, `night`,
-`contrast`. Add `light` — otherwise the brand-new light theme is the one theme nothing checks:
+`SURFACES_BY_THEME` already covers `root`, `night`, `contrast` — which is exactly the three themes
+that exist. **No change needed.** `root` is the light theme and `night` is the dark one, so both
+palettes are already under assertion.
 
-```ts
-const SURFACES_BY_THEME: Record<string, string[]> = {
-  root: ["--canvas", "--panel", "--panel-2"],
-  light: ["--canvas", "--panel", "--panel-2"],
-  night: ["--canvas", "--panel", "--panel-2"],
-  contrast: ["--canvas", "--panel"],
-};
-```
-
-`night` stays in the map deliberately: it now generates zero assertions, and if someone later
-re-populates that block the guard picks it up automatically.
+Do not add a `light` key. There is no `body.theme-light` block for `themeBlock()` to find, and it
+would throw `theme block not found: light`.
 
 ### Headroom targets — measured on 2026-08-02, use these
 

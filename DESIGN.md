@@ -2,7 +2,7 @@
 name: Aurora
 subject: F-Mark — an append-only event-log workspace where a developer collaborates with AI coding agents running in tmux
 reference: Linear / Raycast surface-luminance elevation × glassmorphism 2.0 (translucent chrome over a gradient mesh)
-default_theme: aurora-dark
+default_theme: aurora-light (see "The thesis" - dark-first is the language, not the default)
 tokens:
   surface:
     canvas: "#0b0d16"        # the void behind everything; the mesh sits on this
@@ -66,10 +66,18 @@ F-Mark drives coding agents that run unattended in tmux. The interface is a **wi
 work that continues without you** — so its job is to make state legible at a glance: who
 is working, who is stuck, and what changed while you were gone.
 
-Aurora is dark-first because that is where its reference class lives, and because
-luminance is a cheaper hierarchy signal than weight when most of the screen is text.
-Elevation is **surface lightness, not shadow**: a lighter surface reads as closer. There
-are no drop shadows in this system.
+Aurora is dark-first *as a design language* — that is where its reference class lives, and
+luminance is a cheaper hierarchy signal than weight when most of the screen is text. In the
+dark theme, elevation is **surface lightness, not shadow**: a lighter surface reads as
+closer, and there are no drop shadows.
+
+**Dark-first does not mean dark-by-default.** The shipped default is `light`, and that is
+deliberate rather than a compromise: `applyTheme` represents `light` as *no class on
+`<body>`* (`themes/index.ts:127`), so `:root` **is** the light theme. Making dark the
+default would mean giving `light` an explicit class, changing what every existing user sees
+on next load, and adding pre-paint boot CSS to stop light users seeing a dark flash — three
+changes to a tested contract, for a preference. Aurora's palette lands on every surface
+either way. Revisit as its own task if the default ever matters more than the cost.
 
 The mesh — three slow-drifting colour blobs behind everything — is the one piece of
 atmosphere. It gives the app a light source and a sense of depth. It is capped hard,
