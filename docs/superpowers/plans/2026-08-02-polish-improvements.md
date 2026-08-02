@@ -693,6 +693,17 @@ row; the focus ring is untransitioned per the quality floor."
 
 ## Task 8: Motion consistency batch
 
+### Premise check — verified in `src/` 2026-08-02. TWO of the four sub-items are NOT REAL.
+
+| Sub-item | Verified reality |
+|---|---|
+| Sliding indicator | **REAL.** `.view-toggle` (`shell.css:2341`) is a flex row of buttons with no indicator element and no transition. One must be added. |
+| Context meter transition | **REAL.** `.agent-context-meter span` (`shell.css:4015`) sets `width: var(--context-used, 0%)` with **no** transition, so it jumps after Compact instead of dropping. Note it animates **width**, not the `clip-path` this plan assumed — a 6px solid bar, so width is fine and there is no gradient to distort. |
+| Model/effort chevron rotation | **NOT REAL — SKIP.** There is no chevron in `components/participantStrip/` at all. Zero matches for `chev`. |
+| FlowCard diagnosed-node pulse | **NOT REAL — SKIP.** `cards/FlowCard.tsx` renders `@xyflow/react` nodes and its state concept is `focused` (`:72-73`), not "diagnosed". Nothing to pulse. Do not invent one. |
+
+Do only the two real items. Skipping the other two is the correct outcome, not an incomplete task.
+
 Four small motion fixes that share one theme — the app already teaches these conventions elsewhere
 and breaks them here. Grouped because each is a few lines and they are reviewed as one idea.
 
