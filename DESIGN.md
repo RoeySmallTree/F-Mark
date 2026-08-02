@@ -344,6 +344,55 @@ Further rules:
 - **Never decide on the user's behalf.** "Not now" dismisses the popup and leaves the agent
   blocked; a dismissed notification must never read as an answer.
 
+## Starting work
+
+### Spawning an agent — and the coupling nobody sees
+
+A card per runtime (`claude` · `codex` · `opencode`), shaped by `ProviderCardModel`: status
+(`ready` | `missing`), permission mode, model, effort.
+
+**The permission mode is the most consequential control in the product, and it does not look
+like it.** `RUNTIME_ACCESS_MODE_OPTIONS` marks three modes `dangerous: true` —
+`claude/dontAsk`, `claude/bypassPermissions`, `opencode/dangerously-skip-permissions` — plus
+`codex/never`. Choosing one **silently disables the entire approval and notification system**:
+no access-requests, so no cards, no toasts, no OS notifications. The agent edits and runs
+commands unattended and you find out afterwards, from the log.
+
+So the launcher states the consequence in plain language at the moment of choosing, rather
+than labelling it "Bypass permissions" and hoping:
+
+> **This agent will never ask you.** No approval cards, no notifications — it edits and runs
+> commands on its own. You'll only see what it did afterwards, in the log.
+
+Rules:
+
+- `dangerous` modes render in `--hot` in the menu **and** keep the selector in `--hot`
+  afterwards, so a running agent's card shows how it was launched.
+- `deprecated` modes (`codex/on-failure`) are tagged, not hidden — hiding them makes a saved
+  config look corrupted when it reappears.
+- A `missing` runtime shows an install path and **no configuration selectors**. Offering
+  model and effort pickers for a CLI that isn't installed is a form of lying.
+- F-Mark drives the CLI you already have; it does not bundle one. The empty state says so.
+
+### First run
+
+The real onboarding is six steps (`folder · profile · providers · theme · todos · agent`).
+Two no longer earn one: **theme** was meaningful at 17 themes and is now 3, and **todos** asks
+you to plan work before any exists. Proposed: **folder → you → runtimes → first agent**,
+ending with something running rather than a settings summary.
+
+Folder is first because the session *is* the folder — there is no database. Everything after
+it then has somewhere to write, and the profile becomes a real participant in a real event
+log instead of a preference.
+
+### New session
+
+Name only. It becomes the folder name and the URL. Optionally start with an agent.
+
+No description, no template, no visibility setting: a session earns its meaning from what gets
+written into it, and asking for a description up front asks you to summarise work you have not
+done yet.
+
 ## The navigation contract
 
 **An action button inside a navigable row acts in place. It never navigates.**
