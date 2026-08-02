@@ -122,6 +122,31 @@ recorded number by eye.
 > still carry the **pre-fix** values. They are historical artifacts of the decision, not
 > the source of truth. This file is.
 
+### Exception: participant-focus dimming
+
+Hovering a participant's avatar dims every non-matching row to `opacity: 0.28`
+(`shell.css`, `.feed-scroll.is-focusing .feed-item`). Composited, that measures
+**~1.50:1 in light** and **~1.60:1 in dark** — below even the 3:1 non-text floor, let
+alone AA text contrast. This is a deliberate, accepted exception to the law above, not
+an oversight.
+
+No opacity value threads the needle. 0.45 composites to 1.96:1, 0.60 to 2.59:1 — still
+failing — and text only clears any bar around 0.85, the point at which nothing is
+visibly dimmed and the spotlight effect is gone. There is no value that is both
+compliant and functional; the feature is opacity-based dimming, or it doesn't exist.
+
+It's accepted because the failure mode the contrast law guards against doesn't apply
+here: the dim is mouse-hover only, gates no information (every row renders at full
+opacity by default, so nothing is ever hidden behind it), is instantly reversible on
+mouse-out, and is never presented to assistive tech — hover state carries no semantic
+change, so a screen reader sees the same rows either way. The law protects against
+content you can't read; this dims content you're deliberately not looking at.
+
+Neither `token-contrast.test.ts` (checks token pairs, not composited runtime opacity)
+nor `quality-floor.test.ts` covers this state, so it is asserted by this paragraph, not
+by a test. If that changes — a real-content contrast complaint, an a11y regression, a
+cheaper way to get the spotlight effect — revisit the opacity value, not this write-up.
+
 ## The one rule: one meaning per channel
 
 A channel means exactly one thing, everywhere:
