@@ -478,10 +478,24 @@ const FILES = cssFiles(SRC).map((f) => ({
 }));
 
 describe("quality floor", () => {
-  /* This repo has 11 position:sticky rules across 5 files. overflow-x:hidden
-     creates a scroll container and confines every one of them; clip does not. */
-  test("no overflow-x: hidden anywhere", () => {
-    const offenders = FILES.filter((f) => /overflow-x:\s*hidden/.test(f.css)).map((f) => f.path);
+  /* This repo has 11 position:sticky rules. overflow-x:hidden on a block that
+     does not already scroll creates a NEW scroll container and confines every
+     sticky inside it; clip does not.
+
+     A block that already declares overflow-y:auto|scroll is exempt: it is
+     already a scroll container, so hidden traps nothing new there. Swapping
+     those to `clip` would be a no-op anyway - per spec, `clip` computes back
+     to `hidden` when the other axis scrolls. Two such blocks exist today:
+     .settings-main (modals.css) and .agent-runtime-pop (chips.css). */
+  test("no overflow-x: hidden on a non-scrolling block", () => {
+    const offenders: string[] = [];
+    for (const f of FILES) {
+      for (const block of f.css.match(/\{[^}]*\}/g) ?? []) {
+        if (!/overflow-x:\s*hidden/.test(block)) continue;
+        if (/overflow-y:\s*(auto|scroll)/.test(block)) continue;
+        offenders.push(`${f.path}: ${block.slice(0, 60)}`);
+      }
+    }
     expect(offenders).toEqual([]);
   });
 
@@ -521,9 +535,13 @@ pnpm -F @f-mark/shared build
 pnpm -F @f-mark/renderer test --run tests/quality-floor.test.ts
 ```
 
-Expected: all three PASS against current renderer source. (The known `overflow-x: hidden`
-violation is in a design lab on the Desktop, not in `src/` — this test guards the product.)
-If any fails, **fix the CSS, not the test.**
+Expected: all three PASS against current renderer source — verified 2026-08-02 across all 29
+renderer CSS files. Zero offenders on each rule.
+
+**If any fails, fix the CSS, not the test** — with one exception already ruled on: the two
+`overflow-x: hidden` blocks that also scroll on Y (`.settings-main` in `modals.css`,
+`.agent-runtime-pop` in `chips.css`) are legitimate and the test is written to exempt them. Do not
+"fix" those two, and do not widen the rule back to a blanket ban.
 
 - [ ] **Step 3: Commit**
 
@@ -535,8 +553,10 @@ DESIGN.md's floor was enforced by memory and drifted within days: overflow-x
 hidden appeared where the doc says never, and :active/:disabled went missing.
 The contrast rule is enforced by a test and has never drifted.
 
-Asserts three rules across all renderer CSS: no overflow-x hidden (11 sticky
-rules would be trapped), focus-visible rings never transitioned, and
+Asserts three rules across all renderer CSS: no overflow-x hidden on a block
+that does not already scroll (it would newly trap the 11 sticky rules; a block
+already scrolling on Y is exempt, and clip computes back to hidden there
+anyway), focus-visible rings never transitioned, and
 reduced-motion resets are near-zero rather than a duration token - a previous
 revision reset them to a 120ms token, which defeated the reset entirely."
 ```
@@ -601,11 +621,13 @@ Append to `packages/renderer/src/shell/shell.css`:
 
 - [ ] **Step 3: Bind j/k to the existing navigation**
 
-In `packages/renderer/src/shell/Feed.tsx`, add inside the component body:
+In `packages/renderer/src/shell/Feed.tsx`, **first add `useEffect` to the React import** — the
+file currently imports only `useCallback, useMemo, useState, type JSX` and will not compile
+without it. Then add inside the component body:
 
 ```tsx
-/* j/k reuse useFeedStepNavigation, which already powers FeedNavCluster's
-   buttons. Only the key binding is new.
+/* j/k reuse the step navigation that already powers FeedNavCluster's buttons.
+   Only the key binding is new.
 
    The guard must cover EVERY editable surface, not just the composer: this app
    also has comment textareas, todo-item editors, session-rename editors and
@@ -623,16 +645,18 @@ useEffect(() => {
       return;
     }
     e.preventDefault();
-    if (e.key === "j") navigation.onNext();
-    else navigation.onPrev();
+    if (e.key === "j") scroll.onNext();
+    else scroll.onPrev();
   }
   document.addEventListener("keydown", onKey);
   return () => document.removeEventListener("keydown", onKey);
-}, [navigation]);
+}, [scroll.onNext, scroll.onPrev]);
 ```
 
-Adjust `navigation` to whatever the controller value is named in that file — check the existing
-`FeedNavCluster` props to find it.
+**Verified 2026-08-02 — use `scroll`, not `navigation`.** `navigation` is a local inside
+`useFeedScrollController.ts:96` and never leaves that file. What `Feed.tsx` holds is `scroll`, the
+`FeedScrollController` returned at `useFeedScrollController.ts:103-115`, whose exported interface
+(`:30-46`) declares `onPrev()`, `onNext()`, `canGoPrev`, `canGoNext` directly on it.
 
 - [ ] **Step 4: Verify build and the baseline file set**
 
@@ -852,7 +876,8 @@ per hover movement, on the app's densest surface. This must be built imperativel
 
 **Files:**
 - Modify: `packages/renderer/src/shell/FeedRows.tsx` (add one data attribute)
-- Modify: `packages/renderer/src/shell/Feed.tsx` (delegated listener)
+- Modify: `packages/renderer/src/shell/Feed.tsx` (delegated listener — `useEffect` must be added
+  to its React import if Task 4 has not already done so)
 - Modify: `packages/renderer/src/shell/shell.css`
 
 **Interfaces:**
