@@ -1,6 +1,7 @@
 import { type JSX } from "react";
 import { ComposeAttachmentsView } from "../ComposeAttachmentsView.js";
 import { NameChip } from "../NameChip.js";
+import { WakeNoticeView } from "../WakeNoticeView.js";
 import type { ComposeRootController } from "./types.js";
 
 const NO_LOOSE_STRING_VALUES = {
@@ -13,7 +14,7 @@ interface Props {
 
 export function ComposeDraftHeader({ controller }: Props): JSX.Element {
   const { activeMode, setMode, textDraft } = controller.core;
-  const { attachments } = controller.services;
+  const { attachments, submission } = controller.services;
   const shouldShowName = textDraft.content.length > 0 || activeMode === NO_LOOSE_STRING_VALUES.named;
 
   return (
@@ -31,6 +32,10 @@ export function ComposeDraftHeader({ controller }: Props): JSX.Element {
         attachments={attachments.attachments}
         attachmentErrors={attachments.attachmentErrors}
         onRemove={attachments.removeAttachment}
+      />
+      <WakeNoticeView
+        wake={submission.lastWake}
+        onDismiss={submission.dismissWakeNotice}
       />
     </>
   );
