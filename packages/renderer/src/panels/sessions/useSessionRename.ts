@@ -66,6 +66,7 @@ export function useSessionRename(
 
   const saveRename = useCallback(
     async (session: SessionMeta): Promise<void> => {
+      setError(null);
       const nextSlug = renameValue.trim();
       if (!SLUG_RE.test(nextSlug)) {
         setError("Session name must use lowercase letters, numbers, and hyphens.");

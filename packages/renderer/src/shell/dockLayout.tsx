@@ -9,9 +9,9 @@ import {
   ListChecks,
   MessageSquare,
   MessageSquareReply,
+  ScrollText,
   Search,
   SquareTerminal,
-  Terminal,
 } from "lucide-react";
 import { clearDragSource, setCircularDragImage } from "../drag/dragPreview.js";
 
@@ -134,7 +134,7 @@ export const DOCK_META: Record<DockPaneId, DockPaneMeta> = {
   log: {
     label: "Log",
     short: "Log",
-    icon: <Terminal size={13} aria-hidden="true" />,
+    icon: <ScrollText size={13} aria-hidden="true" />,
   },
   files: {
     label: "Files tree",
@@ -170,8 +170,11 @@ const STORAGE_KEY = "fmark.dockLayout";
    top-bar Msg|File tab by default (see migrateDockLayoutOnce). v3: the Terminal
    pane was added; existing stored layouts get it appended to the right pane
    (normalizeLayout would otherwise park a brand-new pane in the toolbar). v4:
-   Diff tree was added and should surface beside Files. */
-export const CURRENT_DOCK_LAYOUT_VERSION = 4;
+   Diff tree was added and should surface beside Files. v5 (Ledger redesign):
+   the "toolbar" stow area is no longer surfaced — the strip that revealed it
+   was one of five competing tablists. Search moves to the right rail so it
+   keeps a home; nothing is stowed by default. */
+export const CURRENT_DOCK_LAYOUT_VERSION = 5;
 
 export const DEFAULT_DOCK_LAYOUT: DockLayout = {
   areas: {
@@ -186,9 +189,10 @@ export const DEFAULT_DOCK_LAYOUT: DockLayout = {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ],
     bottom: [],
-    toolbar: ["search"],
+    toolbar: [],
   },
   active: {
     left: "sessions",
@@ -457,6 +461,27 @@ function migrateLayoutToV4(layout: DockLayout): DockLayout {
   return next;
 }
 
+/* v4 → v5: the "toolbar" stow area is no longer rendered anywhere in the main
+   shell — ToolbarDockTabs was the only surface that drew it, and it went with
+   the rest of the window manager. The v4 default put `search` in `toolbar`, so
+   essentially every existing install has a pane parked there. Without this
+   step normalizeLayout would faithfully preserve it, the layout would be
+   re-stamped v5, and Search would simply vanish from the UI with no
+   affordance to bring it back except a buried Settings pane editor.
+
+   Everything still stowed is moved to the right rail, preserving order. */
+function migrateLayoutToV5(layout: DockLayout): DockLayout {
+  if (layout.areas.toolbar.length === 0) return layout;
+  const next = cloneDockLayout(layout);
+  const stowed = next.areas.toolbar;
+  next.areas.toolbar = [];
+  for (const pane of stowed) {
+    if (isPanePlacedVisibly(next, pane)) continue;
+    next.areas.right.push(pane);
+  }
+  return next;
+}
+
 /* Run ONCE at main-app startup, BEFORE any getCurrentDockLayout read, main app
    only — the standalone /file-tree page must not mutate the global dock. Fresh
    installs need nothing (the current default already places filesDisplay and
@@ -477,6 +502,7 @@ export function migrateDockLayoutOnce(): void {
   if (version < 2) layout = migrateLayoutToV2(layout);
   if (version < 3) layout = migrateLayoutToV3(layout);
   if (version < 4) layout = migrateLayoutToV4(layout);
+  if (version < 5) layout = migrateLayoutToV5(layout);
   safeStorageSet(layout);
 }
 

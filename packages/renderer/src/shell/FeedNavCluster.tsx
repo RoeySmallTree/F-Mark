@@ -37,7 +37,7 @@ export function FeedNavCluster({
         onClick={onPrev}
         disabled={!canGoPrev}
         aria-label="Previous message"
-        title="Previous message"
+        title="Previous message (k)"
       >
         <ChevronUp size={14} aria-hidden />
       </button>
@@ -47,7 +47,7 @@ export function FeedNavCluster({
         onClick={onNext}
         disabled={!canGoNext}
         aria-label="Next message"
-        title="Next message"
+        title="Next message (j)"
       >
         <ChevronDown size={14} aria-hidden />
       </button>

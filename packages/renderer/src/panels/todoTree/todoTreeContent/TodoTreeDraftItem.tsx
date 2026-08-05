@@ -58,6 +58,7 @@ export function TodoTreeDraftItem({
       onRemove={async () => {
         actions.clearDraft();
       }}
+      fetchDescendants={() => Promise.resolve([])}
       onAddSubtask={(values) =>
         actions.createChildDraftFromDraft(currentDraft, values)
       }

@@ -687,7 +687,7 @@ export function buildTodoListResponse(
   return response;
 }
 
-function findDescendants(
+export function findDescendants(
   entries: TodoSnapshotEntry[],
   parentId: string,
 ): TodoSnapshotEntry[] {

@@ -65,6 +65,7 @@ export function buildTodoCardModel({
       updateTodo: controller.updateTodo,
       saveDirtyThen: controller.saveDirtyThen,
       reparent: controller.reparent,
+      fetchDescendants: controller.fetchDescendants,
     }),
     draft:
       draft === null

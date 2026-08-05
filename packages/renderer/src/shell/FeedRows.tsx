@@ -5,6 +5,7 @@ import { EventCard } from "../cards/EventCard.js";
 import type { ConsumedStub } from "../state/aggregate.js";
 import type { FeedItem } from "../feed/projectFeed.js";
 import type { Aggregated } from "../state/aggregate.js";
+import { flashAnchor } from "./anchorFlash.js";
 import { cssEscape, feedItemDomKey, feedItemReadKey } from "./feedItemKeys.js";
 
 const NO_LOOSE_STRING_VALUES = {
@@ -14,9 +15,6 @@ const NO_LOOSE_STRING_VALUES = {
   feedItem: "feed-item",
   i: "--i",
 } as const;
-
-const ANCHOR_FLASH_CLASS = "feed-anchor-flash";
-const ANCHOR_FLASH_MS = 1200;
 
 /* The anchor dot lights for ANY consumed block (adjacent or not), so its key
    is max(own, newest of all consumed blocks) — one notch above the row read
@@ -43,12 +41,7 @@ function jumpToAnchor(anchorFilename: string): void {
     `[data-event-filename="${cssEscape(anchorFilename)}"]`,
   );
   if (target === null) return;
-  target.scrollIntoView({ behavior: "smooth", block: "center" });
-  target.classList.add(ANCHOR_FLASH_CLASS);
-  window.setTimeout(
-    () => target.classList.remove(ANCHOR_FLASH_CLASS),
-    ANCHOR_FLASH_MS,
-  );
+  flashAnchor(target);
 }
 
 export function FeedRows({
@@ -181,6 +174,7 @@ function GroupFeedRow({
     <div
       data-event-filename={readKey}
       data-feed-read-key={readKey}
+      data-participant-id={group.participant_id}
       className={feedItemClassName({ isFresh, isUnread })}
       style={motionStyle}
     >
@@ -222,6 +216,7 @@ function EventFeedRow({
       data-event-filename={event.filename}
       data-feed-read-key={readKey}
       data-orphan-embed={isOrphan ? "true" : undefined}
+      data-participant-id={event.participant_id}
       className={feedItemClassName({ isFresh, isUnread, isOrphan })}
       style={motionStyle}
     >

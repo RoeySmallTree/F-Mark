@@ -81,13 +81,13 @@ describe("X6 cross-tab appearance sync (storage events)", () => {
 
   it("theme: an UNRELATED storage key is ignored", () => {
     const start = startThemeStorageSync();
-    applyTheme("nord");
-    expect(document.body.classList.contains("theme-nord")).toBe(true);
+    applyTheme("night");
+    expect(document.body.classList.contains("theme-night")).toBe(true);
     // A write to a different key must not touch the theme.
     window.dispatchEvent(
       new StorageEvent("storage", { key: "fmark.unrelated", newValue: "x" }),
     );
-    expect(document.body.classList.contains("theme-nord")).toBe(true);
+    expect(document.body.classList.contains("theme-night")).toBe(true);
     start();
   });
 

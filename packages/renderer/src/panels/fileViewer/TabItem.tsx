@@ -43,6 +43,15 @@ export function TabItem({
   const { Icon, colorClass } = iconForExtension(ext, false, false);
 
   const handleClick = useCallback(() => onActivate(path), [onActivate, path]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onActivate(path);
+      }
+    },
+    [onActivate, path],
+  );
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -73,6 +82,7 @@ export function TabItem({
       data-drop-before={dropBefore ? "true" : undefined}
       style={{ "--fv-tab-pinned": pinned ? 1 : 0 } as CSSProperties}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
       draggable
       onDragStart={(e) => onDragStart(e, path)}
       onDragOver={(e) => onDragOver(e, path)}
@@ -82,6 +92,7 @@ export function TabItem({
       title={path}
       role="tab"
       aria-selected={active}
+      tabIndex={0}
     >
       <Icon
         size={12}

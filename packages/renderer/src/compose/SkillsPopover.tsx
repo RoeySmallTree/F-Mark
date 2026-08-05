@@ -26,6 +26,7 @@ interface SkillsPopoverProps {
   token: string | null;
   trigger: SkillTrigger | null;
   onClose(): void;
+  closing?: boolean;
   onEdit(skill: SkillRef): void;
   onInsert(text: string, trigger: SkillTrigger | null): void;
 }
@@ -38,6 +39,7 @@ export function SkillsPopover({
   token,
   trigger,
   onClose,
+  closing = false,
   onEdit,
   onInsert,
 }: SkillsPopoverProps): JSX.Element {
@@ -98,6 +100,7 @@ export function SkillsPopover({
       className="skills-pop"
       ariaLabel={NO_LOOSE_STRING_VALUES.skills}
       onClose={onClose}
+      closing={closing}
     >
       <div className="skills-pop-head">
         <Sparkles size={14} aria-hidden />

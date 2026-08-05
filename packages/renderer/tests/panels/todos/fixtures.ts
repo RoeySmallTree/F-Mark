@@ -114,6 +114,23 @@ function flattenTodoTree(nodes: TodoTreeNode[]): TodoTreeNode[] {
   return nodes.flatMap((node) => [node, ...flattenTodoTree(node.children)]);
 }
 
+export function descendantIds(nodes: TodoTreeNode[], todoId: string): string[] {
+  const target = findTodoNode(nodes, todoId);
+  return target === null ? [] : flattenTodoTree(target.children).map((n) => n.id);
+}
+
+function findTodoNode(
+  nodes: TodoTreeNode[],
+  todoId: string,
+): TodoTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === todoId) return node;
+    const found = findTodoNode(node.children, todoId);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
 function todoPayload(node: TodoTreeNode): TodoPayload {
   return {
     id: node.id,

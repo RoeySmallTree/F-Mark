@@ -8,6 +8,8 @@ interface SettingsModalViewProps {
   controller: SettingsModalController;
 }
 
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function SettingsModalView({
   controller,
 }: SettingsModalViewProps): JSX.Element {

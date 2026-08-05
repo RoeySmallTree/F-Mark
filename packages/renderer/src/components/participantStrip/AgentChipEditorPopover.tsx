@@ -34,6 +34,7 @@ interface AgentChipEditorPopoverProps {
   onClear(): void;
   onSayGoodbye(): void;
   onClose(): void;
+  closing?: boolean;
 }
 
 const savingLabels = {
@@ -73,6 +74,7 @@ export function AgentChipEditorPopover({
   onClear,
   onSayGoodbye,
   onClose,
+  closing = false,
 }: AgentChipEditorPopoverProps): JSX.Element {
   const modelOptions = withCurrentModel(options.models ?? [], values.model);
   const effortOptions = withCurrentEffort(options.efforts ?? [], values.effort);
@@ -96,6 +98,7 @@ export function AgentChipEditorPopover({
       anchorRect={anchorRect}
       placement="top-start"
       onClose={onClose}
+      closing={closing}
       className="agent-chip-editor-pop"
       ariaLabel={`${agent.name} model and runtime controls`}
     >

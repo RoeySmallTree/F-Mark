@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useCurrentSessionRootScope } from "../../hooks/useCurrentSessionRootScope.js";
 import { getSessionAgentIds } from "../todoPanelUtils.js";
 import type { TodoTreeData } from "./todoTreeData/types.js";
+import { useFetchDescendants } from "./todoTreeData/useFetchDescendants.js";
 import { useLatestTodoMap } from "./todoTreeData/useLatestTodoMap.js";
 import { usePostTodo } from "./todoTreeData/usePostTodo.js";
 import { useTodoTreeLoader } from "./todoTreeData/useTodoTreeLoader.js";
@@ -28,13 +29,19 @@ export function useTodoTreeData(): TodoTreeData {
     sessionId: currentSessionId,
   });
 
-  const { todos, loadedSessionId, loadError, loadTodos, isCurrentSession } =
-    useTodoTreeLoader({
-      currentSessionId,
-      token,
-      scope,
-      reloadVersion: events.length,
-    });
+  const {
+    todos,
+    loadedSessionId,
+    loadError,
+    loadTodos,
+    isCurrentSession,
+    isTodosReloading,
+  } = useTodoTreeLoader({
+    currentSessionId,
+    token,
+    scope,
+    reloadVersion: events.length,
+  });
 
   const postTodo = usePostTodo({
     currentSessionId,
@@ -44,6 +51,12 @@ export function useTodoTreeData(): TodoTreeData {
     rememberLatest,
     loadTodos,
     isCurrentSession,
+  });
+
+  const fetchDescendants = useFetchDescendants({
+    currentSessionId,
+    token,
+    scope,
   });
 
   return {
@@ -58,5 +71,7 @@ export function useTodoTreeData(): TodoTreeData {
     setActionError,
     latestById,
     postTodo,
+    fetchDescendants,
+    isTodosReloading,
   };
 }

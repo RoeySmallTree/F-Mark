@@ -6,6 +6,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { useDeferredUnmount } from "../../popovers/useDeferredUnmount.js";
 import { buildRuntimeMenuItems } from "./model.js";
 import {
   menuStyleFromPosition,
@@ -39,10 +40,16 @@ export function usePlusButtonController({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  /* `open` is the only source of truth. Every close path — the dismissal
+     hook, the toggle, spawning a runtime, opening the runtime manager —
+     sets it false directly; useDeferredUnmount observes that flip and
+     keeps the menu mounted for its exit, so no closer needs to know about
+     the animation. */
   const close = useCallback(() => {
     setOpen(false);
     setExpandedRuntimeId(null);
   }, []);
+  const { mounted, closing } = useDeferredUnmount(open);
 
   const positionMenu = useCallback(() => {
     if (wrapRef.current === null) return;
@@ -111,6 +118,8 @@ export function usePlusButtonController({
 
   return {
     open,
+    mounted,
+    closing,
     expandedRuntimeId,
     menuPlacement: menuPosition?.placement ?? null,
     wrapRef,

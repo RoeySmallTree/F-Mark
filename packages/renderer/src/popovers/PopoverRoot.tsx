@@ -19,16 +19,22 @@ const NO_LOOSE_STRING_VALUES = {
 import type { JSX } from "react";
 import { useStore } from "../state/store.js";
 import { PresetsPopover } from "./PresetsPopover.js";
+import { useDeferredUnmount, useHeldAnchorRect } from "./useDeferredUnmount.js";
 
 export function PopoverRoot(): JSX.Element | null {
   const activePopover = useStore((s) => s.activePopover);
   const closePopover = useStore((s) => s.closePopover);
 
-  if (activePopover.key === NO_LOOSE_STRING_VALUES.presets) {
+  const presetsOpen = activePopover.key === NO_LOOSE_STRING_VALUES.presets;
+  const presets = useDeferredUnmount(presetsOpen);
+  const rect = useHeldAnchorRect(presetsOpen ? activePopover.anchorRect : null);
+
+  if (presets.mounted) {
     return (
       <PresetsPopover
-        anchorRect={activePopover.anchorRect}
+        anchorRect={rect}
         onClose={closePopover}
+        closing={presets.closing}
       />
     );
   }

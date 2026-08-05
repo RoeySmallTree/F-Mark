@@ -68,6 +68,7 @@ export function TodoTreeNodeBranch({
         onRemove={(field, values) =>
           actions.removeTodo(sourceNode, field, values)
         }
+        fetchDescendants={() => actions.fetchDescendants(sourceNode.id)}
         onAddSubtask={async (values) => {
           const patch = dirtyValuesPatch(sourceNode, values);
           if (Object.keys(patch).length > 0) {

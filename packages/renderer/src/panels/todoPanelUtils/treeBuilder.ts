@@ -30,10 +30,6 @@ export function countTree(nodes: TodoTreeNode[]): number {
   return total;
 }
 
-export function countDescendants(node: { children: TodoTreeNode[] }): number {
-  return countTree(node.children);
-}
-
 class TodoTreeBuilder {
   private readonly createdAtById = new Map<string, string>();
   private readonly latestById = new Map<string, TodoPayload>();

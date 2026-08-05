@@ -5,7 +5,11 @@ import {
   type TodoListResponse,
 } from "../../../api/client.js";
 import { EMPTY_TODOS, normalizeTodos } from "../../todoPanelUtils.js";
-import type { IsCurrentTodoSession, LoadTodos } from "./types.js";
+import type {
+  IsCurrentTodoSession,
+  IsTodosReloading,
+  LoadTodos,
+} from "./types.js";
 
 interface TodoTreeLoader {
   todos: TodoListResponse;
@@ -13,6 +17,7 @@ interface TodoTreeLoader {
   loadError: string | null;
   loadTodos: LoadTodos;
   isCurrentSession: IsCurrentTodoSession;
+  isTodosReloading: IsTodosReloading;
 }
 
 interface UseTodoTreeLoaderArgs {
@@ -38,6 +43,11 @@ export function useTodoTreeLoader({
   const loadRequestRef = useRef(0);
   const loadedSessionIdRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(currentSessionId);
+  /* Set true for the duration of every loadTodos() call (including reloads
+     after a post), cleared in the finally. Consumers such as
+     useAutoFirstDraft gate on this to avoid acting on a stale pre-reload
+     snapshot — see that hook for the race this closes. */
+  const reloadInFlightRef = useRef(false);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -89,25 +99,30 @@ export function useTodoTreeLoader({
   );
 
   const loadTodos = useCallback(async (): Promise<void> => {
-    const requestId = ++loadRequestRef.current;
-    const sessionId = currentSessionId;
-
-    if (sessionId === null) {
-      clearTodosForMissingSession(requestId);
-      return;
-    }
-    if (currentSessionIdRef.current !== sessionId) return;
-    if (scope === null) {
-      applyLoadError(requestId, sessionId, new Error("No active session."));
-      return;
-    }
-
-    const client = createClient({ baseUrl: "", token });
+    reloadInFlightRef.current = true;
     try {
-      const next = normalizeTodos(await client.listTodos(sessionId, scope));
-      applyLoadedTodos(requestId, sessionId, next);
-    } catch (err) {
-      applyLoadError(requestId, sessionId, err);
+      const requestId = ++loadRequestRef.current;
+      const sessionId = currentSessionId;
+
+      if (sessionId === null) {
+        clearTodosForMissingSession(requestId);
+        return;
+      }
+      if (currentSessionIdRef.current !== sessionId) return;
+      if (scope === null) {
+        applyLoadError(requestId, sessionId, new Error("No active session."));
+        return;
+      }
+
+      const client = createClient({ baseUrl: "", token });
+      try {
+        const next = normalizeTodos(await client.listTodos(sessionId, scope));
+        applyLoadedTodos(requestId, sessionId, next);
+      } catch (err) {
+        applyLoadError(requestId, sessionId, err);
+      }
+    } finally {
+      reloadInFlightRef.current = false;
     }
   }, [
     currentSessionId,
@@ -127,11 +142,17 @@ export function useTodoTreeLoader({
     [],
   );
 
+  const isTodosReloading = useCallback(
+    (): boolean => reloadInFlightRef.current,
+    [],
+  );
+
   return {
     todos,
     loadedSessionId,
     loadError,
     loadTodos,
     isCurrentSession,
+    isTodosReloading,
   };
 }

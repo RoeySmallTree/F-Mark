@@ -1,0 +1,122 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERACTION — the baseline every control gets for free.
+
+   Before this file the app had 288 `:hover` rules and 63 `:focus-visible`
+   ones. Roughly three quarters of the interface responded to a mouse and did
+   nothing for a keyboard. Rather than add 225 more bespoke rules, the states
+   that must never be missing are defined once, here, against the elements
+   themselves — so a control added tomorrow is reachable by default and an
+   author has to opt OUT rather than remember to opt in.
+
+   Load order matters: this comes after tokens.css and before the component
+   sheets, so any component that genuinely needs a different treatment can
+   still override it with ordinary specificity.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Focus ────────────────────────────────────────────────────────────────
+   One ring, everywhere, instant. A focus ring that fades in is a focus ring
+   you cannot follow while tabbing, so it is exempt from every transition —
+   including the global ones below. --ink reads against every surface in all
+   three themes, which a coloured ring would not. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+  transition: none !important;
+}
+
+/* Never suppress the ring without replacing it. Kept narrow: only clears the
+   UA default where our own ring is already drawn. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Pointer feedback ─────────────────────────────────────────────────────
+   Hover states are a hint, not a jump: colour and border move, geometry does
+   not. Nothing here changes layout, so nothing here can cause reflow on a
+   list of a thousand rows. */
+:where(button, [role="tab"], [role="menuitem"], summary) {
+  transition:
+    color var(--dur-instant) var(--ease-snap),
+    background-color var(--dur-instant) var(--ease-snap),
+    border-color var(--dur-instant) var(--ease-snap),
+    opacity var(--dur-instant) var(--ease-snap);
+}
+
+/* Press is immediate — the one place a transition would feel like lag. */
+:where(button, [role="tab"]):active:not(:disabled) {
+  transition-duration: 0s;
+}
+
+/* ── Disabled ─────────────────────────────────────────────────────────────
+   Reads as unavailable rather than merely faint, and stops pretending to be
+   clickable. `not-allowed` is deliberate: a disabled control that keeps the
+   pointer cursor invites the click it will then swallow. */
+:where(button, input, select, textarea, [role="tab"])[disabled],
+:where(button, input, select, textarea, [role="tab"]):disabled,
+:where([aria-disabled="true"]) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ── Targets ──────────────────────────────────────────────────────────────
+   Icon-only controls get a hit area without getting bigger on screen. This is
+   why the dense rails stay usable on a trackpad without inflating the chrome
+   that made the app feel crowded in the first place. */
+:where(button, [role="tab"]).icon-btn::after,
+:where(button, [role="tab"])[aria-label]:not(:has(> :not(svg)))::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: max(100%, 32px);
+  height: max(100%, 32px);
+  transform: translate(-50%, -50%);
+}
+:where(button, [role="tab"]).icon-btn,
+:where(button, [role="tab"])[aria-label]:not(:has(> :not(svg))) {
+  position: relative;
+}
+
+/* ── Text selection ───────────────────────────────────────────────────────
+   The feed is a document; selecting from it should look deliberate. */
+::selection {
+  background: var(--ledger-tint-2);
+  color: var(--ink);
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────────────────
+   Thin, inked, and only as loud as the surface they sit on. A default macOS
+   scrollbar over a ruled sheet reads as a different application. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-4);
+  background-clip: content-box;
+}
+
+/* ── Form controls ────────────────────────────────────────────────────────
+   Inputs inherit the sheet rather than the operating system. */
+:where(input, textarea, select) {
+  font: inherit;
+  color: var(--ink);
+  accent-color: var(--ledger);
+}
+:where(input, textarea)::placeholder {
+  color: var(--ink-3);
+  opacity: 1; /* Firefox dims placeholders again on top of the colour */
+}

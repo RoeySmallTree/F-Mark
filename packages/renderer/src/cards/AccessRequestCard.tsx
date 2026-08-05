@@ -13,7 +13,9 @@ import {
 } from "../api/managedAgents.js";
 import { scopeToBody } from "../api/rootScope.js";
 import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
+import { useElapsed } from "../hooks/useElapsed.js";
 import { useStore } from "../state/store.js";
+import { formatWhen } from "./format.js";
 import { ErrorNotice, type StructuredError } from "./ToolPresentationParts.js";
 import {
   presentAccessRequest,
@@ -30,6 +32,8 @@ const NO_LOOSE_STRING_VALUES = {
   deny: "deny",
   resolved: "resolved",
   card: "card",
+  approved: "approved",
+  allowed: "allowed",
 } as const;
 
 function latestAccessResponse(
@@ -66,12 +70,44 @@ export function pendingAccessCountForParticipant(
   ).length;
 }
 
+/* Picks the raw status word — never shown directly, only used as the
+   data-status styling hook and as input to formatApprovalStatus below. */
 function statusLabel(
   request: AccessRequestPayload,
   response: AccessResponsePayload | null,
 ): string {
   if (response !== null) return response.status;
   return request.status;
+}
+
+/* A resolved approval previously read "approved", which does not say what was
+   allowed or when. Denials deliberately omit the scope: "denied once" reads
+   as though something was permitted — only approvals name their scope.
+
+   The time reuses cards/format.ts's formatWhen — the convention every other
+   feed card uses for its timestamp — rather than a second formatter. A
+   bespoke HH:MM here rendered a decision from three weeks ago identically to
+   one from thirty seconds ago; formatWhen is relative-first ("5 minutes
+   ago") and only falls back to an absolute date+time after 7 days, which is
+   the distinction a feed whose job is "what changed while you were gone"
+   actually needs. */
+function isNonEmptyString(part: string | null): part is string {
+  return part !== null && part !== "";
+}
+
+export function formatApprovalStatus(
+  status: string,
+  scope: string | null,
+  at: string | null,
+): string {
+  const time = at === null ? null : formatWhen(at);
+  if (status !== NO_LOOSE_STRING_VALUES.approved) {
+    return [status, time].filter(isNonEmptyString).join(" · ");
+  }
+  const parts = [NO_LOOSE_STRING_VALUES.allowed, scope, time].filter(
+    isNonEmptyString,
+  );
+  return parts.join(" · ");
 }
 
 function normalizeAccessError(err: unknown): {
@@ -146,6 +182,35 @@ function requestSuggestions(
   );
 }
 
+interface WaitingElapsedProps {
+  since: string;
+}
+
+/* Rendered only while the request is open (see accessRequestOpen), so the
+   interval this mounts stops ticking the moment a decision lands — the card
+   itself stays mounted in the append-only feed forever, but the timer must
+   not. */
+function WaitingElapsed({ since }: WaitingElapsedProps): JSX.Element {
+  const elapsed = useElapsed(since);
+  return <span className="approval-elapsed"> · waiting {elapsed}</span>;
+}
+
+interface DecisionDetailProps {
+  label: string;
+}
+
+/* Resolved approvals used to render `approvalLabel` in the same fixed pill
+   as OPEN — `.approval-status` was one bordered, uppercase, mono badge for
+   every state. Once approvals grew a scope and time ("ALLOWED · ONCE ·
+   14:04"), that pill was 3-4x longer than "OPEN" and the eye landed on the
+   item needing no attention. OPEN keeps the badge; a resolved decision is
+   plain text next to the actor instead — no chrome, no color, just less
+   weight, matching how little attention a decision that already happened
+   deserves. */
+function DecisionDetail({ label }: DecisionDetailProps): JSX.Element {
+  return <span className="approval-decision"> · {label}</span>;
+}
+
 interface AccessRequestCardProps {
   event: AnyEventRecord;
   participants: Record<string, Participant>;
@@ -175,6 +240,11 @@ export function AccessRequestCard({
   const response = latestAccessResponse(request.request_id, allEvents);
   const open = response === null && request.status === NO_LOOSE_STRING_VALUES.open && !staleClosed;
   const visibleStatus = staleClosed ? NO_LOOSE_STRING_VALUES.resolved : statusLabel(request, response);
+  const approvalLabel = formatApprovalStatus(
+    visibleStatus,
+    response?.scope ?? null,
+    response?.responded_at ?? null,
+  );
   const actor = participants[event.participant_id]?.name ?? event.participant_id;
   const presentation = presentAccessRequest(request);
   const canRespond =
@@ -222,9 +292,13 @@ export function AccessRequestCard({
         </span>
         <div>
           <div className="approval-title">{presentation.title}</div>
-          <div className="approval-sub">{actor}</div>
+          <div className="approval-sub">
+            {actor}
+            {open ? <WaitingElapsed since={request.created_at} /> : null}
+            {open ? null : <DecisionDetail label={approvalLabel} />}
+          </div>
         </div>
-        <code className="approval-status">{visibleStatus}</code>
+        {open ? <code className="approval-status">{approvalLabel}</code> : null}
       </div>
       <div className="approval-body">
         {renderPresentationSections(presentation.sections)}

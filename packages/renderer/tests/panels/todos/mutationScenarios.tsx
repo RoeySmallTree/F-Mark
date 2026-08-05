@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import {
   assignableTree,
   nestedTree,
@@ -25,9 +25,12 @@ export const todoMutationScenarios = [
     "in-progress button toggles WIP while the check controls done/open",
     inProgressButtonTogglesWip,
   ],
-  ["clicking X with no children removes immediately", removesLeafImmediately],
   [
-    "clicking X with children shows inline confirmation before removing",
+    "clicking X with no children confirms with a leaf-only title, then removes",
+    removesLeafImmediately,
+  ],
+  [
+    "clicking X with children confirms with the subtask count before removing",
     confirmsBeforeRemovingParent,
   ],
   [
@@ -92,9 +95,12 @@ async function removesLeafImmediately(): Promise<void> {
     title: "Draft plan",
     status: "open",
   });
+  const confirmSpy = vi.fn<typeof window.confirm>().mockReturnValue(true);
+  vi.stubGlobal("confirm", confirmSpy);
   const { posts, user } = await renderTodosWithTree(singleTree());
 
   await clickButtonAndWaitForPosts(user, /Remove task Draft plan/i, posts);
+  expect(confirmSpy.mock.calls[0]?.[0]).toMatch(/^Remove this task\?/i);
   expectTodoPost(posts, 0, {
     id: "t1",
     status: "removed",
@@ -108,6 +114,8 @@ async function confirmsBeforeRemovingParent(): Promise<void> {
     title: "Parent task",
     status: "open",
   });
+  const confirmSpy = vi.fn<typeof window.confirm>().mockReturnValue(false);
+  vi.stubGlobal("confirm", confirmSpy);
   const { posts, user } = await renderTodosWithTree(nestedTree(), {
     waitForTitle: "Parent task",
   });
@@ -116,10 +124,16 @@ async function confirmsBeforeRemovingParent(): Promise<void> {
     screen.getByRole("button", { name: /Remove task Parent task/i }),
   );
 
-  expect(screen.getByText(/Remove this task and 1 subtask\?/i)).toBeInTheDocument();
+  await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1));
+  expect(confirmSpy.mock.calls[0]?.[0]).toMatch(
+    /Remove this task and 1 subtask\?/i,
+  );
   expect(posts).toHaveLength(0);
 
-  await user.click(screen.getByRole("button", { name: /^Remove$/i }));
+  confirmSpy.mockReturnValue(true);
+  await user.click(
+    screen.getByRole("button", { name: /Remove task Parent task/i }),
+  );
 
   await waitForPosts(posts, 1);
   expectTodoPost(posts, 0, {

@@ -382,6 +382,11 @@ export interface Client {
     scope?: RootScope,
     assignedTo?: string,
   ): Promise<TodoListResponse>;
+  todoDescendants(
+    sessionId: string,
+    todoId: string,
+    scope: RootScope,
+  ): Promise<string[]>;
   search(
     query: string,
     sessionId?: string,

@@ -9,15 +9,21 @@ import { usePresetsPopoverController } from "./presetsPopover/usePresetsPopoverC
 interface Props {
   anchorRect: DOMRect | null;
   onClose(): void;
+  closing?: boolean;
 }
 
-export function PresetsPopover({ anchorRect, onClose }: Props): JSX.Element {
+export function PresetsPopover({
+  anchorRect,
+  onClose,
+  closing = false,
+}: Props): JSX.Element {
   const controller = usePresetsPopoverController(onClose);
   return (
     <PresetsPopoverView
       anchorRect={anchorRect}
       onClose={onClose}
       controller={controller}
+      closing={closing}
     />
   );
 }

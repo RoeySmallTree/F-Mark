@@ -33,6 +33,8 @@ export function TodoTreeList({
     setActionError,
     latestById,
     postTodo,
+    fetchDescendants,
+    isTodosReloading,
   } = useTodoTreeData();
   const {
     addRowRef,
@@ -75,6 +77,7 @@ export function TodoTreeList({
     draft,
     agentIds,
     setDraft,
+    isTodosReloading,
   });
 
   return (
@@ -106,6 +109,7 @@ export function TodoTreeList({
         focusTodo={focusTodo}
         updateExisting={updateExisting}
         createDraft={createDraft}
+        fetchDescendants={fetchDescendants}
       />
     </div>
   );

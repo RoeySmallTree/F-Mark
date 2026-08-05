@@ -20,6 +20,7 @@ interface PresetsPopoverViewProps {
   anchorRect: DOMRect | null;
   onClose(): void;
   controller: PresetsPopoverController;
+  closing?: boolean;
 }
 
 const PRESETS_SHORTCUT = chordToLabel("$mod+P");
@@ -28,12 +29,14 @@ export function PresetsPopoverView({
   anchorRect,
   onClose,
   controller,
+  closing,
 }: PresetsPopoverViewProps): JSX.Element {
   return (
     <Popover
       anchorRect={anchorRect}
       placement="top-end"
       onClose={onClose}
+      closing={closing}
       className="presets-pop"
       ariaLabel={NO_LOOSE_STRING_VALUES.presets}
     >

@@ -8,6 +8,8 @@ interface NewSessionViewProps {
   controller: NewSessionController;
 }
 
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function NewSessionView({
   controller,
 }: NewSessionViewProps): JSX.Element {

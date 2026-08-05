@@ -2,9 +2,16 @@ import { useCallback, useMemo, useState } from "react";
 import type { GitRevertAction, ProseMention } from "@f-mark/shared";
 import { createClient } from "../../../../api/client.js";
 import { useStore } from "../../../../state/store.js";
+import { useConfirmDestructive } from "../../../../confirm/index.js";
 import { useDefaultFileCommentMentions } from "../../lineComment/FileCommentDraftPopover.js";
 import { useFileCommentPoster } from "../../lineComment/useFileCommentPoster.js";
-import { hunkDiffText, hunkLineRange, hunkSnippet } from "./model.js";
+import {
+  hunkDiffText,
+  hunkLineRange,
+  hunkSnippet,
+  revertActionLabel,
+  revertConfirmDetail,
+} from "./model.js";
 import { revertHunkChange } from "./revert.js";
 import type {
   HunkActionsBarController,
@@ -21,15 +28,18 @@ export function useHunkActionsBarController(
     wireMode,
     baseRef = null,
     diffBase,
+    fileStatus,
     hunk,
     oldPath,
     sessionId,
     onReverted,
+    onBeforeRevert,
   } = props;
   const token = useStore((s) => s.token);
   const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
   const poster = useFileCommentPoster();
   const defaultMentions = useDefaultFileCommentMentions();
+  const confirmDestructive = useConfirmDestructive();
 
   const [draftOpen, setDraftOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -42,8 +52,19 @@ export function useHunkActionsBarController(
   const runRevert = useCallback(
     async (action: GitRevertAction): Promise<void> => {
       if (busy) return;
+      const intent = await confirmDestructive({
+        action: "git.revert",
+        title: `${revertActionLabel(action, fileStatus)} — ${relPath}?`,
+        detail: revertConfirmDetail(action, fileStatus),
+      });
+      if (intent === null) return;
       setBusy(true);
       setConflict(null);
+      /* Clear the Monaco model before the mutation runs, not after — the
+         refreshed base/working text lands via onReverted's re-fetch, and
+         Monaco throws if that swap arrives while the old model is still
+         attached (M16a). */
+      onBeforeRevert?.();
       try {
         const error = await revertHunkChange({
           action,
@@ -66,8 +87,11 @@ export function useHunkActionsBarController(
       busy,
       baseRef,
       client,
+      confirmDestructive,
+      fileStatus,
       hunk,
       oldPath,
+      onBeforeRevert,
       onReverted,
       relPath,
       scope,

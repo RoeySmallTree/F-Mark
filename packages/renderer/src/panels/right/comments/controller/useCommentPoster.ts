@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { AnyEventRecord } from "@f-mark/shared";
 import { createClient } from "../../../../api/client.js";
 import { createManagedAgentsClient } from "../../../../api/managedAgents.js";
@@ -55,11 +55,20 @@ export function useCommentPoster({
     [activePath, activePathId, currentSessionId, sessions],
   );
 
+  /* `busyKey` is React state, so two clicks in the same tick both read it as
+     null and both post. That is not theoretical: a UI sweep recovered two
+     identical comment events one millisecond apart. The log is append-only, so
+     a duplicate can never be deleted, only masked. Guard on a ref, which
+     updates synchronously — the same mechanism compose's Send uses. */
+  const inFlightRef = useRef(false);
+
   const postComment = useCallback<PostComment>(
     async (key, group, body): Promise<void> => {
       if (currentSessionId === null || currentUserId === null) return;
       const scope = currentScope();
       if (scope === null) return;
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
       setBusyKey(key);
       try {
         const client = createClient({ baseUrl: "", token });
@@ -87,6 +96,7 @@ export function useCommentPoster({
         }
         await refreshEvents(currentSessionId, scope, token, upsertEvent);
       } finally {
+        inFlightRef.current = false;
         setBusyKey(null);
       }
     },

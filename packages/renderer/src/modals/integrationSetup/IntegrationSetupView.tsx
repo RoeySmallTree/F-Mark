@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { RefreshCw, X } from "lucide-react";
 import type {
   EffortDescriptor,
@@ -6,6 +7,7 @@ import type {
   RuntimeAccessModeOption,
 } from "@f-mark/shared";
 import { RuntimeSelect } from "../../components/RuntimeSelect.js";
+import { useFocusTrap } from "../../a11y/useFocusTrap.js";
 import {
   integrationStatuses,
   itemCopy,
@@ -60,6 +62,9 @@ export function IntegrationSetupView({
   onClose,
   controller,
 }: IntegrationSetupViewProps): JSX.Element {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div
       className="modal-backdrop"
@@ -68,6 +73,7 @@ export function IntegrationSetupView({
       data-modal="integration-setup"
     >
       <div
+        ref={dialogRef}
         className="modal integration-setup-modal"
         role="dialog"
         aria-modal="true"

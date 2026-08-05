@@ -19,6 +19,10 @@ export interface MonacoDiffActionStripsProps {
   actions: GitFileActions;
   sessionId: string | null;
   onReverted: () => void;
+  /** Clears the Monaco diff editor's model right before a revert mutation
+      runs, so the widget isn't left holding a disposed model once the
+      refreshed base/working text lands (M16a). */
+  onBeforeRevert: () => void;
 }
 
 export interface ActionStripCommonProps

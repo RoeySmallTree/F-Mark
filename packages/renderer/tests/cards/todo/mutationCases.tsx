@@ -2,14 +2,17 @@ import { fireEvent, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
 import {
   draftTitleField,
+  expectDescendantsCall,
   expectTodoPost,
   expectWakeCall,
   postedBody,
   replaceField,
   renderTodoCard,
   setupTodoCard,
+  stubConfirm,
   stubRecordingTodoFetch,
   stubTodoFetch,
+  stubTodoFetchWithFailingDescendants,
   taskDescriptionField,
   taskTitleField,
   todoEvent,
@@ -62,8 +65,9 @@ function registerTodoStatusTests(): void {
     });
   });
 
-  test("clicking X removes a todo immediately when it has no children", async () => {
+  test("clicking X asks the server for descendants, confirms, then removes", async () => {
     const fetchMock = stubTodoFetch("20260522T110300Z_us-a7f3.todo.json");
+    stubConfirm(true);
     const { event, user } = setupTodoCard({
       id: "t1",
       title: "Cull stale note",
@@ -74,10 +78,57 @@ function registerTodoStatusTests(): void {
       screen.getByRole("button", { name: /Remove task Cull stale note/i }),
     );
 
-    expect(postedBody(fetchMock)).toMatchObject({
+    await waitForFetchCalls(fetchMock, 2);
+    expectDescendantsCall(fetchMock, 0);
+    expect(postedBody(fetchMock, 1)).toMatchObject({
       status: "removed",
       supersedes: event.filename,
     });
+  });
+
+  test("clicking X still confirms and removes when the descendants lookup fails", async () => {
+    const fetchMock = stubTodoFetchWithFailingDescendants(
+      "20260522T110310Z_us-a7f3.todo.json",
+    );
+    const confirmMock = stubConfirm(true);
+    const { event, user } = setupTodoCard({
+      id: "t1",
+      title: "Cull stale note",
+      status: "open",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Remove task Cull stale note/i }),
+    );
+
+    await waitForFetchCalls(fetchMock, 2);
+    expectDescendantsCall(fetchMock, 0);
+    /* A dialog still appeared despite the failed lookup — this is the
+       regression check: before the fix, the rejected descendants promise
+       propagated out of the void-ed onRemove() and the confirm/remove flow
+       never ran at all. */
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(postedBody(fetchMock, 1)).toMatchObject({
+      status: "removed",
+      supersedes: event.filename,
+    });
+  });
+
+  test("clicking X does not remove when the confirmation is declined", async () => {
+    const fetchMock = stubTodoFetch("20260522T110320Z_us-a7f3.todo.json");
+    stubConfirm(false);
+    const { user } = setupTodoCard({
+      id: "t1",
+      title: "Cull stale note",
+      status: "open",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Remove task Cull stale note/i }),
+    );
+
+    await waitForFetchCalls(fetchMock, 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 }
 

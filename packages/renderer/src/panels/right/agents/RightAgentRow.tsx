@@ -7,6 +7,7 @@ import {
   type MouseEvent,
 } from "react";
 import type { AgentStatusRow } from "@f-mark/shared";
+import { useDeferredUnmount } from "../../../popovers/useDeferredUnmount.js";
 import { RightAgentViewModel } from "./agentPresentation.js";
 import { AgentPopover } from "./AgentPopover.js";
 import { RightAgentSummary } from "./RightAgentSummary.js";
@@ -46,6 +47,7 @@ export function RightAgentRow({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
+  const popover = useDeferredUnmount(popoverOpen);
 
   function openPopover(): void {
     const rect = rowRef.current?.getBoundingClientRect() ?? null;
@@ -98,12 +100,13 @@ export function RightAgentRow({
         <RightAgentSummary view={view} controller={controller} />
       </div>
 
-      {popoverOpen && anchorRect !== null ? (
+      {popover.mounted && anchorRect !== null ? (
         <AgentPopover
           view={view}
           controller={controller}
           anchorRect={anchorRect}
           onClose={() => setPopoverOpen(false)}
+          closing={popover.closing}
         />
       ) : null}
     </>

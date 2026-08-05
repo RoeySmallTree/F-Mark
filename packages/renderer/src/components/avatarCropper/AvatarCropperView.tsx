@@ -1,9 +1,10 @@
-import type { JSX, MouseEvent } from "react";
+import { useRef, type JSX, type MouseEvent } from "react";
 import { X } from "lucide-react";
 import { AvatarCropperActions } from "./AvatarCropperActions.js";
 import { AvatarCropperStage } from "./AvatarCropperStage.js";
 import { AvatarCropperZoom } from "./AvatarCropperZoom.js";
 import type { AvatarCropperController } from "./useAvatarCropperController.js";
+import { useFocusTrap } from "../../a11y/useFocusTrap.js";
 
 interface AvatarCropperViewProps {
   controller: AvatarCropperController;
@@ -12,6 +13,9 @@ interface AvatarCropperViewProps {
 export function AvatarCropperView({
   controller,
 }: AvatarCropperViewProps): JSX.Element {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div
       className="modal-backdrop avatar-cropper-backdrop"
@@ -20,6 +24,7 @@ export function AvatarCropperView({
       onClick={controller.onCancel}
     >
       <div
+        ref={dialogRef}
         className="modal avatar-cropper"
         role="dialog"
         aria-modal="true"

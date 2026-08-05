@@ -17,6 +17,8 @@ import { useStore } from "../state/store.js";
 import { htmlBundleUrl } from "../render/htmlBundle.js";
 import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
 
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function HtmlPreviewModal(): JSX.Element | null {
   const htmlPreview = useStore((s) => s.htmlPreview);
   const token = useStore((s) => s.token);

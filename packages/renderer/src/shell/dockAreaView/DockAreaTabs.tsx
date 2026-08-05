@@ -12,7 +12,15 @@ export function DockAreaTabs({
   label: string;
 }): JSX.Element {
   return (
-    <div className={className} role="tablist" aria-label={label}>
+    /* data-pane-count lets CSS suppress a strip that offers no choice (a lone
+       tab) without hiding it unconditionally — an area that gains a second
+       pane must get its switcher back rather than be stranded. */
+    <div
+      className={className}
+      role="tablist"
+      aria-label={label}
+      data-pane-count={dock.panes.length}
+    >
       {dock.panes.map((pane) => {
         const meta = DOCK_META[pane];
         return (

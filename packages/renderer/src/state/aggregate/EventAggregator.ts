@@ -4,6 +4,7 @@ import type {
   ProsePayload,
 } from "@f-mark/shared";
 import {
+  COMMENT_MARKER_CONTENT,
   EVENT_KINDS,
   getAppendTo,
   getCommentTarget,
@@ -33,8 +34,8 @@ const liveAnchorSentinels = {
 } as const;
 
 const commentMarkers = {
-  removed: "_removed_",
-  resolved: "_resolved_",
+  removed: COMMENT_MARKER_CONTENT.removed,
+  resolved: COMMENT_MARKER_CONTENT.resolved,
 } as const;
 
 function isProseTombstone(event: AnyEventRecord): boolean {

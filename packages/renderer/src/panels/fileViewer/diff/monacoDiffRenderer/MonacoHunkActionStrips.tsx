@@ -14,6 +14,7 @@ export function MonacoHunkActionStrips({
   oldPathProp,
   sessionId,
   onReverted,
+  onBeforeRevert,
 }: ActionStripCommonProps): JSX.Element | null {
   if (diff.hunks.length === 0) return null;
 
@@ -35,6 +36,7 @@ export function MonacoHunkActionStrips({
             {...oldPathProp}
             sessionId={sessionId}
             onReverted={onReverted}
+            onBeforeRevert={onBeforeRevert}
             hideFileAction
           />
         </div>

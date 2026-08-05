@@ -6,6 +6,7 @@ import type {
   Participant,
 } from "@f-mark/shared";
 import type { RootScope } from "../../../api/client.js";
+import type { ConfirmedIntent } from "../../../confirm/index.js";
 
 export type BusyAction =
   | "pause"
@@ -66,5 +67,5 @@ export interface RightAgentsController {
   compact(agent: AgentStatusRow): Promise<void>;
   clear(agent: AgentStatusRow): Promise<void>;
   reconnect(agent: AgentStatusRow): Promise<void>;
-  goodbye(agent: AgentStatusRow): Promise<void>;
+  goodbye(agent: AgentStatusRow, intent: ConfirmedIntent): Promise<void>;
 }

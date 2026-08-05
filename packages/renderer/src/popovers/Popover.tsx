@@ -30,6 +30,10 @@ interface Props {
      popovers can size themselves (e.g. width:380 for the log filter). */
   className?: string;
   ariaLabel?: string;
+  /* Set by useDeferredUnmount at the mount site while the exit animation
+     plays. Purely presentational — the mount site still owns when onClose
+     fires. */
+  closing?: boolean;
 }
 
 const GAP = 6;
@@ -84,6 +88,7 @@ export function Popover({
   children,
   className,
   ariaLabel,
+  closing = false,
 }: Props): JSX.Element {
   const panelRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>(() =>
@@ -132,14 +137,18 @@ export function Popover({
   return (
     <>
       <div
-        className="popover-backdrop"
+        className={["popover-backdrop", closing ? "is-closing" : null]
+          .filter(Boolean)
+          .join(" ")}
         data-testid="popover-backdrop"
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         ref={panelRef}
-        className={["popover", className].filter(Boolean).join(" ")}
+        className={["popover", className, closing ? "is-closing" : null]
+          .filter(Boolean)
+          .join(" ")}
         role="dialog"
         aria-modal="false"
         aria-label={ariaLabel}

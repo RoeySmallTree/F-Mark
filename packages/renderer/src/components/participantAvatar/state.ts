@@ -27,6 +27,7 @@ export interface ParticipantAvatarViewState {
   classes: string;
   glyph?: AvatarPreset;
   label: string;
+  participantId?: string;
   resolvedKind: AvatarKind;
   style?: CSSProperties;
   title?: string;
@@ -93,6 +94,7 @@ export function useParticipantAvatarState(
     }),
     glyph,
     label: avatarLabel({ ...avatarInput, resolvedKind, title }),
+    participantId,
     resolvedKind,
     style: avatarColorStyle(avatarBorderColor(avatarInput), artLines),
     title,

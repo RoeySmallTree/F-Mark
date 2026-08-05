@@ -37,7 +37,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: modal-content-enter 280ms var(--ease-out-quint) backwards;
+  animation: modal-content-enter var(--dur-slow) var(--ease-out-quint) backwards;
 }
 .modal.top {
   align-self: flex-start;
@@ -1370,8 +1370,8 @@
   text-align: left;
   font-family: var(--sans);
   transition:
-    border-color 80ms ease,
-    box-shadow 80ms ease;
+    border-color var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
 }
 .theme-card:hover {
   border-color: var(--ink-4);
@@ -1422,8 +1422,8 @@
   cursor: pointer;
   aspect-ratio: 4 / 3;
   transition:
-    border-color 80ms ease,
-    box-shadow 80ms ease;
+    border-color var(--dur-instant) ease,
+    box-shadow var(--dur-instant) ease;
 }
 .layout-card:hover {
   border-color: var(--ink-4);
@@ -1864,7 +1864,7 @@ kbd {
   font-size: 26px;
   color: var(--ink);
   padding: 0;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-instant) ease, box-shadow var(--dur-instant) ease;
 }
 .preset-editor-emoji:hover,
 .preset-editor-emoji[aria-expanded="true"] {
@@ -1892,7 +1892,7 @@ kbd {
   color: var(--ink);
   letter-spacing: -0.01em;
   padding: 8px 0;
-  transition: border-color 120ms ease;
+  transition: border-color var(--dur-instant) ease;
 }
 .preset-editor-name:focus {
   border-bottom-color: var(--ink-4);
@@ -2568,7 +2568,7 @@ kbd {
   border-radius: 6px;
   font-size: 18px;
   cursor: pointer;
-  transition: background 80ms ease;
+  transition: background var(--dur-instant) ease;
   padding: 0;
 }
 .emoji-picker-cell:hover {
@@ -2631,7 +2631,7 @@ kbd {
   border-radius: 5px;
   padding: 3px 7px;
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
+  transition: border-color var(--dur-instant) ease, color var(--dur-instant) ease;
 }
 .form-label-action:hover {
   border-color: var(--ink-4);
@@ -2723,7 +2723,7 @@ kbd {
   font-size: 11px;
   color: var(--ink-3);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition: border-color var(--dur-instant) ease, color var(--dur-instant) ease, background var(--dur-instant) ease;
 }
 .cat-panel-add:hover {
   border-color: var(--ink-4);
@@ -2765,7 +2765,7 @@ kbd {
   font-weight: 600;
   color: var(--ink);
   padding: 4px 0;
-  transition: border-color 120ms ease;
+  transition: border-color var(--dur-instant) ease;
 }
 .cat-row-name:focus {
   border-bottom-color: var(--ink-4);
@@ -2847,7 +2847,7 @@ kbd {
   justify-content: center;
   padding: 0;
   opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: opacity var(--dur-instant) ease, color var(--dur-instant) ease, border-color var(--dur-instant) ease;
 }
 .emoji-pool-chip:hover .emoji-pool-chip-x,
 .emoji-pool-chip-x:focus-visible {
@@ -2868,7 +2868,7 @@ kbd {
   font-size: 11px;
   color: var(--ink);
   outline: 0;
-  transition: border-color 120ms ease;
+  transition: border-color var(--dur-instant) ease;
 }
 .emoji-pool-input:focus {
   border-color: var(--ink-4);
@@ -2897,7 +2897,7 @@ kbd {
   font-size: 11px;
   color: var(--ink-3);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition: border-color var(--dur-instant) ease, color var(--dur-instant) ease, background var(--dur-instant) ease;
 }
 .ws-chip:hover {
   border-color: var(--ink-4);

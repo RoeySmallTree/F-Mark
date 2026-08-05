@@ -1,8 +1,8 @@
 import type { JSX } from "react";
+import { Popover } from "../../popovers/Popover.js";
 import { AgentMentionEmpty } from "./AgentMentionEmpty.js";
 import { AgentMentionHeader } from "./AgentMentionHeader.js";
 import { AgentMentionList } from "./AgentMentionList.js";
-import { getMentionPickerStyle } from "./position.js";
 import type {
   AgentMentionPickerController,
   AgentMentionPickerProps,
@@ -10,6 +10,7 @@ import type {
 
 interface Props extends AgentMentionPickerProps {
   controller: AgentMentionPickerController;
+  closing?: boolean;
 }
 
 export function AgentMentionPickerView({
@@ -18,13 +19,18 @@ export function AgentMentionPickerView({
   onSelect,
   onClose,
   controller,
+  closing = false,
 }: Props): JSX.Element {
   const { agents, rows, busyId, refresh, resume, reconnect } = controller;
 
   return (
-    <div
+    <Popover
+      anchorRect={anchorRect}
+      placement="top-start"
+      onClose={onClose}
+      closing={closing}
       className="agent-mention-popover"
-      style={getMentionPickerStyle(anchorRect)}
+      ariaLabel="Agents"
     >
       <AgentMentionHeader
         onRefresh={() => void refresh()}
@@ -42,6 +48,6 @@ export function AgentMentionPickerView({
           onReconnect={(row) => void reconnect(row)}
         />
       )}
-    </div>
+    </Popover>
   );
 }

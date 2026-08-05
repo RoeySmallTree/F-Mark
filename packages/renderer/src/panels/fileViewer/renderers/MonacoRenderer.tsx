@@ -23,6 +23,7 @@ import { useRenderedRailStoreBindings } from "../lineComment/renderedRail/useRen
 const NO_LOOSE_STRING_VALUES = {
   on: "on",
   none: "none",
+  http404: "HTTP 404",
 } as const;
 
 const Editor = lazy(async () => {
@@ -80,6 +81,21 @@ export function MonacoRenderer({ path }: MonacoRendererProps): JSX.Element {
   );
 
   if (error !== null) {
+    /* Only a 404 gets the designed empty state — a revert deleting the file
+       out from under a still-open tab is the common case (M16b). Any other
+       error (network, permissions, 5xx) keeps the raw message: it's a real
+       failure worth seeing verbatim, not an expected "file is gone" state. */
+    if (error === NO_LOOSE_STRING_VALUES.http404) {
+      return (
+        <div className="fv-empty">
+          <p>This file was deleted.</p>
+          <p className="fv-empty-hint">
+            It no longer exists at this path — close the tab or open another
+            file.
+          </p>
+        </div>
+      );
+    }
     return <div className="fv-error">failed to load file: {error}</div>;
   }
   if (text === null) {

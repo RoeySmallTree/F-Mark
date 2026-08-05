@@ -5,6 +5,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import { TopBar } from "../src/shell/TopBar.js";
+import { LedgerHeader } from "../src/shell/LedgerHeader.js";
 import { Feed } from "../src/shell/Feed.js";
 import { LeftPanel } from "../src/shell/LeftPanel.js";
 import { RightPanel } from "../src/shell/RightPanel.js";
@@ -118,9 +119,21 @@ describe("Shell — TopBar", () => {
     expect(container.querySelector(".topbar-chips")).toBeNull();
   });
 
+  test("the top bar no longer carries document controls", () => {
+    /* View mode filters the document, so it belongs on the document. Keeping
+       it in the top bar merged two unrelated choices — a pane switcher and a
+       view filter — into one strip of five tabs. */
+    renderWithAgentSpawn(<TopBar />);
+    expect(
+      screen.queryByRole("tablist", { name: /feed view mode/i }),
+    ).toBeNull();
+    expect(screen.queryByRole("tablist", { name: /stowed pane/i })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: /center pane/i })).toBeNull();
+  });
+
   test("view-toggle renders three buttons; clicking updates store.viewMode", async () => {
     const user = userEvent.setup();
-    renderWithAgentSpawn(<TopBar />);
+    renderWithAgentSpawn(<LedgerHeader />);
     const toggle = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(toggle).getAllByRole("tab");
     expect(buttons).toHaveLength(3);
@@ -390,6 +403,9 @@ describe("Shell — RightPanel", () => {
     render(<RightPanel />);
     const tabs = screen.getByRole("tablist", { name: /right panel tabs/i });
     const buttons = within(tabs).getAllByRole("tab");
+    /* Search joined the rail in dock layout v5: it used to live in the top
+       bar's "stowed" strip, which was removed with the rest of the window
+       manager. */
     const expectedKeys = [
       "todos",
       "comments",
@@ -399,18 +415,22 @@ describe("Shell — RightPanel", () => {
       "files",
       "diffTree",
       "terminal",
+      "search",
       "layout",
     ] as const;
     expect(buttons).toHaveLength(expectedKeys.length);
-    expect(buttons[0]).toHaveTextContent(/todos/i);
-    expect(buttons[1]).toHaveTextContent(/comments/i);
-    expect(buttons[2]).toHaveTextContent(/named/i);
-    expect(buttons[3]).toHaveTextContent(/agents/i);
-    expect(buttons[4]).toHaveTextContent(/log/i);
-    expect(buttons[5]).toHaveTextContent(/files/i);
-    expect(buttons[6]).toHaveTextContent(/diff tree/i);
-    expect(buttons[7]).toHaveTextContent(/terminal/i);
-    expect(buttons[8]).toHaveAccessibleName(/layout settings/i);
+    /* Accessible name, not text content: the visible label collapses to an
+       icon in a narrow column, so the name has to survive without it. */
+    expect(buttons[0]).toHaveAccessibleName(/todos/i);
+    expect(buttons[1]).toHaveAccessibleName(/comments/i);
+    expect(buttons[2]).toHaveAccessibleName(/named/i);
+    expect(buttons[3]).toHaveAccessibleName(/agents/i);
+    expect(buttons[4]).toHaveAccessibleName(/log/i);
+    expect(buttons[5]).toHaveAccessibleName(/files tree/i);
+    expect(buttons[6]).toHaveAccessibleName(/diff tree/i);
+    expect(buttons[7]).toHaveAccessibleName(/terminal/i);
+    expect(buttons[8]).toHaveAccessibleName(/search/i);
+    expect(buttons[9]).toHaveAccessibleName(/layout settings/i);
 
     for (let i = 0; i < expectedKeys.length; i++) {
       expect(buttons[i]).toHaveAttribute("data-tab", expectedKeys[i]);

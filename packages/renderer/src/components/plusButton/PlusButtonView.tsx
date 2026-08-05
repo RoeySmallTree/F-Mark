@@ -22,10 +22,10 @@ export function PlusButtonView({
       >
         +
       </button>
-      {controller.open ? (
+      {controller.mounted ? (
         <div
           ref={controller.menuRef}
-          className="plus-menu"
+          className={controller.closing ? "plus-menu is-closing" : "plus-menu"}
           data-placement={controller.menuPlacement ?? "pending"}
           role="menu"
           aria-label="Spawn options"

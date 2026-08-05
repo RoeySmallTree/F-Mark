@@ -80,8 +80,13 @@ export function createManagedAgentControlMethods(
       );
       return r.token;
     },
-    goodbye: (id, confirmToken, scope) =>
-      req<ManagedAgentGoodbyeResponse>("DELETE", goodbyePath(id, confirmToken, scope)),
+    goodbye: (id, confirmToken, scope, intent) => {
+      void intent;
+      return req<ManagedAgentGoodbyeResponse>(
+        "DELETE",
+        goodbyePath(id, confirmToken, scope),
+      );
+    },
     command: (id, body, scope) =>
       req<ManagedAgentCommandResponse>(
         "POST",

@@ -34,6 +34,7 @@ export function ToolUseCard({
     bodyExpanded,
     bodyOverflowing,
     bodyRef,
+    closing,
     open,
     setBodyExpanded,
     toggleOpen,
@@ -64,15 +65,38 @@ export function ToolUseCard({
         success={success}
         toolName={tool_name}
       />
-      {open ? (
-        <ToolUseBody
-          bodyExpanded={bodyExpanded}
-          bodyOverflowing={bodyOverflowing}
-          bodyRef={bodyRef}
-          onExpand={() => setBodyExpanded(true)}
-          presentation={presentation}
-        />
-      ) : null}
+      {/* Always in the DOM so `.tool-call.open .tool-disclosure` (cards.css)
+          can animate grid-template-rows 0fr -> 1fr; the wrapper itself is
+          cheap. `ToolUseBody` — the part that actually renders a tool
+          call's full output — mounts only while open or closing, so
+          hundreds of collapsed calls in the feed never pay for content
+          they aren't showing. */}
+      {/* aria-hidden and inert both track `open` (not `open || closing`) so
+          they flip the instant the close starts, matching aria-expanded on
+          the header above: during the ~120ms closing window the body is
+          still visually animating out but must already be gone from the AT
+          tree and unfocusable (it contains a real "Show full" button).
+          inert is passed as the string workaround, not a boolean prop -
+          this project's React 18.3 doesn't support the boolean `inert` prop
+          (it warns and drops the attribute); the empty-string form is the
+          same pattern already used in FeedComposeDock's compose-shell. */}
+      <div
+        className="tool-disclosure"
+        aria-hidden={!open}
+        {...(!open ? { inert: "" } : {})}
+      >
+        <div className="tool-disclosure-clip">
+          {open || closing ? (
+            <ToolUseBody
+              bodyExpanded={bodyExpanded}
+              bodyOverflowing={bodyOverflowing}
+              bodyRef={bodyRef}
+              onExpand={() => setBodyExpanded(true)}
+              presentation={presentation}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

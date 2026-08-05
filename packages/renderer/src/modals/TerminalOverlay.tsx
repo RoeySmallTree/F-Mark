@@ -7,9 +7,10 @@
    the modal chrome (backdrop, header, Detach/close). Mounted = active WS;
    unmount (Detach / backdrop click → onClose) tears it down. */
 
-import { type JSX } from "react";
+import { useRef, type JSX } from "react";
 import { X } from "lucide-react";
 import { TerminalView } from "../components/terminalView/TerminalView.js";
+import { useFocusTrap } from "../a11y/useFocusTrap.js";
 
 export interface TerminalOverlayProps {
   /** Tmux session id this overlay attaches to (e.g. "fmark-ag-c92e"). */
@@ -27,6 +28,9 @@ export function TerminalOverlay({
   baseUrl,
   onClose,
 }: TerminalOverlayProps): JSX.Element {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div
       className="modal-backdrop"
@@ -35,6 +39,7 @@ export function TerminalOverlay({
       data-modal="terminal"
     >
       <div
+        ref={dialogRef}
         className="modal terminal-overlay"
         role="dialog"
         aria-modal="true"

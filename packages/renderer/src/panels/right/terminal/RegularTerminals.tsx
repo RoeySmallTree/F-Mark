@@ -65,6 +65,7 @@ export function RegularTerminals(): JSX.Element {
                 type="button"
                 className="terminal-tab-close"
                 aria-label={`Kill terminal ${t.label}`}
+                title={`Kill terminal ${t.label}`}
                 onClick={() => c.close(t.tmux_session)}
               >
                 <X size={11} aria-hidden="true" />
