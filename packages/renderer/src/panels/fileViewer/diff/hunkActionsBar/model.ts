@@ -8,6 +8,8 @@ const NO_LOOSE_STRING_VALUES = {
   binaryAdded: "binary-added",
   deleted: "deleted",
   binaryDeleted: "binary-deleted",
+  hunk: "hunk",
+  rename: "rename",
 } as const;
 
 /** Whole-file action verb for a status (X3 labelling). */
@@ -53,8 +55,8 @@ export function revertActionLabel(
   action: GitRevertAction,
   status: GitFileStatus,
 ): string {
-  if (action === "hunk") return hunkActionLabel(status);
-  if (action === "rename") return "Undo rename";
+  if (action === NO_LOOSE_STRING_VALUES.hunk) return hunkActionLabel(status);
+  if (action === NO_LOOSE_STRING_VALUES.rename) return "Undo rename";
   return fileActionLabel(status);
 }
 
@@ -82,7 +84,7 @@ export function revertConfirmDetail(
   action: GitRevertAction,
   status: GitFileStatus,
 ): string {
-  if (action === "rename") return RENAME_DETAIL;
+  if (action === NO_LOOSE_STRING_VALUES.rename) return RENAME_DETAIL;
 
   const isUntracked =
     status === NO_LOOSE_STRING_VALUES.untracked ||
@@ -96,8 +98,12 @@ export function revertConfirmDetail(
 
   if (isUntracked) return UNTRACKED_PERMANENT_DETAIL;
   if (isAdded) return ADDED_LOW_LEVEL_DETAIL;
-  if (isDeleted) return action === "hunk" ? HUNK_RESTORE_DETAIL : FILE_RESTORE_DETAIL;
-  return action === "hunk" ? HUNK_DISCARD_DETAIL : FILE_DISCARD_DETAIL;
+  if (isDeleted) {
+    return action === NO_LOOSE_STRING_VALUES.hunk
+      ? HUNK_RESTORE_DETAIL
+      : FILE_RESTORE_DETAIL;
+  }
+  return action === NO_LOOSE_STRING_VALUES.hunk ? HUNK_DISCARD_DETAIL : FILE_DISCARD_DETAIL;
 }
 
 /* The comment targets the hunk's NEW line range (added/context lines). For a
