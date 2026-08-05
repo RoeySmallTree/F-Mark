@@ -24,3 +24,7 @@ tmp-*
 
 # planning/scratch docs never ship
 planning/
+
+# Playwright output
+test-results/
+playwright-report/
