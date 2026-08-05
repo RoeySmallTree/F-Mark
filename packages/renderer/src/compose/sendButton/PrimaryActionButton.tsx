@@ -14,6 +14,7 @@ const NO_LOOSE_STRING_VALUES = {
 interface PrimaryActionButtonProps {
   ariaLabel: string;
   disabled: boolean;
+  disabledReason: string | null;
   kind: SendButtonKind;
   pendingLabel: string;
   stopLabel: string;
@@ -23,6 +24,7 @@ interface PrimaryActionButtonProps {
 export function PrimaryActionButton({
   ariaLabel,
   disabled,
+  disabledReason,
   kind,
   pendingLabel,
   stopLabel,
@@ -36,6 +38,7 @@ export function PrimaryActionButton({
         onClick={onClick}
         disabled={disabled}
         aria-label={ariaLabel}
+        title={disabledReason ?? undefined}
         data-state={kind}
       >
         <ActionLabel active={kind === NO_LOOSE_STRING_VALUES.pending}>

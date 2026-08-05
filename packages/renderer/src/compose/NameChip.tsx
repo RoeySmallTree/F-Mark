@@ -7,6 +7,10 @@
 
 import { useEffect, useRef, type JSX } from "react";
 import { FileText, X } from "lucide-react";
+import {
+  NAMED_MODE_NAME_HINT_ID,
+  NAMED_MODE_NAME_REQUIRED_MESSAGE,
+} from "./composeHelpers.js";
 
 interface Props {
   active: boolean;
@@ -44,6 +48,8 @@ export function NameChip({
     );
   }
 
+  const nameMissing = value.trim().length === 0;
+
   return (
     <div
       className="name-chip name-chip-expanded"
@@ -58,7 +64,12 @@ export function NameChip({
         placeholder="Name this contribution…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-invalid={nameMissing}
+        aria-describedby={NAMED_MODE_NAME_HINT_ID}
       />
+      <span id={NAMED_MODE_NAME_HINT_ID} className="sr-only">
+        {NAMED_MODE_NAME_REQUIRED_MESSAGE}
+      </span>
       <button
         type="button"
         className="name-chip-close"

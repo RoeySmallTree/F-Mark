@@ -32,6 +32,7 @@ export function SendButton(props: SendButtonProps): JSX.Element {
     <PrimaryActionButton
       ariaLabel={model.ariaLabel}
       disabled={model.disabled}
+      disabledReason={model.disabledReason}
       kind={model.kind}
       pendingLabel={model.pendingLabel}
       stopLabel={model.stopLabel}

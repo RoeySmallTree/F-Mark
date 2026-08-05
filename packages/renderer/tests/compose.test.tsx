@@ -568,6 +568,45 @@ describe("Compose — send button label per mode", () => {
   });
 });
 
+describe("Compose — named mode disabled Send explains why (M10)", () => {
+  beforeEach(() => {
+    resetStore();
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  test("empty name: name field is flagged invalid and Send carries the same reason", async () => {
+    const user = userEvent.setup();
+    resetStore({ composeMode: "message" });
+    const { container } = renderCompose();
+
+    // Content alone isn't the blocker here — only the missing name is.
+    const textarea = screen.getByLabelText(/compose message/i);
+    await user.type(textarea, "hello");
+    await user.keyboard(`${MOD_OPEN}n${MOD_CLOSE}`);
+    expect(useStore.getState().composeMode).toBe("named");
+
+    const nameInput = screen.getByPlaceholderText(/Name this contribution/i);
+    expect(nameInput).toHaveAttribute("aria-invalid", "true");
+    const describedBy = nameInput.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const hint = container.querySelector(`#${describedBy}`);
+    expect(hint).not.toBeNull();
+    expect(hint).toHaveTextContent(/name this contribution before sending/i);
+
+    const send = container.querySelector(".primary-action") as HTMLButtonElement;
+    expect(send).toBeDisabled();
+    expect(send).toHaveAttribute("title", hint!.textContent);
+
+    // Filling in a name clears both the invalid flag and the title.
+    await user.type(nameInput, "My Title");
+    expect(nameInput).toHaveAttribute("aria-invalid", "false");
+    expect(send).not.toBeDisabled();
+    expect(send).not.toHaveAttribute("title");
+  });
+});
+
 describe("Compose — pending approval actions", () => {
   beforeEach(() => {
     resetStore();

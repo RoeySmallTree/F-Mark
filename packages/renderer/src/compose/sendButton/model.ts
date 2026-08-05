@@ -1,3 +1,4 @@
+import { NAMED_MODE_NAME_REQUIRED_MESSAGE } from "../composeHelpers.js";
 import {
   SEND_BUTTON_KINDS,
   SEND_BUTTON_MODES,
@@ -9,6 +10,7 @@ import {
 export interface SendButtonModel {
   ariaLabel: string;
   disabled: boolean;
+  disabledReason: string | null;
   kind: SendButtonKind;
   pendingLabel: string;
   stopLabel: string;
@@ -64,6 +66,20 @@ function disabledForKind(options: {
   return options.busy || !options.canSubmit;
 }
 
+/* Only the named-mode-missing-name case gets a reason: it's the one silent
+   dead-button state (M10). Other disabled states (busy, no session) already
+   read as clearly "not ready yet" from the button's own label/animation. */
+function disabledReasonForKind(options: {
+  disabled: boolean;
+  mode: SendButtonProps["mode"];
+  name: string;
+}): string | null {
+  if (!options.disabled) return null;
+  if (options.mode !== SEND_BUTTON_MODES.named) return null;
+  if (options.name.trim().length > 0) return null;
+  return NAMED_MODE_NAME_REQUIRED_MESSAGE;
+}
+
 function ariaLabelForKind(options: {
   kind: SendButtonKind;
   mode: SendButtonProps["mode"];
@@ -93,14 +109,20 @@ export function sendButtonModel(props: SendButtonProps): SendButtonModel {
     mode: props.mode,
   });
   const stop = stopLabel(props.activeAgentCount ?? 0);
+  const disabled = disabledForKind({
+    busy: props.busy,
+    canSubmit: props.canSubmit,
+    kind,
+    mode: props.mode,
+  });
 
   return {
     ariaLabel: ariaLabelForKind({ kind, mode: props.mode, stopLabel: stop }),
-    disabled: disabledForKind({
-      busy: props.busy,
-      canSubmit: props.canSubmit,
-      kind,
+    disabled,
+    disabledReason: disabledReasonForKind({
+      disabled,
       mode: props.mode,
+      name: props.name,
     }),
     kind,
     pendingLabel: pendingLabel(props.pendingApproval ?? null),

@@ -7,12 +7,13 @@ interface Props {
 }
 
 export function ComposeToolbarBridge({ controller }: Props): JSX.Element {
-  const { activeMode, sessionId, popovers } = controller.core;
+  const { activeMode, sessionId, popovers, textDraft } = controller.core;
   const { attachments, submission, agentControls } = controller.services;
 
   return (
     <ComposeToolbar
       activeMode={activeMode}
+      name={textDraft.name}
       sessionId={sessionId}
       canSubmit={submission.canSubmit}
       busy={submission.busy}
