@@ -1,4 +1,4 @@
-import { type JSX } from "react";
+import { useRef, type JSX } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,6 +17,7 @@ import { FolderStep } from "./FolderStep.js";
 import { TodosStep } from "./TodosStep.js";
 import { ProfileStep } from "./ProfileStep.js";
 import type { OnboardingController } from "./useOnboardingController.js";
+import { useFocusTrap } from "../../a11y/useFocusTrap.js";
 
 const NO_LOOSE_STRING_VALUES = {
   finishing: "finishing",
@@ -155,9 +156,13 @@ function WizardFooter({ controller }: OnboardingViewProps): JSX.Element {
 }
 
 export function OnboardingView({ controller }: OnboardingViewProps): JSX.Element {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
+
   return (
     <div className="modal-backdrop ob-backdrop" role="presentation">
       <div
+        ref={dialogRef}
         className="modal ob-modal"
         role="dialog"
         aria-modal="true"

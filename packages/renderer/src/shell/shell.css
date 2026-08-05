@@ -2554,6 +2554,17 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border: 0;
   cursor: pointer;
 }
+/* Touch target: .icon-btn's own 32x32 box stays the deliberate dense size,
+   but a transparent overlay grows the actual hit area. .topbar-right only
+   has a 4px gap between buttons, so a full 44px overlay (a 6px reach past
+   each edge) would swallow clicks meant for the neighbour — capped at 2px
+   per side (36x36) so adjacent buttons' overlays never touch. */
+.icon-btn::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+}
 .icon-btn:hover {
   background: var(--panel);
   color: var(--ink);

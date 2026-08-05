@@ -21,6 +21,8 @@ interface CmdKPaletteViewProps {
   query: string;
 }
 
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function CmdKPaletteView(props: CmdKPaletteViewProps): JSX.Element {
   const { flatRows, groups, onActivate, onQueryChange, query } = props;
   const [selectedIdx, setSelectedIdx] = useState(0);

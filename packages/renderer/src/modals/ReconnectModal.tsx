@@ -13,10 +13,11 @@ const NO_LOOSE_STRING_VALUES = {
    placeholders, and per-runtime hook hints, so this modal is essentially
    a viewer + clipboard helper. */
 
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { X } from "lucide-react";
 import { MarkdownRenderer } from "../render/MarkdownRenderer.js";
 import { copyToClipboard } from "../render/copy.js";
+import { useFocusTrap } from "../a11y/useFocusTrap.js";
 
 export interface ReconnectModalProps {
   participantId: string;
@@ -51,6 +52,8 @@ export function ReconnectModal({
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
 
   const url = useMemo(
     () => buildGuideUrl(baseUrl, participantId, sessionId, runtimeId),
@@ -98,6 +101,7 @@ export function ReconnectModal({
       data-modal="reconnect"
     >
       <div
+        ref={dialogRef}
         className="modal reconnect-modal"
         role="dialog"
         aria-modal="true"

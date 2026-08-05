@@ -9,6 +9,8 @@ interface SkillsPaletteViewProps {
   controller: SkillsPaletteController;
 }
 
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function SkillsPaletteView({
   controller,
 }: SkillsPaletteViewProps): JSX.Element {
