@@ -1245,13 +1245,19 @@ it("no rule suppresses the focus ring without replacing it", () => {
 });
 ```
 
-- [ ] **Step 6: M13 — raise touch targets — DEFERRED, not attempted**
+- [x] **Step 6: M13 — raise touch targets — SHIPPED PARTIAL (36×36, not 44×44)**
 
-The fix is an invisible `::before` overlay expanding the hit area to 44px without changing visual size. Its one real risk is that adjacent top-bar buttons sit close enough that the overlays swallow clicks meant for a neighbour — and that is a **computed-geometry** question, which this codebase has already been burned by answering from source. The rule learned there stands: a claim about computed layout needs a browser measurement, not a reading.
+*Correction: an earlier revision of this plan recorded M13 as deferred and unattempted. That was wrong — it shipped in `fb329e3` and I did not notice it inside that commit before writing the note.*
 
-So this needs a live kernel and `document.elementFromPoint` on each button's neighbour, which the same session that lands the change should run. Shipping it unmeasured would trade a Medium a11y gap for a possible Blocker-shaped click-interception bug, which is a bad trade.
+`.icon-btn` gains `position: relative` plus a transparent `::before { inset: -2px }`, lifting the hit area from 32×32 to **36×36** without changing visual size.
 
-Original instruction, unchanged, for whoever picks it up:
+**It stops short of the 44px guideline deliberately, and the reason is measured, not assumed:** `.topbar-right` sets a **4px gap** between 32px buttons. A 44px overlay reaches 6px past each edge, so adjacent overlays would overlap by 8px and each button would swallow clicks meant for its neighbour. 2px per side is the largest expansion where adjacent overlays never touch. That is read off the gap declaration — a source fact, not a computed-layout claim — so it does not need a browser to trust.
+
+Reaching a true 44px needs the gap or the button size to change, which is a visual-density decision, not an a11y fix, and belongs with Oran.
+
+**Still open:** the 28×28 `+` button the sweep measured was not located. The only 28×28 add-button found (`.todo-add-row`) is styled in `cards/cards.css` and may not be the one measured. Needs a live kernel to identify.
+
+Original instruction, kept for whoever raises this to a true 44px:
 
 Command palette and settings buttons are 15×32px; `+` is 28×28px, against a ~44px guideline. Raise the *hit* area without changing visual size — the density is deliberate in a dense tool:
 
