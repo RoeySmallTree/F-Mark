@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent } from "react";
 import { useDockLayout } from "../../hooks/useDockLayout.js";
 import { useDockPaneDrag } from "../../hooks/useDockPaneDrag.js";
 import {
@@ -13,6 +13,7 @@ import {
   type DockPaneId,
 } from "../dockLayout.js";
 import { isLeavingDropContainer } from "../dockDragEvents.js";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
 import { ViewModeToggle } from "./ViewModeToggle.js";
 
 const NO_LOOSE_STRING_VALUES = {
@@ -31,6 +32,20 @@ export function CenterDockTabs(): JSX.Element | null {
     centerPanes.includes(layout.active.center)
       ? layout.active.center
       : centerPanes[0];
+  const paneRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = active !== undefined ? centerPanes.indexOf(active) : 0;
+  const { tabIndexFor, onKeyDown: onRovingKeyDown } = useRovingTabIndex(
+    centerPanes.length,
+    activeIndex < 0 ? 0 : activeIndex,
+    (index) => {
+      const pane = centerPanes[index];
+      if (pane === undefined) return;
+      applyDockLayout(
+        setDockActive(layout, NO_LOOSE_STRING_VALUES.center, pane),
+      );
+      paneRefs.current[index]?.focus();
+    },
+  );
 
   function moveHere(pane: DockPaneId, beforePane?: DockPaneId): void {
     applyDockLayout(
@@ -70,6 +85,7 @@ export function CenterDockTabs(): JSX.Element | null {
       className="center-dock-top-tabs"
       role="tablist"
       aria-label="Center pane tabs"
+      onKeyDown={onRovingKeyDown}
       onDragOver={(e) => {
         if (!hasDockPaneDrag(e.dataTransfer)) return;
         e.preventDefault();
@@ -80,12 +96,15 @@ export function CenterDockTabs(): JSX.Element | null {
       }}
       onDrop={(e) => onDrop(e)}
     >
-      {centerPanes.map((pane) => {
+      {centerPanes.map((pane, index) => {
         const meta = DOCK_META[pane];
         const isActive = active === pane;
         const tab = (
           <button
             key={pane}
+            ref={(el) => {
+              paneRefs.current[index] = el;
+            }}
             type="button"
             role="tab"
             data-pane={pane}
@@ -93,6 +112,7 @@ export function CenterDockTabs(): JSX.Element | null {
               dropBefore === pane && draggedPane !== pane ? "true" : undefined
             }
             aria-selected={isActive}
+            tabIndex={tabIndexFor(index)}
             className={`center-dock-tab-button${isActive ? " active" : ""}`}
             draggable
             onClick={() => activate(pane)}

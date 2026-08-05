@@ -4,6 +4,7 @@ import { createClient } from "../../../api/client.js";
 import { useStore } from "../../../state/store.js";
 import { useScopedFile } from "../fileScope.js";
 import { FvLoading } from "../FileViewerLoading.js";
+import { useRovingTabIndex } from "../../../a11y/useRovingTabIndex.js";
 
 const NO_LOOSE_STRING_VALUES = {
   xlsx: "xlsx",
@@ -26,10 +27,7 @@ export function OfficeRenderer({
   kind,
 }: OfficeRendererProps): JSX.Element {
   const token = useStore((s) => s.token);
-  const client = useMemo(
-    () => createClient({ baseUrl: "", token }),
-    [token],
-  );
+  const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
   const scoped = useScopedFile(path);
   if (scoped === null) {
     return <div className="fv-error">file is outside the project root</div>;
@@ -39,6 +37,54 @@ export function OfficeRenderer({
   if (kind === NO_LOOSE_STRING_VALUES.xlsx) return <XlsxView url={url} />;
   if (kind === NO_LOOSE_STRING_VALUES.docx) return <DocxView url={url} />;
   return <PptxView url={url} />;
+}
+
+function XlsxSheetTabs({
+  sheetNames,
+  sheetName,
+  onSelect,
+}: {
+  sheetNames: string[];
+  sheetName: string;
+  onSelect: (name: string) => void;
+}): JSX.Element {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = Math.max(sheetNames.indexOf(sheetName), 0);
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    sheetNames.length,
+    activeIndex,
+    (index) => {
+      const name = sheetNames[index];
+      if (name === undefined) return;
+      onSelect(name);
+      tabRefs.current[index]?.focus();
+    },
+  );
+  return (
+    <div
+      className="file-sheet-tabs"
+      role="tablist"
+      aria-label="Sheets"
+      onKeyDown={onKeyDown}
+    >
+      {sheetNames.map((name, index) => (
+        <button
+          key={name}
+          ref={(el) => {
+            tabRefs.current[index] = el;
+          }}
+          type="button"
+          role="tab"
+          aria-selected={name === sheetName}
+          tabIndex={tabIndexFor(index)}
+          className={name === sheetName ? "active" : ""}
+          onClick={() => onSelect(name)}
+        >
+          {name}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function DocxView({ url }: { url: string }): JSX.Element {
@@ -91,13 +137,12 @@ function XlsxView({ url }: { url: string }): JSX.Element {
     setError(null);
     void (async () => {
       try {
-        const [xlsxMod, res] = await Promise.all([
-          import("xlsx"),
-          fetch(url),
-        ]);
+        const [xlsxMod, res] = await Promise.all([import("xlsx"), fetch(url)]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
-        const next = xlsxMod.read(arrayBuffer, { type: NO_LOOSE_STRING_VALUES.array });
+        const next = xlsxMod.read(arrayBuffer, {
+          type: NO_LOOSE_STRING_VALUES.array,
+        });
         if (!cancelled) {
           xlsxRef.current = xlsxMod;
           setBook(next);
@@ -127,18 +172,11 @@ function XlsxView({ url }: { url: string }): JSX.Element {
         });
   return (
     <div className="fv-csv-table-wrap">
-      <div className="file-sheet-tabs" role="tablist" aria-label="Sheets">
-        {book.SheetNames.map((name) => (
-          <button
-            key={name}
-            type="button"
-            className={name === sheetName ? "active" : ""}
-            onClick={() => setSheetName(name)}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+      <XlsxSheetTabs
+        sheetNames={book.SheetNames}
+        sheetName={sheetName}
+        onSelect={setSheetName}
+      />
       <table className="fv-csv-table">
         <tbody>
           {rows.slice(0, 200).map((row, r) => (
@@ -151,7 +189,9 @@ function XlsxView({ url }: { url: string }): JSX.Element {
         </tbody>
       </table>
       {rows.length > 200 ? (
-        <div className="fv-loading">showing first 200 of {rows.length} rows</div>
+        <div className="fv-loading">
+          showing first 200 of {rows.length} rows
+        </div>
       ) : null}
     </div>
   );

@@ -1,8 +1,9 @@
-import { type JSX } from "react";
+import { useRef, type JSX } from "react";
 import { X } from "lucide-react";
 import { TabEmptyState } from "../TabEmptyState.js";
 import { TerminalBodies } from "./TerminalBodies.js";
 import { useAgentTerminalsController } from "./useAgentTerminalsController.js";
+import { useRovingTabIndex } from "../../../a11y/useRovingTabIndex.js";
 
 const NO_LOOSE_STRING_VALUES = {
   terminalAgents: "terminal-agents",
@@ -20,6 +21,21 @@ export function AgentTerminals(): JSX.Element {
     c.active !== null
       ? c.agents.find((agent) => agent.tmux_session === c.active)
       : undefined;
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = Math.max(
+    c.agents.findIndex((a) => a.tmux_session === c.active),
+    0,
+  );
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    c.agents.length,
+    activeIndex,
+    (index) => {
+      const agent = c.agents[index];
+      if (agent === undefined) return;
+      c.select(agent.tmux_session);
+      tabRefs.current[index]?.focus();
+    },
+  );
 
   if (c.agents.length === 0) {
     return (
@@ -38,18 +54,27 @@ export function AgentTerminals(): JSX.Element {
 
   return (
     <>
-      <div className="terminal-tabs" role="tablist" aria-label="Agent terminals">
-        {c.agents.map((a) => {
+      <div
+        className="terminal-tabs"
+        role="tablist"
+        aria-label="Agent terminals"
+        onKeyDown={onKeyDown}
+      >
+        {c.agents.map((a, index) => {
           const active = a.tmux_session === c.active;
           return (
             <div
               key={a.tmux_session}
               className={`terminal-tab${active ? " active" : ""}`}
-              role="tab"
-              aria-selected={active}
             >
               <button
                 type="button"
+                ref={(el) => {
+                  tabRefs.current[index] = el;
+                }}
+                role="tab"
+                aria-selected={active}
+                tabIndex={tabIndexFor(index)}
                 className="terminal-tab-label"
                 onClick={() => c.select(a.tmux_session)}
                 title={a.alive ? a.tmux_session : "Agent terminal is detached"}

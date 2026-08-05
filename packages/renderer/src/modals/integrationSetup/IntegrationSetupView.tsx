@@ -8,6 +8,7 @@ import type {
 } from "@f-mark/shared";
 import { RuntimeSelect } from "../../components/RuntimeSelect.js";
 import { useFocusTrap } from "../../a11y/useFocusTrap.js";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
 import {
   integrationStatuses,
   itemCopy,
@@ -218,7 +219,9 @@ function LoadedSetup({
           runtimeId={runtimeId}
           accessMode={accessMode}
           accessModeOptions={accessModeOptions}
-          disabled={controller.busy !== null || onAccessModeChange === undefined}
+          disabled={
+            controller.busy !== null || onAccessModeChange === undefined
+          }
           onAccessModeChange={onAccessModeChange}
         />
       </div>
@@ -236,18 +239,47 @@ function SetupTabs({
   setupTab: SetupTab;
   setSetupTab(tab: SetupTab): void;
 }): JSX.Element {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = Math.max(setupTabList.indexOf(setupTab), 0);
+  /* One tab (Local) can be disabled per runtime; onSelect simply no-ops for
+     it, same as clicking it does, so arrow keys can never land the roving
+     tab stop on a disabled option. */
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    setupTabList.length,
+    activeIndex,
+    (index) => {
+      const tab = setupTabList[index];
+      if (tab === undefined) return;
+      const disabled =
+        runtimeId === INTEGRATION_SETUP_VALUES.codex &&
+        tab === INTEGRATION_SETUP_VALUES.local;
+      if (disabled) return;
+      setSetupTab(tab);
+      tabRefs.current[index]?.focus();
+    },
+  );
+
   return (
-    <div className="integration-tabs" role="tablist" aria-label="Setup scope">
-      {setupTabList.map((tab) => {
+    <div
+      className="integration-tabs"
+      role="tablist"
+      aria-label="Setup scope"
+      onKeyDown={onKeyDown}
+    >
+      {setupTabList.map((tab, index) => {
         const disabled =
           runtimeId === INTEGRATION_SETUP_VALUES.codex &&
           tab === INTEGRATION_SETUP_VALUES.local;
         return (
           <button
             key={tab}
+            ref={(el) => {
+              tabRefs.current[index] = el;
+            }}
             type="button"
             role="tab"
             aria-selected={setupTab === tab}
+            tabIndex={tabIndexFor(index)}
             className={`integration-tab${setupTab === tab ? " active" : ""}`}
             disabled={disabled}
             title={disabled ? "Codex is global-only (CODEX_HOME)" : undefined}
@@ -323,7 +355,8 @@ function setupItems(
 ): SetupItemProps[] {
   const { preflight, setupTab, busy, view } = controller;
   if (preflight === null) return [];
-  const runtimeStatus: IntegrationStatus | "unknown" = preflight.runtime.available
+  const runtimeStatus: IntegrationStatus | "unknown" = preflight.runtime
+    .available
     ? integrationStatuses.installed
     : integrationStatuses.missing;
   return [
@@ -341,12 +374,15 @@ function setupItems(
       }),
       version: preflight.runtime.version,
       busy: busy !== null,
-      onAction: preflight.runtime.available ? null : controller.showRuntimeIssue,
+      onAction: preflight.runtime.available
+        ? null
+        : controller.showRuntimeIssue,
     },
     {
       kind: setupItemKinds.mcp,
       title: setupItemTitles.mcp,
-      status: view.selectedMcpLocation?.status ?? integrationStatuses.unsupported,
+      status:
+        view.selectedMcpLocation?.status ?? integrationStatuses.unsupported,
       detail: itemCopy({
         kind: setupItemKinds.mcp,
         status:
@@ -354,7 +390,8 @@ function setupItems(
         location: view.selectedMcpLocation,
         tab: setupTab,
       }),
-      version: view.selectedMcpLocation?.version ?? preflight.mcp.expected_version,
+      version:
+        view.selectedMcpLocation?.version ?? preflight.mcp.expected_version,
       meta: locationMeta(view.selectedMcpLocation),
       busy: busy !== null,
       onAction: controller.setupActionFor(

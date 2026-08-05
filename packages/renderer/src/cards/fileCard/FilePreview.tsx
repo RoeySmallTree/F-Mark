@@ -21,6 +21,7 @@ const NO_LOOSE_STRING_VALUES = {
    (erased at build time). */
 import type { WorkBook } from "xlsx";
 import { useFileText } from "./useFileText.js";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
 
 interface FilePreviewProps {
   kind: FilePreviewKind;
@@ -31,7 +32,8 @@ interface FilePreviewProps {
 function TextPreview({ url }: { url: string }): JSX.Element {
   const { text, error } = useFileText(url);
   if (error !== null) return <div className="file-preview-note">{error}</div>;
-  if (text === null) return <div className="file-preview-note">Loading text…</div>;
+  if (text === null)
+    return <div className="file-preview-note">Loading text…</div>;
   return <pre className="file-text-preview">{text}</pre>;
 }
 
@@ -46,8 +48,10 @@ function CsvPreview({ url }: { url: string }): JSX.Element {
   }, [text]);
 
   if (error !== null) return <div className="file-preview-note">{error}</div>;
-  if (rows === null) return <div className="file-preview-note">Loading CSV…</div>;
-  if (rows.length === 0) return <div className="file-preview-note">Empty CSV</div>;
+  if (rows === null)
+    return <div className="file-preview-note">Loading CSV…</div>;
+  if (rows.length === 0)
+    return <div className="file-preview-note">Empty CSV</div>;
 
   const [head, ...body] = rows;
   return (
@@ -77,11 +81,65 @@ function CsvPreview({ url }: { url: string }): JSX.Element {
   );
 }
 
+function XlsxSheetTabs({
+  sheetNames,
+  sheetName,
+  onSelect,
+}: {
+  sheetNames: string[];
+  sheetName: string;
+  onSelect: (name: string) => void;
+}): JSX.Element {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = Math.max(sheetNames.indexOf(sheetName), 0);
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    sheetNames.length,
+    activeIndex,
+    (index) => {
+      const name = sheetNames[index];
+      if (name === undefined) return;
+      onSelect(name);
+      tabRefs.current[index]?.focus();
+    },
+  );
+  return (
+    <div
+      className="file-sheet-tabs"
+      role="tablist"
+      aria-label="Sheets"
+      onKeyDown={onKeyDown}
+    >
+      {sheetNames.map((name, index) => (
+        <button
+          key={name}
+          ref={(el) => {
+            tabRefs.current[index] = el;
+          }}
+          type="button"
+          role="tab"
+          aria-selected={name === sheetName}
+          tabIndex={tabIndexFor(index)}
+          className={name === sheetName ? "active" : ""}
+          onClick={() => onSelect(name)}
+        >
+          {name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function PdfPreview({ url, name }: { url: string; name: string }): JSX.Element {
   return <iframe className="file-pdf-preview" src={url} title={name} />;
 }
 
-function VideoPreview({ url, name }: { url: string; name: string }): JSX.Element {
+function VideoPreview({
+  url,
+  name,
+}: {
+  url: string;
+  name: string;
+}): JSX.Element {
   return (
     <video
       className="file-video-preview"
@@ -93,8 +151,21 @@ function VideoPreview({ url, name }: { url: string; name: string }): JSX.Element
   );
 }
 
-function AudioPreview({ url, name }: { url: string; name: string }): JSX.Element {
-  return <audio className="file-audio-preview" controls src={url} aria-label={name} />;
+function AudioPreview({
+  url,
+  name,
+}: {
+  url: string;
+  name: string;
+}): JSX.Element {
+  return (
+    <audio
+      className="file-audio-preview"
+      controls
+      src={url}
+      aria-label={name}
+    />
+  );
 }
 
 function DocxPreview({ url }: { url: string }): JSX.Element {
@@ -117,7 +188,8 @@ function DocxPreview({ url }: { url: string }): JSX.Element {
         const result = await mammothMod.default.convertToHtml({ arrayBuffer });
         if (!cancelled) setHtml(result.value);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
       }
     })();
     return () => {
@@ -126,7 +198,8 @@ function DocxPreview({ url }: { url: string }): JSX.Element {
   }, [url]);
 
   if (error !== null) return <div className="file-preview-note">{error}</div>;
-  if (html === null) return <div className="file-preview-note">Loading DOCX…</div>;
+  if (html === null)
+    return <div className="file-preview-note">Loading DOCX…</div>;
   return (
     <div
       className="file-docx-preview"
@@ -152,20 +225,20 @@ function XlsxPreview({ url }: { url: string }): JSX.Element {
     setError(null);
     void (async () => {
       try {
-        const [xlsxMod, res] = await Promise.all([
-          import("xlsx"),
-          fetch(url),
-        ]);
+        const [xlsxMod, res] = await Promise.all([import("xlsx"), fetch(url)]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
-        const nextBook = xlsxMod.read(arrayBuffer, { type: NO_LOOSE_STRING_VALUES.array });
+        const nextBook = xlsxMod.read(arrayBuffer, {
+          type: NO_LOOSE_STRING_VALUES.array,
+        });
         if (!cancelled) {
           xlsxRef.current = xlsxMod;
           setBook(nextBook);
           setSheetName(nextBook.SheetNames[0] ?? null);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
       }
     })();
     return () => {
@@ -188,18 +261,11 @@ function XlsxPreview({ url }: { url: string }): JSX.Element {
         });
   return (
     <div>
-      <div className="file-sheet-tabs" role="tablist" aria-label="Sheets">
-        {book.SheetNames.map((name) => (
-          <button
-            key={name}
-            type="button"
-            className={name === sheetName ? "active" : ""}
-            onClick={() => setSheetName(name)}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+      <XlsxSheetTabs
+        sheetNames={book.SheetNames}
+        sheetName={sheetName}
+        onSelect={setSheetName}
+      />
       <div className="file-table-wrap">
         <table className="file-table">
           <tbody>
@@ -232,14 +298,18 @@ function PptxPreview({ url }: { url: string }): JSX.Element {
     setError(null);
     void (async () => {
       try {
-        const [{ init }, res] = await Promise.all([import("pptx-preview"), fetch(url)]);
+        const [{ init }, res] = await Promise.all([
+          import("pptx-preview"),
+          fetch(url),
+        ]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buffer = await res.arrayBuffer();
         if (cancelled) return;
         const previewer = init(target, { width: 960, height: 540 });
         await previewer.preview(buffer);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
       }
     })();
     return () => {
@@ -264,10 +334,13 @@ export function FilePreview({
   if (kind === NO_LOOSE_STRING_VALUES.image) {
     return <img className="file-image-preview" src={url} alt={name} />;
   }
-  if (kind === NO_LOOSE_STRING_VALUES.video) return <VideoPreview url={url} name={name} />;
-  if (kind === NO_LOOSE_STRING_VALUES.audio) return <AudioPreview url={url} name={name} />;
+  if (kind === NO_LOOSE_STRING_VALUES.video)
+    return <VideoPreview url={url} name={name} />;
+  if (kind === NO_LOOSE_STRING_VALUES.audio)
+    return <AudioPreview url={url} name={name} />;
   if (kind === NO_LOOSE_STRING_VALUES.text) return <TextPreview url={url} />;
-  if (kind === NO_LOOSE_STRING_VALUES.pdf) return <PdfPreview url={url} name={name} />;
+  if (kind === NO_LOOSE_STRING_VALUES.pdf)
+    return <PdfPreview url={url} name={name} />;
   if (kind === NO_LOOSE_STRING_VALUES.csv) return <CsvPreview url={url} />;
   if (kind === NO_LOOSE_STRING_VALUES.docx) return <DocxPreview url={url} />;
   if (kind === NO_LOOSE_STRING_VALUES.xlsx) return <XlsxPreview url={url} />;
