@@ -34,6 +34,7 @@ export function TodoTreeList({
     latestById,
     postTodo,
     fetchDescendants,
+    isTodosReloading,
   } = useTodoTreeData();
   const {
     addRowRef,
@@ -76,6 +77,7 @@ export function TodoTreeList({
     draft,
     agentIds,
     setDraft,
+    isTodosReloading,
   });
 
   return (

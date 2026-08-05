@@ -29,13 +29,19 @@ export function useTodoTreeData(): TodoTreeData {
     sessionId: currentSessionId,
   });
 
-  const { todos, loadedSessionId, loadError, loadTodos, isCurrentSession } =
-    useTodoTreeLoader({
-      currentSessionId,
-      token,
-      scope,
-      reloadVersion: events.length,
-    });
+  const {
+    todos,
+    loadedSessionId,
+    loadError,
+    loadTodos,
+    isCurrentSession,
+    isTodosReloading,
+  } = useTodoTreeLoader({
+    currentSessionId,
+    token,
+    scope,
+    reloadVersion: events.length,
+  });
 
   const postTodo = usePostTodo({
     currentSessionId,
@@ -66,5 +72,6 @@ export function useTodoTreeData(): TodoTreeData {
     latestById,
     postTodo,
     fetchDescendants,
+    isTodosReloading,
   };
 }
