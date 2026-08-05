@@ -36,3 +36,64 @@ describe("modal focus-containment contract", () => {
     expect(ARIA_MODAL_FILES.length).toBeGreaterThan(0);
   });
 });
+
+/* role="tablist" and role="radiogroup" promise arrow-key roving. The 2026-08-04
+   sweep filed this as five widgets; walking the source found twenty-one, so
+   fixing the named five would have left the class wide open while looking
+   closed. This guard is how the real number became visible at all.
+
+   The allowlist below is the honest remainder: every entry is a real gap, not
+   an exemption. Its job is to make a NEW composite widget fail this test, so
+   omitting the keyboard pattern has to be a deliberate act of adding a line
+   here rather than something that happens by not noticing. Shrink it; do not
+   grow it. */
+const ROVING_DEBT = [
+  "shell/LeftRail.tsx",
+  "shell/LedgerHeader.tsx",
+  "shell/dockAreaView/DockAreaTabs.tsx",
+  "shell/topBar/CenterDockTabs.tsx",
+  "shell/topBar/ToolbarDockTabs.tsx",
+  "cards/fileCard/FilePreview.tsx",
+  "panels/right/RightDiffTree.tsx",
+  "panels/right/terminal/AgentTerminals.tsx",
+  "panels/right/terminal/RegularTerminals.tsx",
+  "panels/right/terminal/RightTerminal.tsx",
+  "panels/fileViewer/TabsRow.tsx",
+  "panels/fileViewer/renderers/OfficeRenderer.tsx",
+  "modals/HtmlPreviewModal.tsx",
+  "modals/settings/settingsModal/SettingsSidebar.tsx",
+  "modals/integrationSetup/IntegrationSetupView.tsx",
+  "cards/ApprovalActions.tsx",
+  "modals/presetEditor/CategoryField.tsx",
+  "modals/onboarding/ThemeStep.tsx",
+  "modals/onboarding/providers/ScopeToggle.tsx",
+];
+
+const COMPOSITE_FILES = tsxFiles(SRC)
+  .map((f) => ({ path: path.relative(SRC, f), tsx: readFileSync(f, "utf8") }))
+  .filter(
+    (f) =>
+      f.tsx.includes('role="tablist"') || f.tsx.includes('role="radiogroup"'),
+  );
+
+describe("composite widget keyboard contract", () => {
+  test("a new tablist or radiogroup must wire useRovingTabIndex or be listed as known debt", () => {
+    const uncovered = COMPOSITE_FILES.filter(
+      (f) =>
+        !f.tsx.includes("useRovingTabIndex") && !ROVING_DEBT.includes(f.path),
+    ).map((f) => f.path);
+    expect(uncovered).toEqual([]);
+  });
+
+  test("the debt list has no stale entries — a fixed widget must be removed from it", () => {
+    const fixed = COMPOSITE_FILES.filter(
+      (f) => f.tsx.includes("useRovingTabIndex") && ROVING_DEBT.includes(f.path),
+    ).map((f) => f.path);
+    expect(fixed).toEqual([]);
+  });
+
+  test("every debt entry still exists — a deleted file must not linger here", () => {
+    const known = new Set(COMPOSITE_FILES.map((f) => f.path));
+    expect(ROVING_DEBT.filter((p) => !known.has(p))).toEqual([]);
+  });
+});
