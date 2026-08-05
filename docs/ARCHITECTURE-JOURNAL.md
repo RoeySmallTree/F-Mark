@@ -117,5 +117,11 @@ Why this way:
 • `useFocusTrap` implemented → (not dropping `aria-modal` to false, which
   would be honest but worse for the people the attribute exists for)
 
-Commits: 6e0f183 · 1401cf7 · e3cfd2e · 442f125 · c5e216f · 74c6788 · 2474a02 ·
-7f592a9 · ffd0f0a · 5abed74 · 0d584d1 · 1f2086c · 3fe9613 · fb329e3
+Commits: `be0e3a2..HEAD` — 41 in total, of which 16 are the rebased
+destructive-action-contract branch that had been sitting unmerged.
+
+Two counts in the sweep were low, and both were found by writing the guard
+rather than by reading: `aria-modal="true"` appears in 13 files, not 9, and
+composite widgets missing arrow-key roving number 21, not 5. The roving guard
+carries the remaining 15 as an explicit allowlist, so the gap is bounded and
+visible instead of open-ended — a new tablist fails the suite.
