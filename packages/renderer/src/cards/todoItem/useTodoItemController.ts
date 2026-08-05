@@ -8,7 +8,11 @@ import {
   titleLabelFor,
   todoItemClassName,
 } from "./helpers.js";
-import type { TodoItemController, TodoItemProps } from "./types.js";
+import type {
+  TodoInputField,
+  TodoItemController,
+  TodoItemProps,
+} from "./types.js";
 import { useTodoAssigneeController } from "./useTodoAssigneeController.js";
 import { useTodoItemInputs } from "./useTodoItemInputs.js";
 
@@ -45,6 +49,7 @@ export function useTodoItemController({
   const wip = node.status === NO_LOOSE_STRING_VALUES.wip;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const confirmDestructive = useConfirmDestructive();
+  const removeRef = useRef<(field?: TodoInputField) => Promise<void>>();
   const inputs = useTodoItemInputs({
     node,
     draft,
@@ -56,7 +61,7 @@ export function useTodoItemController({
     onFocusPrev,
     onFocusNext,
     onCommitAndCreateBelow,
-    onRemove,
+    onRemove: async (field) => removeRef.current?.(field),
     onToggleDone,
   });
   const assigneeControl = useTodoAssigneeController({
@@ -68,9 +73,9 @@ export function useTodoItemController({
     onReassign,
   });
 
-  async function remove(): Promise<void> {
+  async function remove(field?: TodoInputField): Promise<void> {
     if (draft) {
-      await onRemove(undefined, inputs.values());
+      await onRemove(field, inputs.values());
       return;
     }
     const descendantCount = await countDescendants(fetchDescendants);
@@ -80,8 +85,9 @@ export function useTodoItemController({
       detail: "Removed tasks stay in the event log but leave the tree.",
     });
     if (intent === null) return;
-    await onRemove(undefined, inputs.values());
+    await onRemove(field, inputs.values());
   }
+  removeRef.current = remove;
 
   const style = {
     "--todo-depth-offset": depthOffset(depth),

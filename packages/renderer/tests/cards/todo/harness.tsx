@@ -9,6 +9,9 @@ import {
 import userEvent from "@testing-library/user-event";
 import { expect, vi, type MockInstance } from "vitest";
 import { TodoCard } from "../../../src/cards/TodoCard.js";
+import { TodoItem } from "../../../src/cards/TodoItem.js";
+import type { TodoItemNode } from "../../../src/cards/TodoItem.js";
+import type { TodoItemProps } from "../../../src/cards/todoItem/types.js";
 import { PARTICIPANTS, jsonResponse, makeTodo } from "../_helpers.js";
 
 export type FetchMock = MockInstance<typeof fetch>;
@@ -46,6 +49,41 @@ export function renderTodoCard(
       allEvents={allEvents}
     />,
   );
+}
+
+export function makeTodoItemNode(
+  overrides: Partial<TodoItemNode> = {},
+): TodoItemNode {
+  return {
+    id: "t1",
+    title: "Cull stale note",
+    status: "open",
+    children: [],
+    ...overrides,
+  };
+}
+
+/** Renders TodoItem directly with mocked handlers, bypassing TodoCard's
+    kernel wiring. Needed to observe args (like the removal `field`) that
+    TodoCard's own onRemove wiring discards. */
+export function renderTodoItemDirect(
+  overrides: Partial<TodoItemProps> = {},
+): RenderResult {
+  const props: TodoItemProps = {
+    node: makeTodoItemNode(),
+    depth: 0,
+    participants: PARTICIPANTS,
+    agentIds: [],
+    onUpdate: vi.fn().mockResolvedValue(undefined),
+    onToggleDone: vi.fn().mockResolvedValue(undefined),
+    onToggleWip: vi.fn().mockResolvedValue(undefined),
+    onRemove: vi.fn().mockResolvedValue(undefined),
+    onAddSubtask: vi.fn(),
+    onReassign: vi.fn().mockResolvedValue(undefined),
+    fetchDescendants: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  };
+  return render(<TodoItem {...props} />);
 }
 
 export function setupTodoCard(

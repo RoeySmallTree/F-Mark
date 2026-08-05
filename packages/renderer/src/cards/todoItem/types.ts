@@ -110,7 +110,7 @@ export interface TodoItemController {
   skipActiveInputBlurCommit: () => void;
   commitTitle: () => Promise<void>;
   commitBody: () => Promise<void>;
-  remove: () => Promise<void>;
+  remove: (field?: TodoInputField) => Promise<void>;
   selectAssignee: (participantId: string | null) => Promise<void>;
   toggleDone: () => Promise<void>;
   toggleWip: () => Promise<void>;
