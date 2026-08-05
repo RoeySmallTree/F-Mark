@@ -32,9 +32,10 @@ Two further facts found while tracing, both recorded as constraints below: the k
 Every task's requirements implicitly include this section.
 
 - **No TDD.** Implementation first, then the test that pins it. (Oran's CLAUDE.md overrides the skill default.)
+- **Typecheck is per package.** There is no root `tsconfig.json`, and `npx tsc` resolves to a decoy `tsc@2.0.4` package on npm rather than the workspace compiler. Use `pnpm -F @f-mark/renderer exec tsc -b` and `pnpm -F f-mark exec tsc --noEmit`.
 - **Node 20 for all test runs.** Node 25 ships an inert `globalThis.localStorage` that shadows jsdom's and reds 32 renderer files. Use `nvm use 20` before any vitest command.
 - **`pnpm run lint` is its own gate, run first.** The renderer's `test` script is `lint && test:static-colors && vitest run` — a lint failure means vitest never runs and no report is written. A green `pnpm test` after a lint error proves nothing.
-- **Regression check by test *name*, not file set.** Diff against `docs/ui-sweep/2026-08-02-test-baseline.json`. `view-toggle`, `feed-*` and `topBar` are already red on this branch, so a file-set diff is blind for them.
+- **Regression check by test *name*, not file set.** Diff against `docs/ui-sweep/2026-08-05-node20-baseline.txt` — **not** `2026-08-02-test-baseline.json`, which is a list of 32 *file paths* recorded under Node 25 and is both too coarse (it cannot see a regression inside an already-red file) and wrong for Node 20. Measured Node-20 truth on `be0e3a2`: renderer 17 failing tests in 6 files, kernel 41 failing tests in 10 files. All 6 renderer files are a subset of the old 32.
 - **Two vitest roots:** `packages/renderer/src/**` and `packages/renderer/tests/**`. A path matching zero files exits 0 — confirm the covering test actually ran.
 - **Every new guard test must be seen red.** Plant the bypass, run, watch it fail, remove the bypass, run again. A guard never seen red proves nothing.
 - **The event log is append-only.** A bad write is permanent and can only be masked. Never point a dev kernel at a real project root; pass `--path <scratch>` and redirect `HOME`/`XDG_CONFIG_HOME`.
@@ -168,7 +169,15 @@ Resolve conflicts by **keeping both intents**: Aurora owns visual/motion changes
 grep -rn "getConfirmToken" packages/ --include="*.ts" --include="*.tsx" | grep -v node_modules
 ```
 
-Expected: **zero hits.** The `confirmToken` → `requestNonce` rename is load-bearing: `getConfirmToken` reads like human confirmation and is a server-issued nonce, and a server cannot verify that a human agreed. If any hit remains, the rebase dropped `d924d9e`.
+**Corrected after execution — "zero hits" was wrong.** The rename in `d924d9e` is **kernel-internal only**: the module, store type and functions became `requestNonces.ts` / `RequestNonceStore` / `mintRequestNonce` / `consumeRequestNonce`, but the HTTP route is still `/managed-agents/:id/confirm-token` and the renderer client method is still `getConfirmToken` (11 hits across `api/managedAgents.ts`, `controlMethods.ts`, `useGoodbyeAction.ts`, `useAgentsController.ts`, `ParticipantStrip.tsx`, `AgentActionMenuPortal.tsx`). Keeping the wire name is a deliberate compatibility choice.
+
+So the correct expectation is: `packages/kernel/src/routes/managedAgents/spawnRoutes/requestNonces.ts` exists and `confirmTokens.ts` does not. Verify with:
+
+```bash
+ls packages/kernel/src/routes/managedAgents/spawnRoutes/ | grep -i "nonce\|confirm"
+```
+
+**Residual nit, deferred to Task 13:** the misleading name survives at the renderer call sites, which is exactly where the sweep said it misleads. It is no longer load-bearing for safety — after B2's fix the dangerous call site is gone and the rest sit behind `ConfirmedIntent` — so renaming the client method to `getRequestNonce` (leaving the HTTP path alone) is cleanup, not a fix.
 
 - [ ] **Step 3: Verify the four already-fixed findings**
 
