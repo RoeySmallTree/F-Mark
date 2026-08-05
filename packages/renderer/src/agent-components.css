@@ -537,7 +537,6 @@ details[open] > summary .chev { transform: rotate(90deg); }
 }
 .tool-head:hover { background: color-mix(in srgb, var(--panel) 58%, transparent); }
 .tool-head:active { transform: scale(0.998); }
-.tool-head:focus-visible { outline: 2px solid color-mix(in srgb, var(--agent) 44%, transparent); outline-offset: -2px; }
 .tool-head:hover .chev,
 .tool-head[aria-expanded="true"] .chev,
 .tb-summary:hover .chev,
