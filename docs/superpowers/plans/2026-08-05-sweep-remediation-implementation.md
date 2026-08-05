@@ -1245,7 +1245,13 @@ it("no rule suppresses the focus ring without replacing it", () => {
 });
 ```
 
-- [ ] **Step 6: M13 — raise touch targets**
+- [ ] **Step 6: M13 — raise touch targets — DEFERRED, not attempted**
+
+The fix is an invisible `::before` overlay expanding the hit area to 44px without changing visual size. Its one real risk is that adjacent top-bar buttons sit close enough that the overlays swallow clicks meant for a neighbour — and that is a **computed-geometry** question, which this codebase has already been burned by answering from source. The rule learned there stands: a claim about computed layout needs a browser measurement, not a reading.
+
+So this needs a live kernel and `document.elementFromPoint` on each button's neighbour, which the same session that lands the change should run. Shipping it unmeasured would trade a Medium a11y gap for a possible Blocker-shaped click-interception bug, which is a bad trade.
+
+Original instruction, unchanged, for whoever picks it up:
 
 Command palette and settings buttons are 15×32px; `+` is 28×28px, against a ~44px guideline. Raise the *hit* area without changing visual size — the density is deliberate in a dense tool:
 
