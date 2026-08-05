@@ -38,6 +38,11 @@ export interface HunkActionsBarProps {
   sessionId: string | null;
   /** Called after a successful revert so the renderer re-fetches the diff. */
   onReverted(): void;
+  /** Called right before the revert mutation runs, ahead of onReverted.
+      Only the Monaco diff view wires this up — it clears the diff editor's
+      model so the widget isn't left holding one Monaco is about to dispose
+      when the refreshed text lands (M16a). */
+  onBeforeRevert?(): void;
   /** Positioning within the renderer (the comment popover anchors here). */
   style?: CSSProperties;
   /** Render only the file-level action(s) - Restore/Delete file + Undo rename,

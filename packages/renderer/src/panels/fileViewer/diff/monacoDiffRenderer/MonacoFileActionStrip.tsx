@@ -20,6 +20,7 @@ export function MonacoFileActionStrip({
   oldPathProp,
   sessionId,
   onReverted,
+  onBeforeRevert,
 }: ActionStripCommonProps): JSX.Element | null {
   if (!actions.file && !actions.rename) return null;
 
@@ -43,6 +44,7 @@ export function MonacoFileActionStrip({
         {...oldPathProp}
         sessionId={sessionId}
         onReverted={onReverted}
+        onBeforeRevert={onBeforeRevert}
         fileLevelOnly
       />
     </div>

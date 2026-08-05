@@ -1,4 +1,14 @@
-import { lazy, Suspense } from "react";
+import {
+  forwardRef,
+  lazy,
+  Suspense,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import type {
+  DiffOnMount,
+  MonacoDiffEditor as MonacoDiffEditorInstance,
+} from "@monaco-editor/react";
 import { FvLoading } from "../../FileViewerLoading.js";
 import type { MonacoThemeMode } from "../../renderers/monaco/theme.js";
 import { monacoEditorTheme } from "../../renderers/monaco/theme.js";
@@ -23,13 +33,38 @@ interface MonacoDiffEditorProps {
   style: FileViewerDiffStyle;
 }
 
-export function MonacoDiffEditor({
-  language,
-  baseText,
-  workingText,
-  theme,
-  style,
-}: MonacoDiffEditorProps): JSX.Element {
+/** A revert calls clearModel() before its mutation lands, so the widget has
+    no attached model when the base/working text swaps underneath it.
+    Without this, every revert (file or hunk, delete or restore) fired an
+    uncaught "TextModel got disposed before DiffEditorWidget model got
+    reset" once the refreshed text replaced the still-attached one (M16a). */
+export interface MonacoDiffEditorHandle {
+  clearModel(): void;
+}
+
+export const MonacoDiffEditor = forwardRef<
+  MonacoDiffEditorHandle,
+  MonacoDiffEditorProps
+>(function MonacoDiffEditor(
+  { language, baseText, workingText, theme, style },
+  ref,
+) {
+  const editorRef = useRef<MonacoDiffEditorInstance | null>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      clearModel: () => {
+        editorRef.current?.setModel(null);
+      },
+    }),
+    [],
+  );
+
+  const onMount: DiffOnMount = (editor) => {
+    editorRef.current = editor;
+  };
+
   return (
     <Suspense fallback={<FvLoading />}>
       <DiffEditor
@@ -39,6 +74,7 @@ export function MonacoDiffEditor({
         original={baseText}
         modified={workingText}
         theme={monacoEditorTheme(theme)}
+        onMount={onMount}
         options={{
           readOnly: true,
           renderSideBySide: style === NO_LOOSE_STRING_VALUES.sideBySide,
@@ -53,4 +89,4 @@ export function MonacoDiffEditor({
       />
     </Suspense>
   );
-}
+});

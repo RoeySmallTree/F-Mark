@@ -33,6 +33,7 @@ export function useHunkActionsBarController(
     oldPath,
     sessionId,
     onReverted,
+    onBeforeRevert,
   } = props;
   const token = useStore((s) => s.token);
   const client = useMemo(() => createClient({ baseUrl: "", token }), [token]);
@@ -59,6 +60,11 @@ export function useHunkActionsBarController(
       if (intent === null) return;
       setBusy(true);
       setConflict(null);
+      /* Clear the Monaco model before the mutation runs, not after — the
+         refreshed base/working text lands via onReverted's re-fetch, and
+         Monaco throws if that swap arrives while the old model is still
+         attached (M16a). */
+      onBeforeRevert?.();
       try {
         const error = await revertHunkChange({
           action,
@@ -85,6 +91,7 @@ export function useHunkActionsBarController(
       fileStatus,
       hunk,
       oldPath,
+      onBeforeRevert,
       onReverted,
       relPath,
       scope,
