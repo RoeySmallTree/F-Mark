@@ -128,4 +128,23 @@ describe("quality floor", () => {
     const reset = ringRules.filter((r) => /transition:\s*none\s*!important/.test(r));
     expect(reset.length, "no global `transition: none !important` on a :focus-visible rule").toBeGreaterThan(0);
   });
+
+  /* Every mount site that gates a popover on derived state must observe it
+     through useDeferredUnmount, not a close-callback wrap — that is the
+     whole fix for H2/H3/H4 (raw setters and toggles bypassing the exit
+     animation). A regression here silently reintroduces the bug this test
+     suite exists to catch. */
+  test("popover mount sites use useDeferredUnmount", () => {
+    const sites = [
+      "compose/ComposePopovers.tsx",
+      "popovers/PopoverRoot.tsx",
+      "panels/right/log/RightLogView.tsx",
+    ];
+    for (const site of sites) {
+      const contents = readFileSync(path.join(SRC, site), "utf8");
+      expect(contents, `${site} should import/use useDeferredUnmount`).toContain(
+        "useDeferredUnmount",
+      );
+    }
+  });
 });

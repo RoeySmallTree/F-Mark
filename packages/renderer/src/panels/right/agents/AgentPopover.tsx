@@ -18,7 +18,6 @@ import { runtimeAccessModeLabel } from "@f-mark/shared";
 import { openAgentTerminalPane } from "../../../state/terminalPaneState.js";
 import { useConfirmDestructive } from "../../../confirm/index.js";
 import { Popover } from "../../../popovers/Popover.js";
-import { usePopoverExit } from "../../../popovers/usePopoverExit.js";
 import {
   commandTitle,
   contextFallback,
@@ -52,6 +51,7 @@ interface AgentPopoverProps {
   controller: RightAgentsController;
   anchorRect: DOMRect;
   onClose(): void;
+  closing?: boolean;
 }
 
 export function AgentPopover({
@@ -59,10 +59,10 @@ export function AgentPopover({
   controller,
   anchorRect,
   onClose,
+  closing = false,
 }: AgentPopoverProps): JSX.Element {
   const { agent } = view;
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const { closing, requestClose } = usePopoverExit(onClose);
   const confirmDestructive = useConfirmDestructive();
 
   const onClear = async (): Promise<void> => {
@@ -73,7 +73,7 @@ export function AgentPopover({
     });
     if (intent === null) return;
     void controller.clear(agent);
-    requestClose();
+    onClose();
   };
 
   const onGoodbye = async (): Promise<void> => {
@@ -84,7 +84,7 @@ export function AgentPopover({
     });
     if (intent === null) return;
     void controller.goodbye(agent, intent);
-    requestClose();
+    onClose();
   };
 
   const options = controller.runtimeOptions[agent.participant_id];
@@ -131,7 +131,7 @@ export function AgentPopover({
     <Popover
       anchorRect={anchorRect}
       placement="bottom-start"
-      onClose={requestClose}
+      onClose={onClose}
       closing={closing}
       className="agent-pop"
       ariaLabel={`${agent.display_name} controls`}
@@ -172,7 +172,7 @@ export function AgentPopover({
                     id: agent.participant_id,
                     value: agent.display_name,
                   });
-                  requestClose();
+                  onClose();
                 }}
               >
                 <Pencil size={11} aria-hidden="true" />
@@ -184,7 +184,7 @@ export function AgentPopover({
                 aria-label={`Pick color for ${agent.display_name}`}
                 onClick={() => {
                   controller.setPickingColorFor(agent.participant_id);
-                  requestClose();
+                  onClose();
                 }}
               >
                 <Palette size={11} aria-hidden="true" />
@@ -312,7 +312,7 @@ export function AgentPopover({
                 disabled={controller.loading}
                 onClick={() => {
                   void controller.refresh();
-                  requestClose();
+                  onClose();
                 }}
               >
                 <RotateCcw size={14} aria-hidden="true" />
@@ -325,7 +325,7 @@ export function AgentPopover({
                 disabled={view.isBusy || disconnected || !agent.controllable}
                 onClick={() => {
                   void controller.interrupt(agent);
-                  requestClose();
+                  onClose();
                 }}
               >
                 <Square size={14} aria-hidden="true" />
@@ -341,7 +341,7 @@ export function AgentPopover({
                 }
                 onClick={() => {
                   void controller.reconnect(agent);
-                  requestClose();
+                  onClose();
                 }}
               >
                 <PlugZap size={14} aria-hidden="true" />
@@ -354,7 +354,7 @@ export function AgentPopover({
                 disabled={view.isBusy || !agent.controllable}
                 onClick={() => {
                   void controller.pauseOrResume(agent);
-                  requestClose();
+                  onClose();
                 }}
               >
                 {agent.paused ? (
@@ -377,7 +377,7 @@ export function AgentPopover({
               title={commandTitle("Compact", view.commandReason)}
               onClick={() => {
                 void controller.compact(agent);
-                requestClose();
+                onClose();
               }}
             >
               <Zap size={14} aria-hidden="true" />
@@ -392,7 +392,7 @@ export function AgentPopover({
                 if (agent.tmux_session !== null) {
                   openAgentTerminalPane(agent.tmux_session);
                 }
-                requestClose();
+                onClose();
               }}
             >
               <Terminal size={14} aria-hidden="true" />

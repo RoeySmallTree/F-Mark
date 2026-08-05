@@ -2868,7 +2868,6 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   flex: 1;
   background: transparent;
   border: 0;
-  outline: 0;
   font: inherit;
   color: var(--ink);
 }
@@ -5360,44 +5359,15 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   cursor: not-allowed;
 }
 
-.agent-mention-popover {
-  z-index: 91;
-  isolation: isolate;
+/* Frame (background, border, radius, shadow, enter/exit animation, ::before
+   inset ring) now comes from the shared .popover base rule in popovers.css —
+   this component mounts on the shared Popover frame. Only the size and the
+   origin corner (this menu opens above-left of the compose textarea) stay
+   as overrides. */
+.popover.agent-mention-popover {
   width: min(392px, calc(100vw - 16px));
   max-height: min(400px, calc(100vh - 96px));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  border-radius: 14px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--canvas) 94%, var(--panel)),
-      var(--canvas)
-    );
-  box-shadow:
-    0 24px 70px color-mix(in srgb, var(--ink) 18%, transparent),
-    0 4px 16px color-mix(in srgb, var(--ink) 8%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--canvas) 78%, transparent);
   transform-origin: bottom left;
-  animation: popover-enter var(--dur-base) var(--ease-out-expo) backwards;
-}
-
-/* Reuses popover-exit from popovers.css — keyframes are global, and this
-   surface already borrows popover-enter from the same place. */
-.agent-mention-popover.is-closing {
-  animation: popover-exit var(--dur-fast) var(--ease-in-quart) forwards;
-  pointer-events: none;
-}
-
-.agent-mention-popover::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: 13px;
-  pointer-events: none;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--canvas) 44%, transparent);
 }
 
 .agent-mention-head {
@@ -6239,3 +6209,4 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
     opacity: 1;
   }
 }
+

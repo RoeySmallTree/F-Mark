@@ -34,6 +34,9 @@ export interface MenuPosition {
 
 export interface PlusButtonController {
   open: boolean;
+  /* True while the menu should be in the DOM: either open, or animating
+     out after a close. Gates rendering; `open` alone gates aria-expanded. */
+  mounted: boolean;
   /* True while the menu is animating out but still mounted. */
   closing: boolean;
   wrapRef: RefObject<HTMLDivElement>;

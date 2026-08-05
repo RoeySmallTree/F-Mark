@@ -30,8 +30,9 @@ interface Props {
      popovers can size themselves (e.g. width:380 for the log filter). */
   className?: string;
   ariaLabel?: string;
-  /* Set by usePopoverExit at the mount site while the exit animation plays.
-     Purely presentational — the mount site still owns when onClose fires. */
+  /* Set by useDeferredUnmount at the mount site while the exit animation
+     plays. Purely presentational — the mount site still owns when onClose
+     fires. */
   closing?: boolean;
 }
 

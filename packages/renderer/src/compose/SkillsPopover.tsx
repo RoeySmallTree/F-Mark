@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { SkillRef } from "@f-mark/shared";
 import { Sparkles } from "lucide-react";
 import { Popover } from "../popovers/Popover.js";
-import { usePopoverExit } from "../popovers/usePopoverExit.js";
 import {
   filterSkills,
   flattenSkills,
@@ -27,6 +26,7 @@ interface SkillsPopoverProps {
   token: string | null;
   trigger: SkillTrigger | null;
   onClose(): void;
+  closing?: boolean;
   onEdit(skill: SkillRef): void;
   onInsert(text: string, trigger: SkillTrigger | null): void;
 }
@@ -39,6 +39,7 @@ export function SkillsPopover({
   token,
   trigger,
   onClose,
+  closing = false,
   onEdit,
   onInsert,
 }: SkillsPopoverProps): JSX.Element {
@@ -55,7 +56,6 @@ export function SkillsPopover({
   const flatRows = useMemo(() => flattenSkills(groups), [groups]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const resultsRef = useRef<HTMLDivElement | null>(null);
-  const { closing, requestClose } = usePopoverExit(onClose);
 
   useEffect(() => {
     setSelectedIdx(0);
@@ -70,7 +70,7 @@ export function SkillsPopover({
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        requestClose();
+        onClose();
         return;
       }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -91,7 +91,7 @@ export function SkillsPopover({
     }
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [flatRows, requestClose, onInsert, selectedIdx, trigger]);
+  }, [flatRows, onClose, onInsert, selectedIdx, trigger]);
 
   return (
     <Popover
@@ -99,7 +99,7 @@ export function SkillsPopover({
       placement="top-start"
       className="skills-pop"
       ariaLabel={NO_LOOSE_STRING_VALUES.skills}
-      onClose={requestClose}
+      onClose={onClose}
       closing={closing}
     >
       <div className="skills-pop-head">

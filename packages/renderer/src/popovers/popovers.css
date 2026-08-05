@@ -15,7 +15,7 @@
    gentle, leaving should feel decided. Travel is shorter than the entrance
    so the panel reads as dismissed rather than thrown.
 
-   Kept alive for the duration by usePopoverExit; EXIT_MS there and
+   Kept alive for the duration by useDeferredUnmount; EXIT_MS there and
    --dur-fast here must agree. */
 @keyframes popover-exit {
   from { opacity: 1; transform: translateY(0) scale(1); }

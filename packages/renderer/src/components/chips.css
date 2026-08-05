@@ -1044,7 +1044,7 @@
 
 /* The exit leaves in the direction it arrived from, per placement. Quicker
    than the 320ms open, on --ease-in-quart. Duration must match EXIT_MS in
-   usePopoverExit, which is what keeps the menu mounted this long.
+   useDeferredUnmount, which is what keeps the menu mounted this long.
 
    Must stay AFTER the [data-placement] rules: .plus-menu.is-closing and
    .plus-menu[data-placement="below"] have equal specificity, so source

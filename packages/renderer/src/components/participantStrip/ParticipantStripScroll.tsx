@@ -4,6 +4,10 @@ import { AgentChip } from "../AgentChip.js";
 import { ParticipantAvatar } from "../ParticipantAvatar.js";
 import { PlusButton } from "../PlusButton.js";
 import { useFlipReorder } from "../../hooks/useFlipReorder.js";
+import {
+  useDeferredUnmount,
+  useHeldAnchorRect,
+} from "../../popovers/useDeferredUnmount.js";
 import { openAgentTerminalPane } from "../../state/terminalPaneState.js";
 import type { AgentPresence } from "../../state/presence.js";
 import { AgentChipEditorPopover } from "./AgentChipEditorPopover.js";
@@ -59,6 +63,12 @@ export function ParticipantStripScroll({
     chipEditor.expandedAgentId === null
       ? null
       : agents.find((agent) => agent.participant_id === chipEditor.expandedAgentId) ?? null;
+  const editorOpen = openEditorAgent !== null;
+  const editorPopover = useDeferredUnmount(editorOpen);
+  const heldEditorRect = useHeldAnchorRect(editorOpen ? editorAnchorRect : null);
+  const heldEditorAgentRef = useRef<AgentChipModel | null>(openEditorAgent);
+  if (openEditorAgent !== null) heldEditorAgentRef.current = openEditorAgent;
+  const heldEditorAgent = heldEditorAgentRef.current;
 
   useFlipReorder(stripRef, [agentFlipKey(agents, activeAgentIds)]);
 
@@ -96,30 +106,31 @@ export function ParticipantStripScroll({
           </div>
         );
       })}
-      {openEditorAgent !== null && editorAnchorRect !== null ? (
+      {editorPopover.mounted && heldEditorAgent !== null && heldEditorRect !== null ? (
         <AgentChipEditorPopover
-          agent={openEditorAgent}
-          anchorRect={editorAnchorRect}
-          values={chipEditor.valuesForAgent(openEditorAgent)}
-          options={chipEditor.optionsForAgent(openEditorAgent)}
-          onModelChange={(value) => chipEditor.setModel(openEditorAgent, value)}
-          onEffortChange={(value) => chipEditor.setEffort(openEditorAgent, value)}
-          onAccessModeChange={(value) => chipEditor.setAccessMode(openEditorAgent, value)}
-          presenceState={presence[openEditorAgent.participant_id]?.state ?? NO_LOOSE_STRING_VALUES.offline}
-          onCompact={() => chipEditor.compact(openEditorAgent)}
-          onReconnect={() => onAgentReconnect(openEditorAgent)}
+          agent={heldEditorAgent}
+          anchorRect={heldEditorRect}
+          values={chipEditor.valuesForAgent(heldEditorAgent)}
+          options={chipEditor.optionsForAgent(heldEditorAgent)}
+          onModelChange={(value) => chipEditor.setModel(heldEditorAgent, value)}
+          onEffortChange={(value) => chipEditor.setEffort(heldEditorAgent, value)}
+          onAccessModeChange={(value) => chipEditor.setAccessMode(heldEditorAgent, value)}
+          presenceState={presence[heldEditorAgent.participant_id]?.state ?? NO_LOOSE_STRING_VALUES.offline}
+          onCompact={() => chipEditor.compact(heldEditorAgent)}
+          onReconnect={() => onAgentReconnect(heldEditorAgent)}
           onOpenTerminal={() => {
-            if (openEditorAgent.tmux_session !== null) {
-              openAgentTerminalPane(openEditorAgent.tmux_session);
+            if (heldEditorAgent.tmux_session !== null) {
+              openAgentTerminalPane(heldEditorAgent.tmux_session);
             }
           }}
           onRefresh={onAgentRefresh}
-          onClear={() => onAgentClear(openEditorAgent)}
-          onSayGoodbye={() => onAgentGoodbye(openEditorAgent)}
+          onClear={() => onAgentClear(heldEditorAgent)}
+          onSayGoodbye={() => onAgentGoodbye(heldEditorAgent)}
           onClose={() => {
             setEditorAnchorRect(null);
             chipEditor.closeEditor();
           }}
+          closing={editorPopover.closing}
         />
       ) : null}
       {userParticipants.map((participant) => {
