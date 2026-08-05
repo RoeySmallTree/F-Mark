@@ -91,15 +91,21 @@ function statusLabel(
    ago") and only falls back to an absolute date+time after 7 days, which is
    the distinction a feed whose job is "what changed while you were gone"
    actually needs. */
+function isNonEmptyString(part: string | null): part is string {
+  return part !== null && part !== "";
+}
+
 export function formatApprovalStatus(
   status: string,
   scope: string | null,
   at: string | null,
 ): string {
-  if (status !== NO_LOOSE_STRING_VALUES.approved) return status;
   const time = at === null ? null : formatWhen(at);
+  if (status !== NO_LOOSE_STRING_VALUES.approved) {
+    return [status, time].filter(isNonEmptyString).join(" · ");
+  }
   const parts = [NO_LOOSE_STRING_VALUES.allowed, scope, time].filter(
-    (part): part is string => part !== null && part !== "",
+    isNonEmptyString,
   );
   return parts.join(" · ");
 }

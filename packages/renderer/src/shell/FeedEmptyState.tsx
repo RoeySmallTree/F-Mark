@@ -6,6 +6,7 @@ import type { ViewMode } from "../state/store.js";
 const NO_LOOSE_STRING_VALUES = {
   document: "document",
   conversation: "conversation",
+  everything: "everything",
 } as const;
 
 const NAMED_MODE_SHORTCUT = chordToLabel("$mod+N");
@@ -47,6 +48,21 @@ export function FeedEmptyState({
         <p className="feed-empty-vignette-title">No messages yet</p>
         <p className="feed-empty-vignette-hint">
           Send a prompt — the agent reads it on their next turn.
+        </p>
+      </div>
+    );
+  }
+  if (viewMode === NO_LOOSE_STRING_VALUES.everything) {
+    return (
+      <div className="feed-empty-vignette" data-view="everything">
+        <div className="feed-empty-icon-outer" aria-hidden="true">
+          <div className="feed-empty-icon-inner">
+            <EverythingSvg />
+          </div>
+        </div>
+        <p className="feed-empty-vignette-title">Nothing here yet</p>
+        <p className="feed-empty-vignette-hint">
+          Write a document or send a message — everything shows up here.
         </p>
       </div>
     );
@@ -112,6 +128,68 @@ function DocumentSvg(): JSX.Element {
         stroke="currentColor"
         strokeWidth="1.5"
         strokeOpacity="0.32"
+      />
+    </svg>
+  );
+}
+
+/* ── Everything mode ───────────────────────────────────────────────────── */
+function EverythingSvg(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {/* back card */}
+      <rect
+        x="9"
+        y="5"
+        width="22"
+        height="12"
+        rx="2"
+        fill="currentColor"
+        opacity="0.06"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeOpacity="0.45"
+      />
+      {/* middle card */}
+      <rect
+        x="6"
+        y="13"
+        width="28"
+        height="12"
+        rx="2"
+        fill="currentColor"
+        opacity="0.08"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeOpacity="0.7"
+      />
+      {/* front card */}
+      <rect
+        x="4"
+        y="21"
+        width="32"
+        height="14"
+        rx="2"
+        fill="currentColor"
+        opacity="0.1"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      {/* front card detail: an actor dot plus a text line */}
+      <circle cx="11" cy="28" r="1.8" fill="currentColor" />
+      <line
+        x1="16"
+        y1="28"
+        x2="29"
+        y2="28"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeOpacity="0.55"
       />
     </svg>
   );

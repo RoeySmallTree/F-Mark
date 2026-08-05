@@ -39,6 +39,7 @@ async function runDeleteSession(
   input: UseSessionDeleteInput,
   session: SessionMeta,
 ): Promise<void> {
+  input.setError(null);
   input.closeContextMenu();
   const intent = await input.confirmDestructive({
     action: "session.delete",

@@ -39,6 +39,7 @@ export function TodoTreeContent({
     draft !== null &&
     draft.parentId === undefined &&
     draft.afterId === undefined;
+  const isFilteredToZero = nodes.length === 0 && allNodeById.size > 0;
 
   return (
     <>
@@ -53,6 +54,9 @@ export function TodoTreeContent({
         registerInputs={registerInputs}
         actions={actions}
       />
+      {isFilteredToZero ? (
+        <p className="panel-empty">No tasks match the current filter.</p>
+      ) : null}
       {shouldRenderRootDraft && draft !== null ? (
         <TodoTreeDraftItem
           currentDraft={draft}
