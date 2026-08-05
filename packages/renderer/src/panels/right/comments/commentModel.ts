@@ -4,7 +4,11 @@ import type {
   LineContext,
   ProsePayload,
 } from "@f-mark/shared";
-import { getCommentTarget, getFileCommentTarget } from "@f-mark/shared";
+import {
+  COMMENT_MARKER_CONTENT,
+  getCommentTarget,
+  getFileCommentTarget,
+} from "@f-mark/shared";
 import { extractFileQuote, quoteFromEventTarget } from "../../../comments/commentQuote.js";
 import {
   createChainRootResolver,
@@ -19,7 +23,7 @@ const NO_LOOSE_STRING_VALUES = {
   all: "all",
   working: "working",
   prose: "prose",
-  removed: "_removed_",
+  removed: COMMENT_MARKER_CONTENT.removed,
 } as const;
 
 export type LineRange = [number, number];
