@@ -34,6 +34,8 @@ export interface MenuPosition {
 
 export interface PlusButtonController {
   open: boolean;
+  /* True while the menu is animating out but still mounted. */
+  closing: boolean;
   wrapRef: RefObject<HTMLDivElement>;
   menuRef: RefObject<HTMLDivElement>;
   menuStyle: CSSProperties;

@@ -10,6 +10,18 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* The exit is deliberately quicker than the entrance and uses
+   --ease-in-quart, the token reserved for exits: arriving should feel
+   gentle, leaving should feel decided. Travel is shorter than the entrance
+   so the panel reads as dismissed rather than thrown.
+
+   Kept alive for the duration by usePopoverExit; EXIT_MS there and
+   --dur-fast here must agree. */
+@keyframes popover-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(6px) scale(0.985); }
+}
+
 .popover-backdrop {
   position: fixed;
   inset: 0;
@@ -45,6 +57,18 @@
   pointer-events: none;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--canvas) 44%, transparent);
 }
+
+/* Both stop taking input the moment the close is decided: the panel is on
+   screen for another 160ms, and a click landing on a menu item that is
+   already dismissed fires an action the user did not choose. */
+.popover.is-closing {
+  animation: popover-exit var(--dur-fast) var(--ease-in-quart) forwards;
+  pointer-events: none;
+}
+.popover-backdrop.is-closing {
+  pointer-events: none;
+}
+
 .popover.log-filter-popover {
   min-width: 320px;
   max-width: 380px;

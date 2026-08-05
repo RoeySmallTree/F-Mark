@@ -1,0 +1,25 @@
+FAIL  src/shell/dockLayout.test.ts > dock layout v4 default > places filesDisplay in center beside messages, search stowed in toolbar
+FAIL  src/shell/dockLayout.test.ts > migrateDockLayoutOnce > does NOT move a filesDisplay the user already placed in a visible area
+FAIL  src/shell/dockLayout.test.ts > migrateDockLayoutOnce > is a byte-for-byte no-op for an already-v4 layout
+FAIL  src/shell/dockLayout.test.ts > migrateDockLayoutOnce > re-homes a toolbar-parked filesDisplay into center after messages, stamps v3
+FAIL  src/shell/dockLayout.test.ts > migrateDockLayoutOnce > v2 → v3 appends the Terminal pane to the right dock
+FAIL  src/shell/dockLayout.test.ts > moveDockPane > falls back to the nearest source-area neighbor when the moved pane was active
+FAIL  src/shell/dockLayout.test.ts > moveDockPane > moves an active right pane to the bottom without disturbing other panes
+FAIL  src/shell/dockLayout.test.ts > moveDockPane > moves one inactive pane without disturbing the source area's active tab
+FAIL  src/shell/dockLayout.test.ts > moveDockPane > supports moving chat into the right pane as a real right-side tab
+FAIL  src/themes/storageSync.test.ts > X6 cross-tab appearance sync (storage events) > theme: a storage event re-applies the body class + notifies subscribers
+FAIL  tests/panels/right-layout.test.tsx > right-tabs config helpers (pure) > reorderRightTabsConfig moves entry to the target slot
+FAIL  tests/panels/right-layout.test.tsx > RightLayout — unified pane arrangement editor > dragging a toolbar pane places that one pane on screen
+FAIL  tests/shell/dock-tabs.test.tsx > relocatable dock tabs > toolbar-stowed panes render as draggable top-bar tabs
+FAIL  tests/shell/view-toggle.test.tsx > View toggle — clicking each TopBar button updates store.viewMode > clicking Conversation → setViewMode('conversation') in store
+FAIL  tests/shell/view-toggle.test.tsx > View toggle — clicking each TopBar button updates store.viewMode > clicking Document → setViewMode('document') in store
+FAIL  tests/shell/view-toggle.test.tsx > View toggle — clicking each TopBar button updates store.viewMode > clicking Everything → setViewMode('everything') in store
+FAIL  tests/themes.test.ts > themes > THEMES exposes all 17 entries in the expected order
+
+# 17 failing tests across 6 files, recorded on feature/ui-redesign-ledger @ be0e3a2
+# under Node 20.20.2. Every one of these 6 files is a subset of the 32 files in
+# 2026-08-02-test-baseline.json, which was recorded under Node 25 where an inert
+# globalThis.localStorage shadows jsdom's and reds 26 extra files spuriously.
+#
+# Diff remediation runs against THIS file, by test name. The 2026-08-02 file-set
+# baseline cannot detect a regression inside an already-red file.

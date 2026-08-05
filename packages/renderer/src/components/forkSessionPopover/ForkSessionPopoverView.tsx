@@ -17,6 +17,7 @@ const NO_LOOSE_STRING_VALUES = {
 interface ForkSessionPopoverViewProps
   extends Pick<ForkSessionPopoverProps, "anchorRect" | "target" | "onClose"> {
   controller: ForkSessionController;
+  closing?: boolean;
 }
 
 export function ForkSessionPopoverView({
@@ -24,12 +25,14 @@ export function ForkSessionPopoverView({
   target,
   onClose,
   controller,
+  closing,
 }: ForkSessionPopoverViewProps): JSX.Element {
   return (
     <Popover
       anchorRect={anchorRect}
       placement="bottom-end"
       onClose={onClose}
+      closing={closing}
       className="fork-session-pop"
       ariaLabel="Fork session"
     >

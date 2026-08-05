@@ -10,6 +10,7 @@ import type {
 
 interface Props extends AgentMentionPickerProps {
   controller: AgentMentionPickerController;
+  closing?: boolean;
 }
 
 export function AgentMentionPickerView({
@@ -18,12 +19,17 @@ export function AgentMentionPickerView({
   onSelect,
   onClose,
   controller,
+  closing,
 }: Props): JSX.Element {
   const { agents, rows, busyId, refresh, resume, reconnect } = controller;
 
   return (
     <div
-      className="agent-mention-popover"
+      className={
+        closing === true
+          ? "agent-mention-popover is-closing"
+          : "agent-mention-popover"
+      }
       style={getMentionPickerStyle(anchorRect)}
     >
       <AgentMentionHeader

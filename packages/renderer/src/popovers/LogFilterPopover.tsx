@@ -7,6 +7,7 @@
 import { useMemo, useState } from "react";
 import type { Participant } from "@f-mark/shared";
 import { Popover } from "./Popover.js";
+import { usePopoverExit } from "./usePopoverExit.js";
 import { DateRangeSection } from "./logFilterPopover/DateRangeSection.js";
 import { FilterFooter } from "./logFilterPopover/FilterFooter.js";
 import { KindsSection } from "./logFilterPopover/KindsSection.js";
@@ -29,6 +30,7 @@ export function LogFilterPopover({
   onApply,
   onClose,
 }: Props): JSX.Element {
+  const { closing, requestClose } = usePopoverExit(onClose);
   const [draft, setDraft] = useState<LogFilter>(() => ({ ...initial }));
 
   const participantEntries = useMemo(
@@ -42,13 +44,14 @@ export function LogFilterPopover({
 
   function apply(): void {
     onApply({ ...draft });
-    onClose();
+    requestClose();
   }
 
   return (
     <Popover
       anchorRect={anchorRect}
-      onClose={onClose}
+      onClose={requestClose}
+      closing={closing}
       className="log-filter-popover"
       ariaLabel="Filter activity log"
     >

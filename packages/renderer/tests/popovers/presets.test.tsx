@@ -11,7 +11,7 @@
 */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, render, screen, within, act } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Preset } from "@f-mark/shared";
 import { PresetsPopover } from "../../src/popovers/PresetsPopover.js";
@@ -348,7 +348,11 @@ describe("PresetsPopover — interactions", () => {
     expect(useStore.getState().composeDraft).toBe(
       "Generate 3 variations of this approach. Highlight tradeoffs for each.",
     );
-    expect(onClose).toHaveBeenCalledTimes(1);
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   test("clicking the backdrop calls onClose", async () => {
@@ -359,7 +363,11 @@ describe("PresetsPopover — interactions", () => {
     );
     await screen.findByText(/Generate variations/i);
     await user.click(screen.getByTestId("popover-backdrop"));
-    expect(onClose).toHaveBeenCalled();
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
   test("pressing Escape calls onClose", async () => {
@@ -370,7 +378,11 @@ describe("PresetsPopover — interactions", () => {
     );
     await screen.findByText(/Generate variations/i);
     await user.keyboard("{Escape}");
-    expect(onClose).toHaveBeenCalled();
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 });
 

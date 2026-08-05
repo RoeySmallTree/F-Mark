@@ -84,10 +84,8 @@ export function ComposePopovers({
           token={token}
           participants={participants}
           selectedIds={selectedMentionIds}
-          onSelect={(mention) => {
-            onAddMention(mention);
-            onCloseMentions();
-          }}
+          onSelect={onAddMention}
+          closeOnSelect
           onClose={onCloseMentions}
         />
       ) : null}

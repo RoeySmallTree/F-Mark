@@ -5384,6 +5384,13 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   animation: popover-enter var(--dur-base) var(--ease-out-expo) backwards;
 }
 
+/* Reuses popover-exit from popovers.css — keyframes are global, and this
+   surface already borrows popover-enter from the same place. */
+.agent-mention-popover.is-closing {
+  animation: popover-exit var(--dur-fast) var(--ease-in-quart) forwards;
+  pointer-events: none;
+}
+
 .agent-mention-popover::before {
   content: "";
   position: absolute;

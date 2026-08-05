@@ -1210,7 +1210,11 @@ describe("Compose — slash skills popover", () => {
     const callsAfterType = fetchMock.mock.calls.length;
 
     await user.keyboard("{Escape}");
-    expect(screen.queryByText(/\/review-pr/)).toBeNull();
+    /* The popover stays mounted for its exit animation (usePopoverExit), so
+       closing is no longer observable on the same tick as the keypress. */
+    await waitFor(() => {
+      expect(screen.queryByText(/\/review-pr/)).toBeNull();
+    });
     ta.setSelectionRange(1, 1);
     fireEvent.click(ta);
 

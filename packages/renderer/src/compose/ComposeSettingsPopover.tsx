@@ -1,6 +1,7 @@
 import { type JSX } from "react";
 import { Settings2 } from "lucide-react";
 import { Popover } from "../popovers/Popover.js";
+import { usePopoverExit } from "../popovers/usePopoverExit.js";
 
 interface Props {
   anchorRect: DOMRect | null;
@@ -27,11 +28,13 @@ export function ComposeSettingsPopover({
   enterToSend,
   onEnterToSendChange,
 }: Props): JSX.Element {
+  const { closing, requestClose } = usePopoverExit(onClose);
   return (
     <Popover
       anchorRect={anchorRect}
       placement="top-end"
-      onClose={onClose}
+      onClose={requestClose}
+      closing={closing}
       className="compose-settings-pop"
       ariaLabel="Compose settings"
     >

@@ -1041,6 +1041,29 @@
   from { opacity: 0; transform: translateY(-6px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* The exit leaves in the direction it arrived from, per placement. Quicker
+   than the 320ms open, on --ease-in-quart. Duration must match EXIT_MS in
+   usePopoverExit, which is what keeps the menu mounted this long.
+
+   Must stay AFTER the [data-placement] rules: .plus-menu.is-closing and
+   .plus-menu[data-placement="below"] have equal specificity, so source
+   order is the only thing that lets the exit override the entrance name. */
+.plus-menu.is-closing {
+  animation: plus-menu-out var(--dur-fast) var(--ease-in-quart) forwards;
+  pointer-events: none;
+}
+.plus-menu[data-placement="below"].is-closing {
+  animation-name: plus-menu-out-below;
+}
+@keyframes plus-menu-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(6px) scale(0.985); }
+}
+@keyframes plus-menu-out-below {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-6px) scale(0.985); }
+}
 .plus-menu-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

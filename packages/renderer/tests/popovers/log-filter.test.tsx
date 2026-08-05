@@ -1,7 +1,7 @@
 /* Phase 12 — LogFilterPopover unit tests. */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
 import { LogFilterPopover } from "../../src/popovers/LogFilterPopover.js";
@@ -118,7 +118,11 @@ describe("LogFilterPopover — interactions", () => {
     expect(onApply).toHaveBeenCalledTimes(1);
     const emitted = onApply.mock.calls[0]![0] as LogFilter;
     expect(emitted.kinds).toEqual(["prose"]);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   test("toggling Named only and a date range, then Apply, emits both", async () => {
@@ -200,7 +204,11 @@ describe("LogFilterPopover — interactions", () => {
       />,
     );
     await user.click(screen.getByTestId("popover-backdrop"));
-    expect(onClose).toHaveBeenCalled();
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
   test("pressing Escape calls onClose", async () => {
@@ -215,7 +223,11 @@ describe("LogFilterPopover — interactions", () => {
       />,
     );
     await user.keyboard("{Escape}");
-    expect(onClose).toHaveBeenCalled();
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 });
 

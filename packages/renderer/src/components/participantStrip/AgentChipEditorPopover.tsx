@@ -12,6 +12,7 @@ import {
   runtimeAccessModeOptions,
 } from "@f-mark/shared";
 import { Popover } from "../../popovers/Popover.js";
+import { usePopoverExit } from "../../popovers/usePopoverExit.js";
 import type {
   AgentChipRuntimeOptions,
   AgentChipEditorValues,
@@ -74,6 +75,7 @@ export function AgentChipEditorPopover({
   onSayGoodbye,
   onClose,
 }: AgentChipEditorPopoverProps): JSX.Element {
+  const { closing, requestClose } = usePopoverExit(onClose);
   const modelOptions = withCurrentModel(options.models ?? [], values.model);
   const effortOptions = withCurrentEffort(options.efforts ?? [], values.effort);
   const accessOptions = withCurrentAccess(agent.runtime_id, values.accessMode);
@@ -95,7 +97,8 @@ export function AgentChipEditorPopover({
     <Popover
       anchorRect={anchorRect}
       placement="top-start"
-      onClose={onClose}
+      onClose={requestClose}
+      closing={closing}
       className="agent-chip-editor-pop"
       ariaLabel={`${agent.name} model and runtime controls`}
     >

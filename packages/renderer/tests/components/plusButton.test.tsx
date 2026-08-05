@@ -13,7 +13,7 @@
      - Esc + outside-click close the menu. */
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PlusButton } from "../../src/components/PlusButton.js";
 
@@ -284,7 +284,11 @@ describe("PlusButton — actions", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: /Claude Code/i }));
     expect(h.onSpawnRuntime).toHaveBeenCalledWith("claude");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 
   test("clicking disabled runtime does not fire onSpawnRuntime", async () => {
@@ -357,6 +361,10 @@ describe("PlusButton — actions", () => {
     );
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    /* Close is animated now (usePopoverExit): the panel stays mounted
+       for its exit, so the callback lands a tick later. */
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 });
