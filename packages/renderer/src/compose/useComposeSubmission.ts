@@ -5,7 +5,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import type { ProseMention } from "@f-mark/shared";
+import type { ProseMention, WakeSessionResponse } from "@f-mark/shared";
 import type { RootScope } from "../api/client.js";
 import type { StagedAttachment } from "./AttachmentChip.js";
 import {
@@ -40,6 +40,10 @@ export interface ComposeSubmissionState {
   hasContent: boolean;
   hasSendableAttachments: boolean;
   canSubmit: boolean;
+  /** The last wake result, so the compose bar can say who the message reached
+      and who it did not. `null` once dismissed, or when no wake ran. */
+  lastWake: WakeSessionResponse | null;
+  dismissWakeNotice(): void;
   submit(): Promise<void>;
   /* void, not the controller's boolean: every action here is re-entrancy
      guarded, and a call rejected by the guard has no honest boolean to
@@ -141,12 +145,19 @@ export function useComposeSubmission({
     ],
   );
 
+  const [lastWake, setLastWake] = useState<WakeSessionResponse | null>(null);
+
+  const dismissWakeNotice = useCallback((): void => setLastWake(null), []);
+
   const finishSubmit = useCallback(
     (result: ComposeSubmitResult | null): void => {
       if (result === null) return;
       clearAfterSubmit();
       discardAttachments(result.sentAttachmentIds);
       requestScrollToBottom();
+      /* Overwrite rather than merge: the notice describes the message just
+         sent, so a previous send's misses must not linger next to it. */
+      setLastWake(result.wake);
     },
     [clearAfterSubmit, discardAttachments, requestScrollToBottom],
   );
@@ -234,7 +245,10 @@ export function useComposeSubmission({
         finishSubmit(result);
         if (shouldEndTurn && result !== null) {
           const posted = await controller.endTurn();
-          if (posted) await controller.wakeAfterSubmittedMessage();
+          /* This is the common path: with end-turn on, submit() is called with
+             wake:false and the wake happens here instead. Without capturing it
+             the notice would be blank exactly when most people send. */
+          if (posted) setLastWake(await controller.wakeAfterSubmittedMessage());
         }
       }),
     [activeMode, controller, finishSubmit, messageEndsTurn, withReentrancyGuard],
@@ -253,6 +267,8 @@ export function useComposeSubmission({
     hasContent,
     hasSendableAttachments,
     canSubmit,
+    lastWake,
+    dismissWakeNotice,
     submit,
     endTurn,
     endTurnAndWake,
