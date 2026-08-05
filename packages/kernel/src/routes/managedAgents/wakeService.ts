@@ -65,11 +65,17 @@ export class ManagedAgentWakeService {
       requested !== undefined
         ? [...new Set(requested.map((value) => String(value)))]
         : undefined;
+    /* Report a not-active agent whether or not the caller named it. Waking
+       without explicit targets used to drop those agents silently — they
+       appeared in neither `notified` nor `skipped`, so a message sent to a
+       session with two agents could reach one of them and say nothing about
+       the other. The agent is still not woken; a session it is not attached
+       to must not pull it off the work it is doing. Only the silence goes. */
     const ensure = await this.deps.ensureForSession({
       sessionId: input.sessionId,
       binding: input.binding,
       targetParticipantIds: targetIds,
-      includeNotActiveSkips: requested !== undefined,
+      includeNotActiveSkips: true,
     });
     const ready = this.readyTargets(ensure);
     const delivered: WakeSessionResponse["delivered"] = [];
