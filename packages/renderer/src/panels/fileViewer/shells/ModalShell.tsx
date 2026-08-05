@@ -3,10 +3,8 @@ import { X } from "lucide-react";
 import { useStore } from "../../../state/store.js";
 import { FileViewer } from "../FileViewer.js";
 
-/* Modal shell — full-viewport overlay with backdrop. Clicking the
-   backdrop or pressing Escape closes; closing flips
-   `fileViewerModalDismissed` so the floating "Reopen viewer" pill
-   shows up until the user picks another layout or reopens. */
+/* Modal shell — full-viewport overlay with backdrop. Clicking the backdrop or
+   pressing Escape closes. */
 export function ModalShell(): JSX.Element {
   const setOpen = useStore((s) => s.setFileViewerModalOpen);
 

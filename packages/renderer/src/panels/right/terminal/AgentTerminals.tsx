@@ -10,8 +10,10 @@ const NO_LOOSE_STRING_VALUES = {
 } as const;
 
 /* The "Agents" half of the dock pane: one inner tab per managed agent, each
-   showing that agent's live tmux terminal. No spawn/close — agents are created
-   and ended through the agent lifecycle, not here. */
+   showing that agent's live tmux terminal. The tab's close button detaches the
+   view only. Ending an agent goes through the agent lifecycle, which requires a
+   ConfirmedIntent — this comment used to claim the same thing while the close
+   button silently called api.goodbye(), so keep the claim and the code together. */
 export function AgentTerminals(): JSX.Element {
   const c = useAgentTerminalsController();
   const activeAgent =
