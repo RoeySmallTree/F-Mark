@@ -82,3 +82,40 @@ Why this way:
   fourteen numbers went wrong before, one hiding a live AA failure)
 
 Commits: dc6584f · ac0595f · c9c55ce · b351454 · f2961b4 · 29bdee3
+
+## 2026-08-05 — Sweep remediation: guards on actions, not controls
+
+How it works: the 2026-08-04 sweep found 34 defects that were really seven
+mechanisms. Each one shipped repeatedly because the guard lived on the
+*control* rather than on the *action*, so every new entry point to the same
+action arrived unguarded. Each cluster now ends in an enforcement artifact — a
+branded type or a test — so the class cannot return silently.
+
+Flow (from the user):
+1. The user triggers something destructive — kill a terminal, Cmd+Backspace a
+   todo, delete an untracked file, make a project active
+2. → the call needs a `ConfirmedIntent`, which only `useConfirmDestructive`
+   can mint, so an unconfirmed path fails to compile rather than failing quietly
+3. → they get one dialog that names the clicked action and what is lost
+4. → recoverable actions deliberately stay unguarded, so the rare dialog keeps
+   its meaning
+
+Why this way:
+• Branded receipt at the action → (not a confirm at each control — that is
+  exactly how six entry points diverged)
+• Popover exit derived from the open boolean via `useDeferredUnmount` → (not
+  routing every close through a wrap: seven popovers span three state
+  mechanisms, so a store-level fix reaches only three and misses Skills)
+• Comment removal keeps writing `_removed_` and the kernel learns to read it →
+  (not writing a `removed: true` tombstone — the prose validator rejects
+  "comments cannot be tombstones", and `applySupersession` already hid the
+  comment, so only the marker ever leaked; reading it also fixes every marker
+  already on disk)
+• Centre pane floored with `min()` in the grid track → (not a dock-engine
+  rewrite: the width is a CSS variable with a JS fallback, so collapse-to-
+  overlay stays a separate project)
+• `useFocusTrap` implemented → (not dropping `aria-modal` to false, which
+  would be honest but worse for the people the attribute exists for)
+
+Commits: 6e0f183 · 1401cf7 · e3cfd2e · 442f125 · c5e216f · 74c6788 · 2474a02 ·
+7f592a9 · ffd0f0a · 5abed74 · 0d584d1 · 1f2086c · 3fe9613 · fb329e3

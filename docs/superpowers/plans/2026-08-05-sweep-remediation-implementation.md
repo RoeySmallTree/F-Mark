@@ -1405,62 +1405,47 @@ Two mechanisms exist for deletion and only one is understood outside the rendere
 
 So a removed comment is a *visible* prose event containing `_removed_` to search, the inbox, and all 23 `fmark_*` MCP tools — the agent-facing surfaces of an agent-collaboration product.
 
-**Three traps found by tracing, any of which breaks a naive fix:**
+### CORRECTED DURING EXECUTION — the planned fix is forbidden by the kernel
 
-1. **The kernel validator rejects the payload.** `ProseFrontmatterValidator.ts:104` returns `` `removed: true` requires empty content ``. The current marker sets `content: "_removed_"`. Both cannot coexist — the content must go, not merely be joined by the flag.
-2. **`mode: "comment"` outranks `removed: true`.** `getProseRole` precedence is `file_path` → `append_to`+`mode:"comment"` → `append_to`+`removed`. If the removal marker carries `mode: "comment"` (set by `buildPostProseBody`), it classifies as `comment`, never reaching the tombstone branch.
-3. **The marker string is duplicated in three separate src files** — `comments/commentMarkers.ts:5`, `panels/right/comments/commentModel.ts:22`, `state/aggregate/EventAggregator.ts:36` — plus tests. Changing one and not the others produces a half-migrated reader.
+The plan above said to make comment removal write `removed: true`. **The kernel rejects that write.**
 
-- [ ] **Step 1: Establish the exact payload shape before changing anything**
+`ProseFrontmatterValidator.validateCommentPayload` returns the error **"comments cannot be tombstones"** for any payload with `mode: "comment"` and `removed: true`. And `buildPostProseBody` → `targetBodyForGroup` **always** adds `mode: "comment"` to a non-file comment. So every line and card comment removal would be rejected outright.
 
-```bash
-cat packages/renderer/src/panels/right/comments/controller/postBodyModel.ts
-```
+That is not an oversight to route around. It is a deliberate invariant, and it is *why* the renderer invented the content marker in the first place. Two further facts settle the design:
 
-Record precisely which fields `buildPostProseBody` adds to a removal post: `mode`, `append_to`, `file_path`, `lines`. **This determines whether trap 2 fires.** Write the answer into the commit body.
+- **`getProseRole` ranks `mode: "comment"` above `removed: true`**, so even if the write were allowed the marker would classify as `comment`, never `tombstone`.
+- **`applySupersession` already hides the comment the marker supersedes.** The original comment was never the leak. **Only the marker itself leaks.**
 
-Decision fork, resolved by what that file says:
-- **If the removal marker carries `mode: "comment"`** — the marker must omit `mode` so precedence reaches the `removed` branch. Verify that omitting it does not break `buildCommentGroups`, which is thread-based and keys on `supersedes`, not on `mode`.
-- **If it does not carry `mode`** — no precedence change is needed, and `removed: true` classifies as `tombstone` (or `file-comment` on a file comment, where `visible.ts` still hides it because that filter reads `payload.removed` directly regardless of role).
+**So the fix is to teach the kernel to read the marker, not to change what is written.** This is strictly better than the original plan:
 
-- [ ] **Step 2: Write the tombstone instead of the content marker**
+| | Write a tombstone instead | Teach `visible.ts` the marker |
+| - | ------------------------- | ----------------------------- |
+| Kernel invariant | fights it | respects it |
+| Historical `_removed_` markers | still leak forever | fixed too |
+| Append-only risk | changes what gets written | changes nothing on disk |
+| Blast radius | `getProseRole` precedence, every role consumer | one filter function |
 
-`panels/right/comments/controller/useCommentThreadActions.ts:78-86`:
+The enforcement artifact stays as planned — a shared predicate in `@f-mark/shared` used by both packages — but it now earns its place, because kernel and renderer genuinely both read the marker.
 
-```ts
-const removeComment = useCallback(
-  async (group: CommentGroup, event: AnyEventRecord): Promise<void> => {
-    await postComment(`remove:${event.filename}`, group, {
-      content: "",
-      removed: true,
-      supersedes: event.filename,
-    });
-  },
-  [postComment],
-);
-```
+The third trap stands unchanged: **the marker string is duplicated in three src files** — `comments/commentMarkers.ts:5`, `panels/right/comments/commentModel.ts:22`, `state/aggregate/EventAggregator.ts:36` — so a half-migrated reader is a real risk.
 
-`content: ""` is required by the validator, not incidental.
+- [x] **Step 1: Put the marker vocabulary in `@f-mark/shared`** — DONE
 
-- [ ] **Step 3: Keep reading the old marker — forever**
+Created `packages/shared/src/commentMarkers.ts` exporting `COMMENT_MARKER_CONTENT`, `isCommentRemovedMarker`, `isCommentResolutionMarker` and `isCommentMarkerEvent`, and re-exported it from `shared/src/index.ts`. Its header records why the tombstone route is closed, so the next reader does not retry it.
 
-The log is append-only. Every `_removed_` marker already written is permanent and must still render correctly. `isRemovedMarker` in `commentMarkers.ts` stays exactly as it is, and gains the new shape alongside:
+A marker requires **both** the exact trimmed content **and** a `supersedes` pointer. Requiring `supersedes` is what stops a real comment that merely discusses the string `_removed_` from being swallowed.
 
-```ts
-export function isRemovedMarker(event: AnyEventRecord): boolean {
-  const payload = prosePayload(event);
-  if (payload === null) return false;
-  if (typeof payload.supersedes !== "string") return false;
-  if (payload.removed === true) return true;
-  return markerContent(payload) === COMMENT_MARKER_CONTENT.removed;
-}
-```
+- [x] **Step 2: Hide the marker from visible reads** — DONE
 
-**Do not delete the content-marker branch.** Deleting it would make every historical removed comment reappear.
+`packages/kernel/src/events/visible.ts` — `isProseTombstone` is now joined by `isCommentMarkerEvent` behind one `isSupersessionMarker` predicate. Nothing else in the kernel changes, because `applySupersession` already drops the superseded comment.
 
-- [ ] **Step 4: Collapse the three duplicated constants**
+- [x] **Step 3: Collapse the three duplicated constants** — DONE
 
-`commentModel.ts:22` and `EventAggregator.ts:36` each re-declare `removed: "_removed_"`. Import `COMMENT_MARKER_CONTENT` from `comments/commentMarkers.js` in both and delete the local copies. One definition, three readers.
+`comments/commentMarkers.ts` now re-exports the shared constant instead of declaring its own; `commentModel.ts:22` and `EventAggregator.ts:36` reference `COMMENT_MARKER_CONTENT` rather than repeating the literal. One definition, three readers.
+
+- [x] **Step 4: Nothing written to the log changes** — BY DESIGN
+
+`removeComment` still posts `content: "_removed_"` + `supersedes`. That is now the deliberate, documented mechanism rather than an accident, and every historical marker already on disk is fixed by the same change.
 
 - [ ] **Step 5: Hand-trace every consumer**
 
