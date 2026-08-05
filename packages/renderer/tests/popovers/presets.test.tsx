@@ -348,7 +348,7 @@ describe("PresetsPopover — interactions", () => {
     expect(useStore.getState().composeDraft).toBe(
       "Generate 3 variations of this approach. Highlight tradeoffs for each.",
     );
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -363,7 +363,7 @@ describe("PresetsPopover — interactions", () => {
     );
     await screen.findByText(/Generate variations/i);
     await user.click(screen.getByTestId("popover-backdrop"));
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
@@ -378,7 +378,7 @@ describe("PresetsPopover — interactions", () => {
     );
     await screen.findByText(/Generate variations/i);
     await user.keyboard("{Escape}");
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();

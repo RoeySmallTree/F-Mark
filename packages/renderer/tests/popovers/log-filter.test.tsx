@@ -118,7 +118,7 @@ describe("LogFilterPopover — interactions", () => {
     expect(onApply).toHaveBeenCalledTimes(1);
     const emitted = onApply.mock.calls[0]![0] as LogFilter;
     expect(emitted.kinds).toEqual(["prose"]);
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -204,7 +204,7 @@ describe("LogFilterPopover — interactions", () => {
       />,
     );
     await user.click(screen.getByTestId("popover-backdrop"));
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
@@ -223,7 +223,7 @@ describe("LogFilterPopover — interactions", () => {
       />,
     );
     await user.keyboard("{Escape}");
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();

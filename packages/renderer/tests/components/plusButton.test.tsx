@@ -284,7 +284,7 @@ describe("PlusButton — actions", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: /Claude Code/i }));
     expect(h.onSpawnRuntime).toHaveBeenCalledWith("claude");
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -361,7 +361,7 @@ describe("PlusButton — actions", () => {
     );
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    /* Close is animated now (usePopoverExit): the panel stays mounted
+    /* Close is animated now (useDeferredUnmount): the panel stays mounted
        for its exit, so the callback lands a tick later. */
     await waitFor(() => {
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();

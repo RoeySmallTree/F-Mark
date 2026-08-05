@@ -1210,7 +1210,7 @@ describe("Compose — slash skills popover", () => {
     const callsAfterType = fetchMock.mock.calls.length;
 
     await user.keyboard("{Escape}");
-    /* The popover stays mounted for its exit animation (usePopoverExit), so
+    /* The popover stays mounted for its exit animation (useDeferredUnmount), so
        closing is no longer observable on the same tick as the keypress. */
     await waitFor(() => {
       expect(screen.queryByText(/\/review-pr/)).toBeNull();
