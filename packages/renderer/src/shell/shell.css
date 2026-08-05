@@ -5116,6 +5116,46 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
 }
+/* Delivery notice: which agents a message reached, and which it did not.
+   Styled off --line and --ink-3 rather than --alarm on purpose. An agent
+   working in another session is a normal state, not a failure, and this app
+   holds one meaning per channel — spending the alarm colour here would blunt
+   it where it actually matters. */
+.compose-wake-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 var(--compose-pad-x);
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.35;
+  animation: name-chip-enter var(--dur-base) var(--ease-out-quart) backwards;
+}
+.compose-wake-notice-text {
+  flex: 1;
+}
+.compose-wake-notice-dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--ink-3);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.compose-wake-notice-dismiss:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
 .compose-attachment-errors {
   display: flex;
   flex-direction: column;
@@ -5903,10 +5943,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   filter: brightness(1.05);
 }
 
-/* While the agent is running, the Stop-run button breathes a soft
+/* While the agent is running, the Stop-run button carries a steady
    agent-coloured halo — the live "agent is working" indicator, co-located
-   with the control that stops it. Mirrors participant-pulse so the compose
-   bar and the topbar chip read as the same "running" beat. */
+   with the control that stops it.
+
+   The halo used to breathe on an infinite loop. It sits directly under the
+   cursor in the compose bar, where a control that never stops moving reads as
+   a demand for attention rather than a status; the state it reports does not
+   change, so neither should the halo. Presence alone carries the signal. The
+   topbar chip keeps its pulse: it is peripheral, and one moving thing in the
+   corner is an ambient cue rather than a distraction. */
 .primary-action.is-stop::after {
   content: "";
   position: absolute;
@@ -5917,22 +5963,6 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
     0 0 0 1.5px var(--agent),
     0 0 12px 1px var(--agent);
   opacity: 0.5;
-  animation: primary-action-run-pulse var(--dur-slow) var(--ease-inout) infinite;
-}
-@keyframes primary-action-run-pulse {
-  0%,
-  100% {
-    opacity: 0.22;
-  }
-  50% {
-    opacity: 0.82;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .primary-action.is-stop::after {
-    animation: none;
-    opacity: 0.5;
-  }
 }
 
 /* The four stacked labels. Each occupies the same grid cell so the cell
