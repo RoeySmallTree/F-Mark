@@ -1,4 +1,5 @@
 import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
+import { isCommentMarkerEvent } from "@f-mark/shared";
 import type { Paths } from "../paths.js";
 import { readEvents, type ReadOptions } from "./reader.js";
 import { applySupersession } from "./supersession.js";
@@ -9,6 +10,17 @@ function isProseTombstone(event: AnyEventRecord): boolean {
   return (
     event.kind === "prose" && (event.payload as ProsePayload).removed === true
   );
+}
+
+/* Comment removal cannot use the `removed: true` tombstone — the prose
+   validator rejects `mode: "comment"` with `removed: true` ("comments cannot be
+   tombstones"), so the renderer supersedes the comment with an event whose
+   content is the marker `_removed_`. `applySupersession` above already drops
+   the comment that marker supersedes; without this the marker itself survived
+   as a visible prose event, which is how the literal string `_removed_` reached
+   search, the inbox, and the fmark_* MCP tools. */
+function isSupersessionMarker(event: AnyEventRecord): boolean {
+  return isProseTombstone(event) || isCommentMarkerEvent(event);
 }
 
 /**
@@ -26,6 +38,6 @@ export async function readVisibleEvents(
   opts: ReadOptions,
 ): Promise<AnyEventRecord[]> {
   return applySupersession(await readEvents(p, sessionId, opts)).filter(
-    (event) => !isProseTombstone(event),
+    (event) => !isSupersessionMarker(event),
   );
 }
