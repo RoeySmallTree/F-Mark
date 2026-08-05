@@ -1,4 +1,5 @@
 import type {
+  AccessRequestSuggestion,
   AccessResponseDecision,
   AccessResponsePayload,
 } from "@f-mark/shared";
@@ -11,6 +12,21 @@ import {
 } from "../post.js";
 import type { AccessRequestPayload, HookPayload } from "./types.js";
 import { stringField } from "./fields.js";
+import * as logger from "../../logger.js";
+
+/* Mirrors the renderer's suggestion filter (composeHelpers.ts /
+   AccessRequestCard.tsx: accessRequestSuggestions / requestSuggestions) so
+   this warning fires exactly when the renderer would silently drop an
+   entry. */
+function isPermissionSuggestion(value: unknown): value is AccessRequestSuggestion {
+  if (value === null || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.label === "string" &&
+    (candidate.decision === "approve" || candidate.decision === "deny")
+  );
+}
 
 const ACCESS_REQUEST_MESSAGE_KEYS = [
   "content",
@@ -81,10 +97,22 @@ export class AccessRequestExtractor {
       ...this.optionalString(payload, "permission_mode"),
       ...this.optionalString(payload, "cwd"),
       ...this.optionalString(payload, "transcript_path"),
-      ...(Array.isArray(payload.permission_suggestions)
-        ? { suggestions: payload.permission_suggestions }
-        : {}),
+      ...this.suggestionsField(payload),
     };
+  }
+
+  private suggestionsField(
+    payload: Record<string, unknown>,
+  ): Partial<AccessRequestPayload> {
+    if (!Array.isArray(payload.permission_suggestions)) return {};
+    const received = payload.permission_suggestions;
+    const suggestions = received.filter(isPermissionSuggestion);
+    if (suggestions.length !== received.length) {
+      logger.warn(
+        `dropped malformed permission_suggestions: received=${received.length} accepted=${suggestions.length}`,
+      );
+    }
+    return { suggestions };
   }
 
   private optionalString(

@@ -931,6 +931,56 @@ describe("extractAccessRequest", () => {
   });
 });
 
+describe("extractAccessRequest permission_suggestions", () => {
+  it("keeps valid suggestions and drops malformed ones with a warning", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = extractAccessRequest({
+      payload: {
+        hook_event_name: "PermissionRequest",
+        tool_name: "Bash",
+        tool_input: { command: "ls" },
+        permission_suggestions: [
+          { id: "s1", label: "Allow once", decision: "approve" },
+          { id: "s2", decision: "approve" } /* missing label */,
+          { label: "Deny", decision: "deny" } /* missing id */,
+          { id: "s3", label: "Deny", decision: "cancel" } /* bad decision */,
+          "not-an-object",
+        ],
+      },
+      participantId: "ag-claude",
+      runtimeId: "claude",
+    });
+    expect(result).not.toBeNull();
+    expect(result!.suggestions).toEqual([
+      { id: "s1", label: "Allow once", decision: "approve" },
+    ]);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain("received=5");
+    expect(warnSpy.mock.calls[0][0]).toContain("accepted=1");
+    warnSpy.mockRestore();
+  });
+
+  it("does not warn when every suggestion is valid", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = extractAccessRequest({
+      payload: {
+        hook_event_name: "PermissionRequest",
+        tool_name: "Bash",
+        tool_input: { command: "ls" },
+        permission_suggestions: [
+          { id: "s1", label: "Allow once", decision: "approve" },
+          { id: "s2", label: "Deny", decision: "deny" },
+        ],
+      },
+      participantId: "ag-claude",
+      runtimeId: "claude",
+    });
+    expect(result!.suggestions).toHaveLength(2);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});
+
 describe("extractLiveAssistantTextEvent", () => {
   it("extracts Claude MessageDisplay delta as arbitrary prose", () => {
     const result = extractLiveAssistantTextEvent({
