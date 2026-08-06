@@ -25,7 +25,7 @@ const ARIA_MODAL_FILES = tsxFiles(SRC)
   .filter((f) => f.tsx.includes('aria-modal="true"'));
 
 describe("modal focus-containment contract", () => {
-  test("every aria-modal=\"true\" file wires useFocusTrap, directly or via a documented shared shell", () => {
+  test('every aria-modal="true" file wires useFocusTrap, directly or via a documented shared shell', () => {
     const uncovered = ARIA_MODAL_FILES.filter(
       (f) => !f.tsx.includes("useFocusTrap") && !f.tsx.includes("Focus trap:"),
     ).map((f) => f.path);
@@ -48,21 +48,6 @@ describe("modal focus-containment contract", () => {
    here rather than something that happens by not noticing. Shrink it; do not
    grow it. */
 const ROVING_DEBT = [
-  "shell/LeftRail.tsx",
-  "shell/LedgerHeader.tsx",
-  "shell/dockAreaView/DockAreaTabs.tsx",
-  "shell/topBar/CenterDockTabs.tsx",
-  "shell/topBar/ToolbarDockTabs.tsx",
-  "cards/fileCard/FilePreview.tsx",
-  "panels/right/RightDiffTree.tsx",
-  "panels/right/terminal/AgentTerminals.tsx",
-  "panels/right/terminal/RegularTerminals.tsx",
-  "panels/right/terminal/RightTerminal.tsx",
-  "panels/fileViewer/TabsRow.tsx",
-  "panels/fileViewer/renderers/OfficeRenderer.tsx",
-  "modals/HtmlPreviewModal.tsx",
-  "modals/settings/settingsModal/SettingsSidebar.tsx",
-  "modals/integrationSetup/IntegrationSetupView.tsx",
   "cards/ApprovalActions.tsx",
   "modals/presetEditor/CategoryField.tsx",
   "modals/onboarding/ThemeStep.tsx",
@@ -87,7 +72,8 @@ describe("composite widget keyboard contract", () => {
 
   test("the debt list has no stale entries — a fixed widget must be removed from it", () => {
     const fixed = COMPOSITE_FILES.filter(
-      (f) => f.tsx.includes("useRovingTabIndex") && ROVING_DEBT.includes(f.path),
+      (f) =>
+        f.tsx.includes("useRovingTabIndex") && ROVING_DEBT.includes(f.path),
     ).map((f) => f.path);
     expect(fixed).toEqual([]);
   });

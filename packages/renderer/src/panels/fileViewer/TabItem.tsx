@@ -22,6 +22,11 @@ export interface TabItemProps {
   onDrop: (e: React.DragEvent<HTMLDivElement>, path: string) => void;
   onDragEnd: () => void;
   dropBefore?: boolean;
+  /* Roving tabindex: TabsRow owns the shared tab stop across all open tabs
+     (only the active one is 0, the rest -1) and needs the rendered node to
+     focus it after an arrow-key move. */
+  tabIndex: 0 | -1;
+  itemRef?: (el: HTMLDivElement | null) => void;
 }
 
 export function TabItem({
@@ -37,6 +42,8 @@ export function TabItem({
   onDrop,
   onDragEnd,
   dropBefore = false,
+  tabIndex,
+  itemRef,
 }: TabItemProps): JSX.Element {
   const name = basenameOf(path);
   const ext = extOf(path);
@@ -77,6 +84,7 @@ export function TabItem({
 
   return (
     <div
+      ref={itemRef}
       className={className}
       data-flip-id={path}
       data-drop-before={dropBefore ? "true" : undefined}
@@ -92,7 +100,7 @@ export function TabItem({
       title={path}
       role="tab"
       aria-selected={active}
-      tabIndex={0}
+      tabIndex={tabIndex}
     >
       <Icon
         size={12}
@@ -107,7 +115,11 @@ export function TabItem({
         title={pinned ? "Unpin" : "Pin"}
         aria-label={pinned ? "Unpin tab" : "Pin tab"}
       >
-        {pinned ? <PinOff size={11} aria-hidden /> : <Pin size={11} aria-hidden />}
+        {pinned ? (
+          <PinOff size={11} aria-hidden />
+        ) : (
+          <Pin size={11} aria-hidden />
+        )}
       </button>
       <button
         type="button"

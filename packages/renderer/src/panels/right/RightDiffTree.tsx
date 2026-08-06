@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -20,6 +21,7 @@ import type { FilesTreeEntry, FilesTreeResponse } from "../../api/client.js";
 import { createClient } from "../../api/client.js";
 import { DEFAULT_FILES_SEARCH, useStore } from "../../state/store.js";
 import { usePresentFile } from "../../shell/usePresentFile.js";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
 import { TabEmptyState } from "./TabEmptyState.js";
 import { PanelLoadingState } from "./PanelLoadingState.js";
 import { FileTree } from "./files/FileTree.js";
@@ -44,6 +46,11 @@ const diffTreeModes = {
   session: GIT_DIFF_MODES.session,
   branch: GIT_DIFF_MODES.branch,
 } as const satisfies Record<string, DiffTreeMode>;
+
+const DIFF_TREE_MODE_ORDER: DiffTreeMode[] = [
+  diffTreeModes.session,
+  diffTreeModes.branch,
+];
 
 const diffTreeRefs = {
   head: "HEAD",
@@ -122,7 +129,8 @@ function changedTree(
     entries: entries.map((entry, index) => ({
       ...entry,
       index,
-      parent: entry.parent === null ? null : (oldToNew.get(entry.parent) ?? null),
+      parent:
+        entry.parent === null ? null : (oldToNew.get(entry.parent) ?? null),
     })),
     truncated: false,
   };
@@ -174,6 +182,19 @@ export function RightDiffTree(): JSX.Element {
     error: null,
     response: null,
   });
+  const modeButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const modeIndex = DIFF_TREE_MODE_ORDER.indexOf(mode);
+  const { tabIndexFor: modeTabIndexFor, onKeyDown: onModeKeyDown } =
+    useRovingTabIndex(
+      DIFF_TREE_MODE_ORDER.length,
+      modeIndex < 0 ? 0 : modeIndex,
+      (index) => {
+        const next = DIFF_TREE_MODE_ORDER[index];
+        if (next === undefined) return;
+        setMode(next);
+        modeButtonRefs.current[index]?.focus();
+      },
+    );
 
   useFilesTreeLoad(client, selectedRoot);
 
@@ -182,7 +203,10 @@ export function RightDiffTree(): JSX.Element {
     [selectedRoot],
   );
   const branchBaseRef =
-    baseRef ?? refs?.current_ref ?? refs?.detected_base_ref ?? diffTreeRefs.head;
+    baseRef ??
+    refs?.current_ref ??
+    refs?.detected_base_ref ??
+    diffTreeRefs.head;
   const branchOptions = useMemo(
     () =>
       uniqueRefs([
@@ -223,13 +247,15 @@ export function RightDiffTree(): JSX.Element {
       setState({ loading: false, error: null, response: null });
       return;
     }
-      setState((prev) => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
     const request =
       mode === diffTreeModes.session
         ? {
             scope,
             mode: diffTreeModes.session,
-            ...(currentSessionId !== null ? { sessionId: currentSessionId } : {}),
+            ...(currentSessionId !== null
+              ? { sessionId: currentSessionId }
+              : {}),
           }
         : {
             scope,
@@ -255,7 +281,8 @@ export function RightDiffTree(): JSX.Element {
   }, [loadChanged]);
 
   const changedByRelPath = useMemo(
-    () => (state.response === null ? EMPTY_CHANGED : statusMap(state.response.files)),
+    () =>
+      state.response === null ? EMPTY_CHANGED : statusMap(state.response.files),
     [state.response],
   );
   const filteredTree = useMemo(
@@ -314,11 +341,20 @@ export function RightDiffTree(): JSX.Element {
       }
     >
       <div className="files-header diff-tree-header">
-        <div className="diff-tree-segment" role="tablist" aria-label="Diff tree mode">
+        <div
+          className="diff-tree-segment"
+          role="tablist"
+          aria-label="Diff tree mode"
+          onKeyDown={onModeKeyDown}
+        >
           <button
             type="button"
+            ref={(el) => {
+              modeButtonRefs.current[0] = el;
+            }}
             role="tab"
             aria-selected={mode === diffTreeModes.session}
+            tabIndex={modeTabIndexFor(0)}
             className={
               mode === diffTreeModes.session
                 ? diffTreeClassNames.active
@@ -330,8 +366,12 @@ export function RightDiffTree(): JSX.Element {
           </button>
           <button
             type="button"
+            ref={(el) => {
+              modeButtonRefs.current[1] = el;
+            }}
             role="tab"
             aria-selected={mode === diffTreeModes.branch}
+            tabIndex={modeTabIndexFor(1)}
             className={
               mode === diffTreeModes.branch
                 ? diffTreeClassNames.active
@@ -377,7 +417,9 @@ export function RightDiffTree(): JSX.Element {
         </div>
       ) : null}
       {state.error !== null ? (
-        <div className="files-truncated">Could not load diff tree: {state.error}</div>
+        <div className="files-truncated">
+          Could not load diff tree: {state.error}
+        </div>
       ) : null}
       {notGit ? (
         <TabEmptyState variant={NO_LOOSE_STRING_VALUES.diffNoGit} fill />

@@ -17,7 +17,8 @@
   /* Default = "columns" placement. The active pane arrangement injects a keyed
      rule (themes/layout.ts) `.main[data-shell-layout="…"]` that overrides these
      templates. Pane sizes are CSS vars set per-session by App on this element. */
-  grid-template-columns: var(--pane-w-leftPanel, 288px) minmax(0, 1fr)
+  grid-template-columns:
+    var(--pane-w-leftPanel, 288px) minmax(0, 1fr)
     var(--pane-w-rightPanel, 340px);
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "leftPanel chat rightPanel";
@@ -85,13 +86,12 @@
   position: absolute;
   inset: -7px;
   border-radius: inherit;
-  background:
-    conic-gradient(
-      from 0deg,
-      transparent 0 52%,
-      color-mix(in srgb, var(--agent) 58%, transparent) 63%,
-      transparent 78% 100%
-    );
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 52%,
+    color-mix(in srgb, var(--agent) 58%, transparent) 63%,
+    transparent 78% 100%
+  );
   animation: drag-preview-shimmer var(--dur-slow) linear infinite;
 }
 .drag-preview-orb::after {
@@ -105,13 +105,12 @@
   color: var(--user);
 }
 .drag-preview-orb[data-tone="copy"]::before {
-  background:
-    conic-gradient(
-      from 0deg,
-      transparent 0 52%,
-      color-mix(in srgb, var(--user) 58%, transparent) 63%,
-      transparent 78% 100%
-    );
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 52%,
+    color-mix(in srgb, var(--user) 58%, transparent) 63%,
+    transparent 78% 100%
+  );
 }
 .drag-preview-orb > svg,
 .drag-preview-orb-fallback {
@@ -127,7 +126,9 @@
   opacity: 0.52 !important;
 }
 @keyframes drag-preview-shimmer {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .drag-preview-orb::before {
@@ -463,12 +464,21 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
     box-shadow var(--dur-slow) var(--ease-snap),
     transform var(--dur-slow) var(--ease-snap),
     border-color var(--dur-slow) var(--ease-snap);
-  animation: agent-launcher-card-enter var(--dur-slow) var(--ease-snap) backwards;
+  animation: agent-launcher-card-enter var(--dur-slow) var(--ease-snap)
+    backwards;
 }
-.agent-launcher-card:nth-child(1) { animation-delay: 0ms; }
-.agent-launcher-card:nth-child(2) { animation-delay: 70ms; }
-.agent-launcher-card:nth-child(3) { animation-delay: 140ms; }
-.agent-launcher-card:nth-child(4) { animation-delay: 210ms; }
+.agent-launcher-card:nth-child(1) {
+  animation-delay: 0ms;
+}
+.agent-launcher-card:nth-child(2) {
+  animation-delay: 70ms;
+}
+.agent-launcher-card:nth-child(3) {
+  animation-delay: 140ms;
+}
+.agent-launcher-card:nth-child(4) {
+  animation-delay: 210ms;
+}
 
 @keyframes agent-launcher-card-enter {
   0% {
@@ -657,7 +667,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   animation: agent-launcher-connect-spin var(--dur-slow) linear infinite;
 }
 @keyframes agent-launcher-connect-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ─── Controls strip ─────────────────────────────────────────────────── */
@@ -714,7 +726,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   color: var(--ink-2);
   transform: scale(0.98);
 }
-.agent-launcher-configure:hover:not(:disabled) .agent-launcher-configure-icon-wrap {
+.agent-launcher-configure:hover:not(:disabled)
+  .agent-launcher-configure-icon-wrap {
   transform: rotate(45deg);
 }
 .agent-launcher-configure[data-primary="true"] {
@@ -723,7 +736,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border-color: transparent;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 15%, transparent);
 }
-.agent-launcher-configure[data-primary="true"] .agent-launcher-configure-icon-wrap {
+.agent-launcher-configure[data-primary="true"]
+  .agent-launcher-configure-icon-wrap {
   background: color-mix(in srgb, var(--canvas) 14%, transparent);
 }
 .agent-launcher-configure[data-primary="true"]:hover:not(:disabled) {
@@ -917,7 +931,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   padding: 10px 18px 16px;
   background: var(--bg);
   border-top: 1px solid var(--line);
-  animation: agent-launcher-compose-enter var(--dur-slow) var(--ease-snap) backwards;
+  animation: agent-launcher-compose-enter var(--dur-slow) var(--ease-snap)
+    backwards;
   animation-delay: var(--dur-base);
 }
 
@@ -994,7 +1009,10 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   font-family: var(--mono);
   cursor: pointer;
   box-shadow: var(--shadow);
-  transition: background var(--dur-instant), color var(--dur-instant), transform var(--dur-instant);
+  transition:
+    background var(--dur-instant),
+    color var(--dur-instant),
+    transform var(--dur-instant);
 }
 .unread-floater:hover {
   background: var(--ink);
@@ -1033,7 +1051,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   padding: 5px;
   border-radius: 999px;
   background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--canvas) 46%, transparent), transparent 54%),
+    radial-gradient(
+      circle at 12% 0%,
+      color-mix(in srgb, var(--canvas) 46%, transparent),
+      transparent 54%
+    ),
     color-mix(in srgb, var(--panel) 42%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--canvas) 48%, transparent),
@@ -1084,7 +1106,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   color: var(--ink-3);
   cursor: pointer;
   padding: 0;
-  transition: background-color var(--dur-instant), color var(--dur-instant);
+  transition:
+    background-color var(--dur-instant),
+    color var(--dur-instant);
 }
 .feed-nav-btn:last-child {
   border-right: 0;
@@ -1367,7 +1391,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
      drop swaps the rendered tree, so the dot unmounts. To get a fade
      instead of a pop, we delay unmount via opacity transition + the
      parent's .is-unread → unset class change. */
-  transition: opacity var(--dur-base) var(--ease-snap), transform var(--dur-base) var(--ease-snap);
+  transition:
+    opacity var(--dur-base) var(--ease-snap),
+    transform var(--dur-base) var(--ease-snap);
 }
 .feed-item.is-fresh .feed-item-unread-dot {
   animation: feed-item-unread-dot-in var(--dur-base) var(--ease-snap) backwards;
@@ -1378,8 +1404,14 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   transform: scale(0.4);
 }
 @keyframes feed-item-unread-dot-in {
-  from { opacity: 0; transform: scale(0.4); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 /* Consumed-block stub — a compact pointer standing in for a block that was
    folded into a named document earlier in the timeline. Muted so it reads as
@@ -1401,7 +1433,10 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;
-  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease, background var(--dur-fast) ease;
+  transition:
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    background var(--dur-fast) ease;
 }
 .feed-consumed-stub:hover {
   color: var(--ink-2);
@@ -1427,9 +1462,15 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   animation: feed-anchor-flash var(--dur-slow) var(--ease-snap) forwards;
 }
 @keyframes feed-anchor-flash {
-  from { outline-color: var(--agent); }
-  60% { outline-color: var(--agent); }
-  to { outline-color: transparent; }
+  from {
+    outline-color: var(--agent);
+  }
+  60% {
+    outline-color: var(--agent);
+  }
+  to {
+    outline-color: transparent;
+  }
 }
 /* Inner feed-col (Feed.tsx) is nested inside the outer feed-col (App.tsx).
    Let it grow so the loading state — and any other absolute fillers —
@@ -1574,13 +1615,24 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 }
 
 @keyframes feed-empty-enter {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes feed-empty-float {
-  0%,  100% { transform: translateY(0); }
-  50%        { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 .feed-empty-loading.empty-state {
@@ -1990,10 +2042,22 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   --avatar-art-line: 6px;
   --avatar-art-scale: 0.6;
   --avatar-art-primary: var(--avatar-color, var(--ink));
-  --avatar-art-accent: color-mix(in srgb, var(--avatar-color, var(--user)) 56%, var(--agent));
+  --avatar-art-accent: color-mix(
+    in srgb,
+    var(--avatar-color, var(--user)) 56%,
+    var(--agent)
+  );
   --avatar-art-spark: color-mix(in srgb, var(--agent) 72%, var(--canvas));
-  --avatar-art-soft: color-mix(in srgb, var(--avatar-color, var(--ink)) 38%, var(--canvas));
-  --avatar-art-shadow: color-mix(in srgb, var(--avatar-color, var(--ink)) 42%, var(--ink));
+  --avatar-art-soft: color-mix(
+    in srgb,
+    var(--avatar-color, var(--ink)) 38%,
+    var(--canvas)
+  );
+  --avatar-art-shadow: color-mix(
+    in srgb,
+    var(--avatar-color, var(--ink)) 42%,
+    var(--ink)
+  );
   --avatar-art-shine: color-mix(in srgb, var(--canvas) 82%, var(--ink));
   position: absolute;
   top: 50%;
@@ -2011,7 +2075,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   font-weight: 500;
   letter-spacing: -0.03em;
   font-variant-ligatures: none;
-  font-feature-settings: "liga" 0, "calt" 0;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
   text-align: left;
   white-space: pre;
   color: var(--avatar-art-primary);
@@ -2112,10 +2178,14 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   z-index: 2;
 }
 
+/* 12px, not 4px, so the 44px hit areas below can exist at all. The buttons
+   stay 32px and nothing looks larger; the pitch is what has to grow, because
+   two 44px overlays on a 36px pitch would overlap by 8px and each button would
+   swallow clicks meant for its neighbour. */
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   min-width: 0;
   flex-shrink: 1;
 }
@@ -2222,8 +2292,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border-radius: 999px;
   border: var(--border-w) solid color-mix(in srgb, var(--user) 18%, var(--line));
   background:
-    radial-gradient(circle at 18% -8%, color-mix(in srgb, var(--user) 13%, transparent), transparent 52%),
-    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 82%, var(--panel)), color-mix(in srgb, var(--panel) 84%, var(--canvas)));
+    radial-gradient(
+      circle at 18% -8%,
+      color-mix(in srgb, var(--user) 13%, transparent),
+      transparent 52%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--canvas) 82%, var(--panel)),
+      color-mix(in srgb, var(--panel) 84%, var(--canvas))
+    );
   color: var(--ink);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--canvas) 76%, transparent),
@@ -2240,7 +2318,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   position: absolute;
   inset: 2px;
   border-radius: inherit;
-  border: var(--border-w) solid color-mix(in srgb, var(--canvas) 50%, transparent);
+  border: var(--border-w) solid
+    color-mix(in srgb, var(--canvas) 50%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent);
   pointer-events: none;
   z-index: 0;
@@ -2288,8 +2367,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   transform: translateY(-1px) translateZ(0);
   border-color: color-mix(in srgb, var(--user) 36%, var(--line));
   background:
-    radial-gradient(circle at 18% -8%, color-mix(in srgb, var(--user) 19%, transparent), transparent 56%),
-    linear-gradient(180deg, color-mix(in srgb, var(--canvas) 88%, var(--panel)), color-mix(in srgb, var(--panel) 78%, var(--canvas)));
+    radial-gradient(
+      circle at 18% -8%,
+      color-mix(in srgb, var(--user) 19%, transparent),
+      transparent 56%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--canvas) 88%, var(--panel)),
+      color-mix(in srgb, var(--panel) 78%, var(--canvas))
+    );
 }
 .topbar-user-button:active .topbar-user-chip {
   transform: translateY(0) scale(0.985);
@@ -2315,7 +2402,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   z-index: 1;
 }
 @keyframes participant-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.35;
   }
   50% {
@@ -2399,10 +2487,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
      width. Both are resolved on THIS element, so neither can disagree with
      the buttons the way a shared `ch` token did. */
   width: calc(
-    (
-        100% - 2 * var(--view-toggle-pad) -
-          (var(--view-toggle-count) - 1) * 1px
-      ) / var(--view-toggle-count)
+    (100% - 2 * var(--view-toggle-pad) - (var(--view-toggle-count) - 1) * 1px) /
+      var(--view-toggle-count)
   );
   border-radius: 5px;
   background: var(--canvas);
@@ -2554,15 +2640,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border: 0;
   cursor: pointer;
 }
-/* Touch target: .icon-btn's own 32x32 box stays the deliberate dense size,
-   but a transparent overlay grows the actual hit area. .topbar-right only
-   has a 4px gap between buttons, so a full 44px overlay (a 6px reach past
-   each edge) would swallow clicks meant for the neighbour — capped at 2px
-   per side (36x36) so adjacent buttons' overlays never touch. */
+/* Touch target: .icon-btn's own 32x32 box stays the deliberate dense size, and
+   a transparent overlay grows the hit area to the 44x44 guideline. The 6px
+   reach past each edge is exactly why .topbar-right carries a 12px gap: on the
+   old 4px gap two overlays would have overlapped by 8px and each button would
+   have swallowed clicks meant for its neighbour. Change one and the other
+   stops being safe. */
 .icon-btn::before {
   content: "";
   position: absolute;
-  inset: -2px;
+  inset: -6px;
   border-radius: inherit;
 }
 .icon-btn:hover {
@@ -2583,7 +2670,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   color: var(--rose);
 }
 @keyframes kernel-restart-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .kernel-restart-btn.is-restarting svg {
@@ -2753,12 +2842,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   min-height: 24px;
   padding: 2px 3px 2px 11px;
   border-radius: max(0px, calc(var(--radius-pill) - 2px));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg) 86%, white),
-      color-mix(in srgb, var(--canvas) 74%, var(--agent-tint))
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg) 86%, white),
+    color-mix(in srgb, var(--canvas) 74%, var(--agent-tint))
+  );
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 48%, transparent),
     inset 0 -10px 22px color-mix(in srgb, var(--ink) 4%, transparent);
@@ -3355,12 +3443,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   gap: 4px;
   padding: 6px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel) 76%, transparent),
-      color-mix(in srgb, var(--canvas) 34%, transparent)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel) 76%, transparent),
+    color-mix(in srgb, var(--canvas) 34%, transparent)
+  );
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -3611,7 +3698,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   width: 150px;
   height: 150px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--agent-color, var(--agent)) 18%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 18%,
+    transparent
+  );
   opacity: 0;
   filter: blur(22px);
   transform: translate3d(14px, -8px, 0) scale(0.92);
@@ -3624,7 +3715,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 .agent-status-row:hover,
 .agent-status-row:focus-visible {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 36%, var(--line-2));
+  border-color: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 36%,
+    var(--line-2)
+  );
   box-shadow:
     0 1px 0 color-mix(in srgb, white 6%, transparent),
     0 18px 42px color-mix(in srgb, var(--ink) 11%, transparent);
@@ -3639,8 +3734,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 }
 
 .agent-status-row.is-open {
-  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 50%, var(--line-2));
-  background: color-mix(in srgb, var(--agent-color, var(--agent)) 8%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 50%,
+    var(--line-2)
+  );
+  background: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 8%,
+    transparent
+  );
 }
 
 .agent-status-summary {
@@ -3649,7 +3752,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   overflow: hidden;
   border-radius: calc(var(--radius-lg) + 4px);
   background:
-    linear-gradient(180deg, color-mix(in srgb, white 5%, transparent), transparent 54%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, white 5%, transparent),
+      transparent 54%
+    ),
     var(--canvas);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
   padding: 11px 12px 12px;
@@ -3682,7 +3789,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 16%, transparent),
-    0 6px 16px color-mix(in srgb, var(--agent-color, var(--agent)) 14%, transparent);
+    0 6px 16px
+      color-mix(in srgb, var(--agent-color, var(--agent)) 14%, transparent);
   margin-right: 0;
   vertical-align: middle;
   color: var(--canvas);
@@ -3715,7 +3823,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 }
 
 .agent-color-swatch.picker.selected {
-  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px currentColor;
+  box-shadow:
+    0 0 0 2px var(--canvas),
+    0 0 0 4px currentColor;
 }
 
 .agent-color-swatch.picker:disabled {
@@ -3879,21 +3989,29 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 }
 
 .agent-status-row[data-state="idle"] .agent-status-badges span:nth-child(2),
-.agent-status-row[data-state="connected"] .agent-status-badges span:nth-child(2),
-.agent-status-row[data-state="turn-ended"] .agent-status-badges span:nth-child(2) {
+.agent-status-row[data-state="connected"]
+  .agent-status-badges
+  span:nth-child(2),
+.agent-status-row[data-state="turn-ended"]
+  .agent-status-badges
+  span:nth-child(2) {
   color: var(--green);
   border-color: color-mix(in srgb, var(--green) 26%, var(--line-3));
   background: color-mix(in srgb, var(--green-tint) 42%, var(--panel));
 }
 
 .agent-status-row[data-state="running"] .agent-status-badges span:nth-child(2),
-.agent-status-row[data-state="notified"] .agent-status-badges span:nth-child(2) {
+.agent-status-row[data-state="notified"]
+  .agent-status-badges
+  span:nth-child(2) {
   color: var(--agent);
   border-color: color-mix(in srgb, var(--agent) 28%, var(--line-3));
   background: color-mix(in srgb, var(--agent-tint) 52%, var(--panel));
 }
 
-.agent-status-row[data-state="access-pending"] .agent-status-badges span:nth-child(2) {
+.agent-status-row[data-state="access-pending"]
+  .agent-status-badges
+  span:nth-child(2) {
   color: var(--rose);
   border-color: color-mix(in srgb, var(--rose) 30%, var(--line-3));
   background: color-mix(in srgb, var(--rose) 10%, var(--panel));
@@ -3945,7 +4063,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   opacity: 1;
   transform: translateY(0);
   color: var(--ink-3);
-  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 24%, var(--line-3));
+  border-color: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 24%,
+    var(--line-3)
+  );
 }
 
 .agent-status-row:hover .agent-row-affordance i,
@@ -4159,8 +4281,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 .agent-controls .agent-control-primary {
   grid-column: span 2;
   color: var(--ink);
-  border-color: color-mix(in srgb, var(--agent-color, var(--agent)) 42%, var(--line-2));
-  background: color-mix(in srgb, var(--agent-color, var(--agent)) 9%, var(--panel));
+  border-color: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 42%,
+    var(--line-2)
+  );
+  background: color-mix(
+    in srgb,
+    var(--agent-color, var(--agent)) 9%,
+    var(--panel)
+  );
 }
 
 .agent-controls .agent-control-primary.danger {
@@ -4228,7 +4358,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border-radius: calc(var(--radius) - 1px);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background var(--dur-instant), color var(--dur-instant);
+  transition:
+    background var(--dur-instant),
+    color var(--dur-instant);
 }
 .right-comments-mode-toggle button:hover {
   color: var(--ink);
@@ -4350,7 +4482,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color var(--dur-instant), background var(--dur-instant);
+  transition:
+    color var(--dur-instant),
+    background var(--dur-instant);
 }
 .right-comments-thread-close:hover {
   color: var(--ink);
@@ -4721,7 +4855,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   background: var(--ink);
   color: var(--canvas);
 }
-.right-comment-composer-actions .right-comment-icon-btn.primary:hover:not(:disabled) {
+.right-comment-composer-actions
+  .right-comment-icon-btn.primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) 88%, var(--canvas));
   color: var(--canvas);
 }
@@ -4824,8 +4959,14 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
 }
 
 @keyframes compose-enter {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* `backwards` fill holds the FROM state before the animation starts, then
@@ -4875,8 +5016,16 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
    in-place into an inline title input + × cancel when activated.
    Subsumes the prior .compose-name card. */
 @keyframes name-chip-enter {
-  from { opacity: 0; transform: translateY(-4px); max-width: 0; }
-  to   { opacity: 1; transform: translateY(0); max-width: 400px; }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+    max-width: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    max-width: 400px;
+  }
 }
 
 .name-chip {
@@ -4958,7 +5107,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   color: var(--ink-3);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
 }
 .name-chip-close:hover {
   background: var(--panel);
@@ -5065,7 +5216,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   animation: compose-attachment-spin var(--dur-slow) linear infinite;
 }
 @keyframes compose-attachment-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .compose-attachment-meta {
   display: flex;
@@ -5105,7 +5258,8 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--dur-instant) var(--ease-out-quint),
+  transition:
+    background-color var(--dur-instant) var(--ease-out-quint),
     color var(--dur-instant) var(--ease-out-quint);
 }
 .compose-attachment-remove:hover {
@@ -5237,8 +5391,12 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   border-color: color-mix(in srgb, var(--agent) 46%, var(--ink-4));
 }
 @keyframes compose-drag-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 /* ============ Compose Actions Dock ============
    A meticulously crafted, hardware-like control dock below the textarea.
@@ -5251,7 +5409,9 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   background: var(--bg);
   border-radius: 28px 28px 0 0;
   padding: 12px 14px 8px;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0,0,0,0.02);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.02);
   border: 1px solid var(--line-2);
 }
 
@@ -5428,12 +5588,11 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   gap: 8px;
   padding: 13px 14px 12px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel) 82%, var(--canvas)),
-      color-mix(in srgb, var(--canvas) 88%, var(--panel))
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel) 82%, var(--canvas)),
+    color-mix(in srgb, var(--canvas) 88%, var(--panel))
+  );
   color: var(--ink);
   font-family: var(--serif);
   font-size: 15px;
@@ -6189,7 +6348,6 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   color: inherit;
 }
 
-
 /* Focus rings for the controls this redesign introduced. The rest of the shell
    styles its own; these were relying on the UA default, which is inconsistent
    with everything around them. Instant, never faded — a focus ring that
@@ -6235,8 +6393,13 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
   animation: feed-fresh-edge 6s var(--ease-out-quart) forwards;
 }
 @keyframes feed-fresh-edge {
-  0%, 55% { opacity: 1; }
-  100% { opacity: 0; }
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 /* The edge is a signal ("this is new"), not decoration, so reduced motion
    keeps it visible instead of removing it - only the fade stops.
@@ -6250,4 +6413,3 @@ body[data-fmark-dock-dragging] .dock-drop-overlay {
     opacity: 1;
   }
 }
-

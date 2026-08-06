@@ -1,8 +1,9 @@
-import { type JSX } from "react";
+import { useRef, type JSX } from "react";
 import { Plus, X } from "lucide-react";
 import { TabEmptyState } from "../TabEmptyState.js";
 import { TerminalBodies } from "./TerminalBodies.js";
 import { useRightTerminalController } from "./useRightTerminalController.js";
+import { useRovingTabIndex } from "../../../a11y/useRovingTabIndex.js";
 
 const NO_LOOSE_STRING_VALUES = {
   terminal: "terminal",
@@ -13,6 +14,21 @@ const NO_LOOSE_STRING_VALUES = {
    Inner tab per terminal, a `+` to spawn one, and a `×` to kill one. */
 export function RegularTerminals(): JSX.Element {
   const c = useRightTerminalController();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = Math.max(
+    c.terminals.findIndex((t) => t.tmux_session === c.activeSession),
+    0,
+  );
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    c.terminals.length,
+    activeIndex,
+    (index) => {
+      const terminal = c.terminals[index];
+      if (terminal === undefined) return;
+      c.select(terminal.tmux_session);
+      tabRefs.current[index]?.focus();
+    },
+  );
 
   if (c.terminals.length === 0) {
     return (
@@ -43,18 +59,27 @@ export function RegularTerminals(): JSX.Element {
 
   return (
     <>
-      <div className="terminal-tabs" role="tablist" aria-label="Terminals">
-        {c.terminals.map((t) => {
+      <div
+        className="terminal-tabs"
+        role="tablist"
+        aria-label="Terminals"
+        onKeyDown={onKeyDown}
+      >
+        {c.terminals.map((t, index) => {
           const active = t.tmux_session === c.activeSession;
           return (
             <div
               key={t.tmux_session}
               className={`terminal-tab${active ? " active" : ""}`}
-              role="tab"
-              aria-selected={active}
             >
               <button
                 type="button"
+                ref={(el) => {
+                  tabRefs.current[index] = el;
+                }}
+                role="tab"
+                aria-selected={active}
+                tabIndex={tabIndexFor(index)}
                 className="terminal-tab-label"
                 onClick={() => c.select(t.tmux_session)}
                 title={t.tmux_session}
