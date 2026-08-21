@@ -65,6 +65,9 @@ export type ThemeTokenKey =
   | "canvas"
   | "panel"
   | "panel-2"
+  | "paper"
+  | "paper-band"
+  | "paper-sunk"
   | "ink"
   | "ink-2"
   | "ink-3"
@@ -72,6 +75,8 @@ export type ThemeTokenKey =
   | "line"
   | "line-2"
   | "line-3"
+  | "rule"
+  | "rule-strong"
   | "user"
   | "user-tint"
   | "user-tint-2"
@@ -80,7 +85,11 @@ export type ThemeTokenKey =
   | "agent-tint-2"
   | "green"
   | "green-tint"
+  | "ledger"
+  | "ledger-tint"
+  | "ledger-tint-2"
   | "rose"
+  | "alarm"
   | "shadow"
   | "shadow-2"
   | "sans"
@@ -98,33 +107,42 @@ export type ThemeTokens = Record<ThemeTokenKey, string>;
  * theme is expressed as a partial override of these values.
  */
 export const THEME_BASE_TOKENS: ThemeTokens = {
-  bg: "#edf0ee",
-  canvas: "#f7f8f7",
-  panel: "#f1f4f2",
-  "panel-2": "#e7ece9",
-  ink: "#141a16",
-  "ink-2": "#46514a",
-  "ink-3": "#75817a",
-  "ink-4": "#9aa69e",
-  line: "#dde3de",
-  "line-2": "#e6eae7",
-  "line-3": "#eff2f0",
-  user: "#1f2a23",
-  "user-tint": "#eaedeb",
-  "user-tint-2": "#d8ded9",
-  agent: "#0e6b45",
-  "agent-tint": "#e0efe7",
-  "agent-tint-2": "#c5e2d3",
-  green: "#0e6b45",
-  "green-tint": "#e0efe7",
-  rose: "#a32a20",
-  shadow: "0 0 0 1px #dde3de",
-  "shadow-2": "0 0 0 1px #c2cbc4, 0 8px 24px -12px rgb(20 26 22 / 18%)",
-  sans: "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",
-  serif: "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",
-  mono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace",
-  radius: "3px",
-  "radius-lg": "5px",
+  bg: "#e9ecf3",
+  canvas: "#ffffff",
+  panel: "#f5f6fa",
+  "panel-2": "#eceef5",
+  paper: "#ffffff",
+  "paper-band": "#f7f8fb",
+  "paper-sunk": "#e9ecf3",
+  ink: "#16181f",
+  "ink-2": "#3d4456",
+  "ink-3": "#5c6372",
+  "ink-4": "#8b91a3",
+  line: "rgb(16 20 34 / 11%)",
+  "line-2": "rgb(16 20 34 / 7%)",
+  "line-3": "rgb(16 20 34 / 4%)",
+  rule: "rgb(16 20 34 / 11%)",
+  "rule-strong": "rgb(16 20 34 / 19%)",
+  user: "#4a5163",
+  "user-tint": "rgb(74 81 99 / 10%)",
+  "user-tint-2": "rgb(74 81 99 / 18%)",
+  agent: "#0a6b5d",
+  "agent-tint": "rgb(10 107 93 / 11%)",
+  "agent-tint-2": "rgb(10 107 93 / 20%)",
+  green: "#0a6b5d",
+  "green-tint": "rgb(10 107 93 / 11%)",
+  ledger: "#0a6b5d",
+  "ledger-tint": "rgb(10 107 93 / 11%)",
+  "ledger-tint-2": "rgb(10 107 93 / 20%)",
+  rose: "#b02a44",
+  alarm: "#b02a44",
+  shadow: "0 1px 2px rgb(18 24 20 / 5%), 0 2px 6px -1px rgb(18 24 20 / 6%)",
+  "shadow-2": "0 1px 2px rgb(18 24 20 / 5%), 0 6px 16px -4px rgb(18 24 20 / 10%), 0 18px 40px -12px rgb(18 24 20 / 14%)",
+  sans: "\"IBM Plex Sans\", ui-sans-serif, system-ui, sans-serif",
+  serif: "\"IBM Plex Sans\", ui-sans-serif, system-ui, sans-serif",
+  mono: "\"IBM Plex Mono\", ui-monospace, SFMono-Regular, monospace",
+  radius: "6px",
+  "radius-lg": "10px",
   "radius-pill": "999px",
   "border-w": "1px",
 };
@@ -139,34 +157,46 @@ export const THEME_OVERRIDES: Record<
 > = {
   light: {},
   night: {
-    bg: "#0a0d0b",
-    canvas: "#0e1210",
-    panel: "#111614",
-    "panel-2": "#1a221d",
-    ink: "#e6ede8",
-    "ink-2": "#a3b0a8",
-    "ink-3": "#74827a",
-    "ink-4": "#4d584f",
-    line: "#232c27",
-    "line-2": "#1b221e",
-    "line-3": "#151b17",
-    user: "#dfe7e2",
-    "user-tint": "#171d1a",
-    "user-tint-2": "#232c27",
-    agent: "#58b98a",
-    "agent-tint": "#12241b",
-    "agent-tint-2": "#1d3a2b",
-    green: "#58b98a",
-    "green-tint": "#12241b",
-    rose: "#e8695c",
-    shadow: "0 0 0 1px #232c27",
-    "shadow-2": "0 0 0 1px #35413a, 0 8px 24px -12px rgb(0 0 0 / 60%)",
+    bg: "#0b0d16",
+    canvas: "#12141f",
+    panel: "#171a27",
+    "panel-2": "#232736",
+    paper: "#12141f",
+    "paper-band": "#141724",
+    "paper-sunk": "#0b0d16",
+    ink: "#f0f1f7",
+    "ink-2": "#bec3da",
+    "ink-3": "#9298af",
+    "ink-4": "#5b607a",
+    line: "rgb(255 255 255 / 10%)",
+    "line-2": "rgb(255 255 255 / 7%)",
+    "line-3": "rgb(255 255 255 / 4%)",
+    rule: "rgb(255 255 255 / 10%)",
+    "rule-strong": "rgb(255 255 255 / 17%)",
+    user: "#a8adc4",
+    "user-tint": "rgb(168 173 196 / 14%)",
+    "user-tint-2": "rgb(168 173 196 / 24%)",
+    agent: "#5eead4",
+    "agent-tint": "rgb(94 234 212 / 16%)",
+    "agent-tint-2": "rgb(94 234 212 / 28%)",
+    green: "#5eead4",
+    "green-tint": "rgb(94 234 212 / 16%)",
+    ledger: "#5eead4",
+    "ledger-tint": "rgb(94 234 212 / 16%)",
+    "ledger-tint-2": "rgb(94 234 212 / 28%)",
+    rose: "#fb8fa0",
+    alarm: "#fb8fa0",
+    shadow: "0 1px 2px rgb(0 0 0 / 40%), 0 2px 6px -1px rgb(0 0 0 / 30%)",
+    "shadow-2": "0 1px 2px rgb(0 0 0 / 50%), 0 6px 16px -4px rgb(0 0 0 / 45%), 0 18px 40px -12px rgb(0 0 0 / 55%)",
   },
   contrast: {
     bg: "#ffffff",
     canvas: "#ffffff",
     panel: "#ffffff",
     "panel-2": "#e8e8e8",
+    paper: "#ffffff",
+    "paper-band": "#f2f2f2",
+    "paper-sunk": "#ffffff",
     ink: "#000000",
     "ink-2": "#1c1c1c",
     "ink-3": "#3d3d3d",
@@ -174,6 +204,8 @@ export const THEME_OVERRIDES: Record<
     line: "#000000",
     "line-2": "#000000",
     "line-3": "#6b6b6b",
+    rule: "#000000",
+    "rule-strong": "#000000",
     user: "#000000",
     "user-tint": "#e8e8e8",
     "user-tint-2": "#d0d0d0",
@@ -182,7 +214,11 @@ export const THEME_OVERRIDES: Record<
     "agent-tint-2": "#b3d7c4",
     green: "#005c33",
     "green-tint": "#d9ebe1",
+    ledger: "#005c33",
+    "ledger-tint": "#d9ebe1",
+    "ledger-tint-2": "#b3d7c4",
     rose: "#a80000",
+    alarm: "#a80000",
     shadow: "0 0 0 2px #000000",
     "shadow-2": "0 0 0 2px #000000",
     radius: "0px",
