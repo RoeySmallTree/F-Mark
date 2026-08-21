@@ -96,6 +96,7 @@ describe("right-tabs config helpers (pure)", () => {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ]);
   });
 
@@ -240,6 +241,10 @@ describe("RightLayout — unified pane arrangement editor", () => {
   });
 
   test("dragging a toolbar pane places that one pane on screen", () => {
+    /* v5 emptied the default toolbar into the right dock, so stow Search
+       explicitly to have an undocked pane to drag. */
+    const stowed = moveDockPane(DEFAULT_DOCK_LAYOUT, "search", "toolbar");
+    applyDockLayout(stowed);
     render(<RightLayout />);
 
     const palette = screen.getByLabelText(/Undocked pane list/i);
@@ -255,7 +260,7 @@ describe("RightLayout — unified pane arrangement editor", () => {
     const layout = getCurrentDockLayout();
     expect(layout.areas.left).toContain("search");
     expect(layout.areas.toolbar).not.toContain("search");
-    expect(layout.areas.right).toEqual(DEFAULT_DOCK_LAYOUT.areas.right);
+    expect(layout.areas.right).toEqual(stowed.areas.right);
   });
 
   test("reset restores the default dock layout", async () => {

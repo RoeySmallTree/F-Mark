@@ -54,6 +54,9 @@ describe("relocatable dock tabs", () => {
 
   test("toolbar-stowed panes render as draggable top-bar tabs", async () => {
     const user = userEvent.setup();
+    /* The default layout stows nothing since v5 (it moved the toolbar's panes
+       into the right dock), so stow Search explicitly to exercise the tabs. */
+    applyDockLayout(moveDockPane(DEFAULT_DOCK_LAYOUT, "search", "toolbar"));
     render(<ToolbarDockTabs />);
 
     const tablist = screen.getByRole("tablist", { name: /Stowed pane tabs/i });

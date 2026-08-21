@@ -47,7 +47,7 @@ describe("theme service", () => {
     expect(fontSource).toBe("default");
 
     /* Required sections. */
-    expect(markdown).toContain("# F-Mark Theme: Light");
+    expect(markdown).toContain("# F-Mark Theme: Day");
     expect(markdown).toContain("## Color palette");
     expect(markdown).toContain("## Typography");
     expect(markdown).toContain("## Border radii & borders");
@@ -61,9 +61,9 @@ describe("theme service", () => {
 
     /* Resolved token values from tokens.css :root. */
     expect(markdown).toContain("`--agent`");
-    expect(markdown).toContain("#b86a1f"); // --agent
-    expect(markdown).toContain("#1a1714"); // --ink
-    expect(markdown).toContain("#faf6ed"); // --canvas
+    expect(markdown).toContain("#0a6b5d"); // --agent
+    expect(markdown).toContain("#16181f"); // --ink
+    expect(markdown).toContain("#ffffff"); // --canvas
     expect(markdown).toContain("6px"); // --radius
     /* There is NO --accent token; the accent is --agent. The doc may mention
        "--accent" in prose to say so, but must never emit it as a declaration. */
@@ -72,21 +72,21 @@ describe("theme service", () => {
   });
 
   it("override param documents a specific theme without touching the reported one", () => {
-    const { theme, source, markdown } = buildActiveThemeDoc("ember");
-    expect(theme).toBe("ember");
+    const { theme, source, markdown } = buildActiveThemeDoc("night");
+    expect(theme).toBe("night");
     expect(source).toBe("override");
-    expect(markdown).toContain("# F-Mark Theme: Ember");
-    expect(markdown).toContain("#ff5d72"); // ember --user
-    expect(markdown).toContain("14px"); // ember --radius-lg
+    expect(markdown).toContain("# F-Mark Theme: Night");
+    expect(markdown).toContain("#a8adc4"); // night --user
+    expect(markdown).toContain("10px"); // --radius-lg, inherited from base
     /* The reported theme is untouched. */
     expect(resolveActiveTheme().name).toBe("light");
   });
 
   it("prefers the reported theme and font over the defaults", () => {
-    setReportedTheme("terminal");
+    setReportedTheme("night");
     setReportedFont("geist");
     const { theme, source, font, fontSource, markdown } = buildActiveThemeDoc();
-    expect(theme).toBe("terminal");
+    expect(theme).toBe("night");
     expect(source).toBe("reported");
     expect(font).toBe("geist");
     expect(fontSource).toBe("reported");
@@ -98,7 +98,7 @@ describe("theme service", () => {
     expect(setReportedFont("not-a-font")).toBe(false);
     expect(resolveActiveTheme().name).toBe("light");
     expect(resolveActiveFont().name).toBe("theme");
-    setReportedTheme("nord");
+    setReportedTheme("night");
     setReportedFont("manrope");
     expect(() => resolveActiveTheme("bogus")).toThrow(/unknown theme/);
     expect(() => resolveActiveFont("bogus")).toThrow(/unknown font/);
@@ -126,7 +126,12 @@ describe("theme registry ↔ tokens.css drift guard", () => {
         const idx = decl.indexOf(":");
         if (idx < 0) continue;
         const key = decl.slice(0, idx).trim();
-        const value = decl.slice(idx + 1).trim();
+        /* Long values (shadows) wrap across lines in tokens.css; collapse
+           whitespace so the comparison is about the value, not its formatting. */
+        const value = decl
+          .slice(idx + 1)
+          .trim()
+          .replace(/\s+/g, " ");
         if (key.startsWith("--") && value.length > 0) {
           out[key.slice(2)] = value;
         }
@@ -139,23 +144,11 @@ describe("theme registry ↔ tokens.css drift guard", () => {
       expect(`${key}=${rootMap[key]}`).toBe(`${key}=${value}`);
     }
 
+    /* `light` is the classless `:root` default, so only these two themes
+       carry a `body.theme-*` block. */
     const selectorByName: Record<string, string> = {
-      terminal: "body.theme-terminal{",
-      ide: "body.theme-ide{",
-      solarized: "body.theme-solarized{",
-      brutalist: "body.theme-brutalist{",
-      cyber: "body.theme-cyber{",
-      amber: "body.theme-amber{",
-      dracula: "body.theme-dracula{",
-      catppuccin: "body.theme-catppuccin{",
-      tokyo: "body.theme-tokyo{",
-      gruvbox: "body.theme-gruvbox{",
-      nord: "body.theme-nord{",
-      monokai: "body.theme-monokai{",
-      borland: "body.theme-borland{",
-      sepia: "body.theme-sepia{",
-      contrast: "body.theme-contrast{",
-      ember: "body.theme-ember{",
+      night: "body.theme-night {",
+      contrast: "body.theme-contrast {",
     };
 
     for (const name of THEME_NAMES) {
@@ -171,9 +164,9 @@ describe("theme registry ↔ tokens.css drift guard", () => {
   });
 
   it("resolves a theme by merging base + overrides", () => {
-    const ember = resolveThemeTokens("ember");
-    expect(ember.user).toBe("#ff5d72"); // overridden
-    expect(ember["radius-pill"]).toBe("999px"); // inherited from base
+    const night = resolveThemeTokens("night");
+    expect(night.user).toBe("#a8adc4"); // overridden
+    expect(night["radius-pill"]).toBe("999px"); // inherited from base
   });
 });
 
@@ -186,7 +179,7 @@ describe("GET/PATCH /theme route", () => {
       const res = await app.inject({ method: "GET", url: "/theme" });
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toMatch(/markdown/);
-      expect(res.body).toContain("# F-Mark Theme: Light");
+      expect(res.body).toContain("# F-Mark Theme: Day");
       expect(res.body).toContain("## Color palette");
       expect(res.body).toContain("## Primary button");
       expect(res.body).toContain("## Border radii & borders");
@@ -203,17 +196,17 @@ describe("GET/PATCH /theme route", () => {
       const patch = await app.inject({
         method: "PATCH",
         url: "/theme",
-        payload: { theme: "dracula" },
+        payload: { theme: "night" },
       });
       expect(patch.statusCode).toBe(200);
       expect(JSON.parse(patch.body)).toEqual({
-        theme: "dracula",
+        theme: "night",
         font: "theme",
       });
 
       const res = await app.inject({ method: "GET", url: "/theme" });
-      expect(res.body).toContain("# F-Mark Theme: Dracula");
-      expect(res.body).toContain("#ff79c6"); // dracula --agent
+      expect(res.body).toContain("# F-Mark Theme: Night");
+      expect(res.body).toContain("#5eead4"); // night --agent
       await app.close();
     });
   });
@@ -242,11 +235,11 @@ describe("GET/PATCH /theme route", () => {
       const patch = await app.inject({
         method: "PATCH",
         url: "/theme",
-        payload: { theme: "dracula", font: "space-grotesk" },
+        payload: { theme: "night", font: "space-grotesk" },
       });
       expect(patch.statusCode).toBe(200);
       expect(JSON.parse(patch.body)).toEqual({
-        theme: "dracula",
+        theme: "night",
         font: "space-grotesk",
       });
 
@@ -265,7 +258,7 @@ describe("GET/PATCH /theme route", () => {
       const res = await app.inject({
         method: "PATCH",
         url: "/theme",
-        payload: { theme: "dracula", font: "not-real" },
+        payload: { theme: "night", font: "not-real" },
       });
       expect(res.statusCode).toBe(400);
       expect(JSON.parse(res.body).error).toMatch(/unknown font/);
@@ -273,7 +266,7 @@ describe("GET/PATCH /theme route", () => {
     });
   });
 
-  it("GET /theme?theme=nord&font=lora overrides reported appearance; format=json returns metadata", async () => {
+  it("GET /theme?theme=contrast&font=lora overrides reported appearance; format=json returns metadata", async () => {
     await withTempProject(async (root) => {
       const p = paths(root);
       await initProject(p);
@@ -281,19 +274,19 @@ describe("GET/PATCH /theme route", () => {
       await app.inject({
         method: "PATCH",
         url: "/theme",
-        payload: { theme: "ember", font: "geist" },
+        payload: { theme: "night", font: "geist" },
       });
       const res = await app.inject({
         method: "GET",
-        url: "/theme?theme=nord&font=lora&format=json",
+        url: "/theme?theme=contrast&font=lora&format=json",
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.theme).toBe("nord");
+      expect(body.theme).toBe("contrast");
       expect(body.source).toBe("override");
       expect(body.font).toBe("lora");
       expect(body.font_source).toBe("override");
-      expect(body.markdown).toContain("# F-Mark Theme: Nord");
+      expect(body.markdown).toContain("# F-Mark Theme: High contrast");
       expect(body.markdown).toContain("Typography is **Lora**");
       await app.close();
     });

@@ -35,26 +35,8 @@ describe("themes", () => {
     clearThemeClasses();
   });
 
-  test("THEMES exposes all 17 entries in the expected order", () => {
-    expect(THEMES.map((t) => t.name)).toEqual([
-      "light",
-      "ember",
-      "night",
-      "night",
-      "night",
-      "contrast",
-      "night",
-      "amber",
-      "dracula",
-      "catppuccin",
-      "tokyo",
-      "gruvbox",
-      "night",
-      "monokai",
-      "borland",
-      "sepia",
-      "contrast",
-    ]);
+  test("THEMES exposes all 3 entries in the expected order", () => {
+    expect(THEMES.map((t) => t.name)).toEqual(["light", "night", "contrast"]);
     for (const theme of THEMES) {
       expect(theme.label.length).toBeGreaterThan(0);
       expect(theme.description.length).toBeGreaterThan(0);
