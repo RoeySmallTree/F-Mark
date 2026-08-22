@@ -1,5 +1,9 @@
 import type { JSX } from "react";
 import { LogFilterPopover } from "../../../popovers/LogFilterPopover.js";
+import {
+  useDeferredUnmount,
+  useHeldAnchorRect,
+} from "../../../popovers/useDeferredUnmount.js";
 import { TabEmptyState } from "../TabEmptyState.js";
 import { ActiveLogFilterChips } from "./ActiveLogFilterChips.js";
 import { LogEventList } from "./LogEventList.js";
@@ -30,6 +34,9 @@ export function RightLogView({
     popoverOpen,
     actions,
   } = controller;
+
+  const filter = useDeferredUnmount(popoverOpen);
+  const filterRect = useHeldAnchorRect(popoverOpen ? popoverAnchorRect : null);
 
   return (
     <div className="right-log" data-testid="right-log">
@@ -67,13 +74,14 @@ export function RightLogView({
         />
       )}
 
-      {popoverOpen ? (
+      {filter.mounted ? (
         <LogFilterPopover
-          anchorRect={popoverAnchorRect}
+          anchorRect={filterRect}
           initial={filterController.filter}
           participants={participants}
           onApply={actions.applyFilter}
           onClose={actions.closePopover}
+          closing={filter.closing}
         />
       ) : null}
     </div>

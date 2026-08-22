@@ -1,14 +1,15 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { useStore } from "../../../state/store.js";
 import { FileViewer } from "../FileViewer.js";
+import { useFocusTrap } from "../../../a11y/useFocusTrap.js";
 
-/* Modal shell — full-viewport overlay with backdrop. Clicking the
-   backdrop or pressing Escape closes; closing flips
-   `fileViewerModalDismissed` so the floating "Reopen viewer" pill
-   shows up until the user picks another layout or reopens. */
+/* Modal shell — full-viewport overlay with backdrop. Clicking the backdrop or
+   pressing Escape closes. */
 export function ModalShell(): JSX.Element {
   const setOpen = useStore((s) => s.setFileViewerModalOpen);
+  const paneRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(paneRef, true);
 
   const close = useCallback(() => setOpen(false), [setOpen]);
 
@@ -37,6 +38,7 @@ export function ModalShell(): JSX.Element {
       onClick={onBackdropClick}
     >
       <div
+        ref={paneRef}
         className="fv-modal-pane"
         role="dialog"
         aria-modal="true"

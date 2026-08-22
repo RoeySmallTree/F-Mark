@@ -38,9 +38,9 @@
   letter-spacing: 0.01em;
   cursor: pointer;
   transition:
-    background 200ms cubic-bezier(0.32, 0.72, 0, 1),
-    color     200ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+    background var(--dur-base) var(--ease-snap),
+    color     var(--dur-base) var(--ease-snap),
+    border-color var(--dur-base) var(--ease-snap);
 }
 
 .terminal-mode-btn:hover {
@@ -81,9 +81,9 @@
   font-size: 12px;
   cursor: pointer;
   transition:
-    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1),
-    color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+    background  var(--dur-base) var(--ease-snap),
+    border-color var(--dur-base) var(--ease-snap),
+    color var(--dur-base) var(--ease-snap);
 }
 
 .terminal-empty-new:hover {
@@ -135,9 +135,9 @@
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   color: var(--ink-3);
   transition:
-    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
-    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+    background  var(--dur-base) var(--ease-snap),
+    color       var(--dur-base) var(--ease-snap),
+    border-color var(--dur-base) var(--ease-snap);
 }
 
 .terminal-tab:hover {
@@ -181,9 +181,9 @@
   cursor: pointer;
   opacity: 0;
   transition:
-    opacity  180ms cubic-bezier(0.32, 0.72, 0, 1),
-    background 180ms cubic-bezier(0.32, 0.72, 0, 1),
-    color    180ms cubic-bezier(0.32, 0.72, 0, 1);
+    opacity  var(--dur-base) var(--ease-snap),
+    background var(--dur-base) var(--ease-snap),
+    color    var(--dur-base) var(--ease-snap);
 }
 
 .terminal-tab:hover .terminal-tab-close,
@@ -216,9 +216,9 @@
   color: var(--ink-3);
   cursor: pointer;
   transition:
-    background  200ms cubic-bezier(0.32, 0.72, 0, 1),
-    color       200ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-color 200ms cubic-bezier(0.32, 0.72, 0, 1);
+    background  var(--dur-base) var(--ease-snap),
+    color       var(--dur-base) var(--ease-snap),
+    border-color var(--dur-base) var(--ease-snap);
 }
 
 .terminal-tab-add:hover {
@@ -274,7 +274,7 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 200ms, color 200ms;
+  transition: border-color var(--dur-base), color var(--dur-base);
 }
 
 .terminal-agent-unavailable button:hover {

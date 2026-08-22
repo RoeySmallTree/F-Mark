@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { PRESENCE_STATES } from "@f-mark/shared";
 import { createManagedAgentsClient } from "../api/managedAgents.js";
+import { useConfirmDestructive } from "../confirm/index.js";
 import { useAgentSpawnContext } from "../hooks/useAgentSpawn.js";
 import { ParticipantStripActions } from "./participantStrip/ParticipantStripActions.js";
 import { ParticipantStripScroll } from "./participantStrip/ParticipantStripScroll.js";
@@ -75,6 +76,7 @@ export function ParticipantStrip({
     () => createManagedAgentsClient({ baseUrl: "", token }),
     [token],
   );
+  const confirmDestructive = useConfirmDestructive();
   useScopedAgentStatusSync({
     api: apiClient,
     currentSessionId,
@@ -159,21 +161,35 @@ export function ParticipantStrip({
 
   const clearAgent = useCallback(
     (agent: (typeof allAgentChips)[number]) => {
-      void apiClient
-        .clear(agent.participant_id, currentScope)
-        .then((resp) => addManagedAgent(resp.agent))
-        .catch((err) => console.error("clear failed", agent.participant_id, err));
+      void (async () => {
+        const intent = await confirmDestructive({
+          action: "agent.clear",
+          title: `Clear ${agent.name}?`,
+          detail: "Discards the agent's conversation context.",
+        });
+        if (intent === null) return;
+        await apiClient
+          .clear(agent.participant_id, currentScope)
+          .then((resp) => addManagedAgent(resp.agent))
+          .catch((err) => console.error("clear failed", agent.participant_id, err));
+      })();
     },
-    [addManagedAgent, apiClient, currentScope],
+    [addManagedAgent, apiClient, confirmDestructive, currentScope],
   );
 
   const sayGoodbye = useCallback(
     (agent: (typeof allAgentChips)[number]) => {
       const id = agent.participant_id;
       void (async () => {
+        const intent = await confirmDestructive({
+          action: "agent.goodbye",
+          title: `Remove ${agent.name}?`,
+          detail: "Ends the agent and its terminal session. This cannot be undone.",
+        });
+        if (intent === null) return;
         try {
           const token = await apiClient.getConfirmToken(id);
-          await apiClient.goodbye(id, token, currentScope);
+          await apiClient.goodbye(id, token, currentScope, intent);
           removeManagedAgent(id);
           removePresence(id);
           const existing = participants[id];
@@ -189,6 +205,7 @@ export function ParticipantStrip({
     [
       apiClient,
       chipEditor,
+      confirmDestructive,
       currentScope,
       participants,
       removeManagedAgent,

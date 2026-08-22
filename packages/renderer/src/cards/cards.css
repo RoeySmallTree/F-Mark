@@ -1,5 +1,5 @@
 /* Card styles.
-   Every color is a CSS custom property so the six themes resolve correctly.
+   Every color is a CSS custom property so the three themes resolve correctly.
    The structural theme overrides (brutalist border-widths, terminal scanlines, etc.)
    already live in themes/structural.css; this file owns the base card shapes. */
 
@@ -33,27 +33,20 @@
   --card-accent: var(--agent);
   --card-accent-tint: var(--agent-tint);
 }
+/* The entry gutter — the ledger's ruled left margin, and the one structural
+   device the whole feed aligns to.
+
+   It was a 14px lozenge built from two radial gradients, a linear gradient,
+   two inset shadows and an 18px outer glow. A ruled sheet is flat, so this is
+   now a hairline rule and a single solid mark.
+
+   The mark's SHAPE carries authorship as well as its colour — a square for a
+   person, a circle for an agent — so the distinction survives for anyone who
+   cannot separate ink from ledger green. */
 .card .stripe {
   position: relative;
   width: 14px;
-  border-radius: var(--radius-pill);
   flex-shrink: 0;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      circle at 50% 10px,
-      color-mix(in srgb, white 68%, var(--card-accent)) 0 2px,
-      transparent 4.75px
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--card-accent) 22%, var(--canvas)) 0%,
-      color-mix(in srgb, var(--card-accent) 11%, var(--canvas)) 56%,
-      transparent 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--card-accent) 24%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
 }
 .card .stripe::before,
 .card .stripe::after {
@@ -61,35 +54,30 @@
   position: absolute;
   pointer-events: none;
 }
+/* The rule: runs the height of the entry, hairline, neutral. It is structure,
+   not emphasis, so it does not take the authorship colour. */
 .card .stripe::before {
-  top: 20px;
-  bottom: 9px;
+  top: 18px;
+  bottom: 2px;
   left: 50%;
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card-accent) 88%, white 12%),
-    color-mix(in srgb, var(--card-accent) 42%, transparent) 72%,
-    transparent
-  );
-  opacity: 0.88;
+  width: var(--border-w);
+  background: var(--rule);
   transform: translateX(-50%);
 }
+/* The mark: solid, flat, sized to sit on the first line of the entry. */
 .card .stripe::after {
-  top: 5px;
+  top: 6px;
   left: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 28%, white 0 1px, transparent 2px),
-    var(--card-accent);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--card-accent) 13%, transparent),
-    0 7px 18px color-mix(in srgb, var(--card-accent) 24%, transparent);
+  width: 7px;
+  height: 7px;
+  background: var(--card-accent);
   transform: translateX(-50%);
-  transition: transform var(--dur-slow) var(--ease-out-expo);
+}
+.card.user .stripe::after {
+  border-radius: 1px; /* square — a person wrote this */
+}
+.card.agent .stripe::after {
+  border-radius: 50%; /* circle — an agent wrote this */
 }
 .card .body {
   flex: 1;
@@ -431,7 +419,7 @@
   border-radius: calc(var(--radius) - 1px);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--dur-instant), color var(--dur-instant);
 }
 .prose-toggle button:hover {
   color: var(--ink);
@@ -453,7 +441,7 @@
   border-radius: var(--radius);
   color: var(--ink-3);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--dur-instant), color var(--dur-instant);
 }
 .prose-copy-btn:hover {
   background: var(--panel);
@@ -667,7 +655,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.14s;
+  transition: transform var(--dur-fast);
 }
 .line-comment-icon {
   position: relative;
@@ -682,8 +670,8 @@
   color: var(--rail-color);
   box-shadow: var(--shadow);
   transition:
-    background 0.14s,
-    color 0.14s;
+    background var(--dur-fast),
+    color var(--dur-fast);
 }
 .line-comment-count {
   position: absolute;
@@ -716,7 +704,7 @@
 }
 .line-comment-anchor.draft {
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-instant);
 }
 .commentable:hover .line-comment-anchor.draft,
 .line-comment-anchor.draft.active {
@@ -1026,9 +1014,9 @@
   cursor: pointer;
   box-shadow: var(--shadow);
   transition:
-    border-color 0.14s,
-    background 0.14s,
-    transform 0.14s;
+    border-color var(--dur-fast),
+    background var(--dur-fast),
+    transform var(--dur-fast);
 }
 .comment-activity-hitbox {
   position: absolute;
@@ -1177,9 +1165,9 @@
   cursor: pointer;
   margin-bottom: var(--choice-opt-mb);
   transition:
-    background 180ms var(--ease-out-quint),
-    border-color 180ms var(--ease-out-quint),
-    transform 220ms var(--ease-out-quint);
+    background var(--dur-base) var(--ease-out-quint),
+    border-color var(--dur-base) var(--ease-out-quint),
+    transform var(--dur-base) var(--ease-out-quint);
   background: none;
   text-align: left;
   width: 100%;
@@ -1210,7 +1198,7 @@
   align-items: center;
   justify-content: center;
   margin-top: 2px;
-  transition: 0.15s;
+  transition: var(--dur-fast);
 }
 .choice-opt.chosen .choice-radio {
   border-color: var(--green);
@@ -1292,8 +1280,8 @@
   padding: 8px 10px;
   outline: none;
   transition:
-    border-color 180ms var(--ease-out-quint),
-    box-shadow 180ms var(--ease-out-quint);
+    border-color var(--dur-base) var(--ease-out-quint),
+    box-shadow var(--dur-base) var(--ease-out-quint);
 }
 .choice-custom-row input:focus {
   border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
@@ -1313,10 +1301,10 @@
   font-weight: 700;
   padding: 7px 11px;
   transition:
-    background 180ms var(--ease-out-quint),
-    border-color 180ms var(--ease-out-quint),
-    color 180ms var(--ease-out-quint),
-    transform 220ms var(--ease-out-quint);
+    background var(--dur-base) var(--ease-out-quint),
+    border-color var(--dur-base) var(--ease-out-quint),
+    color var(--dur-base) var(--ease-out-quint),
+    transform var(--dur-base) var(--ease-out-quint);
 }
 .choice-custom-row button:hover,
 .choice-comment-submit:hover,
@@ -1384,8 +1372,8 @@
   outline: none;
   padding: 8px 10px;
   transition:
-    border-color 180ms var(--ease-out-quint),
-    box-shadow 180ms var(--ease-out-quint);
+    border-color var(--dur-base) var(--ease-out-quint),
+    box-shadow var(--dur-base) var(--ease-out-quint);
 }
 .choice-comment-form textarea:focus {
   border-color: color-mix(in srgb, var(--user) 34%, var(--line-2));
@@ -1467,9 +1455,9 @@
   overflow: hidden;
   background: var(--canvas);
   transition:
-    border-color 0.15s,
-    background 0.15s,
-    opacity 0.15s;
+    border-color var(--dur-fast),
+    background var(--dur-fast),
+    opacity var(--dur-fast);
 }
 .choice-preview-card.chosen {
   border-color: var(--green);
@@ -1923,7 +1911,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: 0.15s;
+  transition: var(--dur-fast);
   background: none;
   padding: 0;
   color: var(--canvas);
@@ -2166,30 +2154,6 @@
   font-size: 10px;
   line-height: 1;
   margin-right: 2px;
-}
-.todo-confirm {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 7px 0 0 28px;
-  color: var(--ink-3);
-  font-family: var(--mono);
-  font-size: 10.5px;
-}
-.todo-confirm button {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--canvas);
-  color: var(--ink-2);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  padding: 2px 6px;
-  cursor: pointer;
-}
-.todo-confirm button:hover {
-  background: var(--panel-2);
-  color: var(--ink);
 }
 .todo-add-row {
   width: 100%;
@@ -3219,7 +3183,7 @@
   }
 }
 .flow-edge.flowing {
-  animation: flow-dashflow 0.7s linear infinite;
+  animation: flow-dashflow var(--dur-slow) linear infinite;
 }
 
 /* === Popover overlay === */
@@ -3243,4 +3207,82 @@
   border: 0;
   display: block;
   background: var(--canvas);
+}
+
+/* === Tool argument copy (ToolUseHeader) === */
+.tool-arg-copy {
+  /* Reset browser <button> chrome — this is a real <button> now (it can't be
+     nested inside .tool-head-toggle below), where it used to be a plain
+     inline span; without this it would render with a UA background/border. */
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding-block: 0;
+  cursor: copy;
+  border-radius: 4px;
+  padding-inline: 3px;
+  margin-inline: -3px;
+  transition: background var(--dur-instant) var(--ease-out-quart);
+}
+.tool-arg-copy:hover { background: var(--agent-tint); color: var(--ink); }
+.tool-arg-copy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tool-arg-copy.is-copied { background: var(--agent-tint-2); }
+
+/* === Tool head toggle (ToolUseHeader) ===
+   `.tool-head` used to be a <button>; splitting the argument out into its
+   own button (above) means `.tool-head` is now a plain row <div>, and the
+   actual keyboard-operable toggle is this smaller inner <button> around the
+   chevron + type badge. `.tool-head` keeps all of its original flex/hover/
+   active CSS unchanged (agent-components.css) — this block only resets this
+   new button's browser chrome and restores the chevron's rotate + tint on
+   expand, which used to come from `.tool-head[aria-expanded="true"] .chev`
+   when aria-expanded lived on the outer element. */
+.tool-head { cursor: pointer; }
+.tool-head-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.tool-head-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tool-head-toggle[aria-expanded="true"] .chev {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--canvas) 86%, transparent);
+  transform: rotate(90deg);
+}
+
+/* === Tool disclosure height (ToolUseCard) ===
+   Mirrors .toolbox-collapse (agent-components.css): a one-row grid that
+   animates grid-template-rows 0fr -> 1fr, so the body reflows to its
+   natural height instead of popping in at full size. The clipped child
+   needs min-height: 0 - without it a 0fr track's automatic minimum is the
+   child's min-content, and the row never actually reaches 0.
+
+   The transition duration is declared on each end state rather than once
+   on the base selector, so entry and exit can differ: entry (this rule
+   matching on .open) runs the full --dur-fast, exit (falling back to the
+   base rule below once .open is removed) runs the shorter --dur-instant -
+   collapsing should read snappier than expanding. */
+.tool-disclosure { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-instant) var(--ease-out-quart); }
+.tool-call.open .tool-disclosure { grid-template-rows: 1fr; transition: grid-template-rows var(--dur-fast) var(--ease-out-quart); }
+.tool-disclosure > .tool-disclosure-clip { min-height: 0; overflow: hidden; }
+
+/* Collapsing already reads as instant under the global reduced-motion reset
+   (styles.css) - transition-duration drops to 0.01ms there. This local rule
+   exists for the one thing that reset doesn't cover: ToolUseCard keeps the
+   body mounted for TOOL_DISCLOSURE_EXIT_MS after close so the exit
+   transition can finish before it unmounts. `transition: none` (not a
+   shortened var() duration - quality-floor.test.ts forbids that) makes the
+   collapse to 0 genuinely instant rather than merely fast, so that mount
+   window can never show a sliver of un-clipped content. */
+@media (prefers-reduced-motion: reduce) {
+  .tool-disclosure { transition: none; }
 }

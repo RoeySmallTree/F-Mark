@@ -423,9 +423,9 @@ describe("CmdKModal — activation (Enter)", () => {
     const user = userEvent.setup();
     render(<CmdKModal />);
     const input = screen.getByLabelText(/command palette query/i);
-    await user.type(input, "theme terminal");
+    await user.type(input, "theme night");
     await user.keyboard("{Enter}");
-    expect(applyTheme).toHaveBeenCalledWith("terminal");
+    expect(applyTheme).toHaveBeenCalledWith("night");
     expect(useStore.getState().activeModal).toBeNull();
   });
 

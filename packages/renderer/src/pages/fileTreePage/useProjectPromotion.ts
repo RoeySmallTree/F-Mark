@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Client } from "../../api/client.js";
+import { useConfirmDestructive } from "../../confirm/index.js";
 import { basename } from "./session.js";
 
 export interface ProjectPromotionState {
@@ -14,16 +15,16 @@ export function useProjectPromotion(
 ): ProjectPromotionState {
   const [promoteBusy, setPromoteBusy] = useState(false);
   const [promoteError, setPromoteError] = useState<string | null>(null);
+  const confirmDestructive = useConfirmDestructive();
 
   const makeActiveProject = useCallback(async (): Promise<void> => {
     if (activePath === null || promoteBusy) return;
-    const ok =
-      typeof window === "undefined"
-        ? true
-        : window.confirm(
-            `Make "${basename(activePath)}" the active project? This switches every open F-Mark tab to this project.`,
-          );
-    if (!ok) return;
+    const intent = await confirmDestructive({
+      action: "project.setActive",
+      title: `Make "${basename(activePath)}" the active project?`,
+      detail: "This switches every open F-Mark tab to this project.",
+    });
+    if (intent === null) return;
     setPromoteBusy(true);
     setPromoteError(null);
     try {

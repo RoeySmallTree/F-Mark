@@ -1,11 +1,10 @@
 import type { AnyEventRecord, ProsePayload } from "@f-mark/shared";
-import { EVENT_KINDS } from "@f-mark/shared";
+import { COMMENT_MARKER_CONTENT, EVENT_KINDS } from "@f-mark/shared";
 
-export const COMMENT_MARKER_CONTENT = {
-  removed: "_removed_",
-  resolved: "_resolved_",
-  unresolved: "_unresolved_",
-} as const;
+/* The marker vocabulary lives in @f-mark/shared so the kernel's visible-read
+   filter and the renderer's thread builder cannot drift apart. Re-exported
+   here because this module is where the renderer already looks for it. */
+export { COMMENT_MARKER_CONTENT };
 
 function prosePayload(event: AnyEventRecord): ProsePayload | null {
   if (event.kind !== EVENT_KINDS.prose) return null;

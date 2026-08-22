@@ -1,267 +1,246 @@
-/* Theme tokens - CSS variable definitions for the 6 themes. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURORA — F-Mark's token system.
+
+   The thesis: F-Mark is an append-only event log. Nothing is deleted; entries
+   are superseded. The interface is a ruled ledger sheet, and every visual
+   channel carries exactly one meaning:
+
+     ink weight   → hierarchy (what to read first)
+     ledger green → agent authorship and live agent activity. Nothing else.
+     alarm red    → destruction and error. Nothing else.
+     the rule     → structure (a ledger is ruled, not boxed)
+
+   Anything that did not encode one of those was decoration, and was cut.
+
+   Three themes only: day (default, no class), night, contrast. The token
+   NAMES below are a contract consumed by ~21k lines of component CSS —
+   redefine values freely, but do not remove a name without migrating its
+   call sites.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --bg: #f4efe6;          /* outer chrome */
-  --canvas: #faf6ed;      /* feed canvas, slightly warmer */
-  --panel: #efe9dc;       /* side panels */
-  --panel-2: #e8e1d0;     /* hover */
-  --ink: #1a1714;
-  --ink-2: #4a443a;
-  --ink-3: #807868;
-  --ink-4: #a89e88;
-  --line: #d9d1bc;
-  --line-2: #e6dec9;
-  --line-3: #ece5d2;
-  --user: #2a5fa8;        /* user blue */
-  --user-tint: #e8eef7;
-  --user-tint-2: #d4dff1;
-  --agent: #b86a1f;       /* agent amber */
-  --agent-tint: #f6ead9;
-  --agent-tint-2: #ecd9b5;
-  --green: #3d7a4f;
-  --green-tint: #dbe9de;
-  --rose: #a83a3a;
-  --shadow: 0 1px 0 rgba(40,30,15,.04), 0 1px 2px rgba(40,30,15,.04);
-  --shadow-2: 0 1px 0 rgba(40,30,15,.06), 0 4px 16px rgba(40,30,15,.06);
-  --sans: 'DM Sans', system-ui, sans-serif;
-  --serif: 'Source Serif 4', Georgia, serif;
-  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* ── AURORA LIGHT.
+     --bg is the tinted void behind everything (never white), so a white
+     --canvas can sit visibly above it — on a pure-white void, white cards
+     vanish and every panel needs a border merely to exist. Naming collision:
+     DESIGN.md calls the void "canvas" and this file's solid surface
+     "solid" — here it is the reverse, --bg is DESIGN.md's canvas and
+     --canvas is DESIGN.md's solid. */
+  --bg: #e9ecf3;
+  --canvas: #ffffff;
+  --panel: #f5f6fa;
+  --panel-2: #eceef5;
+  --paper: #ffffff;
+  --paper-band: #f7f8fb;
+  --paper-sunk: #e9ecf3;
+
+  /* MEASURED against --canvas */
+  --ink: #16181f;   /* 17.73:1 */
+  --ink-2: #3d4456; /*  9.72:1 */
+  --ink-3: #5c6372; /*  6.03:1 — lightest AA text */
+  --ink-4: #8b91a3; /*  3.15:1 — NON-TEXT tier, same debt as dark */
+
+  --rule: rgb(16 20 34 / 11%);
+  --rule-strong: rgb(16 20 34 / 19%);
+  --line: rgb(16 20 34 / 11%);
+  --line-2: rgb(16 20 34 / 7%);
+  --line-3: rgb(16 20 34 / 4%);
+
+  --ledger: #0a6b5d;  /* 6.41:1 — dark teal #5eead4 is 1.48:1 here, unusable */
+  --ledger-tint: rgb(10 107 93 / 11%);
+  --ledger-tint-2: rgb(10 107 93 / 20%);
+
+  --user: #4a5163;
+  --user-tint: rgb(74 81 99 / 10%);
+  --user-tint-2: rgb(74 81 99 / 18%);
+  --agent: #0a6b5d;
+  --agent-tint: rgb(10 107 93 / 11%);
+  --agent-tint-2: rgb(10 107 93 / 20%);
+
+  --green: #0a6b5d;   /* 6.41:1 */
+  --green-tint: rgb(10 107 93 / 11%);
+  --alarm: #b02a44;   /* 6.44:1 */
+  --rose: #b02a44;
+
+  /* ── Depth ───────────────────────────────────────────────────────────────
+     A sheet of paper is flat. Elevation is a rule, not a blur. These two
+     survive for genuinely floating surfaces (popovers, dialogs) and stay
+     hairline-led even there. */
+  --shadow:
+    0 1px 2px rgb(18 24 20 / 5%),
+    0 2px 6px -1px rgb(18 24 20 / 6%);
+  --shadow-2:
+    0 1px 2px rgb(18 24 20 / 5%),
+    0 6px 16px -4px rgb(18 24 20 / 10%),
+    0 18px 40px -12px rgb(18 24 20 / 14%);
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     IBM Plex: drawn for technical documentation, with a true mono sibling.
+     Two faces, three roles. No serif — the direction has no use for one, so
+     --serif resolves to the sans rather than inviting a third voice. */
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --serif: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Scale. Mono carries data and labels; sans carries prose and controls. */
+  --t-micro: 10.5px; /* gutter labels, eyebrows — mono, uppercase */
+  --t-meta: 11.5px; /* timestamps, durations — mono */
+  --t-ui: 13px; /* controls, list rows — sans */
+  --t-body: 14.5px; /* entry prose — sans, 1.62 */
+  --t-title: 16px; /* session title — sans 600 */
+  --t-lead: 20px; /* empty-state headline — sans 600 */
+
+  --track-label: 0.09em;
+  --track-tight: -0.01em;
+  --track-lead: -0.02em;
+
+  /* ── Geometry ────────────────────────────────────────────────────────────
+     Near-square. Printed rules do not have soft corners. */
   --radius: 6px;
   --radius-lg: 10px;
   --radius-pill: 999px;
   --border-w: 1px;
 
-  /* Motion tokens — durations + easings. Use across all enter/exit/transition
-     rules. Reduced-motion override lives in styles.css; nothing here needs
-     to be aware of it. */
-  --dur-instant: 120ms;
-  --dur-fast: 180ms;
-  --dur-base: 220ms;
-  --dur-slow: 320ms;
-  --dur-stagger: 35ms;
+  /* The ledger gutter: a fixed mono column carrying the entry number, the
+     kind glyph, and supersession marks. Every feed row aligns to it — it is
+     the vertical rhythm of the whole document. */
+  --gutter-w: 56px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────────
+     Ink does not bounce: decelerating curves only, nothing overshoots.
+
+     These four durations are the rhythm the codebase already had — the
+     dominant literals were 120 / 160 / 180-220 / 320ms — now named so every
+     surface shares them instead of re-picking a number. Anything that is not
+     one of these tiers is a bug, not a nuance.
+
+     --ease-snap is the one curve worth keeping from before the redesign: a
+     hard decelerate that makes small UI moves feel mechanical rather than
+     floaty. It is the default for state changes. The browser's own `ease-out`
+     is deliberately NOT used — it is the value you get when nobody chose.
+
+     The reduced-motion reset lives in styles.css and covers all of these. */
+  --dur-instant: 120ms; /* hover, focus, colour swaps */
+  --dur-fast: 160ms; /* small position/size moves */
+  --dur-base: 200ms; /* panel + card entrances */
+  --dur-slow: 320ms; /* full-surface transitions */
+  --dur-stagger: 28ms; /* per-item delay in a sequence */
+
+  --ease-snap: cubic-bezier(0.32, 0.72, 0, 1); /* default for state change */
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-quart:  cubic-bezier(0.5, 0, 0.75, 0);
-  --ease-inout:     cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* long, full-surface */
+  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0); /* exits only */
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1); /* loops that must not jerk */
 }
 
-/* === THEME: terminal === */
-body.theme-terminal{
-  --bg:#050605; --canvas:#0a0c0a; --panel:#0d100d; --panel-2:#161a16;
-  --ink:#cfe8c5; --ink-2:#8fb585; --ink-3:#5f7a58; --ink-4:#3d5238;
-  --line:#1d2a1d; --line-2:#152015; --line-3:#0f180f;
-  --user:#4ec0ff; --user-tint:#0a1622; --user-tint-2:#142a40;
-  --agent:#ffb13e; --agent-tint:#1d1407; --agent-tint-2:#3a2710;
-  --green:#3aff7b; --green-tint:#0a1f12;
-  --rose:#ff5577;
-  --shadow:none; --shadow-2:0 0 0 1px rgba(58,255,123,.05);
-  --serif:'JetBrains Mono', ui-monospace, monospace;
-  --sans:'JetBrains Mono', ui-monospace, monospace;
-  --radius:2px; --radius-lg:3px;
+/* ═══ NIGHT ════════════════════════════════════════════════════════════════
+   Not a void with a neon accent. The ruled structure stays visible — bands
+   and hairlines are what keep this reading as a sheet rather than a terminal.
+   The accent itself stays vivid — Aurora teal holds its saturation and sits
+   near max lightness — but it never spreads: one meaning, one channel, so
+   everywhere else the ruled structure carries the eye instead. */
+body.theme-night {
+  /* ── Surfaces — AURORA DARK ───────────────────────────────────────────
+     Elevation is surface LUMINANCE, not shadow: a lighter surface reads as
+     closer. There are no drop shadows in the dark theme. */
+  --bg: #0b0d16;        /* the void behind everything */
+  --canvas: #12141f;    /* OPAQUE. every surface that carries text */
+  --panel: #171a27;     /* raised content: hover, active row, nested panel */
+  --panel-2: #232736;   /* hover on raised content */
+  --paper: #12141f;     /* legacy alias, kept: 0 call sites but referenced in comments */
+  --paper-band: #141724;
+  --paper-sunk: #0b0d16;
+
+  /* ── Ink ──────────────────────────────────────────────────────────────
+     MEASURED against --canvas (#12141f). Do not hand-write these numbers;
+     run tests/token-contrast.test.ts and paste its output. */
+  --ink: #f0f1f7;   /* 16.26:1 — primary */
+  --ink-2: #bec3da; /* 10.48:1 — secondary */
+  --ink-3: #9298af; /*  6.40:1 — meta, timestamps. The lightest AA text. */
+  --ink-4: #5b607a; /*  2.97:1 — NON-TEXT tier. Documented debt: ~214 sites
+                       still set it as `color:`. Do not add new text uses. */
+
+  /* ── Rules ────────────────────────────────────────────────────────────*/
+  --rule: rgb(255 255 255 / 10%);
+  --rule-strong: rgb(255 255 255 / 17%);
+  --line: rgb(255 255 255 / 10%);
+  --line-2: rgb(255 255 255 / 7%);
+  --line-3: rgb(255 255 255 / 4%);
+
+  /* ── The one accent ───────────────────────────────────────────────────
+     Aurora teal. Means: an agent wrote this, or an agent is working. */
+  --ledger: #5eead4;      /* 12.39:1 on --canvas */
+  --ledger-tint: rgb(94 234 212 / 16%);
+  --ledger-tint-2: rgb(94 234 212 / 28%);
+
+  /* ── Authorship ───────────────────────────────────────────────────────*/
+  --user: #a8adc4;
+  --user-tint: rgb(168 173 196 / 14%);
+  --user-tint-2: rgb(168 173 196 / 24%);
+  --agent: #5eead4;
+  --agent-tint: rgb(94 234 212 / 16%);
+  --agent-tint-2: rgb(94 234 212 / 28%);
+
+  /* ── Signals ──────────────────────────────────────────────────────────*/
+  --green: #5eead4;       /* 12.39:1 */
+  --green-tint: rgb(94 234 212 / 16%);
+  --alarm: #fb8fa0;       /*  8.33:1 — destruction and error ONLY */
+  --rose: #fb8fa0;
+
+  --shadow:
+    0 1px 2px rgb(0 0 0 / 40%),
+    0 2px 6px -1px rgb(0 0 0 / 30%);
+  --shadow-2:
+    0 1px 2px rgb(0 0 0 / 50%),
+    0 6px 16px -4px rgb(0 0 0 / 45%),
+    0 18px 40px -12px rgb(0 0 0 / 55%);
 }
 
-/* === THEME: ide-dark === */
-body.theme-ide{
-  --bg:#0e1014; --canvas:#14171c; --panel:#1a1d23; --panel-2:#22262e;
-  --ink:#e6e8eb; --ink-2:#b4b8c0; --ink-3:#7d828c; --ink-4:#525762;
-  --line:#262a32; --line-2:#1f232a; --line-3:#1a1e25;
-  --user:#5b9dff; --user-tint:#0f1a2e; --user-tint-2:#1c3358;
-  --agent:#ffa657; --agent-tint:#2a1d10; --agent-tint-2:#4a3318;
-  --green:#3fb950; --green-tint:#0e2418;
-  --rose:#f85149;
-  --shadow:0 1px 0 rgba(0,0,0,.3); --shadow-2:0 4px 16px rgba(0,0,0,.3);
-  --radius:5px; --radius-lg:8px;
-}
+/* ═══ CONTRAST ═════════════════════════════════════════════════════════════
+   The accessibility target. Pure values, thick rules, and no tint doing work
+   that a border should do. Body text clears WCAG AAA throughout. */
+body.theme-contrast {
+  --paper: #ffffff;
+  --paper-band: #f2f2f2;
+  --paper-sunk: #ffffff;
 
-/* === THEME: solarized === */
-body.theme-solarized{
-  --bg:#002b36; --canvas:#073642; --panel:#062a33; --panel-2:#0a3d4a;
-  --ink:#fdf6e3; --ink-2:#93a1a1; --ink-3:#657b83; --ink-4:#586e75;
-  --line:#0a4150; --line-2:#0a3a48; --line-3:#073642;
-  --user:#268bd2; --user-tint:#0a2638; --user-tint-2:#13456a;
-  --agent:#cb4b16; --agent-tint:#2a1108; --agent-tint-2:#4a1f10;
-  --green:#859900; --green-tint:#1a2008;
-  --rose:#dc322f;
-  --shadow:0 1px 0 rgba(0,0,0,.3); --shadow-2:0 4px 16px rgba(0,0,0,.4);
-  --radius:4px; --radius-lg:6px;
-}
+  --bg: #ffffff;
+  --canvas: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #e8e8e8;
 
-/* === THEME: brutalist === */
-body.theme-brutalist{
-  --bg:#000000; --canvas:#0a0a0a; --panel:#141414; --panel-2:#1f1f1f;
-  --ink:#ffffff; --ink-2:#d4d4d4; --ink-3:#888888; --ink-4:#555555;
-  --line:#404040; --line-2:#2a2a2a; --line-3:#1a1a1a;
-  --user:#ffffff; --user-tint:#1a1a1a; --user-tint-2:#333333;
-  --agent:#ffffff; --agent-tint:#1a1a1a; --agent-tint-2:#333333;
-  --green:#ffffff; --green-tint:#1a1a1a;
-  --rose:#ff0000;
-  --shadow:none; --shadow-2:none;
-  --serif:'JetBrains Mono', ui-monospace, monospace;
-  --sans:'JetBrains Mono', ui-monospace, monospace;
-  --radius:0px; --radius-lg:0px; --radius-pill:0px;
-  --border-w:2px;
-}
+  --ink: #000000; /* 21.00:1 */
+  --ink-2: #1c1c1c; /* 17.04:1 */
+  --ink-3: #3d3d3d; /* 10.86:1 — still AAA */
+  --ink-4: #000000;
 
-/* === THEME: cyberpunk === */
-body.theme-cyber{
-  --bg:#0a0716; --canvas:#100b22; --panel:#150e2e; --panel-2:#1d143d;
-  --ink:#e8e3ff; --ink-2:#a99bd4; --ink-3:#7a6ba8; --ink-4:#544675;
-  --line:#2a1f4d; --line-2:#1f1638; --line-3:#170f28;
-  --user:#00e5ff; --user-tint:#001e2a; --user-tint-2:#003a52;
-  --agent:#ff2bd6; --agent-tint:#2a0824; --agent-tint-2:#4d1342;
-  --green:#7dff5a; --green-tint:#0e2008;
-  --rose:#ff3370;
-  --shadow:0 1px 0 rgba(0,0,0,.4); --shadow-2:0 0 24px rgba(255,43,214,.12), 0 4px 14px rgba(0,0,0,.4);
-  --radius:3px; --radius-lg:5px;
-}
+  --rule: #000000;
+  --rule-strong: #000000;
+  --line: #000000;
+  --line-2: #000000;
+  --line-3: #6b6b6b;
 
-/* === THEME: amber CRT === */
-body.theme-amber{
-  --bg:#080500; --canvas:#0c0800; --panel:#120c00; --panel-2:#1a1200;
-  --ink:#ffb000; --ink-2:#cc8800; --ink-3:#8a5b00; --ink-4:#523600;
-  --line:#3a2700; --line-2:#2a1c00; --line-3:#1a1100;
-  --user:#ffd060; --user-tint:#1a1000; --user-tint-2:#332100;
-  --agent:#ff7a00; --agent-tint:#1a0c00; --agent-tint-2:#331a00;
-  --green:#ffb000; --green-tint:#1a1100;
-  --rose:#ff3300;
-  --shadow:0 0 0 1px rgba(255,176,0,.03); --shadow-2:0 0 14px rgba(255,176,0,.06);
-  --serif:'JetBrains Mono', ui-monospace, monospace;
-  --sans:'JetBrains Mono', ui-monospace, monospace;
-  --radius:2px; --radius-lg:3px;
-}
+  --ledger: #005c33; /*  8.14:1 */
+  --ledger-tint: #d9ebe1;
+  --ledger-tint-2: #b3d7c4;
 
-/* === THEME: Dracula === */
-body.theme-dracula{
-  --bg:#1b1c25; --canvas:#282a36; --panel:#21222c; --panel-2:#343746;
-  --ink:#f8f8f2; --ink-2:#c8c8c0; --ink-3:#6272a4; --ink-4:#44475a;
-  --line:#3d4053; --line-2:#2e3142; --line-3:#252734;
-  --user:#8be9fd; --user-tint:#16242a; --user-tint-2:#1f3a47;
-  --agent:#ff79c6; --agent-tint:#2a0e22; --agent-tint-2:#4a1a3c;
-  --green:#50fa7b; --green-tint:#0d2515;
-  --rose:#ff5555;
-  --shadow:0 1px 0 rgba(0,0,0,.3); --shadow-2:0 4px 16px rgba(0,0,0,.4);
-  --radius:5px; --radius-lg:8px;
-}
+  --user: #000000;
+  --user-tint: #e8e8e8;
+  --user-tint-2: #d0d0d0;
+  --agent: #005c33;
+  --agent-tint: #d9ebe1;
+  --agent-tint-2: #b3d7c4;
 
-/* === THEME: Catppuccin Mocha === */
-body.theme-catppuccin{
-  --bg:#181825; --canvas:#1e1e2e; --panel:#313244; --panel-2:#45475a;
-  --ink:#cdd6f4; --ink-2:#a6adc8; --ink-3:#7f849c; --ink-4:#585b70;
-  --line:#45475a; --line-2:#313244; --line-3:#272838;
-  --user:#89b4fa; --user-tint:#161e2e; --user-tint-2:#1e2a46;
-  --agent:#f5c2e7; --agent-tint:#251a25; --agent-tint-2:#3a2438;
-  --green:#a6e3a1; --green-tint:#162216;
-  --rose:#f38ba8;
-  --shadow:0 1px 0 rgba(0,0,0,.25); --shadow-2:0 4px 18px rgba(0,0,0,.35);
-  --radius:8px; --radius-lg:12px;
-}
+  --green: #005c33;
+  --green-tint: #d9ebe1;
+  --alarm: #a80000; /*  7.88:1 */
+  --rose: #a80000;
 
-/* === THEME: Tokyo Night === */
-body.theme-tokyo{
-  --bg:#16161e; --canvas:#1a1b26; --panel:#24283b; --panel-2:#2f334d;
-  --ink:#c0caf5; --ink-2:#a9b1d6; --ink-3:#565f89; --ink-4:#414868;
-  --line:#2f334d; --line-2:#24283b; --line-3:#1e2030;
-  --user:#7aa2f7; --user-tint:#13192a; --user-tint-2:#1d2944;
-  --agent:#bb9af7; --agent-tint:#1d1729; --agent-tint-2:#2e2348;
-  --green:#9ece6a; --green-tint:#152114;
-  --rose:#f7768e;
-  --shadow:0 1px 0 rgba(0,0,0,.3); --shadow-2:0 4px 16px rgba(0,0,0,.4);
-  --radius:6px; --radius-lg:10px;
-}
+  --border-w: 2px;
+  --radius: 0px;
+  --radius-lg: 0px;
 
-/* === THEME: Gruvbox === */
-body.theme-gruvbox{
-  --bg:#1d2021; --canvas:#282828; --panel:#3c3836; --panel-2:#504945;
-  --ink:#ebdbb2; --ink-2:#d5c4a1; --ink-3:#a89984; --ink-4:#7c6f64;
-  --line:#504945; --line-2:#3c3836; --line-3:#32302f;
-  --user:#83a598; --user-tint:#13201c; --user-tint-2:#1f3530;
-  --agent:#fe8019; --agent-tint:#241208; --agent-tint-2:#3d1f0e;
-  --green:#b8bb26; --green-tint:#1f200a;
-  --rose:#fb4934;
-  --shadow:0 1px 0 rgba(0,0,0,.3); --shadow-2:0 4px 16px rgba(0,0,0,.4);
-  --radius:4px; --radius-lg:6px;
-}
-
-/* === THEME: Nord === */
-body.theme-nord{
-  --bg:#242933; --canvas:#2e3440; --panel:#3b4252; --panel-2:#434c5e;
-  --ink:#eceff4; --ink-2:#d8dee9; --ink-3:#81a1c1; --ink-4:#4c566a;
-  --line:#434c5e; --line-2:#3b4252; --line-3:#353c4a;
-  --user:#88c0d0; --user-tint:#1a2530; --user-tint-2:#26384a;
-  --agent:#d08770; --agent-tint:#2a1810; --agent-tint-2:#48291c;
-  --green:#a3be8c; --green-tint:#1f2a16;
-  --rose:#bf616a;
-  --shadow:0 1px 0 rgba(0,0,0,.25); --shadow-2:0 4px 16px rgba(0,0,0,.35);
-  --radius:6px; --radius-lg:8px;
-}
-
-/* === THEME: Monokai === */
-body.theme-monokai{
-  --bg:#1e1f1c; --canvas:#272822; --panel:#3e3d32; --panel-2:#49483e;
-  --ink:#f8f8f2; --ink-2:#cfcfc2; --ink-3:#75715e; --ink-4:#49483e;
-  --line:#49483e; --line-2:#3e3d32; --line-3:#33332b;
-  --user:#66d9ef; --user-tint:#0e2a30; --user-tint-2:#17434c;
-  --agent:#f92672; --agent-tint:#2a0a18; --agent-tint-2:#4a142a;
-  --green:#a6e22e; --green-tint:#1a230d;
-  --rose:#f92672;
-  --shadow:0 1px 0 rgba(0,0,0,.3); --shadow-2:0 4px 16px rgba(0,0,0,.45);
-  --radius:3px; --radius-lg:5px;
-}
-
-/* === THEME: Borland Blue (Turbo Pascal / WordStar) === */
-body.theme-borland{
-  --bg:#00007a; --canvas:#0000aa; --panel:#000080; --panel-2:#0000d0;
-  --ink:#ffff55; --ink-2:#aaaaaa; --ink-3:#9090ff; --ink-4:#5555aa;
-  --line:#aaaaaa; --line-2:#5555aa; --line-3:#0000d0;
-  --user:#55ffff; --user-tint:#001a2a; --user-tint-2:#003040;
-  --agent:#ff55ff; --agent-tint:#2a0a2a; --agent-tint-2:#4a1a4a;
-  --green:#55ff55; --green-tint:#0a2a0a;
-  --rose:#ff5555;
-  --shadow:none; --shadow-2:0 0 0 1px rgba(255,255,85,.1);
-  --serif:'JetBrains Mono', ui-monospace, monospace;
-  --sans:'JetBrains Mono', ui-monospace, monospace;
-  --radius:0px; --radius-lg:0px; --radius-pill:0px;
-}
-
-/* === THEME: Sepia Paper === */
-body.theme-sepia{
-  --bg:#f0e6d2; --canvas:#f7eed8; --panel:#e8dcc0; --panel-2:#dccfb0;
-  --ink:#3a2e1f; --ink-2:#5e4b32; --ink-3:#8a755a; --ink-4:#b8a684;
-  --line:#d4c5a0; --line-2:#dccfb0; --line-3:#e6daba;
-  --user:#5e4b32; --user-tint:#e8dcc0; --user-tint-2:#d4c5a0;
-  --agent:#8c3a1a; --agent-tint:#ebdcc8; --agent-tint-2:#d4b89c;
-  --green:#4a5a2e; --green-tint:#dcdcbe;
-  --rose:#a83a3a;
-  --shadow:0 1px 0 rgba(80,60,30,.06), 0 1px 2px rgba(80,60,30,.04);
-  --shadow-2:0 1px 0 rgba(80,60,30,.08), 0 4px 16px rgba(80,60,30,.08);
-  --sans:'Source Serif 4', Georgia, serif;
-  --radius:3px; --radius-lg:5px;
-}
-
-/* === THEME: High Contrast === */
-body.theme-contrast{
-  --bg:#000000; --canvas:#000000; --panel:#000000; --panel-2:#1a1a1a;
-  --ink:#ffffff; --ink-2:#ffffff; --ink-3:#dddddd; --ink-4:#999999;
-  --line:#ffffff; --line-2:#aaaaaa; --line-3:#666666;
-  --user:#00ffff; --user-tint:#001a1a; --user-tint-2:#003333;
-  --agent:#ffff00; --agent-tint:#1a1a00; --agent-tint-2:#333300;
-  --green:#00ff00; --green-tint:#001a00;
-  --rose:#ff00ff;
-  --shadow:none; --shadow-2:none;
-  --radius:0px; --radius-lg:0px;
-  --border-w:2px;
-}
-
-/* === THEME: Ember — matches the marketing landing page (neutral plum-black + coral red) === */
-body.theme-ember{
-  --bg:#070608; --canvas:#16141b; --panel:#0e0c11; --panel-2:#201d27;
-  --ink:#f0eef2; --ink-2:#a6a2ae; --ink-3:#726e7a; --ink-4:#403d47;
-  --line:#2a2730; --line-2:#201d26; --line-3:#17151c;
-  --user:#ff5d72; --user-tint:#2a0e15; --user-tint-2:#4d1822;
-  --agent:#ffb13e; --agent-tint:#2a1c08; --agent-tint-2:#4a3112;
-  --green:#34e2b0; --green-tint:#08231b;
-  --rose:#ff4f67;
-  --shadow:0 1px 0 rgba(0,0,0,.4); --shadow-2:0 0 26px rgba(255,93,114,.08), 0 6px 18px rgba(0,0,0,.5);
-  --radius:8px; --radius-lg:14px;
+  --shadow: 0 0 0 2px #000000;
+  --shadow-2: 0 0 0 2px #000000;
 }

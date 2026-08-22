@@ -237,4 +237,44 @@ describe("AccessRequestCard — body rendering branches", () => {
     expect(screen.queryByRole("button", { name: /^Allow/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Cancel/i })).toBeNull();
   });
+
+  test("a denied request renders both the status and the timestamp (M7)", () => {
+    const requestEvent = makeAccessRequest(
+      "20260527T100000Z_ag-c92e.access-request.json",
+      "ag-c92e",
+      {
+        request_id: "ar-denied",
+        title: "mcp__fmark__fmark_post_prose",
+        message: "preview",
+      },
+    );
+    const responseEvent: AnyEventRecord = {
+      filename: "20260527T100100Z_us-a7f3.access-response.json",
+      timestamp: "20260527T100100Z",
+      participant_id: "us-a7f3",
+      kind: "access-response",
+      payload: {
+        schema: "fmark.access-response.v1",
+        request_id: "ar-denied",
+        decision: "deny",
+        status: "denied",
+        delivered: true,
+        delivery: "hook",
+        responded_at: "2026-05-27T10:01:00.000Z",
+      },
+    };
+
+    const { container } = render(
+      <AccessRequestCard
+        event={requestEvent}
+        participants={PARTICIPANTS}
+        allEvents={[requestEvent, responseEvent]}
+      />,
+    );
+    const decision = container.querySelector(".approval-decision");
+    expect(decision).not.toBeNull();
+    expect(decision!.textContent).toContain("denied");
+    /* Not just the bare status word — a real timestamp must follow it. */
+    expect(decision!.textContent).not.toBe(" · denied");
+  });
 });

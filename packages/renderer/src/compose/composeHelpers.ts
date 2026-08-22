@@ -17,6 +17,13 @@ const NO_LOOSE_STRING_VALUES = {
 export type ComposeMode = "message" | "named";
 export type ComposeDragMode = "files" | "fmark-path";
 
+/* Shared between NameChip (aria-invalid / aria-describedby on the name
+   field) and SendButton (title on the disabled Send) so both surface the
+   identical sentence for the same "named mode, no name yet" state. */
+export const NAMED_MODE_NAME_HINT_ID = "compose-named-mode-name-hint";
+export const NAMED_MODE_NAME_REQUIRED_MESSAGE =
+  "Name this contribution before sending — named mode needs a title.";
+
 const NAMED_SHORTCUT = chordToLabel("$mod+N");
 export const PRESETS_SHORTCUT = chordToLabel("$mod+P");
 export const SKILLS_SHORTCUT = chordToLabel("$mod+Shift+K");

@@ -1,5 +1,5 @@
-import { fireEvent } from "@testing-library/react";
-import { expect } from "vitest";
+import { fireEvent, waitFor } from "@testing-library/react";
+import { expect, vi } from "vitest";
 import { nestedTree, siblingTree, singleTree } from "./fixtures.js";
 import {
   bodyInput,
@@ -148,11 +148,17 @@ async function cmdEnterPreservesDirtyTitle(): Promise<void> {
   });
 }
 
+/* BL3: the keyboard path used to call the raw onRemove prop and destroy a todo
+   and its subtree with no gate, while the X button on the same todo confirmed
+   first. It now asks the same question, so this scenario has to answer it. */
 async function cmdBackspaceRemovesFocusedTodo(): Promise<void> {
+  const confirmSpy = vi.fn<typeof window.confirm>().mockReturnValue(true);
+  vi.stubGlobal("confirm", confirmSpy);
   const { posts, title } = await renderTodosWithTree(singleTree());
 
   expectMetaKeyDown(title!, "Backspace");
 
+  await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1));
   await waitForPosts(posts, 1);
   expectTodoPost(posts, 0, {
     id: "t1",

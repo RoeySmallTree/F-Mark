@@ -110,9 +110,13 @@ describe("HunkActionsBar — comment on hunk", () => {
 });
 
 describe("HunkActionsBar — revert conflict UI", () => {
-  beforeEach(() => resetStore());
+  beforeEach(() => {
+    resetStore();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     cleanup();
   });
 
@@ -219,14 +223,14 @@ describe("HunkActionsBar — per-hunk label by status (should-fix 7)", () => {
     expect(screen.getByTestId("fv-hunk-revert").textContent).toMatch(/Revert hunk/);
   });
 
-  test("added/untracked file → 'Revert hunk' (reverse-apply synthetic)", () => {
+  test("added/untracked file → 'Delete hunk' (reverse-apply deletes the synthetic whole-file hunk)", () => {
     renderWith({
       fileStatus: "untracked",
       actions: { hunk: true, file: true, rename: false },
       hunk: HUNK,
       hideFileAction: true,
     });
-    expect(screen.getByTestId("fv-hunk-revert").textContent).toMatch(/Revert hunk/);
+    expect(screen.getByTestId("fv-hunk-revert").textContent).toMatch(/Delete hunk/);
   });
 });
 

@@ -6,6 +6,7 @@ const NO_LOOSE_STRING_VALUES = {
    GET /git/file-version (base + working text). Inline vs side-by-side comes
    from the per-tab diff style, with file/hunk actions rendered above Monaco. */
 
+import { useRef } from "react";
 import { FvLoading } from "../FileViewerLoading.js";
 import { extOf, monacoLanguage } from "../renderers/pickRenderer.js";
 import { useMonacoThemeMode } from "../renderers/monaco/theme.js";
@@ -18,7 +19,10 @@ import type {
 import type { FileViewerDiffStyle } from "../../../state/store.js";
 import { wireModeToDiffBase } from "./diffBase.js";
 import { MonacoDiffActionStrips } from "./monacoDiffRenderer/MonacoDiffActionStrips.js";
-import { MonacoDiffEditor } from "./monacoDiffRenderer/MonacoDiffEditor.js";
+import {
+  MonacoDiffEditor,
+  type MonacoDiffEditorHandle,
+} from "./monacoDiffRenderer/MonacoDiffEditor.js";
 import {
   getMonacoDiffUnavailableView,
   MonacoDiffError,
@@ -54,6 +58,7 @@ export function MonacoDiffRenderer({
   onReverted,
 }: MonacoDiffRendererProps): JSX.Element {
   const theme = useMonacoThemeMode();
+  const editorRef = useRef<MonacoDiffEditorHandle>(null);
   const { version, error, scoped } = useMonacoDiffVersion({
     path,
     wireMode,
@@ -94,9 +99,11 @@ export function MonacoDiffRenderer({
           actions={actions}
           sessionId={sessionId}
           onReverted={onReverted}
+          onBeforeRevert={() => editorRef.current?.clearModel()}
         />
       ) : null}
       <MonacoDiffEditor
+        ref={editorRef}
         language={language}
         baseText={version.baseText}
         workingText={version.workingText}

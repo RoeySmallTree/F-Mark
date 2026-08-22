@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { runtimeAccessModeLabel } from "@f-mark/shared";
 import { openAgentTerminalPane } from "../../../state/terminalPaneState.js";
+import { useConfirmDestructive } from "../../../confirm/index.js";
 import { Popover } from "../../../popovers/Popover.js";
 import {
   commandTitle,
@@ -50,6 +51,7 @@ interface AgentPopoverProps {
   controller: RightAgentsController;
   anchorRect: DOMRect;
   onClose(): void;
+  closing?: boolean;
 }
 
 export function AgentPopover({
@@ -57,9 +59,33 @@ export function AgentPopover({
   controller,
   anchorRect,
   onClose,
+  closing = false,
 }: AgentPopoverProps): JSX.Element {
   const { agent } = view;
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const confirmDestructive = useConfirmDestructive();
+
+  const onClear = async (): Promise<void> => {
+    const intent = await confirmDestructive({
+      action: "agent.clear",
+      title: `Clear ${agent.display_name}?`,
+      detail: "Discards the agent's conversation context.",
+    });
+    if (intent === null) return;
+    void controller.clear(agent);
+    onClose();
+  };
+
+  const onGoodbye = async (): Promise<void> => {
+    const intent = await confirmDestructive({
+      action: "agent.goodbye",
+      title: `Remove ${agent.display_name}?`,
+      detail: "Ends the agent and its terminal session. This cannot be undone.",
+    });
+    if (intent === null) return;
+    void controller.goodbye(agent, intent);
+    onClose();
+  };
 
   const options = controller.runtimeOptions[agent.participant_id];
   const optionsLoading =
@@ -106,6 +132,7 @@ export function AgentPopover({
       anchorRect={anchorRect}
       placement="bottom-start"
       onClose={onClose}
+      closing={closing}
       className="agent-pop"
       ariaLabel={`${agent.display_name} controls`}
     >
@@ -406,11 +433,7 @@ export function AgentPopover({
                   className="agp-row-action"
                   disabled={view.isBusy || view.clearDisabled}
                   title={commandTitle("Clear", view.commandReason)}
-                  onClick={() => {
-                    if (!window.confirm(`Clear ${agent.display_name}?`)) return;
-                    void controller.clear(agent);
-                    onClose();
-                  }}
+                  onClick={() => void onClear()}
                 >
                   <Eraser size={13} aria-hidden="true" />
                   Clear context
@@ -419,11 +442,7 @@ export function AgentPopover({
                   type="button"
                   className="agp-row-action agp-row-action-danger"
                   disabled={view.isBusy}
-                  onClick={() => {
-                    if (!window.confirm(`Remove ${agent.display_name}?`)) return;
-                    void controller.goodbye(agent);
-                    onClose();
-                  }}
+                  onClick={() => void onGoodbye()}
                 >
                   <LogOut size={13} aria-hidden="true" />
                   Say goodbye

@@ -26,6 +26,7 @@ export interface PendingApprovalAction {
 
 export interface SendButtonProps {
   mode: "message" | "named" | "comment";
+  name: string;
   canSubmit: boolean;
   busy: boolean;
   hasContent: boolean;

@@ -7,6 +7,7 @@ import {
 } from "@f-mark/shared";
 import { AgentActionMenu } from "../AgentActionMenu.js";
 import type { ManagedAgentsClient } from "../../api/managedAgents.js";
+import { useConfirmDestructive } from "../../confirm/index.js";
 import type { RootScope } from "../../api/rootScope.js";
 import type { AgentPresence } from "../../state/presence.js";
 import { openAgentTerminalPane } from "../../state/terminalPaneState.js";
@@ -58,6 +59,7 @@ export function AgentActionMenuPortal({
   removePresence,
   closeMenu,
 }: AgentActionMenuPortalProps): JSX.Element | null {
+  const confirmDestructive = useConfirmDestructive();
   if (agent === null || anchor === null) return null;
 
   return createPortal(
@@ -151,9 +153,15 @@ export function AgentActionMenuPortal({
         onSayGoodbye={() => {
           const id = agent.participant_id;
           void (async () => {
+            const intent = await confirmDestructive({
+              action: "agent.goodbye",
+              title: `Remove ${agent.name}?`,
+              detail: "Ends the agent and its terminal session. This cannot be undone.",
+            });
+            if (intent === null) return;
             try {
               const token = await apiClient.getConfirmToken(id);
-              await apiClient.goodbye(id, token, currentScope);
+              await apiClient.goodbye(id, token, currentScope, intent);
               removeManagedAgent(id);
               removePresence(id);
               const existing = participants[id];

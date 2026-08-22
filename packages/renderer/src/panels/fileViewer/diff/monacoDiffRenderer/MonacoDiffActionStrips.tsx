@@ -14,6 +14,7 @@ export function MonacoDiffActionStrips({
   actions,
   sessionId,
   onReverted,
+  onBeforeRevert,
 }: MonacoDiffActionStripsProps): JSX.Element {
   const oldPathProp =
     diff.old_path !== undefined ? { oldPath: diff.old_path } : {};
@@ -33,6 +34,7 @@ export function MonacoDiffActionStrips({
         oldPathProp={oldPathProp}
         sessionId={sessionId}
         onReverted={onReverted}
+        onBeforeRevert={onBeforeRevert}
       />
       <MonacoHunkActionStrips
         path={path}
@@ -47,6 +49,7 @@ export function MonacoDiffActionStrips({
         oldPathProp={oldPathProp}
         sessionId={sessionId}
         onReverted={onReverted}
+        onBeforeRevert={onBeforeRevert}
       />
     </>
   );

@@ -9,6 +9,9 @@ import {
 import userEvent from "@testing-library/user-event";
 import { expect, vi, type MockInstance } from "vitest";
 import { TodoCard } from "../../../src/cards/TodoCard.js";
+import { TodoItem } from "../../../src/cards/TodoItem.js";
+import type { TodoItemNode } from "../../../src/cards/TodoItem.js";
+import type { TodoItemProps } from "../../../src/cards/todoItem/types.js";
 import { PARTICIPANTS, jsonResponse, makeTodo } from "../_helpers.js";
 
 export type FetchMock = MockInstance<typeof fetch>;
@@ -48,6 +51,41 @@ export function renderTodoCard(
   );
 }
 
+export function makeTodoItemNode(
+  overrides: Partial<TodoItemNode> = {},
+): TodoItemNode {
+  return {
+    id: "t1",
+    title: "Cull stale note",
+    status: "open",
+    children: [],
+    ...overrides,
+  };
+}
+
+/** Renders TodoItem directly with mocked handlers, bypassing TodoCard's
+    kernel wiring. Needed to observe args (like the removal `field`) that
+    TodoCard's own onRemove wiring discards. */
+export function renderTodoItemDirect(
+  overrides: Partial<TodoItemProps> = {},
+): RenderResult {
+  const props: TodoItemProps = {
+    node: makeTodoItemNode(),
+    depth: 0,
+    participants: PARTICIPANTS,
+    agentIds: [],
+    onUpdate: vi.fn().mockResolvedValue(undefined),
+    onToggleDone: vi.fn().mockResolvedValue(undefined),
+    onToggleWip: vi.fn().mockResolvedValue(undefined),
+    onRemove: vi.fn().mockResolvedValue(undefined),
+    onAddSubtask: vi.fn(),
+    onReassign: vi.fn().mockResolvedValue(undefined),
+    fetchDescendants: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  };
+  return render(<TodoItem {...props} />);
+}
+
 export function setupTodoCard(
   payload: TodoPayload,
   filename = BASE_TODO_FILENAME,
@@ -63,12 +101,37 @@ export function setupTodoCard(
   };
 }
 
+const DESCENDANTS_URL = /\/todos\/[^/]+\/descendants/;
+
 export function stubTodoFetch(filename: string): FetchMock {
-  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () =>
-    jsonResponse({ filename }),
-  );
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    if (DESCENDANTS_URL.test(String(input))) {
+      return jsonResponse({ descendants: [] });
+    }
+    return jsonResponse({ filename });
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+/** The descendants lookup rejects (server 500); removal must not depend on
+    it succeeding — the confirmation still has to appear and removal still
+    has to go through, just with a degraded (zero) descendant count. */
+export function stubTodoFetchWithFailingDescendants(filename: string): FetchMock {
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    if (DESCENDANTS_URL.test(String(input))) {
+      return jsonResponse({ error: "descendants lookup failed" }, 500);
+    }
+    return jsonResponse({ filename });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+export function stubConfirm(result: boolean): MockInstance<typeof window.confirm> {
+  const confirmMock = vi.fn<typeof window.confirm>().mockReturnValue(result);
+  vi.stubGlobal("confirm", confirmMock);
+  return confirmMock;
 }
 
 export function stubRecordingTodoFetch(filename: string): {
@@ -108,6 +171,10 @@ export function expectTodoPost(
 
 export function expectWakeCall(fetchMock: FetchMock, index = 1): void {
   expect(postedUrl(fetchMock, index)).toMatch(WAKE_URL);
+}
+
+export function expectDescendantsCall(fetchMock: FetchMock, index = 0): void {
+  expect(postedUrl(fetchMock, index)).toMatch(DESCENDANTS_URL);
 }
 
 export async function waitForFetchCalls(

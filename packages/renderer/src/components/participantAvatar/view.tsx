@@ -9,6 +9,7 @@ export function ParticipantAvatarView({
   classes,
   glyph,
   label,
+  participantId,
   resolvedKind,
   style,
   title,
@@ -20,6 +21,7 @@ export function ParticipantAvatarView({
       style={style}
       aria-hidden={ariaHidden}
       aria-label={ariaHidden ? undefined : label}
+      data-participant-avatar={participantId}
     >
       {artLines !== undefined ? (
         <span

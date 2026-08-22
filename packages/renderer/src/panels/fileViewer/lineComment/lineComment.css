@@ -23,7 +23,7 @@
   line-height: 1;
   color: var(--user);
   opacity: 0.55;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-instant);
 }
 .fv-line-comment-glyph:hover::before,
 .fv-line-comment-glyph.active::before {
@@ -47,7 +47,7 @@
   font-size: 10px;
   line-height: 1;
   opacity: 0.85;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-instant);
 }
 .fv-line-comment-glyph-existing:hover::before,
 .fv-line-comment-glyph-existing.active::before {
@@ -60,7 +60,7 @@
 /* Whole-line flash band when a comment is revealed in Monaco. */
 .fv-line-comment-flash {
   background: color-mix(in srgb, var(--agent) 22%, transparent);
-  animation: fv-line-comment-flash-fade 1.4s ease-out;
+  animation: fv-line-comment-flash-fade var(--dur-slow) var(--ease-snap);
 }
 @keyframes fv-line-comment-flash-fade {
   0% {

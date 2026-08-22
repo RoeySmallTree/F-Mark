@@ -15,6 +15,7 @@ const NO_LOOSE_STRING_VALUES = {
 interface CreateTodoPopoverViewProps
   extends Pick<CreateTodoPopoverProps, "anchorRect" | "onClose" | "endTurnAfter"> {
   controller: CreateTodoPopoverController;
+  closing?: boolean;
 }
 
 export function CreateTodoPopoverView({
@@ -22,12 +23,14 @@ export function CreateTodoPopoverView({
   onClose,
   endTurnAfter,
   controller,
+  closing,
 }: CreateTodoPopoverViewProps): JSX.Element {
   return (
     <Popover
       anchorRect={anchorRect}
       placement="top-start"
       onClose={onClose}
+      closing={closing}
       className="create-todo-pop"
       ariaLabel="Create Todo"
     >

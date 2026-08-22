@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore, type OpenFileTab } from "../../state/store.js";
 import { useFlipReorder } from "../../hooks/useFlipReorder.js";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
 import { TabItem } from "./TabItem.js";
 import {
   clearDragSource,
@@ -18,9 +19,7 @@ const EMPTY_TABS: OpenFileTab[] = [];
 export function TabsRow(): JSX.Element | null {
   const sid = useStore((s) => s.currentSessionId);
   const tabs = useStore((s) =>
-    sid !== null
-      ? (s.fileViewerTabsBySession[sid] ?? EMPTY_TABS)
-      : EMPTY_TABS,
+    sid !== null ? (s.fileViewerTabsBySession[sid] ?? EMPTY_TABS) : EMPTY_TABS,
   );
   const active = useStore((s) =>
     sid !== null ? (s.fileViewerActiveBySession[sid] ?? null) : null,
@@ -53,11 +52,30 @@ export function TabsRow(): JSX.Element | null {
     scrollTabIntoView(rowRef.current, path);
   }, [tabs]);
 
-  if (tabs.length === 0) return null;
-
   const pinned = tabs.filter((t) => t.pinned);
   const unpinned = tabs.filter((t) => !t.pinned);
   const ordered: OpenFileTab[] = [...pinned, ...unpinned];
+
+  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const activeIndex = Math.max(
+    ordered.findIndex((t) => t.path === active),
+    0,
+  );
+  /* Arrow keys move the shared tab stop; TabItem's own onKeyDown handles
+     Enter/Space to activate, so the two handlers never compete for the same
+     key. */
+  const { tabIndexFor, onKeyDown: onRovingKeyDown } = useRovingTabIndex(
+    ordered.length,
+    activeIndex,
+    (index) => {
+      const tab = ordered[index];
+      if (tab === undefined) return;
+      setActive(tab.path);
+      itemRefs.current[index]?.focus();
+    },
+  );
+
+  if (tabs.length === 0) return null;
 
   const onDragStart = (e: React.DragEvent<HTMLDivElement>, path: string) => {
     draggedPathRef.current = path;
@@ -104,10 +122,19 @@ export function TabsRow(): JSX.Element | null {
   };
 
   return (
-    <div className="fv-tabs" role="tablist" ref={rowRef}>
-      {ordered.map((t) => (
+    <div
+      className="fv-tabs"
+      role="tablist"
+      ref={rowRef}
+      onKeyDown={onRovingKeyDown}
+    >
+      {ordered.map((t, index) => (
         <TabItem
           key={t.path}
+          itemRef={(el) => {
+            itemRefs.current[index] = el;
+          }}
+          tabIndex={tabIndexFor(index)}
           path={t.path}
           pinned={t.pinned}
           active={t.path === active}
@@ -140,5 +167,9 @@ function scrollTabIntoView(root: HTMLElement | null, path: string): void {
   const el = root?.querySelector<HTMLElement>(
     `[data-flip-id="${cssEscape(path)}"]`,
   );
-  if (el) el.scrollIntoView({ inline: NO_LOOSE_STRING_VALUES.nearest, block: "nearest" });
+  if (el)
+    el.scrollIntoView({
+      inline: NO_LOOSE_STRING_VALUES.nearest,
+      block: "nearest",
+    });
 }

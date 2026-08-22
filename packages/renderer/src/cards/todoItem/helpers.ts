@@ -9,6 +9,8 @@ const NO_LOOSE_STRING_VALUES = {
   compact: "compact",
   draft: "draft",
   unassigned: "Unassigned",
+  subtask: "subtask",
+  subtasks: "subtasks",
 } as const;
 
 export function depthOffset(depth: number): string {
@@ -61,4 +63,29 @@ export function titleLabelFor(title: string): string {
 
 export function assigneeLabelFor(name: string | null): string {
   return name === null ? NO_LOOSE_STRING_VALUES.unassigned : `Assigned to ${name}`;
+}
+
+/** Descendant count for the remove-confirmation copy. `fetchDescendants` is
+    an extra round-trip that removal never used to depend on: if it rejects,
+    the confirmation must still appear (an unconfirmed destructive action is
+    worse than an under-counted one), so this falls back to an unknown/zero
+    count instead of propagating the failure. */
+export async function countDescendants(
+  fetchDescendants: () => Promise<string[]>,
+): Promise<number> {
+  try {
+    return (await fetchDescendants()).length;
+  } catch (err) {
+    console.error("fetchDescendants failed", err);
+    return 0;
+  }
+}
+
+export function removeConfirmTitle(descendantCount: number): string {
+  if (descendantCount === 0) return "Remove this task?";
+  const noun =
+    descendantCount === 1
+      ? NO_LOOSE_STRING_VALUES.subtask
+      : NO_LOOSE_STRING_VALUES.subtasks;
+  return `Remove this task and ${descendantCount} ${noun}?`;
 }

@@ -8,7 +8,7 @@ import {
 import { screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AnyEventRecord, Participant } from "@f-mark/shared";
-import { TopBar } from "../../src/shell/TopBar.js";
+import { LedgerHeader } from "../../src/shell/LedgerHeader.js";
 import { Feed } from "../../src/shell/Feed.js";
 import {
   useStore,
@@ -112,7 +112,7 @@ function resetStore(overrides: Record<string, unknown> = {}): void {
   });
 }
 
-describe("View toggle — clicking each TopBar button updates store.viewMode", () => {
+describe("View toggle — clicking each LedgerHeader button updates store.viewMode", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
     resetStore();
@@ -124,7 +124,7 @@ describe("View toggle — clicking each TopBar button updates store.viewMode", (
 
   test("clicking Document → setViewMode('document') in store", async () => {
     const user = userEvent.setup();
-    renderWithAgentSpawn(<TopBar />);
+    renderWithAgentSpawn(<LedgerHeader />);
     expect(useStore.getState().viewMode).toBe("everything");
     const tablist = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(tablist).getAllByRole("tab");
@@ -134,7 +134,7 @@ describe("View toggle — clicking each TopBar button updates store.viewMode", (
 
   test("clicking Conversation → setViewMode('conversation') in store", async () => {
     const user = userEvent.setup();
-    renderWithAgentSpawn(<TopBar />);
+    renderWithAgentSpawn(<LedgerHeader />);
     const tablist = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(tablist).getAllByRole("tab");
     await user.click(buttons[2]!);
@@ -144,7 +144,7 @@ describe("View toggle — clicking each TopBar button updates store.viewMode", (
   test("clicking Everything → setViewMode('everything') in store", async () => {
     const user = userEvent.setup();
     resetStore({ viewMode: "document" });
-    renderWithAgentSpawn(<TopBar />);
+    renderWithAgentSpawn(<LedgerHeader />);
     const tablist = screen.getByRole("tablist", { name: /feed view mode/i });
     const buttons = within(tablist).getAllByRole("tab");
     await user.click(buttons[0]!);
@@ -219,23 +219,37 @@ describe("View toggle — empty-state messages match the active view", () => {
     globalThis.localStorage?.clear();
   });
 
-  test("Everything: shows the shared pixel loading animation", () => {
+  /* H1 fix: "everything" used to fall through to the loading catch-all
+     forever, even once loading had finished — it now gets its own empty
+     vignette, matching Document and Conversation below. */
+  test("Everything: shows the empty vignette once loading is done", () => {
     resetStore({ events: [], viewMode: "everything" });
     renderWithAgentSpawn(<Feed />);
     expect(screen.queryByText(/start with/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/paste an invite/i)).not.toBeInTheDocument();
 
+    const empty = screen.getByText(/nothing here yet/i);
+    expect(empty.closest("[data-view]")?.getAttribute("data-view")).toBe(
+      "everything",
+    );
+    expect(screen.queryByRole("status", { name: /loading/i })).toBeNull();
+  });
+
+  test("Everything: shows loading instead of empty copy while events load", () => {
+    resetStore({
+      events: [],
+      eventsLoadingSessionId: SESSION_A.id,
+      viewMode: "everything",
+    });
+    renderWithAgentSpawn(<Feed />);
+
+    expect(screen.queryByText(/nothing here yet/i)).not.toBeInTheDocument();
     const loading = screen.getByRole("status", { name: /loading/i });
     expect(loading).toHaveClass("loading-animation");
     expect(loading).toHaveClass("feed-empty-pixel-loading");
     const emptyState = loading.closest(".empty-state");
     expect(emptyState).toHaveClass("feed-empty-loading");
-    expect(emptyState?.getAttribute("data-view")).toBe(
-      "everything",
-    );
-    expect(
-      emptyState?.querySelectorAll(".feed-empty-skeleton-card"),
-    ).toHaveLength(0);
+    expect(emptyState?.getAttribute("data-view")).toBe("everything");
   });
 
   test("Document: shows the Named compose hint", () => {

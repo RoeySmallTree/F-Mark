@@ -1,5 +1,6 @@
-import { useEffect, useState, type CSSProperties, type JSX } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type JSX } from "react";
 import { resolveFontTokens, resolveThemeTokens } from "@f-mark/shared";
+import { useRovingTabIndex } from "../a11y/useRovingTabIndex.js";
 import {
   getCurrentTheme,
   subscribeTheme,
@@ -41,6 +42,19 @@ export function FontPicker(): JSX.Element {
     FONT_PRESETS.find((preset) => preset.name === font) ?? FONT_PRESETS[0]!;
   const themeTokens = resolveThemeTokens(theme);
 
+  const fontRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const fontIndex = FONT_PRESETS.findIndex((preset) => preset.name === font);
+  const roving = useRovingTabIndex(
+    FONT_PRESETS.length,
+    fontIndex < 0 ? 0 : fontIndex,
+    (index) => {
+      const next = FONT_PRESETS[index];
+      if (next === undefined) return;
+      pickFont(next.name);
+      fontRefs.current[index]?.focus();
+    },
+  );
+
   return (
     <div className="font-picker">
       <div className="font-picker-head">
@@ -54,8 +68,9 @@ export function FontPicker(): JSX.Element {
         className="font-picker-grid"
         role="radiogroup"
         aria-label="Font style"
+        onKeyDown={roving.onKeyDown}
       >
-        {FONT_PRESETS.map((preset) => {
+        {FONT_PRESETS.map((preset, index) => {
           const selected = preset.name === font;
           const tokens = resolveFontTokens(themeTokens, preset.name);
           const style = {
@@ -73,6 +88,10 @@ export function FontPicker(): JSX.Element {
               className={`font-picker-card${selected ? " active" : ""}`}
               data-font={preset.name}
               style={style}
+              tabIndex={roving.tabIndexFor(index)}
+              ref={(el) => {
+                fontRefs.current[index] = el;
+              }}
               onClick={() => pickFont(preset.name)}
             >
               <span className="font-picker-sample" aria-hidden="true">

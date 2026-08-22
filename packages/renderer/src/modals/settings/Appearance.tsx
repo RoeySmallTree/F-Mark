@@ -3,7 +3,8 @@
    pane arrangement. All four apply instantly and persist to localStorage via
    the theme / font / density / layout modules so reloading keeps the choice. */
 
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
 import {
   applyDensity,
   DENSITIES,
@@ -30,6 +31,19 @@ export function Appearance(): JSX.Element {
     setDensity(name);
   }
 
+  const densityRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const densityIndex = DENSITIES.findIndex((d) => d.name === density);
+  const densityRoving = useRovingTabIndex(
+    DENSITIES.length,
+    densityIndex < 0 ? 0 : densityIndex,
+    (index) => {
+      const next = DENSITIES[index];
+      if (next === undefined) return;
+      pickDensity(next.name);
+      densityRefs.current[index]?.focus();
+    },
+  );
+
   return (
     <>
       <h3 className="settings-h">Appearance</h3>
@@ -50,14 +64,19 @@ export function Appearance(): JSX.Element {
           className="seg-control"
           role="radiogroup"
           aria-label="Feed density"
+          onKeyDown={densityRoving.onKeyDown}
         >
-          {DENSITIES.map((d) => (
+          {DENSITIES.map((d, index) => (
             <button
               key={d.name}
               type="button"
               role="radio"
               aria-checked={d.name === density}
               className={d.name === density ? "on" : ""}
+              tabIndex={densityRoving.tabIndexFor(index)}
+              ref={(el) => {
+                densityRefs.current[index] = el;
+              }}
               onClick={() => pickDensity(d.name)}
             >
               {d.label}

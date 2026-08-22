@@ -1,5 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
-import type { ProseMention } from "@f-mark/shared";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
+import type { ProseMention, WakeSessionResponse } from "@f-mark/shared";
 import type { RootScope } from "../api/client.js";
 import type { StagedAttachment } from "./AttachmentChip.js";
 import {
@@ -34,8 +40,17 @@ export interface ComposeSubmissionState {
   hasContent: boolean;
   hasSendableAttachments: boolean;
   canSubmit: boolean;
+  /** The last wake result, so the compose bar can say who the message reached
+      and who it did not. `null` once dismissed, or when no wake ran. */
+  lastWake: WakeSessionResponse | null;
+  dismissWakeNotice(): void;
   submit(): Promise<void>;
-  endTurn(): Promise<boolean>;
+  /* void, not the controller's boolean: every action here is re-entrancy
+     guarded, and a call rejected by the guard has no honest boolean to
+     return. The sole caller (useComposeRootActions' onCreateTodoCreated)
+     awaits and discards it. Guarded on its own ref, separate from the other
+     three actions below - see withReentrancyGuard's call sites. */
+  endTurn(): Promise<void>;
   endTurnAndWake(): Promise<void>;
   submitAndMaybeEndTurn(): Promise<void>;
   sendOrEndTurn(): Promise<void>;
@@ -57,6 +72,24 @@ export function useComposeSubmission({
   requestScrollToBottom,
 }: UseComposeSubmissionOptions): ComposeSubmissionState {
   const [busy, setBusy] = useState(false);
+  /* Synchronous in-flight guard: a double-click or Enter-then-click fires two
+     handler calls before React re-renders `busy`, so state-derived disabling
+     alone can't catch the second one — mirrors useSpawnRuntimeAction's
+     spawnsInFlight ref.
+
+     Two separate refs, not one shared ref: submit / endTurnAndWake /
+     submitAndMaybeEndTurn are genuinely one mutually-exclusive action - they
+     all drive the same Send/End-Turn button and the same `busy` state, so
+     they share inFlightRef. The standalone `endTurn` fires from a DIFFERENT
+     control (useComposeRootActions' onCreateTodoCreated, once
+     messageEndsTurn is on and a todo popover closes) whose trigger button is
+     gated only on sessionId, never on `busy`. A shared ref meant a submit in
+     flight silently swallowed that endTurn call - the guard rejected it, the
+     popover closed normally, and nothing told the user their turn never
+     ended. Keying it separately fixes that; it needs its own ref because,
+     unlike spawn's many-runtimes case, there's nothing else to key it by. */
+  const inFlightRef = useRef(false);
+  const endTurnRef = useRef(false);
   const hasContent = content.trim().length > 0;
   const hasSendableAttachments = useMemo(
     () =>
@@ -112,50 +145,114 @@ export function useComposeSubmission({
     ],
   );
 
+  const [lastWake, setLastWake] = useState<WakeSessionResponse | null>(null);
+
+  const dismissWakeNotice = useCallback((): void => setLastWake(null), []);
+
   const finishSubmit = useCallback(
     (result: ComposeSubmitResult | null): void => {
       if (result === null) return;
       clearAfterSubmit();
       discardAttachments(result.sentAttachmentIds);
       requestScrollToBottom();
+      /* Overwrite rather than merge: the notice describes the message just
+         sent, so a previous send's misses must not linger next to it. */
+      setLastWake(result.wake);
     },
     [clearAfterSubmit, discardAttachments, requestScrollToBottom],
   );
 
-  const submit = useCallback(async (): Promise<void> => {
-    setBusy(true);
-    try {
-      finishSubmit(await controller.submit());
-    } finally {
-      setBusy(false);
-    }
-  }, [controller, finishSubmit]);
+  /* Every user-triggered action (submit, end-turn, or the combined
+     submit-then-end-turn) runs through this so a second in-flight call on
+     the SAME ref is rejected before it can touch `busy` state at all —
+     re-entrancy first, visual state second. The ref is per-caller (see the
+     two refs above), so two DIFFERENT actions can be in flight at once
+     without either blocking the other.
 
-  const endTurn = useCallback(
-    async (): Promise<boolean> => controller.endTurn(),
-    [controller],
+     `drivesBusy` defaults to true because `busy` is the Send/End-Turn
+     button's own state, and every caller but one owns that button. The one
+     exception (the standalone `endTurn` below) opts out. */
+  const withReentrancyGuard = useCallback(
+    async (
+      guardRef: MutableRefObject<boolean>,
+      action: () => Promise<void>,
+      { drivesBusy = true }: { drivesBusy?: boolean } = {},
+    ): Promise<void> => {
+      if (guardRef.current) return;
+      guardRef.current = true;
+      if (drivesBusy) setBusy(true);
+      try {
+        await action();
+      } finally {
+        guardRef.current = false;
+        if (drivesBusy) setBusy(false);
+      }
+    },
+    [],
   );
 
-  const endTurnAndWake = useCallback(async (): Promise<void> => {
-    const posted = await controller.endTurn();
-    if (!posted) return;
-    await controller.wakeAfterUserMessage();
-  }, [controller]);
+  const submit = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(inFlightRef, async () => {
+        finishSubmit(await controller.submit());
+      }),
+    [controller, finishSubmit, withReentrancyGuard],
+  );
 
-  const submitAndMaybeEndTurn = useCallback(async (): Promise<void> => {
-    const shouldEndTurn = activeMode === NO_LOOSE_STRING_VALUES.message && messageEndsTurn;
-    setBusy(true);
-    try {
-      const result = await controller.submit({ wake: !shouldEndTurn });
-      finishSubmit(result);
-      if (shouldEndTurn && result !== null) {
+  /* Guarded on its own ref (endTurnRef), not the shared inFlightRef: this
+     fires from a different control than submit/endTurnAndWake/
+     submitAndMaybeEndTurn — useComposeRootActions' onCreateTodoCreated calls
+     it when messageEndsTurn is on, after the todo popover has already
+     closed (see submitTodo.ts: onClose() runs before onCreated()). It
+     returns void rather than the controller's boolean because the sole
+     caller awaits and discards it, and a guard-rejected call has no honest
+     boolean to report.
+
+     drivesBusy: false — by the time this runs there is no popover left to
+     show busy in, and the compose bar's `busy` belongs to its own
+     Send/End-Turn button. Flipping that button's busy state for a call the
+     user didn't trigger by pressing it would be its own small version of the
+     bug this fix exists for: a real Send click landing while this is in
+     flight would see the button looking busy/disabled for a reason that has
+     nothing to do with what the user just did. */
+  const endTurn = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(
+        endTurnRef,
+        async () => {
+          await controller.endTurn();
+        },
+        { drivesBusy: false },
+      ),
+    [controller, withReentrancyGuard],
+  );
+
+  const endTurnAndWake = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(inFlightRef, async () => {
         const posted = await controller.endTurn();
-        if (posted) await controller.wakeAfterSubmittedMessage();
-      }
-    } finally {
-      setBusy(false);
-    }
-  }, [activeMode, controller, finishSubmit, messageEndsTurn]);
+        if (!posted) return;
+        await controller.wakeAfterUserMessage();
+      }),
+    [controller, withReentrancyGuard],
+  );
+
+  const submitAndMaybeEndTurn = useCallback(
+    (): Promise<void> =>
+      withReentrancyGuard(inFlightRef, async () => {
+        const shouldEndTurn = activeMode === NO_LOOSE_STRING_VALUES.message && messageEndsTurn;
+        const result = await controller.submit({ wake: !shouldEndTurn });
+        finishSubmit(result);
+        if (shouldEndTurn && result !== null) {
+          const posted = await controller.endTurn();
+          /* This is the common path: with end-turn on, submit() is called with
+             wake:false and the wake happens here instead. Without capturing it
+             the notice would be blank exactly when most people send. */
+          if (posted) setLastWake(await controller.wakeAfterSubmittedMessage());
+        }
+      }),
+    [activeMode, controller, finishSubmit, messageEndsTurn, withReentrancyGuard],
+  );
 
   const sendOrEndTurn = useCallback(async (): Promise<void> => {
     if (activeMode === NO_LOOSE_STRING_VALUES.message && !canSubmit) {
@@ -170,6 +267,8 @@ export function useComposeSubmission({
     hasContent,
     hasSendableAttachments,
     canSubmit,
+    lastWake,
+    dismissWakeNotice,
     submit,
     endTurn,
     endTurnAndWake,

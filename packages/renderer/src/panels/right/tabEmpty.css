@@ -33,7 +33,7 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--agent) 5%, transparent),
     0 4px 14px color-mix(in srgb, var(--agent) 8%, transparent);
-  animation: tab-empty-float 4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: tab-empty-float var(--dur-slow) var(--ease-out-quint);
   will-change: transform;
 }
 
@@ -67,7 +67,7 @@
 /* ── Animated variant (no-path states) ────────────────────────────────────
    A more expressive float with a micro-rotation to feel organic. */
 .tab-empty-icon-animated {
-  animation: tab-empty-float-deep 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: tab-empty-float-deep var(--dur-slow) var(--ease-out-quint);
 }
 
 /* ── Micro-animations ──────────────────────────────────────────────────────
@@ -75,7 +75,7 @@
    Pulse         — live agent activity dot. */
 .tab-icon-spinner {
   transform-origin: 20px 20px;
-  animation: tab-spinner-rotate 0.95s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+  animation: tab-spinner-rotate var(--dur-slow) var(--ease-snap) infinite;
 }
 
 @keyframes tab-spinner-rotate {
@@ -83,12 +83,12 @@
 }
 
 .tab-icon-cursor {
-  animation: tab-icon-blink 1.1s steps(1) infinite;
+  animation: tab-icon-blink var(--dur-slow) steps(1) infinite;
 }
 
 .tab-icon-pulse {
   transform-origin: center;
-  animation: tab-icon-pulse-anim 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: tab-icon-pulse-anim var(--dur-slow) var(--ease-inout) infinite;
 }
 
 /* ── Copy ──────────────────────────────────────────────────────────────── */

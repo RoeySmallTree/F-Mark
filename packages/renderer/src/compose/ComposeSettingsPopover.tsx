@@ -5,6 +5,7 @@ import { Popover } from "../popovers/Popover.js";
 interface Props {
   anchorRect: DOMRect | null;
   onClose(): void;
+  closing?: boolean;
   messageEndsTurn: boolean;
   onMessageEndsTurnChange(value: boolean): void;
   commentEndsTurn: boolean;
@@ -18,6 +19,7 @@ interface Props {
 export function ComposeSettingsPopover({
   anchorRect,
   onClose,
+  closing = false,
   messageEndsTurn,
   onMessageEndsTurnChange,
   commentEndsTurn,
@@ -32,6 +34,7 @@ export function ComposeSettingsPopover({
       anchorRect={anchorRect}
       placement="top-end"
       onClose={onClose}
+      closing={closing}
       className="compose-settings-pop"
       ariaLabel="Compose settings"
     >

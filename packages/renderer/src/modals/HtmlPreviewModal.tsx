@@ -11,12 +11,19 @@ const NO_LOOSE_STRING_VALUES = {
    Escape close via ModalRoot; the shell stops propagation so only a true
    backdrop click closes. */
 
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { Code, Maximize2, X } from "lucide-react";
 import { useStore } from "../state/store.js";
 import { htmlBundleUrl } from "../render/htmlBundle.js";
 import { useCurrentSessionRootScope } from "../hooks/useCurrentSessionRootScope.js";
+import { useRovingTabIndex } from "../a11y/useRovingTabIndex.js";
 
+const HTML_PREVIEW_MODE_ORDER = ["preview", "source"] as const satisfies Array<
+  "preview" | "source"
+>;
+
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function HtmlPreviewModal(): JSX.Element | null {
   const htmlPreview = useStore((s) => s.htmlPreview);
   const token = useStore((s) => s.token);
@@ -27,6 +34,18 @@ export function HtmlPreviewModal(): JSX.Element | null {
   );
   const [source, setSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const modeButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const modeIndex = HTML_PREVIEW_MODE_ORDER.indexOf(mode);
+  const { tabIndexFor, onKeyDown: onModeKeyDown } = useRovingTabIndex(
+    HTML_PREVIEW_MODE_ORDER.length,
+    modeIndex < 0 ? 0 : modeIndex,
+    (index) => {
+      const next = HTML_PREVIEW_MODE_ORDER[index];
+      if (next === undefined) return;
+      setMode(next);
+      modeButtonRefs.current[index]?.focus();
+    },
+  );
 
   const filename = htmlPreview?.filename ?? "";
   const initialMode = htmlPreview?.mode ?? NO_LOOSE_STRING_VALUES.preview;
@@ -41,7 +60,12 @@ export function HtmlPreviewModal(): JSX.Element | null {
       : "";
 
   useEffect(() => {
-    if (htmlPreview === null || mode !== NO_LOOSE_STRING_VALUES.source || url.length === 0) return;
+    if (
+      htmlPreview === null ||
+      mode !== NO_LOOSE_STRING_VALUES.source ||
+      url.length === 0
+    )
+      return;
     let cancelled = false;
     setSource(null);
     setError(null);
@@ -75,11 +99,19 @@ export function HtmlPreviewModal(): JSX.Element | null {
       <div className="modal-head">
         <div className="modal-eyebrow">HTML PREVIEW</div>
         <h2 className="modal-title">{htmlPreview.title}</h2>
-        <div className="html-preview-modes" role="tablist">
+        <div
+          className="html-preview-modes"
+          role="tablist"
+          onKeyDown={onModeKeyDown}
+        >
           <button
             type="button"
+            ref={(el) => {
+              modeButtonRefs.current[0] = el;
+            }}
             role="tab"
             aria-selected={mode === "preview"}
+            tabIndex={tabIndexFor(0)}
             className={mode === "preview" ? "active" : ""}
             onClick={() => setMode(NO_LOOSE_STRING_VALUES.preview)}
           >
@@ -87,8 +119,12 @@ export function HtmlPreviewModal(): JSX.Element | null {
           </button>
           <button
             type="button"
+            ref={(el) => {
+              modeButtonRefs.current[1] = el;
+            }}
             role="tab"
             aria-selected={mode === "source"}
+            tabIndex={tabIndexFor(1)}
             className={mode === "source" ? "active" : ""}
             onClick={() => setMode(NO_LOOSE_STRING_VALUES.source)}
           >

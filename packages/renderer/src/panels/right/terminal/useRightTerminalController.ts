@@ -5,12 +5,16 @@ import {
   isProcessApiDisabledError,
   PROCESS_API_DISABLED_MESSAGE,
 } from "../../../api/managedAgents.js";
+import { useConfirmDestructive } from "../../../confirm/index.js";
 import { useStore } from "../../../state/store.js";
 import {
   clearActiveTerminal,
   loadActiveTerminal,
   saveActiveTerminal,
 } from "../../../state/terminalActivePersistence.js";
+
+const KILL_TERMINAL_DETAIL =
+  "The shell and everything running in it end now. This cannot be undone.";
 
 export interface RightTerminalController {
   terminals: ManagedTerminal[];
@@ -56,6 +60,7 @@ export function useRightTerminalController(): RightTerminalController {
   const [mounted, setMounted] = useState<Set<string>>(() => new Set());
   const [spawnPending, setSpawnPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirmDestructive = useConfirmDestructive();
 
   const mountSession = useCallback((session: string): void => {
     setMounted((prev) => {
@@ -145,25 +150,34 @@ export function useRightTerminalController(): RightTerminalController {
 
   const close = useCallback(
     (session: string): void => {
-      setError(null);
-      void apiClient
-        .killTerminal(session)
-        .then(() => {
-          removeManagedTerminal(session);
-          clearActiveTerminal(activePathId, session);
-          setMounted((prev) => {
-            if (!prev.has(session)) return prev;
-            const next = new Set(prev);
-            next.delete(session);
-            return next;
-          });
-        })
-        .catch((err: unknown) => {
-          setError(err instanceof Error ? err.message : String(err));
-          console.error("kill terminal failed", err);
+      void (async (): Promise<void> => {
+        const intent = await confirmDestructive({
+          action: "terminal.kill",
+          title: `Kill terminal ${session}?`,
+          detail: KILL_TERMINAL_DETAIL,
         });
+        if (intent === null) return;
+
+        setError(null);
+        void apiClient
+          .killTerminal(session)
+          .then(() => {
+            removeManagedTerminal(session);
+            clearActiveTerminal(activePathId, session);
+            setMounted((prev) => {
+              if (!prev.has(session)) return prev;
+              const next = new Set(prev);
+              next.delete(session);
+              return next;
+            });
+          })
+          .catch((err: unknown) => {
+            setError(err instanceof Error ? err.message : String(err));
+            console.error("kill terminal failed", err);
+          });
+      })();
     },
-    [activePathId, apiClient, removeManagedTerminal],
+    [activePathId, apiClient, confirmDestructive, removeManagedTerminal],
   );
 
   const mountedSessions = useMemo(

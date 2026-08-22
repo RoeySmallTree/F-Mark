@@ -4,7 +4,13 @@ import {
   MessageSquare,
   type LucideIcon,
 } from "lucide-react";
+import { useRef, type CSSProperties } from "react";
 import { useStore, type ViewMode } from "../../state/store.js";
+import { useRovingTabIndex } from "../../a11y/useRovingTabIndex.js";
+
+const NO_LOOSE_STRING_VALUES = {
+  activeIndexVar: "--vm-index",
+} as const;
 
 const VIEW_MODE_OPTIONS: Array<{
   mode: ViewMode;
@@ -32,18 +38,56 @@ const VIEW_MODE_OPTIONS: Array<{
   },
 ];
 
+/* The active pill's offset is an index, not a measured position: the toggle
+   sits in the top bar, and measuring on every mode change would mean a
+   layout pass per click and drift whenever the font or labels change. */
+function indicatorStyle(activeIndex: number): CSSProperties {
+  return {
+    [NO_LOOSE_STRING_VALUES.activeIndexVar as string]: activeIndex,
+  };
+}
+
 export function ViewModeToggle(): JSX.Element {
   const viewMode = useStore((s) => s.viewMode);
   const setViewMode = useStore((s) => s.setViewMode);
+  const activeIndex = Math.max(
+    VIEW_MODE_OPTIONS.findIndex((option) => option.mode === viewMode),
+    0,
+  );
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    VIEW_MODE_OPTIONS.length,
+    activeIndex,
+    (index) => {
+      const option = VIEW_MODE_OPTIONS[index];
+      if (option === undefined) return;
+      setViewMode(option.mode);
+      buttonRefs.current[index]?.focus();
+    },
+  );
 
   return (
-    <div className="view-toggle" role="tablist" aria-label="Feed view mode">
-      {VIEW_MODE_OPTIONS.map(({ mode, label, title, Icon }) => (
+    <div
+      className="view-toggle"
+      role="tablist"
+      aria-label="Feed view mode"
+      onKeyDown={onKeyDown}
+    >
+      <span
+        aria-hidden="true"
+        className="viewmode-indicator"
+        style={indicatorStyle(activeIndex)}
+      />
+      {VIEW_MODE_OPTIONS.map(({ mode, label, title, Icon }, index) => (
         <button
           key={mode}
+          ref={(el) => {
+            buttonRefs.current[index] = el;
+          }}
           type="button"
           role="tab"
           aria-selected={viewMode === mode}
+          tabIndex={tabIndexFor(index)}
           className={viewMode === mode ? "active" : ""}
           onClick={() => setViewMode(mode)}
           title={title}

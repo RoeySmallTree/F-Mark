@@ -63,11 +63,11 @@ describe("X6 cross-tab appearance sync (storage events)", () => {
       notified = n;
     });
 
-    crossTabWrite(THEME_KEY, "dracula");
+    crossTabWrite(THEME_KEY, "night");
 
-    expect(document.body.classList.contains("theme-dracula")).toBe(true);
-    expect(getCurrentTheme()).toBe("dracula");
-    expect(notified).toBe("dracula");
+    expect(document.body.classList.contains("theme-night")).toBe(true);
+    expect(getCurrentTheme()).toBe("night");
+    expect(notified).toBe("night");
 
     // Switching back to light removes all theme-* classes.
     crossTabWrite(THEME_KEY, "light");
@@ -81,13 +81,13 @@ describe("X6 cross-tab appearance sync (storage events)", () => {
 
   it("theme: an UNRELATED storage key is ignored", () => {
     const start = startThemeStorageSync();
-    applyTheme("nord");
-    expect(document.body.classList.contains("theme-nord")).toBe(true);
+    applyTheme("night");
+    expect(document.body.classList.contains("theme-night")).toBe(true);
     // A write to a different key must not touch the theme.
     window.dispatchEvent(
       new StorageEvent("storage", { key: "fmark.unrelated", newValue: "x" }),
     );
-    expect(document.body.classList.contains("theme-nord")).toBe(true);
+    expect(document.body.classList.contains("theme-night")).toBe(true);
     start();
   });
 

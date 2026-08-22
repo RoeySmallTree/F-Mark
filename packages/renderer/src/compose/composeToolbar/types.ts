@@ -4,6 +4,7 @@ import type { ComposeMode } from "../composeHelpers.js";
 
 export interface ComposeToolbarProps {
   activeMode: ComposeMode;
+  name: string;
   sessionId: string | null;
   canSubmit: boolean;
   busy: boolean;

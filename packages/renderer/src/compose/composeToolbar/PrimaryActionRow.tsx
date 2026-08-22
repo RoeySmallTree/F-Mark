@@ -12,6 +12,7 @@ type PrimaryActionRowProps = Pick<
   | "hasContent"
   | "hasSendableAttachments"
   | "isAgentTurn"
+  | "name"
   | "onEndTurn"
   | "onInterrupt"
   | "onSubmit"
@@ -27,6 +28,7 @@ export function PrimaryActionRow({
   hasContent,
   hasSendableAttachments,
   isAgentTurn,
+  name,
   onEndTurn,
   onInterrupt,
   onSubmit,
@@ -36,6 +38,7 @@ export function PrimaryActionRow({
     <div className="compose-actions-row compose-actions-primary">
       <SendButton
         mode={activeMode}
+        name={name}
         canSubmit={canSubmit}
         busy={busy || attachmentBusy}
         hasContent={hasContent || hasSendableAttachments}

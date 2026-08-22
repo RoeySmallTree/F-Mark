@@ -30,15 +30,16 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-describe("dock layout v4 default", () => {
-  it("places filesDisplay in center beside messages, search stowed in toolbar", () => {
-    expect(CURRENT_DOCK_LAYOUT_VERSION).toBe(4);
+describe("dock layout v5 default", () => {
+  it("places filesDisplay in center beside messages, search in the right dock", () => {
+    expect(CURRENT_DOCK_LAYOUT_VERSION).toBe(5);
     expect(DEFAULT_DOCK_LAYOUT.areas.right).toContain("terminal");
     expect(DEFAULT_DOCK_LAYOUT.areas.center).toEqual([
       "messages",
       "filesDisplay",
     ]);
-    expect(DEFAULT_DOCK_LAYOUT.areas.toolbar).toEqual(["search"]);
+    expect(DEFAULT_DOCK_LAYOUT.areas.right).toContain("search");
+    expect(DEFAULT_DOCK_LAYOUT.areas.toolbar).toEqual([]);
     expect(DEFAULT_DOCK_LAYOUT.active.center).toBe("messages");
   });
 
@@ -51,7 +52,7 @@ describe("dock layout v4 default", () => {
 });
 
 describe("migrateDockLayoutOnce", () => {
-  it("re-homes a toolbar-parked filesDisplay into center after messages, stamps v3", () => {
+  it("re-homes a toolbar-parked filesDisplay into center after messages, stamps v5", () => {
     storeV1(
       {
         left: ["sessions"],
@@ -64,7 +65,7 @@ describe("migrateDockLayoutOnce", () => {
     );
     migrateDockLayoutOnce();
     const stored = readStored();
-    expect(stored.version).toBe(4);
+    expect(stored.version).toBe(5);
     expect(stored.areas.center).toEqual(["messages", "filesDisplay"]);
     expect(stored.areas.toolbar).not.toContain("filesDisplay");
     expect(stored.active.center).toBe("messages");
@@ -89,7 +90,7 @@ describe("migrateDockLayoutOnce", () => {
     );
     migrateDockLayoutOnce();
     const stored = readStored();
-    expect(stored.version).toBe(4);
+    expect(stored.version).toBe(5);
     expect(stored.areas.right).toContain("terminal");
     // filesDisplay was already placed → untouched.
     expect(stored.areas.center).toEqual(["messages", "filesDisplay"]);
@@ -108,26 +109,26 @@ describe("migrateDockLayoutOnce", () => {
     );
     migrateDockLayoutOnce();
     const stored = readStored();
-    expect(stored.version).toBe(4);
+    expect(stored.version).toBe(5);
     expect(stored.areas.right).toContain("filesDisplay");
     expect(stored.areas.center).not.toContain("filesDisplay");
   });
 
-  it("is a byte-for-byte no-op for an already-v4 layout", () => {
-    const v4 = JSON.stringify({
-      version: 4,
+  it("is a byte-for-byte no-op for an already-v5 layout", () => {
+    const v5 = JSON.stringify({
+      version: 5,
       areas: {
         left: ["sessions"],
         center: ["messages", "filesDisplay"],
-        right: [...RIGHT_DEFAULT, "diffTree", "terminal"],
+        right: [...RIGHT_DEFAULT, "diffTree", "terminal", "search"],
         bottom: [],
-        toolbar: ["search"],
+        toolbar: [],
       },
       active: { left: "sessions", center: "messages", right: "log" },
     });
-    window.localStorage.setItem(KEY, v4);
+    window.localStorage.setItem(KEY, v5);
     migrateDockLayoutOnce();
-    expect(window.localStorage.getItem(KEY)).toBe(v4);
+    expect(window.localStorage.getItem(KEY)).toBe(v5);
   });
 
   it("does nothing on a fresh install (no stored layout)", () => {
@@ -200,6 +201,7 @@ describe("moveDockPane", () => {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ]);
     expect(layout.active.center).toBe("comments");
     expect(layout.active.right).toBe("log");
@@ -216,6 +218,7 @@ describe("moveDockPane", () => {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ]);
     expect(layout.areas.center).toEqual([
       "messages",
@@ -276,6 +279,7 @@ describe("moveDockPane", () => {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ]);
     expect(layout.active.center).toBe("filesDisplay");
     expect(layout.active.right).toBe("messages");
@@ -293,6 +297,7 @@ describe("moveDockPane", () => {
       "files",
       "diffTree",
       "terminal",
+      "search",
     ]);
     expect(layout.areas.center).toEqual(["messages", "filesDisplay"]);
     expect(layout.active.bottom).toBe("log");

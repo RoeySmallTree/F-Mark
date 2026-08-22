@@ -1,10 +1,11 @@
 import { type CSSProperties, useCallback, useRef } from "react";
-import { Link2, Star } from "lucide-react";
+import { Copy, Link2, Star } from "lucide-react";
 import { iconForExtension } from "./iconForExtension.js";
 import type { FavoriteScope, VisibleRow } from "./buildTreeView.js";
 import { GIT_FILE_STATUSES, type GitFileStatus } from "@f-mark/shared";
 import { useStore } from "../../../state/store.js";
 import { usePresentFile } from "../../../shell/usePresentFile.js";
+import { copyToClipboard } from "../../../render/copy.js";
 import {
   clearDragSource,
   setCircularDragImage,
@@ -43,6 +44,28 @@ const favoriteScopes = {
   project: "project",
   none: "none",
 } as const;
+
+/* Mirrors ToolUseHeader's copy-flash: a direct classList toggle rather than
+   React state, so the transient affordance doesn't force a row re-render.
+   `.tool-arg-copy` supplies the button reset/cursor/focus-ring/flash CSS
+   (reused, not duplicated); `.file-row-copy` only adds sizing, reveal, and
+   the neutral (non-agent-teal) accent — see files.css. */
+const COPIED_CLASS = "is-copied";
+const COPIED_MS = 900;
+
+function flashCopied(el: HTMLElement): void {
+  el.classList.add(COPIED_CLASS);
+  window.setTimeout(() => el.classList.remove(COPIED_CLASS), COPIED_MS);
+}
+
+/* Silent on failure, matching ToolUseHeader's ToolArgument and the other
+   call sites that check the boolean: a denied clipboard permission is rare
+   and not actionable here, and the flash must never claim success it
+   didn't earn. */
+async function copyPath(text: string, el: HTMLElement): Promise<void> {
+  const ok = await copyToClipboard(text);
+  if (ok) flashCopied(el);
+}
 
 function favTooltip(current: FavoriteScope): string {
   switch (current) {
@@ -138,8 +161,17 @@ export function FileRow({
       const dx = Math.abs(e.clientX - start.x);
       const dy = Math.abs(e.clientY - start.y);
       if (dx >= 5 || dy >= 5) return;
-      /* Star button has its own onClick with stopPropagation, so we
-         don't reach here when the user clicks the star. */
+      /* Bail when the mouseup landed inside a button (copy, star, and any
+         future row control). DOM event order is mousedown -> mouseup ->
+         click, each fully bubbling before the next stage fires - so a
+         button's onClick (and any stopPropagation() in it) runs AFTER this
+         handler has already opened the file, and can't prevent it. Checking
+         the mouseup target here, once, covers every control in the row
+         without each new one having to remember a non-obvious incantation. */
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest("button") !== null) {
+        return;
+      }
       if (onOpenFile !== undefined) onOpenFile(entry.absPath);
       else presentFile(entry.absPath);
     },
@@ -148,10 +180,25 @@ export function FileRow({
 
   const onStarClick = useCallback(
     (e: React.MouseEvent): void => {
+      /* This stopPropagation() does NOT stop the row from opening the file -
+         see the button-target check in onMouseUp above for why, and for the
+         actual guard. Kept as harmless defensive hygiene against any future
+         click listener on an ancestor. */
       e.stopPropagation();
       onCycleFav(entry.absPath, fav);
     },
     [entry.absPath, fav, onCycleFav],
+  );
+
+  /* Same stopPropagation() caveat as the star button above: it looks like it
+     guards against opening the file underneath, but by the time this onClick
+     runs, onMouseUp's button-target check has already made that decision. */
+  const onCopyClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>): void => {
+      e.stopPropagation();
+      void copyPath(entry.absPath, e.currentTarget);
+    },
+    [entry.absPath],
   );
 
   const className = [
@@ -193,6 +240,15 @@ export function FileRow({
           {changedBadge(changedStatus).label}
         </span>
       ) : null}
+      <button
+        type="button"
+        className="file-row-copy tool-arg-copy"
+        onClick={onCopyClick}
+        title="Copy file path"
+        aria-label="Copy file path"
+      >
+        <Copy size={11} aria-hidden />
+      </button>
       <button
         type="button"
         className="file-row-star"

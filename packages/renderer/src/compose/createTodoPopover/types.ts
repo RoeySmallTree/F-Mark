@@ -9,6 +9,7 @@ import type { TodoDropdownOption } from "../../panels/todoPanelUtils.js";
 export interface CreateTodoPopoverProps {
   anchorRect: DOMRect | null;
   onClose(): void;
+  closing?: boolean;
   endTurnAfter: boolean;
   onCreated(): Promise<void>;
 }

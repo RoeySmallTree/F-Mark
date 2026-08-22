@@ -168,8 +168,7 @@ describe("<ToolUseCard>", () => {
 
   it("shows an error state when success=false", () => {
     render(<ToolUseCard event={makeEvent({ success: false, result: "permission denied" })} />);
-    const toggle = screen.getByRole("button", { name: /toggle tool details/i });
-    expect(toggle.querySelector(".err-dot")).not.toBeNull();
+    expect(document.querySelector(".err-dot")).not.toBeNull();
   });
 
   it("renders duration when present", () => {

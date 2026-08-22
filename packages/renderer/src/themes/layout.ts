@@ -140,9 +140,20 @@ export function heightVar(pane: PaneId): string {
   return `--pane-h-${pane}`;
 }
 
+/* Below roughly 1024px the stored side-pane widths add up to more than the
+   viewport, and the centre pane is what pays: at 768px it gets 140px and the
+   compose toolbar's buttons overlap each other; at 375px it computes to zero
+   and the page scrolls sideways. Cap each side pane at half the space left
+   over once the centre pane has its floor, so the centre never collapses.
+   Only the stored width is capped, never rewritten — a persisted 340 stays
+   340 and simply renders narrower on a small screen. Rows are left alone:
+   the collapse observed in the sweep was horizontal only. */
+const MIN_CENTRE_PX = 360;
+
 function colTrack(pane: PaneId): string {
   if (pane === paneIds.chat) return gridTracks.flexible;
-  return `var(${widthVar(pane)}, ${DEFAULT_WIDTH[pane]}px)`;
+  const stored = `var(${widthVar(pane)}, ${DEFAULT_WIDTH[pane]}px)`;
+  return `min(${stored}, calc((100vw - ${MIN_CENTRE_PX}px) / 2))`;
 }
 function rowTrack(pane: PaneId): string {
   if (pane === paneIds.chat) return gridTracks.flexible;

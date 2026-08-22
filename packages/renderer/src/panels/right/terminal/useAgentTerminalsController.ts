@@ -26,7 +26,6 @@ export interface AgentTerminalsController {
   /** Agent sessions activated at least once → mounted (keep-alive). */
   mountedSessions: string[];
   token: string | null;
-  closing: Set<string>;
   error: string | null;
   select(tmux: string): void;
   close(agent: AgentTerminal): void;
@@ -41,8 +40,6 @@ export function useAgentTerminalsController(): AgentTerminalsController {
   const participants = useStore((s) => s.participants);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const token = useStore((s) => s.token);
-  const removeManagedAgent = useStore((s) => s.removeManagedAgent);
-  const removePresence = useStore((s) => s.removePresence);
   const activeAgentTmux = useActiveAgentTmux();
   const { scope: currentScope, scopeKey } = useCurrentSessionRootScopeBinding(currentSessionId);
   const managedAgentLiveRevision = useStore((s) => s.managedAgentLiveRevision);
@@ -111,7 +108,6 @@ export function useAgentTerminalsController(): AgentTerminalsController {
       : agents.length > 0;
 
   const [mounted, setMounted] = useState<Set<string>>(() => new Set());
-  const [closing, setClosing] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -144,43 +140,15 @@ export function useAgentTerminalsController(): AgentTerminalsController {
   const close = useCallback(
     (agent: AgentTerminal): void => {
       setError(null);
-      if (closing.has(agent.participant_id)) return;
-      setClosing((prev) => new Set(prev).add(agent.participant_id));
-      void (async () => {
-        try {
-          const token = await api.getConfirmToken(agent.participant_id);
-          await api.goodbye(agent.participant_id, token, currentScope);
-          removeManagedAgent(agent.participant_id);
-          removePresence(agent.participant_id);
-          setMounted((prev) => {
-            if (!prev.has(agent.tmux_session)) return prev;
-            const next = new Set(prev);
-            next.delete(agent.tmux_session);
-            return next;
-          });
-          if (activeAgentTmux === agent.tmux_session) {
-            setActiveAgentTerminal(null);
-          }
-        } catch (err) {
-          setError(err instanceof Error ? err.message : String(err));
-          console.error("close agent terminal failed", err);
-        } finally {
-          setClosing((prev) => {
-            const next = new Set(prev);
-            next.delete(agent.participant_id);
-            return next;
-          });
-        }
-      })();
+      setMounted((prev) => {
+        if (!prev.has(agent.tmux_session)) return prev;
+        const next = new Set(prev);
+        next.delete(agent.tmux_session);
+        return next;
+      });
+      if (activeAgentTmux === agent.tmux_session) setActiveAgentTerminal(null);
     },
-    [
-      activeAgentTmux,
-      api,
-      closing,
-      currentScope,
-      removeManagedAgent,
-      removePresence,
-    ],
+    [activeAgentTmux],
   );
 
   const mountedSessions = useMemo(
@@ -197,7 +165,6 @@ export function useAgentTerminalsController(): AgentTerminalsController {
     active,
     mountedSessions,
     token,
-    closing,
     error,
     select,
     close,

@@ -1,15 +1,18 @@
+import { type CSSProperties, useRef } from "react";
+import { useConfirmDestructive } from "../../confirm/index.js";
+import { fieldValue } from "../../panels/todoPanelUtils.js";
 import {
-  type CSSProperties,
-  useRef,
-  useState,
-} from "react";
-import { countDescendants, fieldValue } from "../../panels/todoPanelUtils.js";
-import {
+  countDescendants,
   depthOffset,
+  removeConfirmTitle,
   titleLabelFor,
   todoItemClassName,
 } from "./helpers.js";
-import type { TodoItemController, TodoItemProps } from "./types.js";
+import type {
+  TodoInputField,
+  TodoItemController,
+  TodoItemProps,
+} from "./types.js";
 import { useTodoAssigneeController } from "./useTodoAssigneeController.js";
 import { useTodoItemInputs } from "./useTodoItemInputs.js";
 
@@ -29,6 +32,7 @@ export function useTodoItemController({
   onRemove,
   onAddSubtask,
   onReassign,
+  fetchDescendants,
   registerInputs,
   onIndent,
   onOutdent,
@@ -43,9 +47,9 @@ export function useTodoItemController({
 }: TodoItemProps): TodoItemController {
   const done = node.status === NO_LOOSE_STRING_VALUES.done;
   const wip = node.status === NO_LOOSE_STRING_VALUES.wip;
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const descendants = countDescendants(node);
+  const confirmDestructive = useConfirmDestructive();
+  const removeRef = useRef<(field?: TodoInputField) => Promise<void>>();
   const inputs = useTodoItemInputs({
     node,
     draft,
@@ -57,7 +61,7 @@ export function useTodoItemController({
     onFocusPrev,
     onFocusNext,
     onCommitAndCreateBelow,
-    onRemove,
+    onRemove: async (field) => removeRef.current?.(field),
     onToggleDone,
   });
   const assigneeControl = useTodoAssigneeController({
@@ -69,14 +73,21 @@ export function useTodoItemController({
     onReassign,
   });
 
-  async function remove(): Promise<void> {
-    if (descendants > 0 && !confirmingRemove) {
-      setConfirmingRemove(true);
+  async function remove(field?: TodoInputField): Promise<void> {
+    if (draft) {
+      await onRemove(field, inputs.values());
       return;
     }
-    await onRemove(undefined, inputs.values());
-    setConfirmingRemove(false);
+    const descendantCount = await countDescendants(fetchDescendants);
+    const intent = await confirmDestructive({
+      action: "todo.remove",
+      title: removeConfirmTitle(descendantCount),
+      detail: "Removed tasks stay in the event log but leave the tree.",
+    });
+    if (intent === null) return;
+    await onRemove(field, inputs.values());
   }
+  removeRef.current = remove;
 
   const style = {
     "--todo-depth-offset": depthOffset(depth),
@@ -96,8 +107,6 @@ export function useTodoItemController({
     assigneeOpen: assigneeControl.assigneeOpen,
     assigneeLabel: assigneeControl.assigneeLabel,
     participantsList: assigneeControl.participantsList,
-    confirmingRemove,
-    descendants,
     titleLabel: titleLabelFor(fieldValue(node.title)),
     className: todoItemClassName({ done, wip, compact, draft }),
     style,
@@ -118,9 +127,6 @@ export function useTodoItemController({
       void onAddSubtask(inputs.values());
     },
     toggleAssigneeMenu: assigneeControl.toggleAssigneeMenu,
-    cancelRemoveConfirmation: () => {
-      setConfirmingRemove(false);
-    },
     onLocalKeyDown: assigneeControl.onLocalKeyDown,
     onInputKeyDown: inputs.onInputKeyDown,
   };

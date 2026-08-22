@@ -5,6 +5,7 @@ import { AgentMentionPicker } from "../components/AgentMentionPicker.js";
 import { ForkSessionPopover } from "../components/ForkSessionPopover.js";
 import { resolveActiveAgent } from "../modals/skills/active-agent.js";
 import { PresetsPopover } from "../popovers/PresetsPopover.js";
+import { useDeferredUnmount, useHeldAnchorRect } from "../popovers/useDeferredUnmount.js";
 import { useStore } from "../state/store.js";
 import { ComposeSettingsPopover } from "./ComposeSettingsPopover.js";
 import { CreateTodoPopover } from "./CreateTodoPopover.js";
@@ -69,32 +70,58 @@ export function ComposePopovers({
   const participants = useStore((s) => s.participants);
   const activeAgent = resolveActiveAgent(participants, sessionId);
 
+  const presetsOpen = activePopover.key === NO_LOOSE_STRING_VALUES.presets;
+  const presets = useDeferredUnmount(presetsOpen);
+  const presetsRect = useHeldAnchorRect(
+    presetsOpen ? activePopover.anchorRect : null,
+  );
+
+  const mentions = useDeferredUnmount(mentionAnchorRect !== null);
+  const mentionsRect = useHeldAnchorRect(mentionAnchorRect);
+
+  const composeSettingsOpen =
+    activePopover.key === NO_LOOSE_STRING_VALUES.composeSettings;
+  const composeSettings = useDeferredUnmount(composeSettingsOpen);
+  const composeSettingsRect = useHeldAnchorRect(
+    composeSettingsOpen ? activePopover.anchorRect : null,
+  );
+
+  const createTodo = useDeferredUnmount(createTodoAnchorRect !== null);
+  const createTodoRect = useHeldAnchorRect(createTodoAnchorRect);
+
+  const fork = useDeferredUnmount(forkAnchorRect !== null);
+  const forkRect = useHeldAnchorRect(forkAnchorRect);
+
+  const skills = useDeferredUnmount(skillsAnchorRect !== null);
+  const skillsRect = useHeldAnchorRect(skillsAnchorRect);
+
   return (
     <>
-      {activePopover.key === NO_LOOSE_STRING_VALUES.presets ? (
+      {presets.mounted ? (
         <PresetsPopover
-          anchorRect={activePopover.anchorRect}
+          anchorRect={presetsRect}
           onClose={onClosePopover}
+          closing={presets.closing}
         />
       ) : null}
-      {mentionAnchorRect !== null ? (
+      {mentions.mounted && mentionsRect !== null ? (
         <AgentMentionPicker
-          anchorRect={mentionAnchorRect}
+          anchorRect={mentionsRect}
           sessionId={sessionId}
           token={token}
           participants={participants}
           selectedIds={selectedMentionIds}
-          onSelect={(mention) => {
-            onAddMention(mention);
-            onCloseMentions();
-          }}
+          onSelect={onAddMention}
+          closeOnSelect
           onClose={onCloseMentions}
+          closing={mentions.closing}
         />
       ) : null}
-      {activePopover.key === NO_LOOSE_STRING_VALUES.composeSettings ? (
+      {composeSettings.mounted ? (
         <ComposeSettingsPopover
-          anchorRect={activePopover.anchorRect}
+          anchorRect={composeSettingsRect}
           onClose={onClosePopover}
+          closing={composeSettings.closing}
           messageEndsTurn={settings.messageEndsTurn}
           onMessageEndsTurnChange={settings.handleMessageEndsTurnChange}
           commentEndsTurn={settings.commentEndsTurn}
@@ -105,30 +132,33 @@ export function ComposePopovers({
           onEnterToSendChange={settings.handleEnterToSendChange}
         />
       ) : null}
-      {createTodoAnchorRect !== null ? (
+      {createTodo.mounted ? (
         <CreateTodoPopover
-          anchorRect={createTodoAnchorRect}
+          anchorRect={createTodoRect}
           onClose={onCloseCreateTodo}
+          closing={createTodo.closing}
           endTurnAfter={createTodoEndsTurn}
           onCreated={onCreateTodoCreated}
         />
       ) : null}
-      {forkAnchorRect !== null && forkTarget !== null ? (
+      {fork.mounted && forkTarget !== null ? (
         <ForkSessionPopover
-          anchorRect={forkAnchorRect}
+          anchorRect={forkRect}
           target={forkTarget}
           onClose={onCloseFork}
+          closing={fork.closing}
         />
       ) : null}
-      {skillsAnchorRect !== null ? (
+      {skills.mounted ? (
         <SkillsPopover
           activeAgent={activeAgent}
-          anchorRect={skillsAnchorRect}
+          anchorRect={skillsRect}
           query={skillsTrigger?.query ?? ""}
           refreshKey={skillsRefreshKey}
           token={token}
           trigger={skillsTrigger}
           onClose={onCloseSkills}
+          closing={skills.closing}
           onEdit={(skill) => {
             onCloseSkills();
             onEditSkill(skill);

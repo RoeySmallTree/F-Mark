@@ -9,6 +9,8 @@ interface PresetEditorViewProps {
   controller: PresetEditorController;
 }
 
+/* Focus trap: this dialog renders inside ModalBackdrop, which applies
+   useFocusTrap to the shared container — see src/a11y/useFocusTrap.ts. */
 export function PresetEditorView({
   controller,
 }: PresetEditorViewProps): JSX.Element {

@@ -254,3 +254,26 @@ describe("shell layout engine", () => {
     }
   });
 });
+
+describe("centre-pane floor (BL2)", () => {
+  test("caps each side pane so the centre pane cannot collapse", () => {
+    const css = placementCss(DEFAULT_PLACEMENT);
+    const cols = /grid-template-columns:\s*([^;]+);/.exec(css)?.[1] ?? "";
+    expect(cols).toContain("min(");
+    expect(cols).toContain("100vw");
+    expect(cols).toContain("360px");
+  });
+
+  test("leaves the centre pane flexible rather than capping it", () => {
+    const css = placementCss(DEFAULT_PLACEMENT);
+    const cols = /grid-template-columns:\s*([^;]+);/.exec(css)?.[1] ?? "";
+    const tracks = cols.split(/\s+(?![^(]*\))/);
+    const flexible = tracks.filter((t) => !t.includes("min("));
+    expect(flexible.length).toBeGreaterThan(0);
+  });
+
+  test("caps by the stored width rather than replacing it", () => {
+    const css = placementCss(DEFAULT_PLACEMENT);
+    expect(css).toContain("var(--pane-w-");
+  });
+});

@@ -11,24 +11,32 @@ const NO_LOOSE_STRING_VALUES = {
  * corresponding `theme-<name>` class.
  */
 
-export type ThemeName =
-  | "light"
-  | "ember"
-  | "terminal"
-  | "ide"
-  | "solarized"
-  | "brutalist"
-  | "cyber"
-  | "amber"
-  | "dracula"
-  | "catppuccin"
-  | "tokyo"
-  | "gruvbox"
-  | "nord"
-  | "monokai"
-  | "borland"
-  | "sepia"
-  | "contrast";
+/* Three themes, each fully audited for contrast, rather than seventeen that
+   nothing could hold to a standard. `light` is the Ledger day sheet and
+   carries no body class, so :root in tokens.css applies. */
+export type ThemeName = "light" | "night" | "contrast";
+
+/* Themes retired in the Ledger redesign. Anything persisted in localStorage
+   from a previous version resolves through this map instead of silently
+   falling back, so a returning user lands on the nearest survivor rather than
+   being yanked to the default. */
+const RETIRED_THEME_ALIASES: Record<string, ThemeName> = {
+  ember: "night",
+  terminal: "night",
+  ide: "night",
+  solarized: "night",
+  cyber: "night",
+  amber: "night",
+  dracula: "night",
+  catppuccin: "night",
+  tokyo: "night",
+  gruvbox: "night",
+  nord: "night",
+  monokai: "night",
+  borland: "night",
+  brutalist: "contrast",
+  sepia: "light",
+};
 
 export const STORAGE_KEY = "fmark.theme";
 
@@ -36,98 +44,21 @@ export const THEMES: { name: ThemeName; label: string; description: string }[] =
   [
     {
       name: "light",
-      label: "Light",
-      description: "Warm paper canvas with soft ink, the default daytime look.",
-    },
-    {
-      name: "ember",
-      label: "Ember",
+      label: "Day",
       description:
-        "Plum-black with bright coral-red and warm amber, soft corners and a gentle glow. Matches the landing page.",
+        "Cool paper with deep ink and a single ledger green. The default sheet.",
     },
     {
-      name: "terminal",
-      label: "Terminal",
-      description: "Phosphor green on near-black with subtle scanline overlay.",
-    },
-    {
-      name: "ide",
-      label: "IDE Dark",
-      description: "GitHub-style dark editor palette with cool greys and blues.",
-    },
-    {
-      name: "solarized",
-      label: "Solarized",
-      description: "Classic Solarized Dark with a teal base and warm accents.",
-    },
-    {
-      name: "brutalist",
-      label: "Brutalist",
+      name: "night",
+      label: "Night",
       description:
-        "Pure black & white, monospace everywhere, thick borders, zero radius.",
-    },
-    {
-      name: "cyber",
-      label: "Cyberpunk",
-      description:
-        "Deep purple base with cyan/magenta neon gradients and glow.",
-    },
-    {
-      name: "amber",
-      label: "Amber CRT",
-      description:
-        "Monochrome amber phosphor on black, glow text and double-rule borders.",
-    },
-    {
-      name: "dracula",
-      label: "Dracula",
-      description: "Muted purple base with cyan, pink and green accents.",
-    },
-    {
-      name: "catppuccin",
-      label: "Catppuccin Mocha",
-      description:
-        "Pastel mocha palette with soft lavender and pillowy rounded corners.",
-    },
-    {
-      name: "tokyo",
-      label: "Tokyo Night",
-      description: "Inky blue-violet base with calm blue and purple roles.",
-    },
-    {
-      name: "gruvbox",
-      label: "Gruvbox",
-      description: "Retro warm browns with mustard and orange, vintage contrast.",
-    },
-    {
-      name: "nord",
-      label: "Nord",
-      description:
-        "Arctic blue-grey polar night with frost cyan and aurora accents.",
-    },
-    {
-      name: "monokai",
-      label: "Monokai",
-      description:
-        "Olive-charcoal base with punchy pink, green and cyan. The Sublime classic.",
-    },
-    {
-      name: "borland",
-      label: "Borland Blue",
-      description:
-        "Turbo Pascal blue with yellow text, double borders and zero radius.",
-    },
-    {
-      name: "sepia",
-      label: "Sepia Paper",
-      description:
-        "Light parchment, all-serif and academic calm. The light alternative.",
+        "The same ruled sheet after dark — banding and hairlines stay visible.",
     },
     {
       name: "contrast",
-      label: "High Contrast",
+      label: "High contrast",
       description:
-        "Pure black with white, cyan and yellow, thick borders. The accessibility target.",
+        "Pure black on white with thick rules. Clears WCAG AAA for body text.",
     },
   ];
 
@@ -157,9 +88,18 @@ function safeStorageSet(value: string): void {
   }
 }
 
+/* Resolve a stored value to a live theme: an exact match wins, a retired name
+   maps to its nearest survivor, anything else falls back to the default. */
+function resolveThemeName(raw: unknown): ThemeName {
+  if (isThemeName(raw)) return raw;
+  if (typeof raw === "string" && raw in RETIRED_THEME_ALIASES) {
+    return RETIRED_THEME_ALIASES[raw] as ThemeName;
+  }
+  return NO_LOOSE_STRING_VALUES.light;
+}
+
 export function getCurrentTheme(): ThemeName {
-  const raw = safeStorageGet();
-  return isThemeName(raw) ? raw : NO_LOOSE_STRING_VALUES.light;
+  return resolveThemeName(safeStorageGet());
 }
 
 /**

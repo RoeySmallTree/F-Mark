@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { Dispatch, MouseEvent, SetStateAction } from "react";
 import type { ForkSessionResponse, SessionMeta } from "../../api/client.js";
+import { useConfirmDestructive } from "../../confirm/index.js";
 import type { SessionBadge } from "../../lib/sessionBadge.js";
 import { useAllSessions } from "./useAllSessions.js";
 import { useInlineSessionCreator } from "./useInlineSessionCreator.js";
@@ -95,11 +96,13 @@ export function useSessionsController(): SessionsController {
     setError: ui.setError,
     token: store.token,
   });
+  const confirmDestructive = useConfirmDestructive();
   const deleteSession = useSessionDelete({
     activePath: store.activePath,
     activePathId: store.activePathId,
     allSessions: all.allSessions,
     closeContextMenu: ui.closeContextMenu,
+    confirmDestructive,
     currentSessionId: store.currentSessionId,
     refreshSelectedRootSessions: selection.refreshSelectedRootSessions,
     setAllSessions: all.setAllSessions,

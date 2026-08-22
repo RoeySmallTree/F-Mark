@@ -8,7 +8,8 @@ export type RightTabKey =
   | "log"
   | "files"
   | "diffTree"
-  | "terminal";
+  | "terminal"
+  | "search";
 
 /* The right pane can also show the Layout settings tab. That key is
    intentionally NOT in RightTabKey so it stays out of persistence /
@@ -24,6 +25,7 @@ export const RIGHT_TAB_IDS = {
   files: "files",
   diffTree: "diffTree",
   terminal: "terminal",
+  search: "search",
 } as const satisfies Record<string, RightTabKey>;
 
 /* Per-tab config used by the Layout settings tab. The order of the array
@@ -48,6 +50,7 @@ export const DEFAULT_RIGHT_TABS_CONFIG: RightTabConfig = [
   { key: "files", enabled: true },
   { key: "diffTree", enabled: true },
   { key: "terminal", enabled: true },
+  { key: "search", enabled: true },
 ];
 
 const RIGHT_TAB_KEYS: RightTabKey[] = [
@@ -59,6 +62,7 @@ const RIGHT_TAB_KEYS: RightTabKey[] = [
   "files",
   "diffTree",
   "terminal",
+  "search",
 ];
 
 export function isRightTabKey(value: unknown): value is RightTabKey {

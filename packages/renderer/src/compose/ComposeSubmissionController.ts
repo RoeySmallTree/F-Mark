@@ -1,4 +1,4 @@
-import type { ProseMention } from "@f-mark/shared";
+import type { ProseMention, WakeSessionResponse } from "@f-mark/shared";
 import { createClient, type RootScope } from "../api/client.js";
 import { createManagedAgentsClient } from "../api/managedAgents.js";
 import { scopeToBody } from "../api/rootScope.js";
@@ -29,6 +29,9 @@ export interface ComposeSubmissionSnapshot {
 
 export interface ComposeSubmitResult {
   sentAttachmentIds: Set<string>;
+  /** Who the message actually reached, and who it did not. `null` when no wake
+      was attempted — the caller must not report a miss that never happened. */
+  wake: WakeSessionResponse | null;
 }
 
 export class ComposeSubmissionController {
@@ -47,10 +50,12 @@ export class ComposeSubmissionController {
       scope,
       proseFilename,
     );
-    if (options.wake !== false) await this.wakeIfNeeded(sessionId, scope);
+    const wake =
+      options.wake === false ? null : await this.wakeIfNeeded(sessionId, scope);
 
     return {
       sentAttachmentIds: new Set(sendable.map((attachment) => attachment.id)),
+      wake,
     };
   }
 
@@ -76,10 +81,10 @@ export class ComposeSubmissionController {
     });
   }
 
-  async wakeAfterSubmittedMessage(): Promise<void> {
+  async wakeAfterSubmittedMessage(): Promise<WakeSessionResponse | null> {
     const s = this.snapshot;
-    if (s.sessionId === null || s.scope === null) return;
-    await this.wakeIfNeeded(s.sessionId, s.scope);
+    if (s.sessionId === null || s.scope === null) return null;
+    return await this.wakeIfNeeded(s.sessionId, s.scope);
   }
 
   private readyForSubmit(): {
@@ -145,23 +150,22 @@ export class ComposeSubmissionController {
   private async wakeIfNeeded(
     sessionId: string,
     scope: RootScope,
-  ): Promise<void> {
+  ): Promise<WakeSessionResponse | null> {
     const s = this.snapshot;
-    if (s.mode !== NO_LOOSE_STRING_VALUES.message) return;
+    if (s.mode !== NO_LOOSE_STRING_VALUES.message) return null;
     const managedClient = createManagedAgentsClient({
       baseUrl: "",
       token: s.token,
     });
     if (s.mentions.length > 0) {
-      await managedClient.wakeSession(sessionId, {
+      return await managedClient.wakeSession(sessionId, {
         reason: NO_LOOSE_STRING_VALUES.mention,
         target_participant_ids: s.mentions.map((m) => m.participant_id),
         ...scopeToBody(scope),
       });
-      return;
     }
-    if (!s.messageEndsTurn) return;
-    await managedClient.wakeSession(sessionId, {
+    if (!s.messageEndsTurn) return null;
+    return await managedClient.wakeSession(sessionId, {
       reason: NO_LOOSE_STRING_VALUES.userMessage,
       ...scopeToBody(scope),
     });

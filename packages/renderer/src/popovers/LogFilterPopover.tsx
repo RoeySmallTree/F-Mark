@@ -20,6 +20,7 @@ interface Props {
   participants: Record<string, Participant>;
   onApply(filter: LogFilter): void;
   onClose(): void;
+  closing?: boolean;
 }
 
 export function LogFilterPopover({
@@ -28,6 +29,7 @@ export function LogFilterPopover({
   participants,
   onApply,
   onClose,
+  closing = false,
 }: Props): JSX.Element {
   const [draft, setDraft] = useState<LogFilter>(() => ({ ...initial }));
 
@@ -49,6 +51,7 @@ export function LogFilterPopover({
     <Popover
       anchorRect={anchorRect}
       onClose={onClose}
+      closing={closing}
       className="log-filter-popover"
       ariaLabel="Filter activity log"
     >

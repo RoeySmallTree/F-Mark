@@ -4,6 +4,7 @@ import {
   createManagedAgentsClient,
   isProcessApiDisabledError,
 } from "../../src/api/managedAgents.js";
+import { mintConfirmedIntent } from "../../src/confirm/intent.js";
 
 describe("ManagedAgentsClient", () => {
   let fetchSpy: MockInstance<typeof fetch>;
@@ -78,7 +79,12 @@ describe("ManagedAgentsClient", () => {
   it("goodbye appends the root scope to the DELETE query", async () => {
     fetchSpy.mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
     const c = createManagedAgentsClient({ baseUrl: "http://x", token: null });
-    await c.goodbye("ag-1", "tok-123", { pathId: "bg123" });
+    await c.goodbye(
+      "ag-1",
+      "tok-123",
+      { pathId: "bg123" },
+      mintConfirmedIntent("agent.goodbye"),
+    );
     const call = fetchSpy.mock.calls[0]!;
     expect(String(call[0])).toContain("/managed-agents/ag-1?");
     expect(String(call[0])).toContain("confirm=tok-123");

@@ -7,16 +7,16 @@ import {
   registerTerminalKillRoute,
   registerTerminalSpawnRoute,
 } from "./spawnRoutes/terminalRoutes.js";
-import type { ConfirmTokenStore } from "./spawnRoutes/confirmTokens.js";
+import type { RequestNonceStore } from "./spawnRoutes/requestNonces.js";
 
 export function registerManagedAgentSpawnRoutes(
   app: FastifyInstance,
   context: ManagedAgentsRouteContext,
 ): void {
-  const confirmTokens: ConfirmTokenStore = new Map();
+  const requestNonces: RequestNonceStore = new Map();
 
   registerSpawnRoute(app, context);
-  registerLifecycleRoutes(app, context, confirmTokens);
+  registerLifecycleRoutes(app, context, requestNonces);
   registerTerminalSpawnRoute(app, context);
   registerTerminalKillRoute(app, context);
   registerManagedAgentListRoutes(app, context);

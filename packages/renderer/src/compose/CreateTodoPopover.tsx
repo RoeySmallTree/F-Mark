@@ -6,10 +6,14 @@ import { useCreateTodoPopoverController } from "./createTodoPopover/useCreateTod
 export function CreateTodoPopover({
   anchorRect,
   onClose,
+  closing = false,
   endTurnAfter,
   onCreated,
 }: CreateTodoPopoverProps): JSX.Element {
-  const controller = useCreateTodoPopoverController({ onClose, onCreated });
+  const controller = useCreateTodoPopoverController({
+    onClose,
+    onCreated,
+  });
 
   return (
     <CreateTodoPopoverView
@@ -17,6 +21,7 @@ export function CreateTodoPopover({
       onClose={onClose}
       endTurnAfter={endTurnAfter}
       controller={controller}
+      closing={closing}
     />
   );
 }

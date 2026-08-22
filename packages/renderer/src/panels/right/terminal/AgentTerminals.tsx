@@ -1,8 +1,9 @@
-import { type JSX } from "react";
+import { useRef, type JSX } from "react";
 import { X } from "lucide-react";
 import { TabEmptyState } from "../TabEmptyState.js";
 import { TerminalBodies } from "./TerminalBodies.js";
 import { useAgentTerminalsController } from "./useAgentTerminalsController.js";
+import { useRovingTabIndex } from "../../../a11y/useRovingTabIndex.js";
 
 const NO_LOOSE_STRING_VALUES = {
   terminalAgents: "terminal-agents",
@@ -10,14 +11,31 @@ const NO_LOOSE_STRING_VALUES = {
 } as const;
 
 /* The "Agents" half of the dock pane: one inner tab per managed agent, each
-   showing that agent's live tmux terminal. No spawn/close — agents are created
-   and ended through the agent lifecycle, not here. */
+   showing that agent's live tmux terminal. The tab's close button detaches the
+   view only. Ending an agent goes through the agent lifecycle, which requires a
+   ConfirmedIntent — this comment used to claim the same thing while the close
+   button silently called api.goodbye(), so keep the claim and the code together. */
 export function AgentTerminals(): JSX.Element {
   const c = useAgentTerminalsController();
   const activeAgent =
     c.active !== null
       ? c.agents.find((agent) => agent.tmux_session === c.active)
       : undefined;
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndex = Math.max(
+    c.agents.findIndex((a) => a.tmux_session === c.active),
+    0,
+  );
+  const { tabIndexFor, onKeyDown } = useRovingTabIndex(
+    c.agents.length,
+    activeIndex,
+    (index) => {
+      const agent = c.agents[index];
+      if (agent === undefined) return;
+      c.select(agent.tmux_session);
+      tabRefs.current[index]?.focus();
+    },
+  );
 
   if (c.agents.length === 0) {
     return (
@@ -36,18 +54,27 @@ export function AgentTerminals(): JSX.Element {
 
   return (
     <>
-      <div className="terminal-tabs" role="tablist" aria-label="Agent terminals">
-        {c.agents.map((a) => {
+      <div
+        className="terminal-tabs"
+        role="tablist"
+        aria-label="Agent terminals"
+        onKeyDown={onKeyDown}
+      >
+        {c.agents.map((a, index) => {
           const active = a.tmux_session === c.active;
           return (
             <div
               key={a.tmux_session}
               className={`terminal-tab${active ? " active" : ""}`}
-              role="tab"
-              aria-selected={active}
             >
               <button
                 type="button"
+                ref={(el) => {
+                  tabRefs.current[index] = el;
+                }}
+                role="tab"
+                aria-selected={active}
+                tabIndex={tabIndexFor(index)}
                 className="terminal-tab-label"
                 onClick={() => c.select(a.tmux_session)}
                 title={a.alive ? a.tmux_session : "Agent terminal is detached"}
@@ -57,8 +84,7 @@ export function AgentTerminals(): JSX.Element {
               <button
                 type="button"
                 className="terminal-tab-close"
-                aria-label={`Close agent ${a.label}`}
-                disabled={c.closing.has(a.participant_id)}
+                aria-label={`Close ${a.label} terminal view`}
                 onClick={() => c.close(a)}
               >
                 <X size={11} aria-hidden="true" />
@@ -74,7 +100,7 @@ export function AgentTerminals(): JSX.Element {
         <div className="terminal-agent-unavailable">
           <p>{activeAgent.label} is detached.</p>
           <button type="button" onClick={() => c.close(activeAgent)}>
-            Remove agent
+            Close terminal view
           </button>
         </div>
       ) : (

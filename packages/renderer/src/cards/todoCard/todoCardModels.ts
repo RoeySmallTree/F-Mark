@@ -60,6 +60,7 @@ interface TodoCardItemModelInput {
     next: () => void,
   ) => Promise<void>;
   reparent: (values: TodoItemValues, parentId: string | null) => Promise<void>;
+  fetchDescendants: (todoId: string) => Promise<string[]>;
 }
 
 interface TodoDraftItemModelInput {
@@ -155,9 +156,11 @@ function buildTodoCardItemHandlers({
   updateTodo,
   saveDirtyThen,
   reparent,
+  fetchDescendants,
 }: TodoCardItemModelInput): TodoItemHandlers {
   return {
     onUpdate: (patch) => updateTodo(patch),
+    fetchDescendants: () => fetchDescendants(payloadId),
     onToggleDone: (values) =>
       updateTodo({
         ...dirtyTodoCardValuesPatch(node, values),
@@ -229,6 +232,7 @@ function buildTodoDraftItemHandlers({
     onToggleWip: (values) =>
       createDraft(draft, values, TODO_STATUSES.wip).then(() => undefined),
     onRemove: async () => setDraft(null),
+    fetchDescendants: () => Promise.resolve([]),
     onAddSubtask: async (values) => {
       const created = await createDraft(draft, values);
       if (!created) return;

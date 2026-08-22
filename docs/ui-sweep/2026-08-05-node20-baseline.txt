@@ -1,0 +1,40 @@
+# Node 20 test baseline — CORRECTED 2026-08-22
+#
+# The previous version of this file listed 17 renderer failures across 6 files
+# as the "known baseline". That was wrong, and wrong in a way worth recording:
+# it was measured ON the redesign branch and never compared against
+# `origin/main`. Diffing by test name against origin/main (0b53c36) showed all
+# 17 were REGRESSIONS introduced by the Aurora work, not inherited noise. A
+# baseline taken from the branch under test can only ever confirm itself.
+#
+# All 17, plus 10 equivalent kernel regressions in tests/routes/theme.test.ts,
+# are fixed as of this commit. Root causes were:
+#   - themes went 17 -> 3 (Day/Night/High contrast); tests still named ember,
+#     dracula, nord, terminal, and asserted "Light" where the label is now "Day"
+#   - dock layout went v4 -> v5, which empties the toolbar into the right dock,
+#     so `search` moved and every hardcoded right-dock array was one short
+#   - ViewModeToggle moved from TopBar to LedgerHeader
+#   - packages/shared/src/themeTokens.ts had drifted from tokens.css: it still
+#     carried pre-final Aurora values, so the kernel served agents the wrong
+#     hex codes via GET /theme. It also never picked up the 9 Aurora tokens
+#     (paper*, rule*, ledger*, alarm), which are now tracked.
+#
+# ── Verified state, Node 20.20.2, macOS ──────────────────────────────────────
+#
+#                       origin/main (0b53c36)      this branch
+#   kernel              33 failed / 1188            31 failed / 1197
+#   renderer           106 failed / 1121             0 failed / 1355  (all green)
+#
+# Renderer runs the full gate (eslint + static-colors + vitest) and is clean.
+#
+# The 31 remaining kernel failures are PRE-EXISTING on origin/main and are
+# macOS-only environment artifacts, not logic:
+#   - /var vs /private/var realpath mismatch in temp-dir assertions
+#   - /proc absent, so a test expecting 403 gets 404
+# They are a strict SUBSET of origin/main's 33; the 2 that no longer fail are
+# the documented paneRace flake (see docs/known-issues/paneRace-flaky.md).
+# CI runs ubuntu-latest + Node 20, where these pass.
+#
+# To re-verify, run against BOTH vitest roots (src/** and tests/**) and diff by
+# TEST NAME against origin/main, never by file set and never against a baseline
+# recorded on your own branch.
